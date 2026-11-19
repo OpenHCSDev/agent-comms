@@ -240,10 +240,7 @@ class GoalPublicationRead:
     goals: Goals
     resources: ExitStack
     names: tuple[str, ...]
-
-    @cached_property
-    def registry(self) -> RegistrySnapshot:
-        return self.goals.registry.snapshot()
+    registry: RegistrySnapshot
 
     @cached_property
     def turns(self) -> Mapping[StoredTurnRecord, TurnDeclaration]:
@@ -456,7 +453,9 @@ class Goals(
     ) -> tuple[GoalChange, ...]:
         """Ready publication owners share reads, retaining one result per request."""
         with ExitStack() as resources:
-            source = GoalPublicationRead(self, resources, tuple(name for name, _previous in requests))
+            source = GoalPublicationRead(
+                self, resources, tuple(name for name, _previous in requests), self.registry.snapshot(),
+            )
             return tuple(source.change(name, previous) for name, previous in requests)
 
     def goal_snapshot(self, name: str) -> GoalSnapshot:
