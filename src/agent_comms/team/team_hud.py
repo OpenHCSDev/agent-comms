@@ -446,6 +446,16 @@ class TeamBoardPublicationStore(
             ],
         )
 
+    def packet_map(
+        self,
+        publication: TeamBoardPublication | None = None,
+    ) -> dict[ThreadIncarnation, tuple[TeamUpdate, ...]]:
+        """Per-recipient packets derived from the one shared retained frame cut."""
+        return {
+            hud.teammate: hud.packets
+            for hud in self.huds(publication=publication)
+        }
+
     @staticmethod
     def captured_frames(huds: tuple[TeamHud, ...]) -> SharedJson:
         recipients = {

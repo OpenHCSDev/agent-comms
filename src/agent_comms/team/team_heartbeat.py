@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.comms import Comms
@@ -13,12 +13,10 @@ from agent_comms.coordination.service_passes import ServicePassStore, TeamPass
 from agent_comms.execution.child_process import ReadWork
 from agent_comms.execution.watch_passes import PreparedWatchPass
 from agent_comms.heartbeat_subjects import TeamHistory
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.planning.nominal_census import NominalPlanReadings
 from agent_comms.planning.orders import ProgressRead, Todo
 from agent_comms.projects.checkouts import RepositoryReads
 from agent_comms.planning.plan_reading import PlanReadings, RetainedPlanReadings
-from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.watch_phase import WatchPhase
 from agent_comms.task_attachments.team_pings import (
     AlarmGroup,
@@ -27,7 +25,6 @@ from agent_comms.task_attachments.team_pings import (
     TeammatePing,
     TeamPings,
     TeamUpdate,
-    TeamUpdateStore,
 )
 from agent_comms.team.standing_rules import (
     HeartbeatFrame,
@@ -35,13 +32,7 @@ from agent_comms.team.standing_rules import (
     StandingRule,
     TeamInputs,
 )
-from agent_comms.team.team_hud import (
-    AllTeamBoards,
-    TeamBoardPublicationStore,
-    TeamBoardSelection,
-    TeamHud,
-    TeamPlan,
-)
+from agent_comms.team.team_hud import TeamBoardPublicationStore, TeamHud, TeamPlan
 from agent_comms.team.team_service import TeamService
 from agent_comms.ui_model.hud_groups import HudUnavailableGroup
 from agent_comms.ui_model.teammate_state import TeammateState
@@ -137,13 +128,13 @@ class TeamHeartbeatEffects(TeamService):
         completed = []
         now = time.time()
         duty = self.duty(comms.registry, comms.goals)
+        retained_store = TeamBoardPublicationStore.at(comms.root)
+        retained_packets = retained_store.packet_map(retained_store.read())
         try:
             for observed in boards:
                 recipients = self.served(comms.registry, comms.goals)
                 held = {
-                    recipient.incarnation: TeamUpdate.latest(
-                        comms, recipient.incarnation
-                    )
+                    recipient.incarnation: retained_packets.get(recipient.incarnation, ())
                     for recipient in recipients
                 }
                 announced = {
@@ -222,7 +213,6 @@ class TeamHeartbeatEffects(TeamService):
                 for delivery in deliveries:
                     hud = board.for_delivery(delivery)
                     recipient = delivery.packet.teammate
-                    TeamUpdateStore.record(comms.root, delivery.packet)
                     huds[recipient] = hud
                     facts = PublishedFacts.of(hud.display_facts)
                     if delivery.packet.should_publish(
@@ -289,6 +279,14 @@ class TeamHeartbeat(
             snapshot = comms.registry.snapshot()
             actions = TeamHistory.of(comms, snapshot, self.actors(snapshot))
             duty = self.duty(comms.registry, comms.goals)
+            publication_store = TeamBoardPublicationStore.at(comms.root)
+            publication = publication_store.read()
+            retained_huds = {
+                hud.teammate: hud
+                for hud in publication_store.huds(publication=publication)
+            }
+            changed_huds = []
+            publications = []
             for thread in self.served(comms.registry, comms.goals):
                 update = TeamUpdate.report_failure(
                     thread.incarnation,
@@ -299,12 +297,22 @@ class TeamHeartbeat(
                 )
                 if update is None:
                     continue
-                TeamUpdateStore.record(comms.root, update)
                 sections = AlarmGroup.sections(
                     (update,),
                     update.open_pings(actions),
                     update.stopped(snapshot),
                 )
+                current = retained_huds.get(thread.incarnation)
+                if current is not None:
+                    changed_huds.append(replace(
+                        current,
+                        packets=(update,),
+                        open_pings=update.open_pings(actions),
+                        stopped=update.stopped(snapshot),
+                    ))
+                publications.append((update, sections))
+            TeamBoardPublicationStore.write_all(comms.root, tuple(changed_huds))
+            for update, sections in publications:
                 duty.publish(
                     lambda update=update, sections=sections: update.send(
                         comms,
