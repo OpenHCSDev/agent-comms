@@ -30,6 +30,8 @@ from typing import (
     Self,
 )
 
+from immutables import Map, MapMutation
+
 from agent_comms.errors import MissingSourceLine
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
@@ -554,13 +556,11 @@ class RepositoryReads:
         """
         retained: dict[Path, CheckoutHistory] = {}
         for common_dir, history in previous._histories.items():
-            if 'graph' not in history.__dict__:
+            if CheckoutHistory.graph.attrname not in history.__dict__:
                 continue
             try:
                 fresh = history.checkout.read()
-                retained[common_dir] = (
-                    history if fresh.refs == history.refs and fresh.heads == history.heads
-                    else fresh)
+                retained[common_dir] = history.following(fresh)
             except (GitCommandError, OSError):
                 # A later requested acquisition owns reporting its unreadable source.
                 continue
@@ -638,19 +638,33 @@ class CommitMessages:
         return tuple(accumulate((len(message) + 1 for message in self.lowered), initial=0))
 
     @cached_property
-    def word_names(self) -> dict[str, frozenset[str]]:
-        """The declared boundary alphabet supplies the words, never a problem-ID grammar."""
+    def word_names(self) -> Map[str, Map[str, None]]:
+        """One cold build groups postings before freezing their immutable roots."""
         names: dict[str, set[str]] = {}
         for sha, message in zip(self.shas, self.lowered):
-            for match in self.words.finditer(message):
-                names.setdefault(match[0], set()).add(sha)
-        return {word: frozenset(shas) for word, shas in names.items()}
+            for word in set(self.words.findall(message)):
+                if word not in names:
+                    names[word] = set()
+                names[word].add(sha)
+        return Map((word, Map(dict.fromkeys(shas))) for word, shas in names.items())
+
+    @cached_property
+    def messages_by_sha(self) -> Map[str, str]:
+        return Map(zip(self.shas, self.lowered))
+
+    def acquired_index(self) -> CommitMessages:
+        """Only an index actually read by the old cut is carried into a fresh cut."""
+        return self if CommitMessages.word_names.attrname in self.__dict__ else NoCommitMessages()
+
+    def following(self, commits: tuple[GitCommit, ...]) -> CommitMessages:
+        """New source messages share immutable postings, never a mutable answer cache."""
+        return RetainedCommitMessages(commits, self)
 
     def naming(self, token: str) -> frozenset[str]:
         """The commits whose message has this literal token on its own, in any case."""
         token = token.lower()
         if token not in self._named:
-            self._named[token] = (self.word_names.get(token, frozenset())
+            self._named[token] = (frozenset(self.word_names.get(token, ()))
                                   if self.words.fullmatch(token)
                                   else frozenset(self._occurrences(token)))
         return self._named[token]
@@ -663,8 +677,57 @@ class CommitMessages:
                 at = self.text.find(token, at + 1)
                 continue
             message = bisect_right(self.starts, at) - 1
+            next_start = self.starts[message + 1]
+            if end >= next_start:
+                at = self.text.find(token, at + 1)
+                continue
             yield self.shas[message]
-            at = self.text.find(token, self.starts[message + 1])
+            at = self.text.find(token, next_start)
+
+
+class NoCommitMessages(CommitMessages):
+    """No acquired index: the next messages use the cold builder directly."""
+
+    def __init__(self) -> None:
+        super().__init__(())
+
+    def following(self, commits: tuple[GitCommit, ...]) -> CommitMessages:
+        return CommitMessages(commits)
+
+
+class RetainedCommitMessages(CommitMessages):
+    """A fresh message cut whose index changes only changed original text."""
+
+    def __init__(self, commits: tuple[GitCommit, ...], earlier: CommitMessages) -> None:
+        super().__init__(commits)
+        self._earlier_messages = earlier.messages_by_sha
+        self._earlier_words = earlier.word_names
+
+    @cached_property
+    def word_names(self) -> Map[str, Map[str, None]]:
+        """Update only changed messages over immutable word and posting roots."""
+        previous, current = self._earlier_messages, self.messages_by_sha
+        changed = {sha for sha in set(previous).union(current)
+                   if previous.get(sha) != current.get(sha)}
+        edits: dict[str, MapMutation[str, None]] = {}
+        for sha in changed:
+            before = set(self.words.findall(previous[sha])) if sha in previous else set()
+            after = set(self.words.findall(current[sha])) if sha in current else set()
+            for word in before ^ after:
+                if word not in edits:
+                    edits[word] = self._earlier_words.get(word, Map()).mutate()
+                if word in after:
+                    edits[word][sha] = None
+                else:
+                    del edits[word][sha]
+        result = self._earlier_words.mutate()
+        for word, edited in edits.items():
+            posting = edited.finish()
+            if posting:
+                result[word] = posting
+            else:
+                del result[word]
+        return result.finish()
 
 
 @dataclass(frozen=True)
@@ -723,6 +786,7 @@ class CheckoutHistory:
         self._remote_selections: dict[str, int] = {}
         self._bases: dict[int, tuple[str, ...]] = {}
         self._walks: dict[CommitSelection, CommitWalk] = {}
+        self._message_seed: CommitMessages = NoCommitMessages()
 
     @cached_property
     def repository(self) -> Repo:
@@ -749,6 +813,13 @@ class CheckoutHistory:
     def require_read(self) -> dict[str, GitReference]:
         """Read the ref cut, propagating unreadable-checkout errors to its caller."""
         return self.refs
+
+    def following(self, fresh: CheckoutHistory) -> CheckoutHistory:
+        """Fresh refs/HEADs keep their own graph; acquired message work can survive."""
+        if fresh.refs == self.refs and fresh.heads == self.heads:
+            return self
+        fresh._message_seed = self._message_seed.acquired_index()
+        return fresh
 
     def head_for(self, checkout: Checkout) -> GitHead:
         """Select by the worktree identity; shared refs cannot answer its HEAD."""
@@ -877,7 +948,9 @@ class CheckoutHistory:
 
     @cached_property
     def messages(self) -> CommitMessages:
-        return CommitMessages(tuple(self.graph.values()))
+        captured = self._message_seed.following(tuple(self.graph.values()))
+        self._message_seed = captured
+        return captured
 
     def commits(self, refs: tuple[str, ...], *excluded: str, selected: CommitFilter = EveryCommit(),
                 first_parent: bool = False) -> Iterator[GitCommit]:
