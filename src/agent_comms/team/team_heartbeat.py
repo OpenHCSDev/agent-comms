@@ -35,7 +35,13 @@ from agent_comms.team.standing_rules import (
     StandingRule,
     TeamInputs,
 )
-from agent_comms.team.team_hud import TeamFrame, TeamHud, TeamPlan
+from agent_comms.team.team_hud import (
+    AllTeamBoards,
+    TeamBoardSelection,
+    TeamFrame,
+    TeamHud,
+    TeamPlan,
+)
 from agent_comms.team.team_service import TeamService
 from agent_comms.ui_model.hud_groups import HudUnavailableGroup
 from agent_comms.ui_model.teammate_state import TeammateState
@@ -161,11 +167,11 @@ class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
     """The shared board derivation, independent of the heartbeat's scheduling and effects."""
 
     _previous_reads: RepositoryReads | None = None
-    def read_board(self, comms: Comms) -> tuple[TeamPlan, tuple[TeamHud, ...]]:
+    def read_board(self, comms: Comms, selection: TeamBoardSelection = AllTeamBoards()) -> tuple[TeamPlan, tuple[TeamHud, ...]]:
         """Prepare the shared board without service effects or retained-frame writes."""
         retention = ReadRetention()
         return self.pass_body(
-            comms, self.observe(comms, self.prepare_board(comms, retention)), retention)
+            comms, self.observe(comms, self.prepare_board(comms, retention)), retention, selection)
 
     def _progress_read(self) -> ProgressRead:
         progress = (ProgressRead.retaining(self._previous_reads)
@@ -190,6 +196,7 @@ class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
 
     def pass_body(self, comms: Comms, boards: tuple[TeamObservation, ...],
                   retention: BoardRetention = HeartbeatRetention(),
+                  selection: TeamBoardSelection = AllTeamBoards(),
                   ) -> tuple[TeamPlan, tuple[TeamHud, ...]]:
         """Derive the team board once, then let ``retention`` say what happens to it."""
         huds = {}
@@ -226,7 +233,9 @@ class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                 pings = TeamPings(states, rules, retained, now=now, history=history,
                                   not_applied=not_applied)
                 deliveries = tuple(pings.delivery(recipient, published=announced[recipient])
-                                   for recipient in held)
+                                   for recipient in held if selection.includes(recipient))
+                if not deliveries:
+                    continue
                 board = TeamHud.of(comms, observed.frame, observed.states,
                                    delivery=deliveries[0], usage=usage)
                 plan = TeamPlan(board.phases)

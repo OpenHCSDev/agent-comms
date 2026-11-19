@@ -77,6 +77,7 @@ from agent_comms.messaging.revision_views import (
     BusSourceView,
     NotificationsView,
     RegistrationsView,
+    RetainedTeamFramesView,
     RevisionView,
     RosterView,
     SidebarBasisView,
@@ -122,7 +123,13 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry.view_unread import ReplyIndexResult
 from agent_comms.team.team_heartbeat import TeamBoardRead
-from agent_comms.team.team_hud import TeamFrame, TeamHud, TeamPlan
+from agent_comms.team.team_hud import (
+    AllTeamBoards,
+    TeamBoardSelection,
+    TeamFrame,
+    TeamHud,
+    TeamPlan,
+)
 from agent_comms.team.team_hud_records import TeammateDetail
 from agent_comms.transcript.transcripts import (
     AcquiredThreadPresentation,
@@ -949,6 +956,8 @@ class ObserveThreads(InterestRequest):
 class ObserveTeamHud(InterestRequest):
     """The retained team board, prepared on demand independently of heartbeat publication."""
 
+    selection: TeamBoardSelection = AllTeamBoards()
+
     def observation(self) -> TeamHudReading:
         return TeamHudReading(self)
 
@@ -959,12 +968,19 @@ class StopTeamHud(TaggedRecordMember, ObservationRequest):
         service.interest.remove(TeamHudReading)
 
 
+@dataclass(frozen=True)
 class RetainedTeamFrames:
     """Before this reading prepares a board, the page sees the heartbeat's retained frames."""
 
+    selection: TeamBoardSelection
+
+    def prepared(self, revision: ReadState, huds: tuple[TeamHud, ...]) -> RetainedTeamFrames:
+        """No prepared recipient supplies a replacement for the retained publication."""
+        return PreparedTeamBoard(self.selection, revision, huds) if huds else RetainedTeamFrames(self.selection)
+
     def observed(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         yield UnreadableHistory.outcome(
-            lambda: TeamHudObserved(revision, TeamFrame.read_all(comms.root)),
+            lambda: TeamHudObserved(revision, TeamFrame.read_all(comms.root, self.selection)),
         ).answer(
             lambda observed: observed,
             lambda error: ObservationStep(),  # Keep the interest until its source can be read.
@@ -977,10 +993,14 @@ class RetainedTeamFrames:
 class PreparedTeamBoard(RetainedTeamFrames):
     """The board this reading derived: the page sees it until the next one is prepared."""
 
+    revision: ReadState
     huds: tuple[TeamHud, ...]
 
     def observed(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
-        yield TeamHudObserved(revision, self.huds)
+        if revision.changed_since(RetainedTeamFramesView(), self.revision):
+            yield from super().observed(comms, revision)
+        else:
+            yield TeamHudObserved(revision, self.huds)
 
 
 class TeamHudReading(TeamBoardRead, ReadingObservation[ObserveTeamHud]):
@@ -995,7 +1015,7 @@ class TeamHudReading(TeamBoardRead, ReadingObservation[ObserveTeamHud]):
         super().__init__(request=request)
         self.preparation: set[asyncio.Task[None]] = set()
         self.prepared_revision: ReadState = NoRevision()
-        self.board: RetainedTeamFrames = RetainedTeamFrames()
+        self.board: RetainedTeamFrames = RetainedTeamFrames(request.selection)
 
     def close(self) -> None:
         super().close()
@@ -1021,7 +1041,7 @@ class TeamHudReading(TeamBoardRead, ReadingObservation[ObserveTeamHud]):
         board = await service.comms.bus.when_open(
             lambda: self.run_async(partial(
                 self.enter_phase, service.comms.root,
-                partial(UnreadableHistory.outcome, partial(self.read_board, service.comms)))))
+                partial(UnreadableHistory.outcome, partial(self.read_board, service.comms, self.request.selection)))))
         await board.answer(
             partial(self.publish, service),
             lambda deferred: self.prepare_again(),
@@ -1031,7 +1051,7 @@ class TeamHudReading(TeamBoardRead, ReadingObservation[ObserveTeamHud]):
 
     async def publish(self, service: ObservationService,
                       board: tuple[TeamPlan, tuple[TeamHud, ...]]) -> None:
-        self.board = PreparedTeamBoard(board[1])
+        self.board = self.board.prepared(self.prepared_revision, board[1])
         service.interest.prepared(self, service)
 
     async def unreadable(self, service: ObservationService, cause: UnreadableHistory) -> None:

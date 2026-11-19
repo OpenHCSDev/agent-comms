@@ -22,7 +22,16 @@ from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import Ping, RulePing, TeamDecisions, TeamUpdateNotice
 from agent_comms.team.standing_rules import ReviewTimerUp
 from agent_comms.team.team_hud import (
-    CodexUsage, TeamFrame, TeamFramesDocument, TeamHud, TeamHudRecord, TeamPlan, UnreadableUsage,
+    AllTeamBoards,
+    CodexUsage,
+    NamedTeamBoards,
+    TeamBoardSelection,
+    TeamFrame,
+    TeamFramesDocument,
+    TeamHud,
+    TeamHudRecord,
+    TeamPlan,
+    UnreadableUsage,
 )
 from agent_comms.team.vibe_check import OverloadDegradation
 
@@ -75,6 +84,42 @@ def test_one_snapshot_preserves_every_recipient_and_encodes_each_ping_once(tmp_p
     captured[0]["open_pings"][0]["text"] = "another caller edit"
     assert Ping.encode(original[0].open_pings[0])["text"] != "another caller edit"
     assert values(TeamFrame.read_all(tmp_path)) == expected
+
+
+@pytest.mark.parametrize("selection, names", [
+    (AllTeamBoards(), ("first", "second", "third")),
+    (NamedTeamBoards(frozenset(("second",))), ("second",)),
+    (NamedTeamBoards(frozenset(("first", "third"))), ("first", "third")),
+    (NamedTeamBoards(frozenset(("missing",))), ()),
+    (NamedTeamBoards(frozenset()), ()),
+])
+def test_selected_frames_decode_only_requested_recipients(tmp_path, monkeypatch, selection, names):
+    original = huds()
+    TeamFrame.replace_all(tmp_path, TeamPlan(), original)
+    selection = FieldCodec.decode(TeamBoardSelection, FieldCodec.encode(selection, TeamBoardSelection))
+    decoded = []
+    decode = FieldCodec.decode
+
+    def counted(annotation, raw):
+        if annotation is TeamHud:
+            decoded.append(raw)
+        return decode(annotation, raw)
+
+    monkeypatch.setattr(FieldCodec, "decode", counted)
+    selected = TeamFrame.read_all(tmp_path, selection)
+    assert tuple(hud.teammate.name for hud in selected) == names
+    assert len(decoded) == len(names)
+    assert values(selected) == values(tuple(hud for hud in original if hud.teammate.name in names))
+
+
+def test_combined_board_selection_keeps_every_visible_page_and_full_board():
+    first, second = (TeamBoardSelection.named(name) for name in ("first", "second"))
+    combined = first.combined(second)
+    assert combined == NamedTeamBoards(frozenset(("first", "second")))
+    assert combined.combined(first) == combined
+    assert combined.combined(AllTeamBoards()) == AllTeamBoards()
+    assert AllTeamBoards().combined(combined) == AllTeamBoards()
+    assert TeamBoardSelection.named("") == AllTeamBoards()
 
 
 def test_partial_and_full_passes_keep_their_actual_membership_and_old_cuts(tmp_path):

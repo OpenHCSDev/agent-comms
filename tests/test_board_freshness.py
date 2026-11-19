@@ -26,7 +26,15 @@ from agent_comms.task_attachments.team_pings import TeamUpdateStore
 from agent_comms.team.standing_rules import StandingRule
 from agent_comms.team.team_frame_file import TeamPlanFile
 from agent_comms.team.team_heartbeat import TeamBoardRead, TeamHeartbeat, TeamObservation
-from agent_comms.team.team_hud import CodexUsage, TeamFrame, TeamPlan, UnreadableUsage
+from agent_comms.team.team_hud import (
+    AllTeamBoards,
+    CodexUsage,
+    NamedTeamBoards,
+    TeamFrame,
+    TeamHud,
+    TeamPlan,
+    UnreadableUsage,
+)
 from agent_comms.ui_model.observation import (
     ObservationService,
     ObserveTeamHud,
@@ -79,6 +87,24 @@ def test_preparing_a_board_has_no_service_or_publication_effects(held_bus, accou
     assert not before.changed_since(TeamBoardView(), held_bus.views.revision())
 
 
+def test_selected_board_prepares_only_the_requested_recipient(held_bus, account_read, monkeypatch):
+    _plan, whole = TeamBoardRead().read_board(held_bus)
+    assert whole
+    owner = whole[0].teammate
+    delivered = []
+    original = TeamHud.for_delivery
+
+    def counted(board, delivery):
+        delivered.append(delivery.packet.teammate)
+        return original(board, delivery)
+
+    monkeypatch.setattr(TeamHud, "for_delivery", counted)
+    _plan, selected = TeamBoardRead().read_board(held_bus, NamedTeamBoards(frozenset((owner.name,))))
+    assert tuple(hud.teammate for hud in selected) == (owner,)
+    assert delivered == [owner]
+    assert TeamFrame.read_all(held_bus.root) == ()
+
+
 async def test_live_observer_serves_while_preparation_blocks_then_updates_without_beats(
     held_bus, account_read, monkeypatch,
 ):
@@ -88,11 +114,11 @@ async def test_live_observer_serves_while_preparation_blocks_then_updates_withou
     original = TeamBoardRead.read_board
     builds = []
 
-    def blocked_read(board, comms):
+    def blocked_read(board, comms, selection):
         builds.append(threading.get_ident())
         loop.call_soon_threadsafe(started.set)
         assert release.wait(10), "The observer loop could not release its worker"
-        return original(board, comms)
+        return original(board, comms, selection)
 
     monkeypatch.setattr(TeamBoardRead, "read_board", blocked_read)
     before_passes = ServicePassStore.at(held_bus.root).read()
@@ -147,7 +173,7 @@ async def test_retiring_interest_drops_preparation_without_a_late_publication(co
     finished = threading.Event()
     loop = asyncio.get_running_loop()
 
-    def blocked_read(board, wire):
+    def blocked_read(board, wire, selection):
         loop.call_soon_threadsafe(started.set)
         try:
             assert release.wait(10)
