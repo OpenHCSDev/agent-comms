@@ -22,6 +22,10 @@ class BoardActionOffer(
 
     @property
     @abstractmethod
+    def label(self) -> str: ...
+
+    @property
+    @abstractmethod
     def words(self) -> tuple[str, ...]: ...
 
     def text(self) -> str:

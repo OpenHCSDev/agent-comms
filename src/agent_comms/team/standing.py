@@ -437,6 +437,7 @@ class DeliveryAwaitingJudgement(OwedAnswer, UndatedStandingRule, OrderHeadReview
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], debtors: tuple[Thread, ...],
                   requests: Mapping[ThreadIncarnation, Sequence[OwnerRequest]]) -> tuple[Self, ...]:
         """One team debt per retained claim, even before its original reaches the bus."""
+        DeclaredFamily.discover_package(team)
         return tuple(cls(message=claim.message, author=owner,
                          reviewer=claim.reviewer.identity(todo), problem=todo.id,
                          request=claim.request(), todo=todo)

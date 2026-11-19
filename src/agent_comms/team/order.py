@@ -1230,6 +1230,10 @@ class TeamVerbActionOffer(BoardActionOffer):
     recipient: ThreadIncarnation
 
     @property
+    def label(self) -> str:
+        return self.verb.help
+
+    @property
     def words(self) -> tuple[str, ...]:
         return (self.verb.tool(), self.verb.declared_name, *self.arguments)
 
