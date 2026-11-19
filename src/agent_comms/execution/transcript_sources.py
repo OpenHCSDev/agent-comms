@@ -98,9 +98,12 @@ from agent_comms.storage.recorded_time import (
     UnrecordedEventTime,
 )
 from agent_comms.storage.typed_table import (
+    FULL_SCHEMA_REBUILD,
     Column,
     DurableStore,
+    SchemaRebuild,
     StoreWriter,
+    TypedRow,
     TypedTable,
 )
 from agent_comms.team.rule_deal import Mute, Speaking, Voice
@@ -1101,6 +1104,29 @@ class Through(PageLimit):
 
 
 @dataclass(frozen=True)
+class RetiredDraftRow(TypedRow):
+    """The durable full-draft row replaced once by ordered appends."""
+
+    thread: ThreadLookup
+    turn_id: NativeTurnId
+    item_id: NativeItemId
+    events: tuple[TranscriptEvent, ...]
+
+    table: ClassVar[str] = "external_draft"
+
+    @classmethod
+    def stored(cls, connection: Connection) -> tuple[RetiredDraftRow, ...]:
+        exists = connection.execute(
+            "SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?", (cls.table,),
+        ).fetchone()
+        if exists is None:
+            return ()
+        return tuple(cls.read(connection.execute(
+            f'SELECT thread,turn_id,item_id,events FROM "{cls.table}"'
+        )))
+
+
+@dataclass(frozen=True)
 class DraftAppendRow(ExternalTranscriptRows, TypedTable, declared_name="external_draft_append"):
     """One ordered event append for one live draft message."""
 
@@ -1293,8 +1319,25 @@ class ExternalTranscript(TranscriptSource, DurableStore):
     incarnation: ThreadIncarnation
     filename: ClassVar[str] = "external_transcripts.sqlite3"
     tables = ExternalTranscriptRows
+    retired_tables = (RetiredDraftRow.table,)
     # The CLI keeps its own items; a lost tail is republished when a watch starts.
     synchronous: ClassVar[str] = "NORMAL"
+
+    @classmethod
+    def carry_schema(
+        cls,
+        connection: Connection,
+        sharing: tuple[type[TypedTable], ...] = (),
+        *,
+        rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
+    ) -> None:
+        """Expand each durable full draft before retiring its old table."""
+        drafts = RetiredDraftRow.stored(connection)
+        super().carry_schema(connection, sharing, rebuild=rebuild)
+        for draft in drafts:
+            DraftAppendRow.append(
+                connection, draft.thread, draft.turn_id, draft.item_id, draft.events,
+            )
 
     @property
     def lookup(self) -> ThreadLookup:
