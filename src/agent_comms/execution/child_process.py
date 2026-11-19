@@ -24,6 +24,7 @@ import sys
 import termios
 import threading
 import time
+import inspect
 from abc import (
     ABC,
     abstractmethod,
@@ -1967,6 +1968,13 @@ async def join_retirement[Result](task: asyncio.Future[Result]) -> Result:
             except asyncio.CancelledError as error:
                 interrupted = error
         result = task.result()
+        if interrupted is not None and inspect.isawaitable(result):
+            returned = asyncio.ensure_future(result)
+            returned.cancel()
+            try:
+                await join_retirement(returned)
+            except asyncio.CancelledError:
+                pass
     except ChildRetirementError:
         raise  # Cancellation cannot turn an unattested physical stop into success.
     except BaseException as error:
