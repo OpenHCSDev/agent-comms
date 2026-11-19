@@ -12,6 +12,10 @@ class HeartbeatDelivery(DeclaredFamily, affix="HeartbeatDelivery"):
     def publish[Publication](cls, operation: Callable[[], Publication]) -> tuple[Publication, ...]:
         return ()
 
+    @classmethod
+    def publishes(cls) -> bool:
+        return False
+
 
 class OnHeartbeatDelivery(HeartbeatDelivery):
     """Execute the packet owner's publication, retaining its notice or wake behavior."""
@@ -19,6 +23,10 @@ class OnHeartbeatDelivery(HeartbeatDelivery):
     @classmethod
     def publish[Publication](cls, operation: Callable[[], Publication]) -> tuple[Publication, ...]:
         return (operation(),)
+
+    @classmethod
+    def publishes(cls) -> bool:
+        return True
 
 
 class OffHeartbeatDelivery(HeartbeatDelivery):

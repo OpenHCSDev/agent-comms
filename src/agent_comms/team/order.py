@@ -1211,7 +1211,7 @@ class TeamVerb(ClearingVerb, affix="Verb"):
         cls,
         values: Mapping[str, str],
         observation: TextDigest,
-        recipient: ThreadIncarnation,
+        recipient: ThreadIncarnation | None,
     ) -> tuple[BoardActionOffer, ...]:
         return tuple(TeamVerbActionOffer(cls, arguments, observation, recipient)
                      for arguments in cls.command_arguments(values))
@@ -1227,7 +1227,11 @@ class TeamVerbActionOffer(BoardActionOffer):
     verb: type[TeamVerb]
     arguments: tuple[str, ...]
     observation: TextDigest
-    recipient: ThreadIncarnation
+    recipient: ThreadIncarnation | None = None
+
+    def bind(self, recipient: ThreadIncarnation) -> Self:
+        """The packet owns one generic action; its board owner supplies the recipient."""
+        return self if self.recipient == recipient else replace(self, recipient=recipient)
 
     @property
     def label(self) -> str:

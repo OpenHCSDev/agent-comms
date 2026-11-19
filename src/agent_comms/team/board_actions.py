@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FrozenRecordMember, TaggedRecordMember
 from agent_comms.transport.tool_result import ToolResult
+
+if TYPE_CHECKING:
+    from agent_comms.registry.thread_identity import ThreadIncarnation
 
 
 class BoardActionOffer(
@@ -30,6 +34,12 @@ class BoardActionOffer(
 
     def text(self) -> str:
         return " ".join(self.words)
+
+    def bind(self, recipient: ThreadIncarnation) -> BoardActionOffer:
+        """Bind this recipient-neutral action to the board incarnation executing it."""
+        return self if getattr(self, "recipient", None) == recipient else replace(
+            self, recipient=recipient,
+        )
 
     @abstractmethod
     def execute(self, root: Path, actor: str) -> BoardActionApplied:

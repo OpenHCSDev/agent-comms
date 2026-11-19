@@ -331,7 +331,7 @@ class CommsBoardActionTool(HumanToolRequest[BoardActionApplied]):
             action
             for packet in TeamUpdate.latest(comms, recipient)
             for ping in packet.handled
-            for action in ping.board_actions()
+            for action in ping.board_actions(packet.teammate)
         )
         if self.offer not in current:
             raise ToolRefusedError("The board action is stale; read the current board")

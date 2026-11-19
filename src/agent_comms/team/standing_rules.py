@@ -348,7 +348,7 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
 
     def action_offers(
         self,
-        recipient: ThreadIncarnation,
+        recipient: ThreadIncarnation | None,
         *,
         observation: TextDigest | None = None,
     ) -> tuple[BoardActionOffer, ...]:
@@ -1709,14 +1709,10 @@ class HostMemoryHigh(IndependentStandingRule, UndatedStandingRule):
 
     def line(self) -> str:
         return (
-            f"RAM shared Python host {self.process.pid}: "
-            f"{self.memory.resident / 2**20:.0f} MiB resident, "
-            f"{self.memory.peak / 2**20:.0f} MiB peak / "
-            f"{self.rule.host_memory_bytes / 2**20:.0f} MiB host budget; "
-            f"whole team {self.fleet_resident / 2**20:.0f} / "
-            f"{self.rule.team_memory_budget(self.owners) / 2**20:.0f} MiB "
-            f"for {self.owners} owners"
-            " -> inspect comms_resources and fix the host's growing owner"
+            f"RAM shared Python host {self.process.pid} exceeds its "
+            f"{self.rule.host_memory_bytes / 2**20:.0f} MiB host or "
+            f"{self.rule.team_memory_budget(self.owners) / 2**20:.0f} MiB team budget "
+            f"for {self.owners} owners -> inspect comms_resources and fix the growing owner"
         )
 
 
@@ -1734,13 +1730,10 @@ class MemoryLow(IndependentStandingRule, UndatedStandingRule):
         return (cls(rule=rule, memory=memory),) if rule.memory_due(memory) else ()
 
     def line(self) -> str:
-        dirs = ", ".join(map(str, self.memory.idle_dirs)) or "none"
-        processes = ", ".join(map(str, self.memory.processes)) or "none"
         return (
-            f"FREE {self.memory.available_gib:.1f} GiB of memory available (cleanup due under"
-            f" {self.rule.memory_gib:g} GiB); pytest temp dirs idle over"
-            f" {self.rule.idle_minutes:g} min: {dirs}; test processes: {processes}"
-            ". who's cleaning up? -> put a cleanup owner on it now"
+            f"FREE memory is below the {self.rule.memory_gib:g} GiB cleanup threshold; "
+            f"pytest temp dirs idle over {self.rule.idle_minutes:g} min may be reclaimable. "
+            "who's cleaning up? -> inspect comms_resources and put one cleanup owner on it"
         )
 
 
@@ -1763,9 +1756,9 @@ class DiskLow(IndependentStandingRule, UndatedStandingRule, FamilyScan):
 
     def line(self) -> str:
         return (
-            f"FREE {self.free_gib:.1f} GiB free on {self.rule.volume} (cleanup due under"
-            f" {self.rule.cleanup_gib:g} GiB{self.floor_warning()}). who's cleaning up?"
-            " -> put a cleanup owner on it now"
+            f"FREE space on {self.rule.volume} is below the {self.rule.cleanup_gib:g} GiB"
+            f" cleanup threshold{self.floor_warning()}. who's cleaning up?"
+            " -> inspect comms_resources and put one cleanup owner on it"
         )
 
 
