@@ -231,7 +231,10 @@ class RulePing(Ping):
         rules: Mapping[tuple[type[StandingRule], TextDigest], StandingRule],
     ) -> RulePing:
         rule = rules[(self.rule, self.observation)]
-        return replace(self, offers=rule.action_offers(recipient))
+        return replace(
+            self,
+            offers=rule.action_offers(recipient, observation=self.observation),
+        )
 
     def board_actions(self) -> tuple[BoardActionOffer, ...]:
         return self.offers
@@ -354,7 +357,17 @@ class TeamPings(PingLines):
         announced = {ping.key: ping for packet in published for ping in packet.handled}
         new = tuple(ping for ping in self.handled if announced.get(ping.key) != ping)
         wakes = self.open_wakes or any(not ping.parked(self.stopped_threads) for ping in new)
-        bind = lambda pings: tuple(ping.for_recipient(recipient, self.rules) for ping in pings)
+        bound: dict[Ping, Ping] = {}
+
+        def bind(pings: tuple[Ping, ...]) -> tuple[Ping, ...]:
+            """Bind each captured occurrence once across handled/new/waiting/open subsets."""
+            carried = []
+            for ping in pings:
+                if ping not in bound:
+                    bound[ping] = ping.for_recipient(recipient, self.rules)
+                carried.append(bound[ping])
+            return tuple(carried)
+
         handled, decisions, waiting, opened = map(
             bind, (self.handled, new, self.waiting, self.opened),
         )
