@@ -101,7 +101,7 @@ def test_retaining_reloads_changed_git_replacement_policy(main: Path) -> None:
     replacement = git(main, 'commit-tree', 'HEAD^{tree}', '-m', 'P304 replacement')
     reads = RepositoryReads()
     previous = reads.history_for(Checkout(main))
-    before = previous.graph.copy()
+    before = dict(previous.graph)
     assert previous.messages.naming('P303') == {original}
     git(main, 'replace', original, replacement)
     following_reads = RepositoryReads.retaining(reads)
@@ -125,7 +125,7 @@ def test_retaining_reloads_changed_shallow_boundary(main: Path) -> None:
     shallow = Path(git(main, 'rev-parse', '--path-format=absolute', '--git-path', 'shallow'))
     reads = RepositoryReads()
     previous = reads.history_for(Checkout(main))
-    before = previous.graph.copy()
+    before = dict(previous.graph)
     shallow.write_text(tip + '\n')
     following_reads = RepositoryReads.retaining(reads)
     following = following_reads.history_for(Checkout(main))
@@ -146,7 +146,7 @@ def test_retaining_reloads_changed_graft_boundary(main: Path) -> None:
     graft = Path(git(main, 'rev-parse', '--path-format=absolute', '--git-path', 'info/grafts'))
     reads = RepositoryReads()
     previous = reads.history_for(Checkout(main))
-    before = previous.graph.copy()
+    before = dict(previous.graph)
     graft.write_text(tip + '\n')
     following_reads = RepositoryReads.retaining(reads)
     following = following_reads.history_for(Checkout(main))
@@ -168,7 +168,7 @@ def test_retaining_reloads_changed_replacement_setting(main: Path) -> None:
     git(main, 'replace', original, replacement)
     reads = RepositoryReads()
     previous = reads.history_for(Checkout(main))
-    before = previous.graph.copy()
+    before = dict(previous.graph)
     assert previous.messages.naming('P304') == {original}
     git(main, 'config', 'core.useReplaceRefs', 'false')
     following_reads = RepositoryReads.retaining(reads)
@@ -186,7 +186,7 @@ def test_retaining_reloads_changed_replacement_setting(main: Path) -> None:
 def test_changed_invalid_policy_reports_its_source_failure(main: Path) -> None:
     reads = RepositoryReads()
     previous = reads.history_for(Checkout(main))
-    before = previous.graph.copy()
+    before = dict(previous.graph)
     policy = previous.policy
     git(main, 'config', 'core.useReplaceRefs', 'not-a-boolean')
     with pytest.raises(FailedGitCommand, match='not-a-boolean'):
@@ -199,7 +199,7 @@ def test_changed_invalid_policy_reports_its_source_failure(main: Path) -> None:
 def test_unreadable_boundary_reports_its_original_file(main: Path, name: str) -> None:
     reads = RepositoryReads()
     previous = reads.history_for(Checkout(main))
-    before = previous.graph.copy()
+    before = dict(previous.graph)
     boundary = Path(git(main, 'rev-parse', '--path-format=absolute', '--git-path', name))
     boundary.mkdir()
     following = RepositoryReads.retaining(reads).history_for(Checkout(main))
@@ -227,6 +227,17 @@ def test_captured_history_maps_keep_order_and_reject_reader_mutation(main: Path,
     with pytest.raises(TypeError):
         setitem(restored, key, value)
     assert RepositoryReads.retaining(reads).history_for(Checkout(main)) is history
+
+
+def test_captured_graph_owns_its_supplied_mapping(main: Path) -> None:
+    original = Checkout(main).read().graph
+    supplied = dict(original)
+    captured = type(original)(original.source, supplied)
+    supplied.clear()
+    assert tuple(captured.items()) == tuple(original.items())
+    assert captured.source is original.source
+    with pytest.raises(TypeError):
+        captured.commits['injected'] = next(iter(original.values()))
 
 
 def test_indexed_commit_words_and_literal_phrases_keep_the_boundary_contract():

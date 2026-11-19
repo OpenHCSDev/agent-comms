@@ -67,9 +67,16 @@ def test_real_changed_ref_keeps_old_cut_and_reuses_unchanged_postings(tmp_path: 
     old_answer = tuple(earlier.commits(('main',), selected=CommitsNaming('P1')))
     old_words = earlier.messages.word_names
     git(main, 'commit', '--allow-empty', '-m', 'P2 added')
-    following = RepositoryReads.retaining(reads).history_for(Checkout(main))
-    assert tuple(following.commits(('main',), selected=CommitsNaming('P1'))) == old_answer
-    assert len(tuple(following.commits(('main',), selected=CommitsNaming('P2')))) == 1
+    decoded = Mock(wraps=GitCommit.listed)
+    with patch.object(GitCommit, 'listed', decoded):
+        following = RepositoryReads.retaining(reads).history_for(Checkout(main))
+        assert tuple(following.commits(('main',), selected=CommitsNaming('P1'))) == old_answer
+        assert len(tuple(following.commits(('main',), selected=CommitsNaming('P2')))) == 1
+    added = git(main, 'rev-parse', 'HEAD').strip()
+    assert [call.args[0].split('\0', 1)[0] for call in decoded.call_args_list] == [added]
+    fresh = Checkout(main).read().graph
+    assert tuple(following.graph.items()) == tuple(fresh.items())
+    assert following.graph[old_answer[0].sha] is earlier.graph[old_answer[0].sha]
     assert following.messages.word_names['p1'] is old_words['p1']
     assert tuple(earlier.commits(('main',), selected=CommitsNaming('P2'))) == ()
 

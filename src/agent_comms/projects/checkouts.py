@@ -617,6 +617,23 @@ class GitCommit:
     at: float
     message: str
 
+    @classmethod
+    def listed(cls, row: str) -> GitCommit:
+        sha, parents, at, message = row.split("\0", 3)
+        return cls(GitCommitText.from_text(sha),
+                   tuple(map(GitCommitText.from_text, parents.split())), float(at), message)
+
+    @classmethod
+    def read(cls, repository: Path, heads: tuple[str, ...], *walk_options: str) -> dict[str, GitCommit]:
+        """Git supplies these complete commit facts, in its own selected walk order."""
+        if not heads:
+            return {}
+        text = Repo.git(repository, "rev-list", "--stdin", "--no-commit-header",
+                        "--format=%H%x00%P%x00%ct%x00%B%x00", *walk_options,
+                        input="".join(f"{head}\n" for head in heads))
+        return {commit.sha: commit for commit in (
+            cls.listed(row) for row in text.split("\0\n") if row)}
+
 
 @dataclass(frozen=True)
 class CommitSelection:
@@ -794,6 +811,64 @@ class GitHistoryPolicy:
     boundary_files: tuple[tuple[Path, DocumentBytes], ...]
 
 
+@dataclass(frozen=True)
+class GitGraphSource:
+    """The repository and effective walk policy that supplied immutable commit facts."""
+
+    repository: Path
+    policy: GitHistoryPolicy
+
+
+class CommitGraph(Mapping[str, GitCommit]):
+    """No acquired graph. Its first cut reads all original facts through GitCommit."""
+
+    def __getitem__(self, sha: str) -> GitCommit:
+        raise KeyError(sha)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(())
+
+    def __len__(self) -> int:
+        return 0
+
+    def following(self, source: GitGraphSource, heads: tuple[str, ...]) -> CapturedCommitGraph:
+        return CapturedCommitGraph(source, GitCommit.read(source.repository, heads))
+
+
+@dataclass(frozen=True, eq=False)
+class CapturedCommitGraph(CommitGraph):
+    """An immutable source cut; a fresh Git walk still owns reachability and ordering."""
+
+    source: GitGraphSource
+    commits: Mapping[str, GitCommit]
+
+    def __post_init__(self) -> None:
+        # Capture the supplied map; no caller keeps a writable handle to this cut.
+        object.__setattr__(self, "commits", MappingProxyType(dict(self.commits)))
+
+    def __getitem__(self, sha: str) -> GitCommit:
+        return self.commits[sha]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.commits)
+
+    def __len__(self) -> int:
+        return len(self.commits)
+
+    def following(self, source: GitGraphSource, heads: tuple[str, ...]) -> CapturedCommitGraph:
+        if source != self.source:
+            return super().following(source, heads)
+        if not heads:
+            return type(self)(source, {})
+        order = Repo.git(source.repository, "rev-list", "--stdin",
+                         input="".join(f"{head}\n" for head in heads))
+        shas = tuple(map(GitCommitText.from_text, order.splitlines()))
+        added = GitCommit.read(source.repository, tuple(sha for sha in shas if sha not in self),
+                               "--no-walk=unsorted")
+        return type(self)(source, {
+            sha: self[sha] if sha in self else added[sha] for sha in shas})
+
+
 class CheckoutHistory:
     """A pass's selected refs and immutable commit graph, never a command-output cache.
 
@@ -809,6 +884,7 @@ class CheckoutHistory:
         self._bases: dict[int, tuple[str, ...]] = {}
         self._walks: dict[CommitSelection, CommitWalk] = {}
         self._message_seed: CommitMessages = NoCommitMessages()
+        self._graph_seed: CommitGraph = CommitGraph()
 
     @cached_property
     def repository(self) -> Repo:
@@ -851,6 +927,7 @@ class CheckoutHistory:
         if (fresh.refs == self.refs and fresh.heads == self.heads
                 and fresh.policy == self.policy):
             return self
+        fresh._graph_seed = self.__dict__.get(CheckoutHistory.graph.attrname, self._graph_seed)
         fresh._message_seed = self._message_seed.acquired_index()
         return fresh
 
@@ -864,28 +941,13 @@ class CheckoutHistory:
 
     @cached_property
     def graph(self) -> Mapping[str, GitCommit]:
-        # Capture policy before Git walks: a later comparison must not reread the old cut.
-        self.policy
+        # Capture sources before Git walks; a later cut never rereads this one's policy.
+        source = GitGraphSource(self.checkout.common_dir, self.policy)
         heads = tuple(dict.fromkeys((
             *self.required, *(reference.commit for reference in self.refs.values()),
             *(sha for head in self.heads.values() for sha in head.required()),
         )))
-        if not heads:
-            return MappingProxyType({})
-        text = Repo.git(self.checkout.common_dir, "rev-list", "--stdin", "--no-commit-header",
-                        "--format=%H%x00%P%x00%ct%x00%B%x00",
-                        input="".join(f"{head}\n" for head in heads))
-        commits = {}
-        for row in text.split("\0\n"):
-            if not row:
-                continue
-            sha, parents, at, message = row.split("\0", 3)
-            commit = GitCommit(
-                GitCommitText.from_text(sha),
-                tuple(map(GitCommitText.from_text, parents.split())), float(at), message,
-            )
-            commits[commit.sha] = commit
-        return MappingProxyType(commits)
+        return self._graph_seed.following(source, heads)
 
     def resolve(self, revision: str) -> str:
         """Resolve captured ref names or an unambiguous captured commit abbreviation."""
