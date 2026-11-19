@@ -2,7 +2,9 @@
 
 import os
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +20,9 @@ from agent_comms.execution.launch_runtime import (
     RunningSource,
     RuntimeReplacedError,
 )
+from agent_comms.execution.owner_lifecycle import OwnerLifecycle
+from agent_comms.execution.owner_restart import OwnerRestartHandoff
+from agent_comms.execution.systemd_unit import AgentsSlice
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import OwnersNotRestarted, UpgradeRefused
 from agent_comms.installer.upgrade import OwnersStopped, Stack
@@ -92,6 +97,138 @@ def test_a_succeeding_install_restarts_its_owners_unless_taken_over(comms, tmp_p
         with taken.given_back_on(stack, comms.root):
             taken.retired()
         assert taken.started == ()
+
+
+def _launch_wave_lifecycle(count: int, events: list[tuple[str, str]]):
+    root = Path("/retained-root")
+    threads = tuple(
+        SimpleNamespace(
+            name=f"owner-{index}",
+            role=SimpleNamespace(require_executable=lambda _refusal: None),
+            process_alive=False,
+            require_process=lambda index=index: SimpleNamespace(pid=index + 100),
+        )
+        for index in range(count)
+    )
+    owners = tuple(
+        SimpleNamespace(
+            name=thread.name,
+            launch=SimpleNamespace(process=SimpleNamespace(pid=index)),
+            require_current=lambda _snapshot, thread=thread: (
+                events.append(("validate", thread.name)) or thread
+            ),
+        )
+        for index, thread in enumerate(threads)
+    )
+    registry = SimpleNamespace(
+        snapshot=lambda: object(),
+        require_member=lambda name, _member: threads[int(name.removeprefix("owner-"))],
+        status=lambda _name: SimpleNamespace(
+            holds_process=lambda: False, require_visible=lambda _refusal: None
+        ),
+    )
+    lifecycle = SimpleNamespace(root=root, registry=registry)
+    lifecycle.launch_waves = lambda items, launch: OwnerLifecycle.launch_waves(
+        lifecycle, items, launch
+    )
+    handoff = OwnerRestartHandoff(str(root), owners, None, None, None, None)
+    return handoff, lifecycle, threads
+
+
+def test_a_retained_owner_cohort_resumes_under_its_launch_budget(monkeypatch):
+    monkeypatch.setattr(AgentsSlice, "owner_initialization_capacity", 3)
+    events = []
+    handoff, lifecycle, _threads = _launch_wave_lifecycle(11, events)
+    active = 0
+    peak = 0
+
+    @contextmanager
+    def launch(thread, source):
+        nonlocal active, peak
+        events.append(("start", thread.name))
+        active += 1
+        peak = max(peak, active)
+        try:
+            yield SimpleNamespace(
+                require_process=lambda: SimpleNamespace(pid=source.process.pid + 100)
+            )
+        finally:
+            active -= 1
+            events.append(("join", thread.name))
+
+    results = handoff._launch(lifecycle, launch)
+    names = tuple(f"owner-{index}" for index in range(11))
+    assert peak == 3
+    assert active == 0
+    assert tuple(name for event, name in events if event == "validate") == names
+    assert events.index(("validate", "owner-10")) < events.index(("start", "owner-0"))
+    assert tuple(name for event, name in events if event == "start") == names
+    assert sorted(name for event, name in events if event == "join") == sorted(names)
+    assert events.index(("join", "owner-0")) < events.index(("start", "owner-3"))
+    assert tuple(result.thread for result in results) == names
+    assert tuple(result.previous_pid for result in results) == tuple(range(11))
+    assert tuple(result.pid for result in results) == tuple(range(100, 111))
+
+
+def test_the_normal_install_start_path_consumes_the_same_launch_budget(monkeypatch):
+    monkeypatch.setattr(AgentsSlice, "owner_initialization_capacity", 3)
+    events = []
+    _handoff, lifecycle, threads = _launch_wave_lifecycle(11, events)
+    active = 0
+    peak = 0
+
+    @contextmanager
+    def launching_owner(thread, _binary, _arguments, *, launch_runtime):
+        nonlocal active, peak
+        assert launch_runtime.runs_this_process
+        events.append(("start", thread.name))
+        active += 1
+        peak = max(peak, active)
+        try:
+            yield thread
+        finally:
+            active -= 1
+            events.append(("join", thread.name))
+
+    lifecycle.launching_owner = launching_owner
+    names = tuple(thread.name for thread in threads)
+    results = OwnerLifecycle.start_many(lifecycle, names)
+    assert peak == 3
+    assert active == 0
+    assert tuple(name for event, name in events if event == "start") == names
+    assert sorted(name for event, name in events if event == "join") == sorted(names)
+    assert events.index(("join", "owner-0")) < events.index(("start", "owner-3"))
+    assert tuple(result.thread for result in results) == names
+    assert all(result.launched for result in results)
+
+
+def test_a_failed_restart_wave_joins_admitted_owners_and_admits_no_successor(monkeypatch):
+    monkeypatch.setattr(AgentsSlice, "owner_initialization_capacity", 3)
+    events = []
+    handoff, lifecycle, _threads = _launch_wave_lifecycle(11, events)
+    dispatched = []
+    joined = []
+
+    @contextmanager
+    def launch(thread, source):
+        dispatched.append(thread.name)
+        try:
+            yield SimpleNamespace(
+                require_process=lambda: SimpleNamespace(pid=source.process.pid + 100)
+            )
+        finally:
+            joined.append(thread.name)
+            if thread.name == "owner-4":
+                raise RuntimeError("owner initialization failed")
+
+    with pytest.raises(RuntimeError, match="owner initialization failed"):
+        handoff._launch(lifecycle, launch)
+    names = tuple(f"owner-{index}" for index in range(11))
+    admitted = names[:6]
+    assert tuple(name for event, name in events if event == "validate") == names
+    assert tuple(dispatched) == admitted
+    assert sorted(joined) == sorted(admitted)
+    assert tuple(owner.name for owner in handoff.owners) == names
 
 
 def test_a_recorded_target_keeps_the_import_path_its_capture_selected(tmp_path):

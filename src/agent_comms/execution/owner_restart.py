@@ -132,12 +132,18 @@ class OwnerRestartHandoff:
         snapshot = lifecycle.registry.snapshot()
         # Close the entire witness set before ANY replacement launch.
         threads = tuple(owner.require_current(snapshot) for owner in self.owners)
-        with ExitStack() as launches:
-            results = tuple(OwnerRestartResult(
+        def start(
+            launches: ExitStack, item: tuple[Thread, RetiredOwnerLaunch],
+        ) -> OwnerRestartResult:
+            thread, owner = item
+            return OwnerRestartResult(
                 thread.name, owner.launch.process.pid,
                 launches.enter_context(launch(thread, owner.launch)).require_process().pid,
-            ) for thread, owner in zip(threads, self.owners, strict=True))
-        return results
+            )
+
+        return lifecycle.launch_waves(
+            tuple(zip(threads, self.owners, strict=True)), start
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
