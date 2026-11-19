@@ -29,3 +29,7 @@ class RepositoryEnvironment:
     @property
     def declaration_record(self) -> Path:
         return self.common / "test-environment.json"
+
+    @property
+    def history(self) -> Path:
+        return self.common / "test-environment-history"
