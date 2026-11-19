@@ -1,7 +1,7 @@
 """Fresh message evidence changes only its own postings; old cuts remain answers."""
 import re
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -12,19 +12,6 @@ from agent_comms.projects.repo import Repo
 
 def records(*texts):
     return tuple(GitCommit(str(index), (), float(index), text) for index, text in enumerate(texts))
-
-
-class ObservedWords:
-    def __init__(self, original):
-        self.original = original
-        self.read = []
-
-    def findall(self, text):
-        self.read.append(text)
-        return self.original.findall(text)
-
-    def fullmatch(self, text):
-        return self.original.fullmatch(text)
 
 
 @pytest.mark.parametrize('after', [
@@ -40,7 +27,7 @@ def test_retained_postings_change_only_changed_original_messages(after):
     before_words = before.word_names
     with pytest.raises(TypeError):
         before.messages_by_sha['0'] = 'forged source'
-    observed = ObservedWords(CommitMessages.words)
+    observed = Mock(wraps=CommitMessages.words)
     with patch.object(CommitMessages, 'words', observed):
         following = before.following(after)
         following_words = following.word_names
@@ -48,7 +35,7 @@ def test_retained_postings_change_only_changed_original_messages(after):
     current = {record.sha: record.message.lower() for record in after}
     changed = {sha for sha in previous.keys() | current.keys() if previous.get(sha) != current.get(sha)}
     expected_reads = [message for source in (previous, current) for sha, message in source.items() if sha in changed]
-    assert sorted(observed.read) == sorted(expected_reads)
+    assert sorted(call.args[0] for call in observed.findall.call_args_list) == sorted(expected_reads)
     for token in ('p1', 'p2', 'p3', 'p4', 'stable', 'new words', 'changed same'):
         expected = frozenset(record.sha for record in after if re.search(
             r'(?<![a-z0-9_])' + re.escape(token) + r'(?![a-z0-9_])', record.message.lower()))
@@ -123,8 +110,8 @@ def test_retention_does_not_acquire_new_graph_or_an_unused_word_index(tmp_path: 
         assert 'rev-list' not in args
         return original_git(*args, **kwargs)
 
-    observed = ObservedWords(CommitMessages.words)
+    observed = Mock(wraps=CommitMessages.words)
     with patch.object(Repo, 'git', without_graph), patch.object(CommitMessages, 'words', observed):
         following = RepositoryReads.retaining(reads).history_for(Checkout(main))
         assert following is not earlier
-    assert observed.read == []
+    observed.findall.assert_not_called()
