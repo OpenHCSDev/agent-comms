@@ -123,4 +123,4 @@ class SharedJson:
         return tuple(JsonNode.require(expanded, root) for root in self.roots)
 
     def decode[T](self, declaration: TypeForm[T]) -> T:
-        return FieldCodec.decode(declaration, list(self.expanded()))
+        return FieldCodec.decode_shared(declaration, list(self.expanded()))

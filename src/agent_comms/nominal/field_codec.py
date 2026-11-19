@@ -23,6 +23,7 @@ from collections.abc import (
     MutableMapping,
 )
 from contextvars import ContextVar
+from copy import copy, deepcopy
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum, IntFlag
@@ -1266,6 +1267,32 @@ class SharedValueEncoding(ValueEncoding):
         return encoded
 
 
+@dataclass
+class SharedValueDecoding:
+    """One synchronous read of stable shared JSON, never a cache between reads.
+
+    Only declared pure copyable records participate. Sources stay alive to prevent id
+    reuse; each caller receives a detached occurrence, including the first.
+    """
+
+    captured: dict[tuple[type, int], tuple[object, SharedRecordMember]] = field(default_factory=dict)
+    closed: bool = field(default=False, init=False)
+    current: ClassVar[ContextVar[SharedValueDecoding | None]] = ContextVar('shared_record_read', default=None)
+
+    def decode(self, declaration: type[SharedRecordMember], data: object) -> object:
+        if self.closed:
+            return declaration.from_wire(data)
+        key = (declaration, id(data))
+        if key not in self.captured:
+            self.captured[key] = (data, declaration.from_wire(data))
+        return self.captured[key][1].detached()
+
+    def close(self) -> None:
+        """A task inheriting this context after return must decode normally."""
+        self.closed = True
+        self.captured.clear()
+
+
 @dataclass(frozen=True, slots=True)
 class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
     """One annotation owns its wire conversion, draft projection and choice domain."""
@@ -2021,6 +2048,36 @@ class RecordMember(ExternalJsonShape, WireValue):
 
     def to_wire(self) -> dict[str, JsonValue]:
         return FieldCodec.encode_record(self)
+
+
+class SharedRecordMember(RecordMember):
+    """A deterministic record whose detached copies preserve its complete wire value.
+
+    Opting in promises from_wire has no per-occurrence effects or contextual answers,
+    and deepcopy retains every occurrence field. Plain record/custom forms do not opt in.
+    """
+
+    def detached(self) -> Self:
+        return deepcopy(self)
+
+    @handles(object)
+    @classmethod
+    def decode_value(cls, data: object, structural: ValueDecoder[T]) -> T:
+        reading = SharedValueDecoding.current.get()
+        if reading is None:
+            return super().decode_value(data, structural)
+        return cast(T, reading.decode(cls, data))
+
+
+class FrozenRecordMember(SharedRecordMember):
+    """A record declaring immutable wire fields can share those values between copies.
+
+    Its copy protocol must retain all occurrence fields and detach derived mutable state.
+    Mutable records retain SharedRecordMember's deep-copy contract.
+    """
+
+    def detached(self) -> Self:
+        return copy(self)
 
 
 class TaggedRecordMember(RecordMember):
@@ -2964,6 +3021,17 @@ class FieldCodec(MroDispatch, Sealed):
     def encode_document(cls, value: object, declared: object) -> object:
         """A document whose declaration names its leaf member stores that member untagged."""
         return compile_decoder(declared).encode_document(value)
+
+    @classmethod
+    def decode_shared(cls, target: TypeForm[T], data: object) -> T:
+        """Decode stable shared input in one isolated cut, detaching returned occurrences."""
+        reading = SharedValueDecoding()
+        token = reading.current.set(reading)
+        try:
+            return cls.decode(target, data)
+        finally:
+            reading.close()
+            reading.current.reset(token)
 
     @classmethod
     def decode_document(cls, declared: TypeForm[T], data: object) -> T:

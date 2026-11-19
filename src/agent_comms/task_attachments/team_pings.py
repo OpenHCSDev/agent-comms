@@ -33,6 +33,7 @@ from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
+    FrozenRecordMember,
     HudExclude,
     MalformedRecord,
     OrderId,
@@ -68,7 +69,7 @@ class OrderKey:
 
 
 @dataclass(frozen=True)
-class Ping(TaggedRecordMember, DeclaredFamily, affix="Ping"):
+class Ping(FrozenRecordMember, TaggedRecordMember, DeclaredFamily, affix="Ping"):
     """One heartbeat line: the work it asks for, what disposes of it, and when it began.
 
     ``since`` is carried from the previous packet while the observation is unchanged, so a
