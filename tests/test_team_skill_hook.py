@@ -28,12 +28,13 @@ from agent_comms.comms import Comms
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.session import CoordinationSession
 from agent_comms.coordination.tables.board_delivery import ReaderBoardDelivery
-from agent_comms.heartbeat_subjects import TeammateSubject
+from agent_comms.heartbeat_subjects import TeamHistory, TeammateSubject
 from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.nominal.field_codec import FieldCodec, OrderId
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.planning.goal_actions import CreateProblemGoalAction
 from agent_comms.planning.orders import (
+    StoredHeadReview,
     ProgressRead,
     ReviewedHeadVerdict,
 )
@@ -41,6 +42,8 @@ from agent_comms.planning.plan_phases import BusWriterPhase
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.projects.head_review import PullRequestHead
+from agent_comms.projects.work_branches import SharedCommitBase
 from agent_comms.projects.rule_probes import Probe
 from agent_comms.registry.heartbeat_delivery import OffHeartbeatDelivery
 from agent_comms.registry.registry_document import RegisteredTeamProject
@@ -54,6 +57,7 @@ from agent_comms.task_attachments.team_pings import (
     ParkedAlarms,
     RulePing,
     TeamDecisions,
+    TeamPings,
     TeamUpdate,
     TeamUpdateStore,
 )
@@ -77,7 +81,9 @@ from agent_comms.team.rule_deal import (
 from agent_comms.team.rule_file import RuleFile
 from agent_comms.team.spinning import SpinningTeammate
 from agent_comms.team.standing import PlanIdle
+from agent_comms.team.publication_rules import ClosedUnmergedPullRequest
 from agent_comms.team.standing_rules import (
+    DeliveredHeadReview,
     DirectiveUnacted,
     OrderlessUnreviewedHead,
     RetiredStandingRule,
@@ -1161,3 +1167,49 @@ def test_board_delivery_reads_one_cut_per_transaction(notification_bus, monkeypa
     assert deliver(reader, (), 1502.0, 2) == ()
     assert deliver(reader, (), 1503.0, 1) == ()
     assert deliver(other, entries, 1200.0, 1) == ()
+
+
+def test_reader_board_selects_its_rows_before_disposal_reads(notification_bus, monkeypatch):
+    comms = notification_bus
+    reader = comms.registry.require("colleague").incarnation
+    repo = RepositoryName.from_wire("OpenHCSDev/agent-comms")
+    since = time.time() + 100.0
+    base = SharedCommitBase("1" * 40)
+    rules = tuple(ClosedUnmergedPullRequest(
+        request=PullRequestHead(repo, i + 100, f"{i+100:040x}"),
+        closed_at=since, commits=(f"{i+100:040x}",), base=base,
+    ) for i in range(40))
+    mine_request = PullRequestHead(repo, 1, "2" * 40)
+    mine_rule = DeliveredHeadReview(
+        holder=reader, problem="P1", order=OrderId.mint(),
+        repo=repo, pr=1, head=mine_request.head, due_at=since,
+    )
+    prepared = TeamPings((), (*rules, mine_rule), (), now=since,
+                         history=TeamHistory.of_team(comms))
+    packet = prepared.delivery(reader, published=()).packet
+    unrelated, mine = packet.handled[:-1], packet.handled[-1]
+    reads = []
+    original = StoredHeadReview.head_reviews
+
+    def read(cls, store, request):
+        reads.append(request)
+        return original(store, request)
+
+    monkeypatch.setattr(StoredHeadReview, "head_reviews", classmethod(read))
+    assert packet.reader_board(comms, reader.name) == (mine.board_entry(),)
+    assert reads == [mine_request]
+    reads.clear()
+    assert packet.board(comms) == tuple(ping.board_entry() for ping in packet.handled)
+    assert set(reads) == {ping.subjects[0].request for ping in unrelated} | {mine_request}
+
+    def fail(cls, store, request):
+        raise ValueError(f"unreadable head {request.pr}")
+
+    monkeypatch.setattr(StoredHeadReview, "head_reviews", classmethod(fail))
+    # Unaddressed errors cannot break an unrelated tool reply; full board errors stay loud.
+    elsewhere = TeamDecisions(reader, unrelated, (), ())
+    assert elsewhere.reader_board(comms, reader.name) == ()
+    with pytest.raises(ValueError, match="unreadable head"):
+        elsewhere.board(comms)
+    with pytest.raises(ValueError, match="unreadable head 1"):
+        packet.reader_board(comms, reader.name)

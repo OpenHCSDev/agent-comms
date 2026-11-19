@@ -376,8 +376,9 @@ class TeamUpdate(OwnerNotice, TeamObservation, PingLines, declared_name=None):
         carries what is that session's own, and the whole board stays in comms_hud."""
         history = TeamHistory.of_team(comms)
         stopped = self.stopped(history.snapshot)
-        return tuple(ping.board_entry() for ping in self.open_pings(history)
-                     if ping.addresses(reader) and not ping.parked(stopped))
+        return tuple(ping.board_entry() for ping in self.handled
+                     if ping.addresses(reader) and not ping.parked(stopped)
+                     and ping.on_board(history))
 
     async def delivered_by(self, bridge: DeliversInput[Message], message: Message) -> type[Outcome]:
         return await self.wake(bridge, message)
