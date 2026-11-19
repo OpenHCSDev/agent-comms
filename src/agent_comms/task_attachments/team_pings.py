@@ -429,8 +429,13 @@ class TeamUpdate(OwnerNotice, TeamObservation, PingLines, declared_name=None):
 
     @classmethod
     def latest(cls, comms: Comms, recipient: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
-        """The last retained observation, even when nothing was sent to the bus."""
-        return TeamUpdateStore.for_team(comms.root, recipient).read()
+        """The recipient packet from the heartbeat's one atomic retained publication."""
+        # Local import breaks the declaration cycle: TeamHud owns the stored frame and
+        # contains TeamUpdate, while TeamUpdate exposes the reader-facing projection.
+        from agent_comms.team.team_hud import TeamBoardPublicationStore
+
+        store = TeamBoardPublicationStore.at(comms.root)
+        return store.packet_map(store.read()).get(recipient, ())
 
     @classmethod
     def published(cls, comms: Comms, recipient: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
@@ -490,28 +495,14 @@ class TeamUpdateNotice(TeamUpdate, declared_name="team_notice"):
         return DeliveredOutcome
 
 
-@dataclass(frozen=True)
-class TeamDecisions(TeamUpdate, declared_name="team_decisions"):
-    """The new lines first, then the lines still undisposed, oldest first."""
-
-    decisions: tuple[Ping, ...]
-    waiting: tuple[Ping, ...]
-    role = ConversationRole()
-
-    async def wake(self, bridge: DeliversInput[Message], message: Message) -> type[Outcome]:
-        return await bridge.deliver(message)
-
-    def new_pings(self) -> tuple[Ping, ...]:
-        return self.decisions
-
-
 @dataclass(frozen=True, slots=True)
 class TeamUpdateStore(PatternFile, SingleFileStore, DurableFile,
-                           LockedStore[tuple[TeamUpdate, ...]], DependentStateTier, declared_name="team_update_store"):
-    """The last observation for one teammate birth, not a message or a disposable view.
+                      LockedStore[tuple[TeamUpdate, ...]], DependentStateTier,
+                      declared_name="team_update_store"):
+    """Legacy per-recipient files retained only for their existing migration controls.
 
-    The packet declarations supply the complete stored shape through FieldCodec. Only the
-    heartbeat writes it; failed publication and muted delivery do not erase observations.
+    Product readers and heartbeat writers use TeamBoardPublicationStore, the one atomic
+    owner.  No running source path writes these files.
     """
 
     filename: ClassVar[str] = "team_updates/{lookup}.json"
@@ -528,6 +519,21 @@ class TeamUpdateStore(PatternFile, SingleFileStore, DurableFile,
     def record(cls, root: Path, packet: TeamUpdate) -> None:
         store = cls.for_team(root, packet.teammate)
         store.replace_if_changed((packet,))
+
+
+@dataclass(frozen=True)
+class TeamDecisions(TeamUpdate, declared_name="team_decisions"):
+    """The new lines first, then the lines still undisposed, oldest first."""
+
+    decisions: tuple[Ping, ...]
+    waiting: tuple[Ping, ...]
+    role = ConversationRole()
+
+    async def wake(self, bridge: DeliversInput[Message], message: Message) -> type[Outcome]:
+        return await bridge.deliver(message)
+
+    def new_pings(self) -> tuple[Ping, ...]:
+        return self.decisions
 
 
 class AlarmGroup(ViewHeading, affix="Alarms"):

@@ -1213,6 +1213,7 @@ def test_one_pass_gives_every_team_its_own_packet(notification_bus):
         assert quiet.task.teammate == recipient
         assert aged(quiet.task.handled) == aged(first.task.handled)
         assert TeamBoardPublicationStore.read_for(comms, recipient.name).packets == (quiet.task,)
+    assert not (comms.root / "team_updates").exists()
 
 
 def test_fork_cli_inherits_channels_without_a_rank_exception(notification_bus):
