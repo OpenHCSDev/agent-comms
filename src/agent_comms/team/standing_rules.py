@@ -316,18 +316,6 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
                      for verb in self.clearing_actions()
                      for offer in verb.action_offers(values, observation, recipient))
 
-    def clearing_commands(self) -> str:
-        """The applicable verbs, with arguments supplied by this line's observed owners."""
-        values = self.command_values()
-        # Verbs of one tool taking the same arguments print once: `judge ok|back --pr 3 --head H`,
-        # not the same arguments once per verb.
-        alike: dict[tuple[str, tuple[str, ...]], list[str]] = {}
-        for verb in self.clearing_actions():
-            for arguments in verb.command_arguments(values):
-                alike.setdefault((verb.tool(), arguments), []).append(verb.declared_name)
-        return " or ".join(f"`{' '.join((tool, '|'.join(names), *arguments))}`"
-                           for (tool, arguments), names in alike.items())
-
     def attention(self) -> bool:
         return True
 
@@ -1196,9 +1184,6 @@ class ReviewTimerUp(HeldOrderDue, FamilyScan):
 class HeadReviewTimerUp(OrderHeadReviewCommands, ReviewTimerUp):
     """A timer with a current PR head offers only that order's accepted verdicts."""
 
-    def line(self) -> str:
-        return f"{super().line()} -> {self.clearing_commands()}"
-
 
 @dataclass(frozen=True)
 class DeliveredHeadReview(HeldOrderLine, DatedStandingRule):
@@ -1284,8 +1269,7 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
 
     def line(self) -> str:
         return (f"JUDGE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} is sitting"
-                f" there unjudged. you read it yet?"
-                f" -> {self.clearing_commands()}")
+                f" there unjudged. you read it yet?")
 
 
 @dataclass(frozen=True)

@@ -655,7 +655,7 @@ class AlarmSection:
         """The section in one line: how many of each rule, and the line left longest, so the
         reader sees what is owed and for how long before reading any row."""
         oldest = min(self.pings, key=lambda ping: ping.since.chronology())
-        words = oldest.text.partition(FoldedRule.arrow)[0].split(" ")
+        words = oldest.text.split(" ")
         named = " ".join(words[:14]) + (" …" if len(words) > 14 else "")
         counts = ", ".join(f"{len(pings)} {kind.display_label().lower()}"
                            for kind, pings in self.by_kind().items())
@@ -747,9 +747,8 @@ class FoldedRule:
 
     @classmethod
     def of(cls, kind: type[DeclaredFamily], pings: tuple[Ping, ...]) -> FoldedRule:
-        split = tuple(ping.text.partition(cls.arrow) for ping in pings)
-        words = tuple(tuple(observed.split(" ")) for observed, _, _ in split)
-        actions = tuple(tuple(action.split(" ")) if arrow else () for _, arrow, action in split)
+        words = tuple(tuple(ping.text.split(" ")) for ping in pings)
+        actions = tuple(cls.action_words(ping.board_actions()) for ping in pings)
         # A lone row shares nothing with anyone: it keeps every word it has.
         room = min(len(row) for row in words) - 1 if len(pings) > 1 else 0
         prefix = cls.common(words, room)
@@ -758,6 +757,11 @@ class FoldedRule:
         return cls(kind, prefix, suffix, template, tuple(
             RuleRow(ping, row[len(prefix):len(row) - len(suffix)], action)
             for ping, row, action in zip(pings, words, actions)))
+
+    @staticmethod
+    def action_words(offers: tuple[BoardActionOffer, ...]) -> tuple[str, ...]:
+        return tuple(word for index, offer in enumerate(offers)
+                     for word in (("or", *offer.words) if index else offer.words))
 
     @staticmethod
     def common(rows: tuple[tuple[str, ...], ...], room: int) -> tuple[str, ...]:

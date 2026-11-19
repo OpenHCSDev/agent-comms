@@ -24,6 +24,8 @@ from agent_comms.task_attachments.team_pings import (
     TeamDelivery,
     WatchingAlarms,
 )
+from agent_comms.team import judge
+from agent_comms.team.order import TeamVerbActionOffer
 from agent_comms.team.standing_rules import ServicePassFailing
 from agent_comms.team.team_hud import CodexUsage, TeamHud, UnreadableUsage
 from agent_comms.team.team_hud_records import HudRecord, Teammate, TeamOrder
@@ -195,7 +197,9 @@ def test_heartbeat_prints_every_alarm_with_watching_below_the_unit_tables() -> N
 def shows_every_word(ping, lines: tuple[str, ...]) -> bool:
     """Folding moves shared words into the rule header; it never drops one."""
     shown = "\n".join(lines)
-    return all(word in shown for word in ping.text.replace(" -> ", " ").split(" "))
+    words = (*ping.text.split(" "),
+             *(word for offer in ping.board_actions() for word in offer.words))
+    return all(word in shown for word in words)
 
 
 def test_alarm_text_names_each_rule_once_above_all_of_its_rows() -> None:
@@ -213,17 +217,25 @@ def test_alarm_text_names_each_rule_once_above_all_of_its_rows() -> None:
 
 
 def test_rows_of_one_rule_print_their_shared_words_once() -> None:
-    ping = example_hud().packets[0].handled[0]
-    texts = (
-        "JUDGE openhcsdev/agent-comms#3766 29e260518 is sitting there unjudged. you read it yet?"
-        " -> judge ok/back --repo openhcsdev/agent-comms --pr 3766 --head 29e2605180debb204a7c77ca4b8cf772f51091da",
-        "JUDGE openhcsdev/toad#1375 31e3ca17e is sitting there unjudged. you read it yet?"
-        " -> judge ok/back --repo openhcsdev/toad --pr 1375 --head 31e3ca17e0c61cd2b827afe0c66082e0da55756b",
+    hud = example_hud()
+    ping = hud.packets[0].handled[0]
+    sources = (
+        ("openhcsdev/agent-comms#3766", "3766", "29e2605180debb204a7c77ca4b8cf772f51091da"),
+        ("openhcsdev/toad#1375", "1375", "31e3ca17e0c61cd2b827afe0c66082e0da55756b"),
     )
-    pings = tuple(replace(ping, text=text) for text in texts)
+    pings = tuple(replace(
+        ping,
+        text=f"JUDGE {name} {head[:9]} is sitting there unjudged. you read it yet?",
+        offers=(TeamVerbActionOffer(
+            judge.OkVerb,
+            ("--repo", name.rpartition("#")[0], "--pr", pr, "--head", head),
+            ping.observation,
+            hud.teammate,
+        ),),
+    ) for name, pr, head in sources)
     header, *rows = FoldedRule.of(ping.alarm_kind, pings).lines(1000)
     assert header.endswith(": JUDGE … is sitting there unjudged. you read it yet?"
-                           " -> judge ok/back --repo REPO --pr PR --head HEAD")
+                           " -> judge ok --repo REPO --pr PR --head HEAD")
     assert rows[0].startswith("  openhcsdev/agent-comms#3766 29e2605180debb204a7c77ca4b8cf772f51091da ·")
     assert all(shows_every_word(folded, (header, *rows)) for folded in pings)
 

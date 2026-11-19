@@ -43,6 +43,7 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import ExternalThread, ForkThread
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import (
+    FoldedRule,
     RulePing,
     TeamPings,
     TeamUpdateNotice,
@@ -220,7 +221,6 @@ def test_orderless_board_commands_do_not_invent_a_problem(board_review):
     rule, = OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))
     assert judge.PromoteVerb not in rule.clearing_actions()
     assert "problem" not in rule.command_values()
-    assert "--problem" not in rule.clearing_commands()
     recipient = comms.registry.require("colleague").incarnation
     offers = rule.action_offers(recipient)
     assert offers
@@ -236,6 +236,8 @@ def test_orderless_board_commands_do_not_invent_a_problem(board_review):
     carried, = delivery.packet.handled
     assert isinstance(carried, RulePing) and carried.offers == offers
     assert FieldCodec.decode(RulePing, FieldCodec.encode(carried)) == carried
+    rendered = "\n".join(FoldedRule.of(carried.alarm_kind, (carried,)).lines(time.time()))
+    assert all(offer.text() in rendered for offer in offers)
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
 
 

@@ -211,7 +211,7 @@ class InstallDue(UndatedStandingRule, FamilyScan):
 class PendingInstallDue(InstallDue):
     @property
     def action(self) -> str:
-        return f"{self.clearing_commands()} installs Core main {self.target[:12]}; batch the landing requests first"
+        return f"install Core main {self.target[:12]}; batch the landing requests first"
 
     def launch(self, comms: Comms) -> str:
         """Every repository's merge installs the same Core target, so a run of that target
@@ -463,14 +463,9 @@ class DeliveryAwaitingJudgement(OwedAnswer, UndatedStandingRule, OrderHeadReview
         """The team obligation stays visible but never serializes unrelated work."""
         return False
 
-    def clearing_action(self) -> str:
-        DeclaredFamily.discover_package(team)  # The verbs that clear it, for its action.
-        return self.clearing_commands()
-
     def line(self) -> str:
         return (f"JUDGE TEAM: {self.author.name} delivered {self.problem} ({self.cited}); "
-                f"review routed to {self.reviewer.name}. First sound verdict settles it. "
-                f"-> {self.clearing_action()}")
+                f"review routed to {self.reviewer.name}. First sound verdict settles it.")
 
 
 @dataclass(frozen=True)
