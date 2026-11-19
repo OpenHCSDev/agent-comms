@@ -25,6 +25,7 @@ from agent_comms.nominal.field_codec import (
     WireTransient,
     projected,
 )
+from agent_comms.nominal.shared_json import SharedJson
 from agent_comms.planning.plan_phase_base import Plan, PlanPhase
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.locked_store import JsonDocument
@@ -162,14 +163,8 @@ class TeamLoad(ServiceReading):
 
 
 @dataclass(frozen=True)
-class TeamHud(TeamLoad):
-    """One disposable view of native records, shared by comms_hud and the team board.
-
-    TodoStore owns orders, review timers and strikes; OrderEditCountRead owns edit counts;
-    PullRequests owns ready/draft facts; PlanPhase owns phase state; OverloadDegradation
-    owns the load formula and decision; ForkThread owns which threads are forks. Nothing here
-    makes independent board decisions; its lines come from the retained observation.
-    """
+class TeamHudRecord(TeamLoad):
+    """Captured board data; rendering belongs to the public TeamHud view."""
 
     teammate: ThreadIncarnation
     units: tuple[Teammate, ...]
@@ -180,6 +175,17 @@ class TeamHud(TeamLoad):
     stopped: frozenset[str] = field(default=frozenset(), kw_only=True)
     phases: Annotated[tuple[TeamPhase, ...], WireTransient()] = field(default=(), kw_only=True)
     """The team plan's phases, read from TeamPlanDocument with the frame, never stored in it."""
+
+
+@dataclass(frozen=True)
+class TeamHud(TeamHudRecord):
+    """One disposable view of native records, shared by comms_hud and the team board.
+
+    TodoStore owns orders, review timers and strikes; OrderEditCountRead owns edit counts;
+    PullRequests owns ready/draft facts; PlanPhase owns phase state; OverloadDegradation
+    owns the load formula and decision; ForkThread owns which threads are forks. Nothing here
+    makes independent board decisions; its lines come from the retained observation.
+    """
 
     def with_plan(self, plan: TeamPlan) -> Self:
         return replace(self, phases=plan.phases)
@@ -346,72 +352,85 @@ class TeamHud(TeamLoad):
 
 
 @dataclass(frozen=True)
-class TeamFrame(TeamFrameFile, JsonDocument[TeamHud]):
-    """The newest TeamHud of each beating teammate, for views that only show it.
+class TeamFramesDocument(TeamFrameFile, JsonDocument[SharedJson]):
+    """One atomic board cut, retaining each recipient's distinct captured packet."""
 
-    One writer, the heartbeat, replaces every teammate's file each beat from the same
-    TeamHud the heartbeat reads, and keeps no history. It is a current view, never
-    proof that a packet was successfully published.
+    path: Path
+    record_type = SharedJson
+
+    def empty(self) -> SharedJson:
+        return SharedJson()
+
+    def huds(self) -> tuple[TeamHud, ...]:
+        return self.read().decode(tuple[TeamHud, ...])
+
+    def publish(self, huds: tuple[TeamHud, ...]) -> None:
+        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self._publish_unlocked(SharedJson.of(huds, tuple[TeamHudRecord, ...]))
+
+
+@dataclass(frozen=True)
+class TeamFrame(TeamFrameFile):
+    """A recipient selection in the heartbeat's single retained board cut.
+
+    Only the heartbeat writes. An interrupted pass replaces its completed recipients
+    in one publication and retains all others at their previous cut.
     """
 
     path: Path
+    recipient: ThreadIncarnation
     reading: ServiceReading = field(default_factory=ServiceReading, compare=False, kw_only=True)
-
-    record_type = TeamHud
 
     @classmethod
     def at(cls, root: Path, recipient: ThreadIncarnation) -> Self:
-        return cls(cls.path_in(root, lookup=str(recipient.require_recorded().lookup)))
+        return cls(cls.path_in(root), recipient.require_recorded())
 
-    def empty(self) -> TeamHud:
-        raise BoardUnavailable(self.reading, f'Tristan frame missing: {self.path}')
+    def read(self) -> TeamHud:
+        frames = TeamFramesDocument(self.path).huds()
+        for hud in frames:
+            if hud.teammate == self.recipient:
+                return hud
+        if any(hud.teammate.require_recorded().lookup == self.recipient.require_recorded().lookup
+               for hud in frames):
+            raise BoardUnavailable(self.reading,
+                f'Tristan frame belongs to another incarnation of {self.recipient.name}')
+        raise BoardUnavailable(self.reading, f'Tristan frame missing for {self.recipient.name}: {self.path}')
 
     @classmethod
     def current(cls, comms: Comms, recipient: str) -> TeamHud:
-        """Read the heartbeat's publication, never repeat its forge and history work. A fork
-        reads the board of the teammate whose turn it works inside."""
         thread = comms.registry.require(recipient)
-        owner = comms.registry.require(
-            thread.teammate()).incarnation.require_recorded()
+        owner = comms.registry.require(thread.teammate()).incarnation.require_recorded()
         passes = ServicePassStore.at(comms.root).read()
         health = ServiceReading().with_services(passes, owner)
-        hud = cls(cls.path_in(comms.root, lookup=str(owner.lookup)), reading=health).read()
-        if hud.teammate != owner:
-            raise BoardUnavailable(health, f'Tristan frame belongs to another incarnation of {owner.name}')
-        return hud.with_services(passes, owner).with_plan(
-            TeamPlanDocument.at(comms.root, health).read())
+        hud = cls(cls.path_in(comms.root), owner, reading=health).read()
+        return hud.with_services(passes, owner).with_plan(TeamPlanDocument.at(comms.root, health).read())
 
     @classmethod
     def replace_all(cls, root: Path, plan: TeamPlan, huds: tuple[TeamHud, ...]) -> None:
-        """Write the pass's team plan once and one frame per teammate; a teammate no longer
-        beating loses its frame. A pass with no board writes an empty plan, never leaves the
-        last one standing."""
         document = TeamPlanDocument.at(root)
         document.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         document._publish_unlocked(plan)
-        for stale in cls.matching_in(root) - cls.write_all(root, huds):
-            stale.unlink(missing_ok=True)
+        TeamFramesDocument(cls.path_in(root)).publish(huds)
 
     @classmethod
     def write_all(cls, root: Path, huds: tuple[TeamHud, ...]) -> frozenset[Path]:
-        """Write one frame per teammate in huds, unlinking nothing, and name what was written."""
-        written = set()
-        for hud in huds:
-            frame = cls.at(root, hud.teammate)
-            frame.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            frame._publish_unlocked(hud)
-            written.add(frame.path)
-        return frozenset(written)
+        if not huds:
+            return frozenset()
+        document = TeamFramesDocument(cls.path_in(root))
+        retained = {hud.teammate.require_recorded().lookup: hud for hud in document.huds()}
+        retained.update((hud.teammate.require_recorded().lookup, hud) for hud in huds)
+        document.publish(tuple(retained.values()))
+        return frozenset((document.path,))
 
     @classmethod
     def read_all(cls, root: Path) -> tuple[TeamHud, ...]:
         passes = ServicePassStore.at(root).read()
         health = ServiceReading(services=passes)
-        frames = tuple(cls(path, reading=health).read() for path in cls.matching_in(root))
+        frames = TeamFramesDocument(cls.path_in(root)).huds()
         plan = TeamPlanDocument.at(root, health).read() if frames else TeamPlan()
         huds = tuple(sorted((hud.with_services(passes, hud.teammate.require_recorded()).with_plan(plan)
-            for hud in frames),
-            key=lambda hud: hud.teammate.name))
+            for hud in frames), key=lambda hud: hud.teammate.name))
         if not huds and passes.failing:
             raise BoardUnavailable(health, 'no published teammate frame.')
         return huds
+

@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from cutover.carry_shared_team_frames import FlatTeamFrameFile, SharedTeamFrames
 from cutover.carry_team_plan_frames import TeamPlanFrames
 
 from agent_comms.nominal.field_codec import FieldCodec, RecordProblems
@@ -30,15 +31,16 @@ def test_a_frame_written_with_its_own_phases_moves_them_to_the_team_plan(tmp_pat
         usage=CodexUsage(UnreadableUsage(reason="not requested")), packets=(), open_pings=(),
         phases=phases,
     )
-    TeamFrame.replace_all(tmp_path, TeamPlan(phases), (hud,))
-    frame = TeamFrame.at(tmp_path, owner).path
+    frame = FlatTeamFrameFile.path_in(tmp_path, lookup=str(owner.lookup))
+    frame.parent.mkdir(parents=True)
+    frame.write_text(json.dumps(FieldCodec.encode(hud, TeamHud)))
     plan = TeamPlanDocument.at(tmp_path).path
     previous = json.loads(frame.read_text())
     previous["phases"] = FieldCodec.encode(TeamPlan(phases), TeamPlan)["phases"]
     frame.write_text(json.dumps(previous))
-    plan.unlink()
+    plan.unlink(missing_ok=True)
     with pytest.raises(RecordProblems, match="phases"):
-        TeamFrame.at(tmp_path, owner).read()
+        FieldCodec.decode_document(TeamHud, json.loads(frame.read_text()))
     step = TeamPlanFrames(LiveFilesRequest(tmp_path), tmp_path / "spill")
     assert {frame} <= set(step.input_files())
 
@@ -46,7 +48,8 @@ def test_a_frame_written_with_its_own_phases_moves_them_to_the_team_plan(tmp_pat
     assert not plan.exists()
     step.carry(apply=True)
 
-    restored, = TeamFrame.read_all(tmp_path)
-    assert restored.phases == phases
     assert "phases" not in json.loads(frame.read_text())
     assert step.carry(apply=False).changed == 0
+    SharedTeamFrames(LiveFilesRequest(tmp_path), tmp_path / "spill").carry(apply=True)
+    restored, = TeamFrame.read_all(tmp_path)
+    assert restored.phases == phases

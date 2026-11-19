@@ -242,7 +242,7 @@ class TeamBoardRead(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                 # check that cannot read one repo used to throw here with huds still empty.
                 retention.reconcile(comms, observed)
             # Only a pass that got through every teammate may replace the team's frames.
-            # TeamFrame.replace_all unlinks every frame absent from huds, which is what a
+            # TeamFrame.replace_all drops every recipient absent from huds, which is what a
             # teammate that stopped beating deserves and the opposite of what a pass that
             # threw deserves: on 2026-11-08 one Textual worktree could not read a blob for
             # patch-id, the first reconcile raised with huds empty, and retaining that empty

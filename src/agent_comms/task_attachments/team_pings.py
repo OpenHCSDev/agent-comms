@@ -6,9 +6,9 @@ subject actions dispose of requests, never a delivery setting or publication att
 """
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
-from copy import deepcopy
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
@@ -82,17 +82,17 @@ class Ping(TaggedRecordMember, DeclaredFamily, affix="Ping"):
     threads: tuple[str, ...] = field(default=(), compare=False, kw_only=True)
 
     @cached_property
-    def _encoded_record(self) -> dict[str, object]:
+    def _encoded_text(self) -> str:
         # This frozen occurrence owns its text, source subjects and clock. Equal
         # pings may carry different evidence; never share this cache by equality.
-        return FieldCodec.encode_record(self)
+        return FieldCodec.compact(FieldCodec.encode_record(self))
 
     @classmethod
     def encode(cls, value: Ping) -> object:
         if not isinstance(value, cls):
             raise MalformedRecord(f"Expected {cls.__name__} record")
-        # Encoded JSON is caller-owned, so mutation cannot alter later answers.
-        return deepcopy(value._encoded_record)
+        # Parsing the immutable occurrence text gives the caller fresh mutable JSON.
+        return json.loads(value._encoded_text)
 
     @classmethod
     def schema(cls) -> dict[str, object]:

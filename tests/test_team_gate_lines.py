@@ -89,7 +89,7 @@ def test_process_copies_share_only_class_fields_and_keep_occurrence_data(monkeyp
             assert FieldCodec.encode_record(copied) == before
             assert copied is not alarm
             assert copied.subjects[0] is not alarm.subjects[0]
-            assert "_encoded_record" not in copied.__dict__
+            assert "_encoded_text" not in copied.__dict__
     assert len(acquired) == reads
     assert FieldCodec.encode_record(first) == before
 
