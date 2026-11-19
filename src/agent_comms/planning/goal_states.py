@@ -93,6 +93,10 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         if not self.may_become(nxt):
             raise ValueError(self.transition_refusal())
 
+    def accepts_pause(self) -> bool:
+        """Whether this state's declared transition table admits an ordinary pause."""
+        return self.may_become(PausedGoal())
+
     def continues_unassigned_turn(self) -> bool:
         """Only an active first assignment keeps an accepted unassigned input working."""
         return False

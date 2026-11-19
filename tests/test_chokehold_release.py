@@ -7,10 +7,11 @@ from types import SimpleNamespace
 from agent_comms.errors import BirthChangedError
 from agent_comms.planning.goal_actions import (
     ChokeholdPausedGoalAction,
+    CompletedGoalAction,
     OwnerInvocable,
     PausedGoalAction,
 )
-from agent_comms.planning.goal_states import ActiveGoal, OwnerPause
+from agent_comms.planning.goal_states import ActiveGoal, CompletedGoal, OwnerPause
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice
@@ -82,6 +83,19 @@ def test_a_chokehold_leaves_an_owner_pause_alone(comms, monkeypatch):
 
     assert not ChokeholdAnswer.held(comms, "owner-paused")
     assert _burst(comms, "owner-paused")
+
+
+def test_a_chokehold_leaves_a_completed_goal_terminal(comms, monkeypatch):
+    """An ignored check is still announced, but completed work is never pause-resumed."""
+    _teammate(comms, monkeypatch, "completed")
+    comms.goals.update_goal("completed", CompletedGoalAction())
+
+    Chokehold(comms.registry.require("completed").incarnation,
+              SimpleNamespace(seq=1, message_id="check")).enforce(comms)
+
+    assert isinstance(comms.registry.require("completed").goal.require().state, CompletedGoal)
+    assert not ChokeholdAnswer.held(comms, "completed")
+    assert _burst(comms, "completed")
 
 
 def test_any_teammate_can_pull_the_emergency_release(comms, monkeypatch):
