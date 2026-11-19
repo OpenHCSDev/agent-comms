@@ -16,7 +16,7 @@ def test_gpt_56_sol_compaction_policy_merges_and_preserves_settings(tmp_path):
         "steeringMode": "all",
         "compaction": {"keepThis": "owned by Pi", "reserveTokens": 1},
     }))
-    settings.chmod(0o600)
+    settings.chmod(0o644)
 
     assert NativeAgentSettings.reconcile(
         agent, SelectedModel("openai-codex", "gpt-5.6-sol")
