@@ -88,6 +88,7 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.recorded_time import EventTime, RecordedEventTime
 from agent_comms.task_attachments.owner_notices import OrderNotice
+from agent_comms.team.board_actions import BoardActionOffer
 from agent_comms.team.team_service import TeamService
 from agent_comms.transcript.transcript_events import TurnDigest
 
@@ -199,25 +200,41 @@ class ClearingVerb(DeclaredVerb, declared_name=None):
         return False
 
     @classmethod
-    def commands(cls, values: Mapping[str, str]) -> tuple[str, ...]:
-        """The commands its parser exposes, filled from this line's observed arguments.
+    def command_arguments(cls, values: Mapping[str, str]) -> tuple[tuple[str, ...], ...]:
+        """The exact arguments its declared parsers bind from one observed rule.
 
-        A parameter variant with no parser contributes no second command. Required review
+        A parameter variant with no parser contributes no second binding. Required review
         prose remains the reviewer's, not something the board can manufacture.
         """
         verbs = argparse.ArgumentParser(prog=cls.tool()).add_subparsers()
         cls.add_parser(verbs)
-        commands = []
+        bindings = []
         for parser in verbs.choices.values():
             placeholder = parser._get_formatter()._format_args
-            words = [cls.tool(), cls.declared_name]
+            arguments: list[str] = []
             for action in parser._actions:
                 if action.dest in values:
-                    words += [*action.option_strings[:1], values[action.dest]]
+                    arguments += [*action.option_strings[:1], values[action.dest]]
                 elif action.required and not action.option_strings:
-                    words.append(placeholder(action, action.dest))
-            commands.append(' '.join(words))
-        return tuple(commands)
+                    arguments.append(placeholder(action, action.dest))
+            bindings.append(tuple(arguments))
+        return tuple(bindings)
+
+    @classmethod
+    def commands(cls, values: Mapping[str, str]) -> tuple[str, ...]:
+        """The declaration-derived command text for non-board CLI readers."""
+        return tuple(' '.join((cls.tool(), cls.declared_name, *arguments))
+                     for arguments in cls.command_arguments(values))
+
+    @classmethod
+    @abstractmethod
+    def action_offers(
+        cls,
+        values: Mapping[str, str],
+        observation: TextDigest,
+        recipient: ThreadIncarnation,
+    ) -> tuple[BoardActionOffer, ...]:
+        """Bind this declaration to one observed rule and its board recipient."""
 
 
 class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discovery_package="agent_comms.team"):
@@ -291,6 +308,14 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
                               for member in family.members_with(family))
         return tuple(verb for verb in verbs if self.review_allowed(verb))
 
+    def action_offers(self, recipient: ThreadIncarnation) -> tuple[BoardActionOffer, ...]:
+        """The applicable declarations with this observation's exact arguments and recipient."""
+        values = self.command_values()
+        observation = self.observation_key()
+        return tuple(offer
+                     for verb in self.clearing_actions()
+                     for offer in verb.action_offers(values, observation, recipient))
+
     def clearing_commands(self) -> str:
         """The applicable verbs, with arguments supplied by this line's observed owners."""
         values = self.command_values()
@@ -298,9 +323,8 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
         # not the same arguments once per verb.
         alike: dict[tuple[str, tuple[str, ...]], list[str]] = {}
         for verb in self.clearing_actions():
-            for command in verb.commands(values):
-                tool, name, *arguments = command.split(" ")
-                alike.setdefault((tool, tuple(arguments)), []).append(name)
+            for arguments in verb.command_arguments(values):
+                alike.setdefault((verb.tool(), arguments), []).append(verb.declared_name)
         return " or ".join(f"`{' '.join((tool, '|'.join(names), *arguments))}`"
                            for (tool, arguments), names in alike.items())
 

@@ -54,6 +54,7 @@ from agent_comms.nominal.field_codec import (
     SubclassUnion,
     boundary_decoder,
 )
+from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.planning.delivery_evidence import DeliveryEvidence, TodoProblems, WorkingEvidence
 from agent_comms.planning.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.planning.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
@@ -114,6 +115,7 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.storage.recorded_time import EventTime, RecordedEventTime
 from agent_comms.storage.typed_table import RowNotFoundError
+from agent_comms.team.board_actions import BoardActionOffer
 from agent_comms.team.standing import DeliveryAwaitingJudgement, InstallDue, UnownedWheelSpin
 from agent_comms.team.standing_rules import ClearingVerb, HuntDue, OwedAnswer
 from agent_comms.team.team_hud import TeamBoardPublicationStore
@@ -1204,9 +1206,32 @@ class TeamVerb(ClearingVerb, affix="Verb"):
         """Name the attempted member and targets when no state changed."""
         return ReadOrderAction(type(self), tuple(identity))
 
+    @classmethod
+    def action_offers(
+        cls,
+        values: Mapping[str, str],
+        observation: TextDigest,
+        recipient: ThreadIncarnation,
+    ) -> tuple[BoardActionOffer, ...]:
+        return tuple(TeamVerbActionOffer(cls, arguments, observation, recipient)
+                     for arguments in cls.command_arguments(values))
+
     @abstractmethod
     def run(self, ctx: Team) -> OrderActionResult: ...
 
+
+@dataclass(frozen=True)
+class TeamVerbActionOffer(BoardActionOffer):
+    """A teammate verb with every argument supplied by one current rule observation."""
+
+    verb: type[TeamVerb]
+    arguments: tuple[str, ...]
+    observation: TextDigest
+    recipient: ThreadIncarnation
+
+    @property
+    def words(self) -> tuple[str, ...]:
+        return (self.verb.tool(), self.verb.declared_name, *self.arguments)
 
 
 @dataclass(frozen=True, kw_only=True)

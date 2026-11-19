@@ -41,6 +41,7 @@ from agent_comms.registry.threads import ExternalThread, ForkThread
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import RulePing
 from agent_comms.team import judge, order
+from agent_comms.team.board_actions import BoardActionOffer
 from agent_comms.team.standing import DeliveryAwaitingJudgement
 from agent_comms.team.standing_rules import (
     HeadReviewTimerUp,
@@ -211,6 +212,15 @@ def test_orderless_board_commands_do_not_invent_a_problem(board_review):
     assert judge.PromoteVerb not in rule.clearing_actions()
     assert "problem" not in rule.command_values()
     assert "--problem" not in rule.clearing_commands()
+    recipient = comms.registry.require("colleague").incarnation
+    offers = rule.action_offers(recipient)
+    assert offers
+    assert all(offer.recipient == recipient and offer.observation == rule.observation_key()
+               for offer in offers)
+    assert all("--problem" not in offer.arguments for offer in offers)
+    for offer in offers:
+        assert FieldCodec.decode(BoardActionOffer, FieldCodec.encode(offer)) == offer
+        assert offer.text().startswith(f"{offer.verb.tool()} {offer.verb.declared_name} ")
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
 
 
