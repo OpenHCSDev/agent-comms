@@ -91,7 +91,7 @@ class ServedReadNativeChildProcessRuntimeRequest(
 ):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> NativeChildProcessReply:
         return NativeChildProcessReply(
-            ctx.server.agent.effects.turns.native_child_process(ctx.session)
+            ctx.server.agent.turns.native_child_process(ctx.session)
         )
 
 
