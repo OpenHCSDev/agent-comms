@@ -223,12 +223,12 @@ def test_muted_changed_quiet_display_publishes_once_when_enabled(notification_bu
     comms.threads.set_heartbeat_delivery("colleague", OffHeartbeatDelivery)
     comms.registry.register_child("muted-fork", "colleague", ForkThread, comms.goals)
     muted = beat(comms)
-    assert muted.display_facts != first.display_facts
+    assert muted.display.facts != first.display.facts
     assert notifications(comms) == (original,)
     assert TeamBoardPublicationStore.read_for(comms, "colleague") == muted
     comms.threads.set_heartbeat_delivery("colleague", OnHeartbeatDelivery)
     enabled = beat(comms)
-    assert enabled.display_facts == muted.display_facts
+    assert enabled.display.facts == muted.display.facts
     _, resumed = notifications(comms)
     assert not resumed.role.counts_as_conversation()
     beat(comms)
@@ -478,9 +478,9 @@ def test_hidden_tool_time_keeps_publication_display_facts(notification_bus):
         recorded_turn(comms, (False,))
         later = beat(comms, states=state_cards(comms, TeammateState))
         assert tuple(card.clock for card in hud.units) != tuple(card.clock for card in later.units)
-        assert hud.display_facts == later.display_facts
+        assert hud.display.facts == later.display.facts
         # A unit may still need a teammate action; a hidden clock is not a new display fact.
-        assert first.task.publication == PublishedFacts.of(later.display_facts)
+        assert first.task.publication == PublishedFacts.of(later.display.facts)
 
 
 def test_unchanged_open_alarm_wakes_each_beat_until_a_recorded_action(notification_bus):
@@ -506,7 +506,7 @@ def test_unchanged_open_alarm_wakes_each_beat_until_a_recorded_action(notificati
     assert cleared.board == ()
     # ReviewTimerUp is already shown in the unit row, not as a separate alarm. Its
     # disposal advances the retained board without publishing an identical quiet display.
-    assert cleared.display_facts == hud.display_facts
+    assert cleared.display.facts == hud.display.facts
     assert len(notifications(comms)) == 2
     beat(comms, (rule,))
     assert len(notifications(comms)) == 2
@@ -747,8 +747,8 @@ def test_recreated_watcher_retains_non_disposable_observation_without_nagging(no
     assert lead_hud(comms).board == ()
 
     section, = TeamBoardPublicationStore.read_for(comms, "colleague").alarms
-    assert section.group is WatchingAlarms
-    assert tuple(ping.text for ping in section.pings) == (failing.line(),)
+    assert section.display.group is WatchingAlarms
+    assert tuple(ping.text for ping in section.display.pings) == (failing.line(),)
 
 
 def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notification_bus):
@@ -791,7 +791,7 @@ def test_rule_packets_compact_new_lines_keep_originals_then_repeat_without_a_new
     assert isinstance(first.task, TeamDecisions)
     assert set(first.task.decisions) == set(first.task.handled) == {
         RulePing.capture(rule) for rule in rules}
-    assert sum(len(section.pings) for section in lead_hud(comms).alarms) == len(rules)
+    assert sum(len(section.display.pings) for section in lead_hud(comms).alarms) == len(rules)
     details = "\n".join(lead_hud(comms).alarm_detail(lead_hud(comms).alarms, time.time()))
     assert all(rule.line() in details for rule in rules)
     assert_status_fields(first, lead_hud(comms))
@@ -1023,7 +1023,7 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
     for frame in (lead_hud(comms), hud):
         now = time.time()
         original_lines = frame.alarm_detail(frame.alarms, now)
-        assert all(section.heading() not in original_lines for section in frame.alarms)
+        assert all(section.display.heading() not in original_lines for section in frame.alarms)
         assert all(rule.line() in "\n".join(original_lines) for rule in rules)
     assert len(message.task.handled) == 12
     assert {entry.text for entry in message.task.board(comms)} == {rule.line() for rule in rules}
@@ -1033,7 +1033,7 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
     replacement = replace(packet, handled=swapped, waiting=swapped)
     changed = replace(hud, packets=(replacement,), open_pings=swapped)
     assert hud.alarm_text(hud.alarms, 1000) == changed.alarm_text(changed.alarms, 1000)
-    assert hud.display_facts != changed.display_facts
+    assert hud.display.facts != changed.display.facts
 
 
 def test_failed_quiet_publication_retries_identical_display_until_committed(notification_bus):
@@ -1043,22 +1043,22 @@ def test_failed_quiet_publication_retries_identical_display_until_committed(noti
     first_hud = beat(comms)
     first, = notifications(comms)
     assert isinstance(first.task, TeamUpdateNotice)
-    assert first.task.publication == PublishedFacts.of(first_hud.display_facts)
+    assert first.task.publication == PublishedFacts.of(first_hud.display.facts)
     comms.registry.register_child("quiet-fork", "colleague", ForkThread, comms.goals)
     with refused_publication(comms), pytest.raises(HumanSendRefusedError):
         beat(comms)
     owner = comms.registry.require("colleague").incarnation
     unsent = TeamBoardPublicationStore.read_for(comms, "colleague")
-    assert first_hud.display_facts != unsent.display_facts
+    assert first_hud.display.facts != unsent.display.facts
     assert TeamUpdate.latest(comms, owner) == unsent.packets
     assert TeamUpdate.published(comms, owner) == (first.task,)
-    assert TeamUpdate.published(comms, owner)[0].publication == PublishedFacts.of(first_hud.display_facts)
+    assert TeamUpdate.published(comms, owner)[0].publication == PublishedFacts.of(first_hud.display.facts)
     assert len(notifications(comms)) == 1
 
     retried = beat(comms)
-    assert retried.display_facts == unsent.display_facts
+    assert retried.display.facts == unsent.display.facts
     _, committed = notifications(comms)
-    assert committed.task.publication == PublishedFacts.of(retried.display_facts)
+    assert committed.task.publication == PublishedFacts.of(retried.display.facts)
     assert committed.reference != first.reference
     beat(comms)
     assert tuple(message.reference for message in notifications(comms)) == (
@@ -1066,7 +1066,7 @@ def test_failed_quiet_publication_retries_identical_display_until_committed(noti
     )
     ServicePassStore.at(comms.root).failed("independent-watch", OSError("new recorded failure"))
     failed = beat(comms)
-    assert failed.display_facts != retried.display_facts
+    assert failed.display.facts != retried.display.facts
     assert "new recorded failure" in failed.status_strip(time.time())
     assert len(notifications(comms)) == 3
 
@@ -1198,7 +1198,7 @@ def test_retained_packet_without_display_witness_keeps_original_message_identity
     assert retained.reference == message.reference
     assert retained.body == message.body
     assert retained.task.publication == UnpublishedFacts()
-    facts = PublishedFacts.of(hud.display_facts)
+    facts = PublishedFacts.of(hud.display.facts)
     assert retained.task.should_publish(facts, (retained.task,))
     assert not message.task.should_publish(facts, (message.task,))
     assert Message.from_wire(retained.to_wire()).message_id == message.message_id

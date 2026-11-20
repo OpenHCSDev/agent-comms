@@ -53,6 +53,7 @@ from agent_comms.registry.threads import ForkThread, NativeThread
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import (
     AlarmGroup,
+    AlarmSection,
     NewAlarms,
     ParkedAlarms,
     RulePing,
@@ -1116,10 +1117,13 @@ def test_rows_waiting_on_a_stopped_thread_leave_the_main_view():
                       subjects=(worker,), since=since, threads=("pi-stopped",))
     claude = RecordedThreadIncarnation("claude", 1.0)
     packet = TeamDecisions(claude, (live, parked), (live, parked), ())
-    sections = AlarmGroup.sections((packet,), (live, parked), frozenset({"pi-stopped"}))
-    groups = {section.group: section for section in sections}
-    assert groups[NewAlarms].pings == (live,)
-    assert groups[ParkedAlarms].pings == (parked,)
+    sections = AlarmSection.bind(
+        AlarmGroup.displays((packet,), (live, parked), frozenset({"pi-stopped"})),
+        claude,
+    )
+    groups = {section.display.group: section for section in sections}
+    assert groups[NewAlarms].display.pings == (live,)
+    assert groups[ParkedAlarms].display.pings == (parked,)
     assert groups[ParkedAlarms].text_lines(2.0) == ()
     assert not ParkedAlarms.needs_disposal()
     assert parked.parked(frozenset({"pi-stopped"})) and not live.parked(frozenset({"pi-stopped"}))

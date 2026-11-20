@@ -53,6 +53,7 @@ from agent_comms.storage.typed_table import TypedTable
 from agent_comms.task_attachments.disclosure_text import (
     AccentTone,
     ViewHeading,
+    ViewSectionFacts,
     ViewTable,
     WarningTone,
 )
@@ -595,16 +596,15 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
         return tuple(line for folded in section.folded_rules for line in folded.lines(now))
 
     @classmethod
-    def sections(cls, packets: tuple[TeamUpdate, ...], opened: tuple[Ping, ...],
-                 stopped: frozenset[str]) -> tuple[AlarmSection, ...]:
+    def displays(cls, packets: tuple[TeamUpdate, ...], opened: tuple[Ping, ...],
+                 stopped: frozenset[str]) -> tuple[AlarmDisplay, ...]:
+        """The recipient-neutral occurrence sets that own alarm display facts."""
         new = tuple(line for packet in packets for ping in packet.new_pings()
                     for line in ping.alarm_pings())
-        recipient = packets[0].teammate if packets else None
-        return tuple(AlarmSection(group, members, recipient)
+        return tuple(AlarmDisplay(group, members)
                      for group in cls.members_with(cls)
                      for members in (tuple(ping for ping in group.members(packets, opened, new)
                                            if group.admits(ping, stopped)),) if members)
-
 
 class MainAlarms(AlarmGroup, declared_name=None):
     """The groups of the main view: together they are what a parked line would have shown."""
@@ -681,10 +681,15 @@ class AlarmLine:
 
 
 @dataclass(frozen=True)
-class AlarmSection:
+class AlarmDisplay:
+    """One exact, recipient-neutral alarm occurrence set and its displayed facts."""
+
     group: type[AlarmGroup]
     pings: tuple[Ping, ...]
-    recipient: ThreadIncarnation | None = None
+    identity: tuple[tuple[object, ...], ...] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "identity", tuple(ping.occurrence_identity for ping in self.pings))
 
     def heading(self) -> str:
         return self.group.count_heading(len(self.pings))
@@ -696,14 +701,6 @@ class AlarmSection:
         for ping in self.pings:
             grouped.setdefault(ping.alarm_kind, []).append(ping)
         return {kind: tuple(pings) for kind, pings in grouped.items()}
-
-    @cached_property
-    def folded_rules(self) -> tuple[FoldedRule, ...]:
-        """Retain the rule/action shape; only row ages are painted for each heartbeat."""
-        return tuple(
-            FoldedRule.of(kind, pings, self.recipient)
-            for kind, pings in self.by_kind.items()
-        )
 
     @cached_property
     def digest_source(self) -> tuple[Ping, str, str]:
@@ -723,12 +720,40 @@ class AlarmSection:
         oldest, counts, named = self.digest_source
         return f"{self.heading()}: {counts}. Oldest, {oldest.since.age(now)}: {named}"
 
-    def text_lines(self, now: float) -> tuple[str, ...]:
-        return self.group.row_lines(self, now)
+    @cached_property
+    def facts(self) -> ViewSectionFacts:
+        """The publication cells derived once from this exact occurrence set."""
+        table = ViewTable(AlarmLine, HudExclude, tuple(
+            AlarmLine(ping.alarm_kind, ping.text, ping.since.age(0)) for ping in self.pings
+        ))
+        return ViewSectionFacts(self.heading(), (table.facts,))
 
-    def tables(self, now: float) -> tuple[ViewTable[AlarmLine], ...]:
-        return (ViewTable(AlarmLine, HudExclude, tuple(
-            AlarmLine(ping.alarm_kind, ping.text, ping.since.age(now)) for ping in self.pings)),)
+
+@dataclass(frozen=True)
+class AlarmSection:
+    """Recipient-bound actions over one shared alarm display source."""
+
+    display: AlarmDisplay
+    recipient: ThreadIncarnation | None = None
+
+    @classmethod
+    def bind(
+        cls,
+        displays: tuple[AlarmDisplay, ...],
+        recipient: ThreadIncarnation | None,
+    ) -> tuple[AlarmSection, ...]:
+        return tuple(cls(display, recipient) for display in displays)
+
+    @cached_property
+    def folded_rules(self) -> tuple[FoldedRule, ...]:
+        """Bind only the action words; display membership remains recipient-neutral."""
+        return tuple(
+            FoldedRule.of(kind, pings, self.recipient)
+            for kind, pings in self.display.by_kind.items()
+        )
+
+    def text_lines(self, now: float) -> tuple[str, ...]:
+        return self.display.group.row_lines(self, now)
 
 
 class ActionWord(ABC):

@@ -25,6 +25,7 @@ from agent_comms.planning.orders import (
 from agent_comms.presentation import WireRevision
 from agent_comms.task_attachments.owner_notices import VibeCheckNotice
 from agent_comms.task_attachments.team_pings import (
+    AlarmDisplay,
     AlarmSection,
     FoldedRule,
     RuleRow,
@@ -181,9 +182,9 @@ def test_steady_heartbeat_retains_its_board_derivations(held_bus, account_read, 
     assert retained is not None
     before = {hud.teammate: hud for hud in retained.huds}
     for hud in before.values():
-        _ = hud.alarms, hud.plain_group_text, hud.publication_facts
+        _ = hud.alarms, hud.plain_group_text, hud.display.publication
         for section in hud.alarms:
-            _ = section.digest_source
+            _ = section.display.digest_source
             for folded in section.folded_rules:
                 _ = folded.lines(0)
                 for row in folded.rows:
@@ -205,7 +206,7 @@ def test_steady_heartbeat_retains_its_board_derivations(held_bus, account_read, 
         lambda self: pytest.fail("an equal alarm rebuilt its static header"),
     )
     monkeypatch.setattr(
-        AlarmSection,
+        AlarmDisplay,
         "by_kind",
         property(lambda self: pytest.fail("an equal alarm regrouped its digest")),
     )
@@ -227,7 +228,7 @@ def test_steady_heartbeat_retains_its_board_derivations(held_bus, account_read, 
         ] == []
         assert hud.alarms is before[teammate].alarms
         assert hud.plain_group_text is before[teammate].plain_group_text
-        assert hud.publication_facts is before[teammate].publication_facts
+        assert hud.display.publication is before[teammate].display.publication
 
     rendered = next(hud for hud in after.values() if hud.open_pings)
     changed_ping = replace(rendered.open_pings[0], text="changed exact rendering source")
