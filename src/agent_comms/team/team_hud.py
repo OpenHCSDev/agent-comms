@@ -336,7 +336,7 @@ class TeamHud(TeamHudRecord):
         """Carry each derived owner only when its complete source remains unchanged.
 
         Service completion clocks remain fresh on ``self``. Recipient-neutral display
-        sources retain their facts independently of recipient-bound action rendering.
+        sources retain their facts and folded words independently of dispatch binding.
         """
         if previous is None:
             return self
@@ -387,7 +387,7 @@ class TeamHud(TeamHudRecord):
 
     @cached_property
     def alarms(self) -> tuple[AlarmSection, ...]:
-        return AlarmSection.bind(self.alarm_displays, self.teammate)
+        return tuple(map(AlarmSection, self.alarm_displays))
 
     @cached_property
     def groups(self) -> tuple[HudSection, ...]:
