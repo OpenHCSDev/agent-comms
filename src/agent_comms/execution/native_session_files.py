@@ -305,14 +305,17 @@ class PiCompactionSettings:
 
 
 class FleetCompactionPolicy(DeclaredFamily, affix="CompactionPolicy"):
-    """A selected model's managed-session compaction settings."""
+    """A selected model's managed-session compaction settings, declared for that model
+    (provider/model) or for every model of one provider (provider)."""
 
     @classmethod
     def for_model(cls, model: SelectedModel) -> type[FleetCompactionPolicy]:
-        try:
-            return cls.member_named(model.qualified)
-        except UnknownFamilyMember:
-            return NoFleetCompactionPolicy
+        for name in (model.qualified, model.provider):
+            try:
+                return cls.member_named(name)
+            except UnknownFamilyMember:
+                continue
+        return NoFleetCompactionPolicy
 
     @classmethod
     @abstractmethod
@@ -325,6 +328,19 @@ class NoFleetCompactionPolicy(NullMember, FleetCompactionPolicy, declared_name=N
     @classmethod
     def settings(cls) -> None:
         return None
+
+
+class ClmLocalCompactionPolicy(FleetCompactionPolicy, declared_name="clm-local"):
+    """pi-clm owns a context-language model's context: it edits the next request through its
+    mirror and cancels Pi's own compaction (ClmLocalProvider runs it with
+    PI_CLM_NATIVE_COMPACTION=off). Pi must not decide to compact that context either: its
+    pre-response check measured the raw history, ran a compaction pi-clm cancelled, and
+    ended CLM's turn with 'no compaction could be prepared' at ~6.4k effective tokens
+    (2026-11-20)."""
+
+    @classmethod
+    def settings(cls) -> PiCompactionSettings:
+        return PiCompactionSettings(enabled=False, reserve_tokens=0, keep_recent_tokens=0)
 
 
 class Gpt56SolCompactionPolicy(
