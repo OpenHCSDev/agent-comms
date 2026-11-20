@@ -274,6 +274,18 @@ export class MemoryEntryStore extends EntryStore {
 }
 
 /** Disk-backed, bounded-page selector index; payloads remain exclusively in the native JSONL. */
+/** Stock Pi's public extension view, derived from the one native entry-store owner. */
+export function buildSessionContext(entries, leafId) {
+    const store = new MemoryEntryStore({type: 'session', version: 3, id: 'context-view'}, entries);
+    try {
+        const {model, thinkingLevel} = store.contextSettings(leafId, {thinkingLevel: 'off'});
+        const messages = Array.from(store.contextEntries(leafId)).flatMap(sessionEntryToContextMessages);
+        return {messages, thinkingLevel, model};
+    } finally {
+        store.close();
+    }
+}
+
 export class DiskEntryStore extends EntryStore {
     #fd;
     #db;

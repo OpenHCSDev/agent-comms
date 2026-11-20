@@ -823,7 +823,7 @@
      }
      /**
       * Set or clear a label on an entry.
-@@ -1028,91 +849,71 @@
+@@ -1028,91 +849,75 @@
       * Pass undefined or empty string to clear the label.
       */
      appendLabelChange(targetId, label) {
@@ -870,7 +870,9 @@
 -        path.reverse();
 -        return path;
 -    }
-+
++    getBranch(fromId) {
++        return Array.from(this.entryStore.branch(fromId ?? this.leafId));
++    }
      /**
       * Build the active, compaction-aware entry list for context/rendering.
       * Uses tree traversal from current leaf.
@@ -904,7 +906,9 @@
 -    getEntries() {
 -        return this.fileEntries.filter((e) => e.type !== "session");
 -    }
-+
++    getEntries() {
++        return Array.from(this.entryStore.entries());
++    }
      /**
       * Get the session as a tree structure. Returns a shallow defensive copy of all entries.
       * A well-formed session has exactly one root (first entry with parentId === null).
@@ -2007,7 +2011,7 @@
      allMessagesText: string;
  }
 -export type ReadonlySessionManager = Pick<SessionManager, "getCwd" | "getSessionDir" | "getSessionId" | "getSessionFile" | "getLeafId" | "getLeafEntry" | "getEntry" | "getLabel" | "getBranch" | "buildContextEntries" | "getHeader" | "getEntries" | "getTree" | "getSessionName">;
-+export type ReadonlySessionManager = Pick<SessionManager, "getCwd" | "getSessionDir" | "getSessionId" | "getSessionFile" | "getLeafId" | "getLeafEntry" | "getEntry" | "getLabel" | "buildContextEntries" | "getHeader" | "entryStore" | "getTree" | "getSessionName">;
++export type ReadonlySessionManager = Pick<SessionManager, "getCwd" | "getSessionDir" | "getSessionId" | "getSessionFile" | "getLeafId" | "getLeafEntry" | "getEntry" | "getLabel" | "getBranch" | "buildContextEntries" | "getHeader" | "getEntries" | "entryStore" | "getTree" | "getSessionName">;
  export declare function assertValidSessionId(id: string): void;
  /** Exported for testing */
 -export declare function migrateSessionEntries(entries: FileEntry[]): void;
@@ -2073,7 +2077,7 @@
      /**
       * Get the label for an entry, if any.
       */
-@@ -261,19 +242,17 @@
+@@ -261,19 +242,18 @@
      /**
       * Walk from entry to root, returning all entries in path order.
       * Includes all entry types (messages, compaction, model changes, etc.).
@@ -2081,6 +2085,7 @@
 +     * Use entryStore.contextEntries() to get the resolved messages for the LLM.
       */
 -    getBranch(fromId?: string): SessionEntry[];
++    getBranch(fromId?: string): SessionEntry[];
      /**
       * Build the active, compaction-aware entry list for context/rendering.
       * Uses tree traversal from current leaf.
@@ -2095,11 +2100,12 @@
      /**
       * Get session header.
       */
-@@ -283,7 +262,6 @@
+@@ -283,7 +262,7 @@
       * The session is append-only: use appendXXX() to add entries, branch() to
       * change the leaf pointer. Entries cannot be modified or deleted.
       */
 -    getEntries(): SessionEntry[];
++    getEntries(): SessionEntry[];
      /**
       * Get the session as a tree structure. Returns a shallow defensive copy of all entries.
       * A well-formed session has exactly one root (first entry with parentId === null).
@@ -2130,7 +2136,7 @@
 -//# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 +//# sourceMappingURL=index.d.ts.map
-+export { EntryStore, DiskEntryStore, MemoryEntryStore, EntryBranchRange } from "./core/session-entry-store.js";
++export { buildSessionContext, EntryStore, DiskEntryStore, MemoryEntryStore, EntryBranchRange } from "./core/session-entry-store.js";
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -5,7 +5,7 @@
@@ -2158,7 +2164,7 @@
 -//# sourceMappingURL=index.js.map
 \ No newline at end of file
 +//# sourceMappingURL=index.js.map
-+export { EntryStore, DiskEntryStore, MemoryEntryStore, EntryBranchRange } from "./core/session-entry-store.js";
++export { buildSessionContext, EntryStore, DiskEntryStore, MemoryEntryStore, EntryBranchRange } from "./core/session-entry-store.js";
 --- a/dist/main.js
 +++ b/dist/main.js
 @@ -637,7 +637,7 @@
