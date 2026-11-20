@@ -300,9 +300,6 @@ class TeamHeartbeatEffects(TeamService):
                     )),
                 )
                 usage = CodexConnection.usage()
-                history = TeamHistory.of(
-                    comms, snapshot, TeamService.actors(snapshot),
-                )
                 states = tuple(
                     state for state in observed.states if state not in rejected
                 )
@@ -310,6 +307,9 @@ class TeamHeartbeatEffects(TeamService):
                 captured = (
                     *(ping for state, ping in observed_states if state not in rejected),
                     *(ping for rule, ping in observed_rules if rule not in rejected),
+                )
+                history = TeamHistory.of(
+                    comms, snapshot, TeamService.actors(snapshot),
                 )
                 not_applied = tuple(
                     rule.rejected_line(error)

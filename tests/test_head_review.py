@@ -1218,6 +1218,35 @@ def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
     assert owed() == [request]
 
 
+def test_team_history_captures_the_head_subject_family_in_one_relation(head_bus, monkeypatch):
+    comms, _, request = head_bus
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+    decided = HeadSubject(request)
+    superseded = UnlandedHeadSubject(request)
+    missing = HeadSubject(replace(request, pr=request.pr + 1))
+    calls = []
+    original = StoredHeadReview.head_reviews_among.__func__
+
+    def counted(cls, db, requests):
+        requests = tuple(requests)
+        calls.append(requests)
+        return original(cls, db, requests)
+
+    monkeypatch.setattr(StoredHeadReview, "head_reviews_among", classmethod(counted))
+    history = TeamHistory.read(comms, frozenset()).capturing(
+        (decided, superseded, missing)
+    )
+    assert calls == [(request, missing.request)]
+    monkeypatch.setattr(
+        StoredHeadReview,
+        "head_reviews",
+        classmethod(lambda *_args, **_kwargs: pytest.fail("captured history reopened a head")),
+    )
+    assert history.action_at(decided).occurred()
+    assert not history.action_at(superseded).occurred()
+    assert not history.action_at(missing).occurred()
+
+
 def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus):
     comms, _, request = head_bus
     todo = comms.goals.todos.get("P2")
