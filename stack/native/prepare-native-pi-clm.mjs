@@ -8,7 +8,8 @@ const sourceRoot = resolve(process.argv[3]);
 const metadata = JSON.parse(readFileSync(resolve(sourceRoot, 'package.json'), 'utf8'));
 const { build } = await import(pathToFileURL(resolve(packageRoot, 'node_modules/esbuild/lib/main.js')));
 const result = await build({
-    entryPoints: [resolve(sourceRoot, 'index.ts')],
+    absWorkingDir: sourceRoot,
+    entryPoints: ['index.ts'],
     bundle: true,
     write: false,
     platform: 'node',
