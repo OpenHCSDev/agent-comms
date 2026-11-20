@@ -17,7 +17,12 @@ from agent_comms.planning.order_words import DirectiveText
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.task_attachments.team_pings import RulePing, TeamDecisions, TeamPings
+from agent_comms.task_attachments.team_pings import (
+    RetainedPingCuts,
+    RulePing,
+    TeamDecisions,
+    TeamPings,
+)
 from agent_comms.team.standing import GoalBlocked, RequestStalled
 from agent_comms.team.standing_rules import (
     DirectiveUnacted,
@@ -158,7 +163,9 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
                    text="IDLE housekeeping", since=RecordedEventTime(now - 600))
     previous = TeamDecisions(thread.incarnation, (old,), (old,), ())
     history = TeamHistory.read(comms, frozenset({thread.name}))
-    delivery = TeamPings((), (rule,), (previous,), now=now, history=history).delivery(
+    delivery = TeamPings(
+        (), (rule,), RetainedPingCuts.from_packets(((previous,),)), now=now, history=history,
+    ).delivery(
         thread.incarnation, published=(previous,))
     update = delivery.packet
     assert update.handled[0].urgent
@@ -168,6 +175,8 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
         comms.registry.status("paper"),
     )
     assert GoalBlocked.violations(comms) == ()
-    cleared = TeamPings((), (), (update,), now=now + 60, history=history).delivery(
+    cleared = TeamPings(
+        (), (), RetainedPingCuts.from_packets(((update,),)), now=now + 60, history=history,
+    ).delivery(
         thread.incarnation, published=(update,))
     assert cleared.packet.handled == ()

@@ -27,6 +27,7 @@ from agent_comms.storage.watch_phase import WatchPhase
 from agent_comms.task_attachments.team_pings import (
     AlarmGroup,
     AlarmSection,
+    RetainedPingCuts,
     RulePing,
     TeammatePing,
     TeamPings,
@@ -267,16 +268,8 @@ class TeamHeartbeatEffects(TeamService):
                     comms,
                     tuple(recipient.incarnation for recipient in recipients),
                 )
-                known = (
-                    frozenset.intersection(*(
-                        frozenset(
-                            ping for packet in packets for ping in packet.handled
-                        )
-                        for packets in held.values()
-                    ))
-                    if held
-                    else frozenset()
-                )
+                retained = RetainedPingCuts.from_packets(held.values())
+                known = retained.common()
                 observed_rules = tuple(zip(
                     observed.rules, observed.rule_pings, strict=True,
                 ))
@@ -301,23 +294,25 @@ class TeamHeartbeatEffects(TeamService):
                     )),
                 )
                 usage = CodexConnection.usage()
-                states = tuple(
-                    state for state in observed.states if state not in rejected
-                )
-                rules = tuple(rule for rule in observed.rules if rule not in rejected)
-                captured = (
-                    *(ping for state, ping in observed_states if state not in rejected),
-                    *(ping for rule, ping in observed_rules if rule not in rejected),
-                )
+                if rejected:
+                    states = tuple(
+                        state for state in observed.states if state not in rejected
+                    )
+                    rules = tuple(rule for rule in observed.rules if rule not in rejected)
+                    captured = (
+                        *(ping for state, ping in observed_states if state not in rejected),
+                        *(ping for rule, ping in observed_rules if rule not in rejected),
+                    )
+                else:
+                    states = observed.states
+                    rules = observed.rules
+                    captured = (*observed.state_pings, *observed.rule_pings)
                 history = TeamHistory.of(
                     comms, snapshot, TeamService.actors(snapshot),
                 )
                 not_applied = tuple(
                     rule.rejected_line(error)
                     for rule, error in rejected.items()
-                )
-                retained = tuple(
-                    packet for packets in held.values() for packet in packets
                 )
                 if not held:
                     continue

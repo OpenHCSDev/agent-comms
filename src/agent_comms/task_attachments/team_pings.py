@@ -7,7 +7,7 @@ subject actions dispose of requests, never a delivery setting or publication att
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
@@ -325,6 +325,58 @@ class PingLines:
         return tuple(ping for ping in self.handled if ping.on_board(history))
 
 
+@dataclass(frozen=True)
+class HandledPingCut:
+    """One recipient's exact retained occurrence sequence."""
+
+    pings: tuple[Ping, ...]
+    identity: tuple[tuple[object, ...], ...] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "identity", tuple(ping.occurrence_identity for ping in self.pings))
+
+
+@dataclass(frozen=True)
+class RetainedPingCuts:
+    """Distinct exact handled sequences retained across every recipient."""
+
+    cuts: tuple[HandledPingCut, ...]
+
+    @classmethod
+    def from_packets(
+        cls,
+        packet_groups: Iterable[tuple[TeamUpdate, ...]],
+    ) -> RetainedPingCuts:
+        cuts: dict[tuple[tuple[object, ...], ...], HandledPingCut] = {}
+        for packets in packet_groups:
+            cut = HandledPingCut(tuple(
+                ping for packet in packets for ping in packet.handled
+            ))
+            cuts.setdefault(cut.identity, cut)
+        return cls(tuple(cuts.values()))
+
+    def common(self) -> frozenset[Ping]:
+        """Observations already enforced for every recipient."""
+        if not self.cuts:
+            return frozenset()
+        common = set(self.cuts[0].pings)
+        for cut in self.cuts[1:]:
+            common.intersection_update(cut.pings)
+        return frozenset(common)
+
+    def began(self) -> dict[Ping, EventTime]:
+        """Each equal observation's earliest retained source clock."""
+        began: dict[Ping, EventTime] = {}
+        for cut in self.cuts:
+            for ping in cut.pings:
+                began[ping] = min(
+                    ping.since,
+                    began.get(ping, ping.since),
+                    key=lambda since: since.chronology(),
+                )
+        return began
+
+
 class TeamPings(PingLines):
     """Prepare one board's alarm ages and captures for all its recipients."""
 
@@ -340,15 +392,10 @@ class TeamPings(PingLines):
         )
 
     def __init__(self, states: tuple[TeammateState, ...], rules: tuple[StandingRule, ...],
-                 previous: tuple[TeamUpdate, ...], *, now: float, history: TeamHistory,
+                 previous: RetainedPingCuts, *, now: float, history: TeamHistory,
                  not_applied: tuple[str, ...] = (),
                  captured: tuple[Ping, ...] | None = None) -> None:
-        began: dict[Ping, EventTime] = {}
-        for packet in previous:
-            for ping in packet.handled:
-                # On equal clocks the later occurrence wins, as in the old stable sort.
-                began[ping] = min(ping.since, began.get(ping, ping.since),
-                                  key=lambda since: since.chronology())
+        began = previous.began()
         captures = self.capture(states, rules) if captured is None else captured
         self.handled = tuple(sorted(
             (replace(ping, since=began.get(ping, ping.since).continued_from(now))
