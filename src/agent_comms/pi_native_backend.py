@@ -216,9 +216,6 @@ class PiNativeBackend(
     async def run_turn(
         self, thread: Thread, content: InputContent, delivery: TurnDelivery
     ) -> AsyncIterator[AgentEvent]:
-        from agent_comms.execution import backend
-        from agent_comms.team.pi_rule_gate import PiRuleGate
-
         # Model changes are stored for the next turn after its selected snapshot was
         # acquired. Extension selection is a launch-time fact, so build the launch
         # from the current declaration rather than switching providers after spawn.
@@ -227,7 +224,21 @@ class PiNativeBackend(
         ))
         images = {"images": content.images} if content.images else {}
         package = self.comms.owners.require_private_launch().native_package
-        async for event in backend.stream_agent_events(
+        provider = thread.model.native(NativeArguments(())).provider_type
+        # A thread that has saved nothing yet has no session to name its conversation by.
+        session_file = thread.writable_runtime.arguments().get("session_file")
+        await Coordination.run_worker(partial(provider.turn_starting, session_file))
+        try:
+            async for event in self._turn_events(thread, content, delivery, images, package):
+                yield event
+        finally:
+            await Coordination.run_worker(partial(provider.turn_ended, session_file))
+
+    def _turn_events(self, thread, content, delivery, images, package):
+        from agent_comms.execution import backend
+        from agent_comms.team.pi_rule_gate import PiRuleGate
+
+        return backend.stream_agent_events(
             self.configuration.launch.binary,
             self.comms.threads.native_launch_arguments(
                 thread, NativeArguments.parse(self.arguments(thread)), package.path),
@@ -251,8 +262,7 @@ class PiNativeBackend(
             deal_delivery=PiRuleGate.of(self.comms, thread).delivery(),
             ui_request=delivery.ui_request,
             tool_mode=delivery.tool_mode,
-        ):
-            yield event
+        )
 
     async def abort[Result](self, owner: asyncio.Task[Result]) -> None:
         from agent_comms.execution import backend

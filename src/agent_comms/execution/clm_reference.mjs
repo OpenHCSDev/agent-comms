@@ -11,12 +11,13 @@
 // turns since that edit, with the harness's own notices inserted and rolled-back turns left
 // out. Each of those is one custom session entry, so a restart rebuilds the same view.
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ENTRY = "clm-reference";
 const CTX_ROOT = "/tmp/.live_ctx";
 const CTX_NAME = "LIVE_CTX_MAIN.txt";
+const VIEW_NAME = "LIVE_VIEW.json";
 const PROTECT = 1; // Pi sends the system prompt separately: the protected prefix is the task.
 const TRIVIAL_EDIT_TOKENS = 32;
 const ROLLBACK_ESCALATE_AFTER = 3;
@@ -598,8 +599,26 @@ export default function clmReference(pi) {
       [messages, origin] = view.build(raw, template);
     }
     sent = { raw, messages, origin };
+    publishView(messages, system);
     return { messages };
   });
+
+  /** The live view as sent, for the thread's owner to record: one atomic file holding the
+   * system prompt, every turn in order with its reference role and text, and the budget's
+   * state. The owner checkpoints it into the thread's context history; this extension only
+   * publishes what it sent, it keeps no second copy of the context. */
+  function publishView(messages, system) {
+    const view = {
+      version: 1,
+      system,
+      turns: messages.map((message) => ({ role: referenceRole(message), text: renderedText(message) })),
+      budget: { strict_target: budget.strictTarget, token_ratio: budget.tokRatio,
+                retries: budget.nRetry, turns_rolled_back: budget.nTurnsRolledBack },
+    };
+    const file = join(ctxDir, VIEW_NAME);
+    writeFileSync(`${file}.next`, JSON.stringify(view), { encoding: "utf8", mode: 0o600 });
+    renameSync(`${file}.next`, file);
+  }
 
   /** budget.rollback_to_margin + _note_rollback: drop the newest raw turns until the margin is
    * free, never leaving a tool call without its result, and pin the ledger. */

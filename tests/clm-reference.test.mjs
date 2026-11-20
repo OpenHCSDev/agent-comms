@@ -152,3 +152,19 @@ test("a rollback never removes an input: inputs are the task", async () => {
   assert.match(messages[1].content[0].text, /CONTEXT LIMIT HIT/);
   assert.equal(messages[messages.length - 1].inputId, "a".repeat(32));
 });
+
+test("each request publishes the live view it sent, atomically, for the owner to record", async () => {
+  const session = `t${process.pid}e`;
+  const h = harness(session);
+  await h.hooks.session_start({}, h.ctx);
+  const raw = [user("TASK"), assistant([{ type: "thinking", thinking: "plan" },
+    { type: "toolCall", id: "c0", name: "bash", arguments: { command: "ls" } }]), toolResult("a.txt")];
+  const { messages } = await h.hooks.context({ messages: raw }, h.ctx);
+  const view = JSON.parse(readFileSync(`/tmp/.live_ctx/${session}/LIVE_VIEW.json`, "utf8"));
+  assert.equal(view.version, 1);
+  assert.equal(view.system, "SYSTEM");
+  assert.deepEqual(view.turns.map((turn) => turn.role), ["user", "assistant", "tool"]);
+  assert.equal(view.turns[1].text, 'plan\nbash {"command": "ls"}');
+  assert.equal(view.turns.length, messages.length);
+  assert.equal(view.budget.strict_target, 26624);
+});
