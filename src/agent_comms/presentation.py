@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.coordination.service_passes import ServiceFailureStore
 from agent_comms.messaging.display_sources import ChannelSortView
 from agent_comms.messaging.notification_contracts import RevisionChanges
 
@@ -639,6 +640,14 @@ class WireRevision(ReadState, ToolResult):
     ] = ()
 
     expiry_seconds: ClassVar[int] = 30
+
+    service_failures: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(
+            lambda views: ServiceFailureStore.source_paths(views.root),
+            RetainedTeamFramesView,
+        ),
+    ] = ()
 
     @classmethod
     def empty(cls) -> WireRevision:
