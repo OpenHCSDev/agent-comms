@@ -216,6 +216,12 @@ class PiNativeBackend(
         from agent_comms.execution import backend
         from agent_comms.team.pi_rule_gate import PiRuleGate
 
+        # Model changes are stored for the next turn after its selected snapshot was
+        # acquired. Extension selection is a launch-time fact, so build the launch
+        # from the current declaration rather than switching providers after spawn.
+        thread = await Coordination.run_worker(partial(
+            self.comms.registry.require, thread.name,
+        ))
         images = {"images": content.images} if content.images else {}
         package = self.comms.owners.require_private_launch().native_package
         async for event in backend.stream_agent_events(
