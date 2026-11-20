@@ -913,6 +913,15 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
     def due(self, now: float) -> bool:
         return True
 
+    def source_valid_until(self) -> float:
+        """Exclusive clock boundary where this opened answer needs its source read again.
+
+        Most answer sources change only with their stored revision.  A member whose source
+        membership also changes with time exposes that semantic boundary itself; the retained
+        family cut must not reproduce subtype knowledge to keep the read correct.
+        """
+        return math.inf
+
     @classmethod
     def violations(cls, comms: Comms) -> tuple[Self, ...]:
         """Every live teammate's due debts, with shared team debts read once."""

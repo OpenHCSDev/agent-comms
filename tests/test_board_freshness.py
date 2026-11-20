@@ -16,12 +16,14 @@ from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
 )
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.messaging.revision_views import TeamBoardView
 from agent_comms.planning.orders import (
     ProgressRead,
     TodoStore,
 )
 from agent_comms.presentation import WireRevision
+from agent_comms.task_attachments.owner_notices import VibeCheckNotice
 from agent_comms.task_attachments.team_pings import TeamUpdateStore
 from agent_comms.team.standing_rules import OwedAnswer, StandingRule, TeamInputs
 from agent_comms.team.team_heartbeat import (
@@ -39,6 +41,7 @@ from agent_comms.team.team_hud import (
     TeamPlan,
     UnreadableUsage,
 )
+from agent_comms.team.vibe_check import VibeCheckUnanswered
 from agent_comms.ui_model.observation import (
     ObservationService,
     ObserveTeamHud,
@@ -144,6 +147,47 @@ def test_owed_answer_family_reuses_its_unchanged_source_cut(held_bus, monkeypatc
     )
     assert calls == 2
     assert third.revision != second.revision
+
+
+def test_owed_answer_cut_reopens_at_its_members_source_expiry(held_bus, monkeypatch):
+    """A frozen store cannot keep an escalation after its owner says its window ended."""
+    acquisition = TeamBoardAcquisition()
+    snapshot = held_bus.registry.snapshot()
+    project = snapshot.team_project.require()
+    inputs = TeamInputs.prepare(held_bus, project, ProgressRead(), acquisition)
+    owners = tuple(
+        teammate.incarnation
+        for teammate in acquisition.teammates(snapshot, held_bus.goals)
+    )
+    message = Message(
+        "user", "colleague", "Answer the escalation", InfoKind,
+        timestamp=100.0, seq=1,
+    )
+    answer = VibeCheckUnanswered(message)
+    calls = 0
+
+    def read_once_then_expired(comms, selected, scan):
+        nonlocal calls
+        calls += 1
+        return (answer,) if calls == 1 else ()
+
+    monkeypatch.setattr(OwedAnswer, "read_scan", read_once_then_expired)
+    revision = held_bus.views.revision()
+    boundary = message.timestamp + VibeCheckNotice.horizon
+    first = OwedAnswerCut.capture(
+        held_bus, inputs, owners, revision, None, now=boundary - 1,
+    )
+    retained = OwedAnswerCut.capture(
+        held_bus, inputs, owners, revision, first, now=boundary - 0.5,
+    )
+    expired = OwedAnswerCut.capture(
+        held_bus, inputs, owners, revision, retained, now=boundary,
+    )
+
+    assert first.valid_until == boundary
+    assert retained.answers is first.answers
+    assert expired.answers == ()
+    assert calls == 2
 
 
 def test_a_pass_that_throws_leaves_the_boards_it_could_not_replace(held_bus, account_read, monkeypatch):

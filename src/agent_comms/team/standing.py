@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -395,7 +396,7 @@ class UnitAskUnanswered(TeammateOwedAnswer, UndatedStandingRule):
         return tuple(cls(message, owner, debtor=debtor.incarnation)
                      for debtor in debtors
                      for owner, questions in UnansweredTeammateAsks.for_orders(
-                         source, snapshot, debtor.name, held, time.time(),
+                         source, snapshot, debtor.name, held, math.inf,
                      ).items()
                      for message in questions)
 
