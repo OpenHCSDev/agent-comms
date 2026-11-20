@@ -487,31 +487,18 @@ class NativeRepositoryInputs:
 class NativeBuildInputs(GitLaunch):
     root: Path
 
-    def submodule_pathspecs(self) -> tuple[str, ...]:
-        """Every pinned repository tree, derived from Git's own gitlink declarations."""
-        index = self._run(self.root, "ls-files", "--stage", "-z", "--cached")
-        index.check_returncode()
-        paths = tuple(
-            record.split("\t", 1)[1]
-            for record in index.stdout.decode().split("\0")
-            if record.startswith("160000 ")
-        )
-        return ((".gitmodules",) if paths else ()) + paths
-
     def paths(self) -> tuple[Path, ...]:
-        """The files the recipe in stack/native reads: that directory, its declared
-        repository inputs and every pinned submodule tree.
+        """The files the recipe in stack/native reads: that directory and the
+        repository inputs it declares.
         """
         tracked = self._run(
             self.root,
             "ls-files",
-            "--recurse-submodules",
             "-z",
             "--cached",
             "--",
             "stack/native",
             *NativeRepositoryInputs.of(self.root).pathspecs(),
-            *self.submodule_pathspecs(),
         )
         tracked.check_returncode()
         paths = tracked.stdout.decode()

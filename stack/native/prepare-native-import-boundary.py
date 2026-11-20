@@ -209,9 +209,30 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
         target = package / item.target
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         shutil.copyfile(repo / item.source, target)
-    for builder in ("prepare-native-pi-clm.mjs", "prepare-native-global-extensions.mjs"):
+    prepare_pi_clm(stack, package, environment)
+    subprocess.run(
+        ["node", str(stack / "prepare-native-global-extensions.mjs"), str(package)],
+        env=environment, check=True, timeout=60,
+    )
+
+
+def prepare_pi_clm(stack: Path, package: Path, environment: dict[str, str]) -> None:
+    with tempfile.TemporaryDirectory(prefix=".pi-clm-build-", dir=package.parent) as scratch:
+        staging = Path(scratch)
+        declaration = stack / "pi-clm"
+        for name in ("package.json", "package-lock.json"):
+            shutil.copyfile(declaration / name, staging / name)
         subprocess.run(
-            ["node", str(stack / builder), str(package)],
+            [
+                "npm", "ci", "--prefer-offline", "--ignore-scripts", "--omit=dev",
+                "--omit=peer", "--no-audit", "--no-fund",
+            ],
+            cwd=staging, env=environment, check=True, stdout=sys.stderr,
+            stderr=sys.stderr, timeout=120,
+        )
+        source = staging / "node_modules/@lolipopshock/pi-clm"
+        subprocess.run(
+            ["node", str(stack / "prepare-native-pi-clm.mjs"), str(package), str(source)],
             env=environment, check=True, timeout=60,
         )
 
