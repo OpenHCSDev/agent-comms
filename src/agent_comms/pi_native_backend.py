@@ -184,6 +184,9 @@ class PiNativeBackend(
 
         if open_native is None:
             open_native = NativeSessionPreparation.open
+        thread = await Coordination.run_worker(partial(
+            self.comms.registry.require, thread.name,
+        ))
         environment = await Coordination.run_worker(lambda: self.configuration.native_environment(
             thread, self.comms.registry.snapshot(),
         ))
