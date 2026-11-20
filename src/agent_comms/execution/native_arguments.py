@@ -20,6 +20,7 @@ from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldV
 
 if TYPE_CHECKING:
     from agent_comms.execution.owner_lifecycle import OwnerLifecycle
+    from agent_comms.transport.native_tool_transport import NativeToolMode
     from agent_comms.registry.thread_model import ThreadModel
 
 
@@ -150,7 +151,8 @@ class ExtensionArgument(NamedOption, ValueArgument):
 
 
 class ModelProvider(DeclaredFamily, affix="Provider"):
-    """Provider declarations own the native extensions their models require."""
+    """Provider declarations own the native extensions and the action space their models
+    require."""
 
     @classmethod
     def extension_arguments(cls, package: Path) -> tuple[str, ...]:
@@ -159,6 +161,11 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
     @classmethod
     def extension_environment(cls) -> Mapping[str, str]:
         return {}
+
+    @classmethod
+    def native_tool_mode(cls, mode: NativeToolMode) -> NativeToolMode:
+        """The tools a model of this provider runs with for an input granted `mode`."""
+        return mode
 
 
 class NoSelectedModel(ModelProvider, declared_name=None):
@@ -178,18 +185,29 @@ class OpenAICodexProvider(ModelProvider, declared_name="openai-codex"):
 
 
 class ClmLocalProvider(ModelProvider, declared_name="clm-local"):
-    """Local context-language models edit their next request through pi-clm."""
+    """Local context language models, served under the reference harness they were trained in:
+    clm_reference.mjs mirrors the context to a file the model edits with bash, with the
+    reference's 28K budget and 2,048-token reserve (the RL arm's configuration, paper App. E)."""
+
+    budget_tokens: ClassVar[int] = 28_672
+    reserve_tokens: ClassVar[int] = 2_048
 
     @classmethod
     def extension_arguments(cls, package: Path) -> tuple[str, ...]:
-        return (
-            "-e",
-            str(package / "agent-comms-extensions/pi-clm/src/index.mjs"),
-        )
+        return ("-e", str(package / "dist/clm_reference.mjs"))
 
     @classmethod
     def extension_environment(cls) -> Mapping[str, str]:
-        return {"PI_CLM_NATIVE_COMPACTION": "off"}
+        return {
+            "CLM_CONTEXT_BUDGET": str(cls.budget_tokens),
+            "CLM_CONTEXT_RESERVE": str(cls.reserve_tokens),
+        }
+
+    @classmethod
+    def native_tool_mode(cls, mode: NativeToolMode) -> NativeToolMode:
+        from agent_comms.execution.context_language_model import ContextLanguageModelMode
+
+        return ContextLanguageModelMode(mode)
 
 
 @dataclass(frozen=True)

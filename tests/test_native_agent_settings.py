@@ -76,8 +76,8 @@ def test_model_context_override_preserves_other_route_configuration(tmp_path):
     assert not NativeModelConfiguration.set_context_window(tmp_path, selected, 1_050_000)
 
 
-def test_every_clm_local_model_leaves_compaction_to_pi_clm(tmp_path):
-    """pi-clm owns a context-language model's context and cancels Pi's compaction; Pi's own
+def test_every_clm_local_model_leaves_compaction_to_its_harness(tmp_path):
+    """The CLM reference harness owns a context language model's context; Pi's own
     pre-response check must not decide to compact it, whichever clm-local model runs."""
     for model in ("clm-livectx-iter44-ffc4aab2-q4_k_m.gguf", "any-future-clm.gguf"):
         session = tmp_path / model

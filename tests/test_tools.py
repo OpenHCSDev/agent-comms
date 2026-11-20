@@ -37,7 +37,7 @@ class TestToolCatalog:
         )
 
         assert str(
-            tmp_path / "package/agent-comms-extensions/pi-clm/src/index.mjs"
+            tmp_path / "package/dist/clm_reference.mjs"
         ) not in arguments
 
     def test_native_launch_carries_the_existing_catalog_and_thread_tier(self, comms, tmp_path, monkeypatch):
