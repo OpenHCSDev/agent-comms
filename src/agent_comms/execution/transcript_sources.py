@@ -421,6 +421,14 @@ class LaterTranscript(TranscriptTraversal):
         return initial, consumed
 
 
+@dataclass(frozen=True)
+class CapturedTurns:
+    """Input-bounded turns with the exact record cut that supplied them."""
+
+    source: RecordsCut
+    turns: tuple[TurnDigest, ...]
+
+
 class TranscriptSource(ReadsPublishedMessages, ResolvesSentReports):
     """Recorded items alone carry no assigned-wire or publication authority.
 
@@ -466,15 +474,24 @@ class TranscriptSource(ReadsPublishedMessages, ResolvesSentReports):
 
     def turns(self, bound: TurnBound) -> tuple[TurnDigest, ...]:
         """Read input-bounded turns under one original record-source cut."""
+        return self.capture_turns(bound).turns
+
+    def record_cut(self) -> RecordsCut:
+        """The current original record coordinate, independent of its concrete store."""
+        with self.reading() as reader:
+            return reader.cut()
+
+    def capture_turns(self, bound: TurnBound) -> CapturedTurns:
+        """Retain the source that actually supplied this bounded answer."""
         with self.reading() as reader:
             cut = reader.cut()
             if cut.offset == 0:
-                return bound.take(())
+                return CapturedTurns(cut, bound.take(()))
             with closing(reader.reverse(cut.offset)) as records:
                 turns = bound.take(self._newest_turns(records))
             if not cut.holds(reader.cut(), cut.offset):
                 raise StaleRevision('Turn source changed during its read')
-        return turns
+        return CapturedTurns(cut, turns)
 
     @staticmethod
     def _newest_turns(records: Iterator[NativeRecord]) -> Iterator[TurnDigest]:
@@ -1280,8 +1297,11 @@ class StoreRead(TranscriptSource):
                 yield row.record(self.connection)
 
     def turns(self, bound: TurnBound) -> tuple[TurnDigest, ...]:
+        return self.capture_turns(bound).turns
+
+    def capture_turns(self, bound: TurnBound) -> CapturedTurns:
         with closing(ExternalItemRow.recent_turn_ids(self.connection, self.transcript.lookup)) as ids:
-            return bound.take(
+            turns = bound.take(
                 TurnDigest(turn_id, tuple(
                     event
                     for row in ExternalItemRow.select(
@@ -1289,6 +1309,7 @@ class StoreRead(TranscriptSource):
                         order_by=("seq",))
                     for event in row.events_in(self.connection)))
                 for turn_id in ids)
+        return CapturedTurns(self.cut(), turns)
 
     def tool_call_count(self, since: float) -> int:
         call = "$." + FieldCodec.record_key(ToolStartTranscript, "tool_call_id")

@@ -37,14 +37,13 @@ from agent_comms.execution.transcript_sources import ExternalTranscript, NativeT
 from agent_comms.execution.turn_bound import TurnBound, TurnsSince
 from agent_comms.execution.turn_digests import (
     OrderEditCountRead,
+    OrderEditCountReadings,
     OrderEditsRead,
 )
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
 )
-from agent_comms.execution.turn_digests import OrderEditCountRead, OrderEditsRead
-from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId, ToolCallId
@@ -318,12 +317,12 @@ def incoming_for(todo):
     return IncomingWork(frozenset({todo.id}), frozenset({todo.order.checked().id}))
 
 
-def record_edits(comms, source, count):
+def record_edits(comms, source, count, *, turn="parent-work", start=0):
     """One retained-holder transcript turn with ``count`` original edit calls."""
     actor = comms.registry.require("retained").incarnation
     ExternalTranscript(comms.root, actor).finish(
-        turn_id=NativeTurnId("parent-work"),
-        item_id=NativeItemId("parent-edit"),
+        turn_id=NativeTurnId(turn),
+        item_id=NativeItemId(f"{turn}-edit"),
         events=tuple(
             ToolStartTranscript(
                 position=position,
@@ -339,7 +338,7 @@ def record_edits(comms, source, count):
                     call_id=ToolCallId(f"parent-edit-{position}"),
                 ),
             )
-            for position in range(count)
+            for position in range(start, start + count)
         ),
     )
 
@@ -380,8 +379,25 @@ def test_edits_under_a_merged_order_are_nobodys_review(fork_bus):
     merged = {hold.todo.id: MergedProgress("a" * 40) for hold in holds}
     workplaces = EditWorkplaces.capture(
         comms.goals, comms.registry.snapshot(), held.holders, ProgressRead())
-    assert [read.read() for read in OrderEditCountRead.judgeable(
-        comms.root, holds, open_order, workplaces)] == [3]
+    reads = tuple(OrderEditCountRead.judgeable(
+        comms.root, holds, open_order, workplaces))
+    assert [read.read() for read in reads] == [3]
+    retained = OrderEditCountReadings()
+    retained.begin_pass()
+    assert retained.read_all(reads) == {"P40": 3}
+    retained.finish_pass()
+    first, = retained.cuts.values()
+    retained.begin_pass()
+    assert retained.read_all(reads) == {"P40": 3}
+    retained.finish_pass()
+    second, = retained.cuts.values()
+    assert second is first
+    record_edits(comms, source, 1, turn="following-work", start=3)
+    retained.begin_pass()
+    assert retained.read_all(reads) == {"P40": 4}
+    retained.finish_pass()
+    refreshed, = retained.cuts.values()
+    assert refreshed is not first
     assert tuple(OrderEditCountRead.judgeable(comms.root, holds, merged, workplaces)) == ()
 
 

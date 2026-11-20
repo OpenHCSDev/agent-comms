@@ -16,6 +16,7 @@ from agent_comms.execution.transcript_sources import (
     StoreRead,
     TranscriptSource,
 )
+from agent_comms.execution.native_record_file import RecordsCut
 from agent_comms.execution.turn_bound import TurnBound, TurnsSince
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.message_reference import MessageReference
@@ -273,23 +274,6 @@ class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):
 class OrderEditCountRead(OrderEditRead[int]):
     """Load counts the edits each order owns; ownership reads each edit's path."""
 
-    @classmethod
-    def read_all(cls, reads: Iterable[Self]) -> dict[str, int]:
-        """Read each holder's source once, then project each order from that cut."""
-        counts: dict[str, int] = {}
-        by_holder: dict[ThreadIncarnation, list[Self]] = {}
-        for read in reads:
-            selected = read.progress.unjudged(lambda: 1)
-            if selected:
-                by_holder.setdefault(read.thread.incarnation, []).append(read)
-            else:
-                counts[read.todo.id] = 0
-        for selected in by_holder.values():
-            counts.update(OrderEditCountBatch(
-                selected[0].root, selected[0].thread, tuple(selected),
-            ).read())
-        return counts
-
     def when_readable(self, operation: Callable[[], int]) -> int:
         return self.progress.unjudged(operation)
 
@@ -298,27 +282,88 @@ class OrderEditCountRead(OrderEditRead[int]):
 
 
 @dataclass(frozen=True)
-class OrderEditCountBatch(ThreadRead[dict[str, int]]):
+class OrderEditCountCut:
+    """One holder's order projections and the exact transcript cut that supplied them."""
+
+    reads: tuple[OrderEditCountRead, ...]
+    source: RecordsCut
+    counts: tuple[tuple[str, int], ...]
+
+    def serves(self, reads: tuple[OrderEditCountRead, ...], source: RecordsCut) -> bool:
+        return self.reads == reads and self.source == source
+
+
+@dataclass(frozen=True)
+class OrderEditCountBatch(ThreadRead[OrderEditCountCut]):
     """One holder transcript cut supplying every live order's edit count."""
 
     reads: tuple[OrderEditCountRead, ...]
+    previous: OrderEditCountCut | None
 
-    def native(self) -> dict[str, int]:
+    def retained(self, source: RecordsCut) -> OrderEditCountCut | None:
+        return self.previous if self.previous is not None and self.previous.serves(
+            self.reads, source,
+        ) else None
+
+    def native(self) -> OrderEditCountCut:
         source = self.thread.runtime.history_source(self.root, self.thread.incarnation)
-        turns = source.turns(TurnsSince(min(read.bound.at for read in self.reads)))
-        return {
-            read.todo.id: read.project_edits(read.edits_from_turns(turns))
+        retained = self.retained(source.record_cut())
+        if retained is not None:
+            return retained
+        captured = source.capture_turns(TurnsSince(min(read.bound.at for read in self.reads)))
+        return OrderEditCountCut(self.reads, captured.source, tuple(
+            (read.todo.id, read.project_edits(read.edits_from_turns(captured.turns)))
             for read in self.reads
-        }
+        ))
 
-    def external(self) -> dict[str, int]:
+    def external(self) -> OrderEditCountCut:
         with ExternalTranscript(self.root, self.thread.incarnation).reading() as source:
-            return {
-                read.todo.id: read.project_edits(read.owned(
+            revision = source.cut()
+            retained = self.retained(revision)
+            if retained is not None:
+                return retained
+            return OrderEditCountCut(self.reads, revision, tuple(
+                (read.todo.id, read.project_edits(read.owned(
                     source.unjudged(read.todo, read.bound.at)
-                ))
+                )))
                 for read in self.reads
-            }
+            ))
+
+
+class OrderEditCountReadings:
+    """Retain each holder's counts while its complete order and transcript sources agree."""
+
+    def __init__(self) -> None:
+        self.cuts: dict[tuple[ThreadIncarnation, tuple[str, ...]], OrderEditCountCut] = {}
+        self.prepared: dict[tuple[ThreadIncarnation, tuple[str, ...]], OrderEditCountCut] = {}
+
+    def begin_pass(self) -> None:
+        self.prepared = {}
+
+    def finish_pass(self) -> None:
+        self.cuts, self.prepared = self.prepared, {}
+
+    def close(self) -> None:
+        self.cuts = {}
+        self.prepared = {}
+
+    def read_all(self, reads: Iterable[OrderEditCountRead]) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        by_holder: dict[ThreadIncarnation, list[OrderEditCountRead]] = {}
+        for read in reads:
+            if read.progress.unjudged(lambda: 1):
+                by_holder.setdefault(read.thread.incarnation, []).append(read)
+            else:
+                counts[read.todo.id] = 0
+        for holder, selected in by_holder.items():
+            key = holder, tuple(read.todo.id for read in selected)
+            cut = OrderEditCountBatch(
+                selected[0].root, selected[0].thread, tuple(selected),
+                self.prepared.get(key, self.cuts.get(key)),
+            ).read()
+            self.prepared[key] = cut
+            counts.update(cut.counts)
+        return counts
 
 
 @dataclass(frozen=True)

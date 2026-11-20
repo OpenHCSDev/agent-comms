@@ -12,6 +12,7 @@ from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.comms import Comms
 from agent_comms.coordination.service_passes import ServicePassStore, TeamPass
 from agent_comms.execution.child_process import ReadWork
+from agent_comms.execution.turn_digests import OrderEditCountReadings
 from agent_comms.execution.watch_passes import PreparedWatchPass
 from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.messaging.revision_views import OwedAnswerView
@@ -161,6 +162,10 @@ class TeamBoardAcquisition(
     _previous_reads: RepositoryReads | None = None
     _answer_cuts: tuple[OwedAnswerCut, ...] = ()
 
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self.edit_count_readings = OrderEditCountReadings()
+
     def _progress_read(self) -> ProgressRead:
         progress = (
             ProgressRead.retaining(self._previous_reads)
@@ -174,14 +179,17 @@ class TeamBoardAcquisition(
         if self._previous_reads is not None:
             self._previous_reads.close()
             self._previous_reads = None
+        self.edit_count_readings.close()
 
     def acquire_board(self, comms: Comms) -> tuple[TeamInputs, ...]:
         self.begin_pass()
+        self.edit_count_readings.begin_pass()
         progress = self._progress_read()
         snapshot = comms.registry.snapshot()
         return tuple(
             TeamInputs.prepare(
-                comms, project, progress, self, snapshot=snapshot,
+                comms, project, progress, self, self.edit_count_readings,
+                snapshot=snapshot,
             )
             for project in snapshot.team_project.boards()
         )
@@ -219,6 +227,7 @@ class TeamBoardAcquisition(
             ))
         self._answer_cuts = tuple(cuts)
         self.finish_pass()
+        self.edit_count_readings.finish_pass()
         return tuple(observed)
 
 
