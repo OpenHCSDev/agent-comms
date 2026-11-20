@@ -2088,6 +2088,11 @@ class TaggedRecordMember(RecordMember):
     """A record member whose wire shape retains its declared family selector."""
 
     @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        """Describe the nominal family shape, including its selector."""
+        return StructuralRepresentation.schema_for(cls)
+
+    @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
         return structural
 

@@ -216,6 +216,17 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
     assert UnderReviewHeadVerdict in assert_review_preconditions(timer, comms, request)
 
 
+def test_board_action_family_schema_lists_its_nominal_offers() -> None:
+    schema = FieldCodec.value_schema(BoardActionOffer)
+    alternatives = schema["oneOf"]
+    assert isinstance(alternatives, list)
+    discriminator = BoardActionOffer.family_discriminator
+    assert {
+        alternative["properties"][discriminator]["const"]
+        for alternative in alternatives
+    } == set(BoardActionOffer.names())
+
+
 def test_orderless_board_commands_do_not_invent_a_problem(board_review):
     comms, request, _, _ = board_review
     rule, = OrderlessUnreviewedHead.scan_reviews(comms.goals, ProgressRead(()))
