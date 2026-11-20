@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import Comms, wire
-from agent_comms.context_segments.optional_awareness import ProjectionUnavailable
 from agent_comms.coordination.assignment_states import (
     EngagedAssignment,
     FullPendingAssignment,
@@ -319,7 +318,9 @@ def test_normal_rename_preserves_selected_claims_for_the_same_owner(
         assert result.omitted_count == 0
         selected = result.context()["selected"]
         assert [row["claim_id"] for row in selected] == [old_claim.assignment_id, current_claim.assignment_id]
-        assert old_claim.assignment_id in result.render(32768)
+        # The rows stay in context(); the recipient is handed their summary.
+        assert result.selected_summary()["count"] == 2
+        assert old_claim.assignment_id not in result.render(32768)
         captured = AwarenessClaimGenerations.one(
             store.session._connection, claim_id=old_claim.assignment_id,
         )
@@ -483,10 +484,31 @@ def test_full_bounded_awareness_window_keeps_foreground_deadline(tmp_path: Path)
         started = time.monotonic()
         bounded = all_rows(initial, assignment, owner)
         elapsed = time.monotonic() - started
-        # One hundred complete claim descriptions exceed the existing 16KiB
-        # optional text budget; omission must still fit the actual 250ms gate.
-        assert 'Optional awareness omitted' in bounded.render(32768)
-        assert bounded.reason == ProjectionUnavailable()
+        # One hundred decisions reach the recipient as one summary, not 100 rows,
+        # and the full read still fits the actual 250ms gate.
+        assert bounded.selected_summary()["count"] == 100
+        assert len(bounded.render(32768)) < 1000
         assert elapsed < 0.250
+    finally:
+        store.close()
+
+
+def test_many_prior_decisions_render_as_one_summary_not_rows(tmp_path: Path) -> None:
+    """Every wake inlined each prior decision: CLM's 50 rows were 10,392 of a 15,918-char
+    wake against a 49,152-token window (2026-11-20). The recipient now gets one summary
+    line, the obligations it owes stay inline, and the rows stay in context()."""
+    comms, store, index, root_id = _root(tmp_path)
+    try:
+        accepted = [_accepted(comms, store, root_id, "member000", f"work {n}") for n in range(30)]
+        initial, assignment = accepted[-1]
+        owner = _owner(comms, "member000")
+        result = _projection(index, store, owner, 0, initial.message.seq)(initial, assignment, owner)
+        assert len(result.context()["selected"]) == 30
+        rendered = result.render(32768)
+        summary = result.selected_summary()
+        assert summary["count"] == 30
+        assert summary["seq_range"] == [accepted[0][0].message.seq, initial.message.seq]
+        assert not any(claim.assignment_id in rendered for _, claim in accepted)
+        assert len(rendered) < 1000
     finally:
         store.close()

@@ -225,17 +225,33 @@ class CompleteAwareness(Complete, ContextSegment, OptionalAwarenessResult):
         }
 
     def require_resource_budget(self, max_text_bytes: int) -> None:
-        text = FieldCodec.compact(FieldCodec.encode(self.context()), ensure_ascii=False, sort_keys=True)
-        if len(text.encode("utf-8")) > max_text_bytes:
+        """The budget bounds what the recipient is handed: the rendered text."""
+        if len(self.text().encode("utf-8")) > max_text_bytes:
             raise ProjectionUnavailableError("binding awareness exceeds the byte budget")
+
+    def selected_summary(self) -> dict[str, object]:
+        """The selected decisions as the recipient reads them on every wake: how many, over
+        which sequences, and how each ended. Each row is a past message, which bus history
+        reads in full on demand; inlining all of them cost CLM 10,392 of its 15,918-char
+        wake (50 rows) against a 49,152-token window (2026-11-20). The rows stay in
+        `context()` and in this segment's provenance."""
+        rows = FieldCodec.encode([row.context() for row in self.selected])
+        dispositions: dict[str, int] = {}
+        for row in rows:
+            dispositions[row["disposition"]] = dispositions.get(row["disposition"], 0) + 1
+        sequences = [row["source_seq"] for row in rows]
+        return {
+            "count": len(rows),
+            "seq_range": [min(sequences), max(sequences)] if sequences else [],
+            "dispositions": dispositions,
+            "expand": "comms_history reads these messages by sequence",
+        }
 
     def text(self) -> str:
         content = self.content_instruction.render(
             dict(
                 sequence=self.through_seq,
-                selected=json.dumps(
-                    FieldCodec.encode([row.context() for row in self.selected]), ensure_ascii=False, sort_keys=True
-                ),
+                selected=json.dumps(self.selected_summary(), ensure_ascii=False, sort_keys=True),
                 obligations=json.dumps(
                     FieldCodec.encode([row.context() for row in self.open_obligations]),
                     ensure_ascii=False,
