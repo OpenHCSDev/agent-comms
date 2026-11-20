@@ -225,9 +225,11 @@ class NativePiRpcLaunch:
         runtime = LaunchRuntime.running()
         cls._command_selection(command, runtime, package)
         cwd = worktree.resolve(strict=True)
+        environment = dict(os.environ)
+        environment.update(configuration.encode())
         return cls._managed(package, (*arguments, "--no-extensions", "--no-skills",
-            "--no-context-files", "--no-session"), cwd, configuration.encode(),
-            SelectedSession(cwd), runtime, root)
+            "--no-context-files", "--no-session"), cwd, environment,
+            SelectedSession(cwd), configuration, runtime, root)
 
     @classmethod
     def managed(
@@ -254,22 +256,27 @@ class NativePiRpcLaunch:
         saved = Path(session_file).absolute() if session_file is not None else None
         NativeSessionFiles.prepare_private_directory(directory)
         session = SelectedSession.for_launch(directory, saved, root=root, worktree=cwd, owner=owner)
-        return cls._managed(package, arguments, cwd, environment, session, runtime, root)
+        agent_dir = directory / NativeAgentSettings.directory_name
+        NativeSessionFiles.prepare_private_directory(agent_dir)
+        environment, configuration = session.launch_environment(agent_dir, environment)
+        return cls._managed(
+            package, arguments, cwd, environment, session, configuration, runtime, root
+        )
 
     @classmethod
-    def _managed(cls, package, arguments, cwd, environment, session, runtime, root):
+    def _managed(cls, package, arguments, cwd, environment, session, configuration, runtime, root):
         """Assemble the entire key from one acquired package and selected source."""
         cwd = Path(cwd).resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
-        env = dict(os.environ)
-        env.update(environment or {})
         arguments += ("--session-dir", str(session.directory))
         arguments += session.launch_arguments(NoThinkingOverride)
         arguments += session.proof_arguments(root)
         if session.path is not None:
             arguments += ("--session", str(session.path))
-        return cls._build(package, arguments, cwd, env, session, RestartEnvironment.inherit(env), runtime, root)
+        return cls._build(
+            package, arguments, cwd, environment, session, configuration, runtime, root
+        )
 
     def retained_managed(
         self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
@@ -287,9 +294,13 @@ class NativePiRpcLaunch:
         if ((saved, directory) != (self.session.path, self.session.directory)
                 or self.session.files(root).owner.lookup != owner.lookup):
             return None
-        return self._managed(self.package,
-            NativeArguments.parse(arguments).managed_rpc(self.package.path),
-            worktree, environment, self.session, self.runtime, root)
+        agent_dir = self.session.directory / NativeAgentSettings.directory_name
+        NativeSessionFiles.prepare_private_directory(agent_dir)
+        environment, configuration = self.session.launch_environment(agent_dir, environment)
+        return self._managed(
+            self.package, NativeArguments.parse(arguments).managed_rpc(self.package.path),
+            worktree, environment, self.session, configuration, self.runtime, root
+        )
 
     @classmethod
     def tracked(cls, package: VerifiedNativePackage, **options) -> NativePiRpcLaunch:

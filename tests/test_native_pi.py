@@ -26,7 +26,7 @@ from agent_comms.execution.native_input_proof import (
     NativeContextProof,
 )
 from agent_comms.execution.native_pi import NativePiPromptRejected, NativePiRpcLaunch
-from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.execution.native_session_files import NativeAgentSettings, NativeSessionFiles
 from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.native_startup import NATIVE_STARTUP_POLICY
 from agent_comms.execution.transcript_sources import NativeTranscript
@@ -226,6 +226,33 @@ def test_missing_native_model_fails_before_any_session_side_effect(tmp_path, pro
             selected_tool_mode=ToollessMode(CodingChild(
                 comms=wire(tmp_path), thread=NativeThread('modelless', frozenset(), Checkout(tmp_path)))))
     assert not (tmp_path/'sessions').exists()
+
+
+def test_managed_launch_isolates_writable_settings_from_ambient_packages(
+    tmp_path, monkeypatch, native_runtime_package,
+):
+    ambient = tmp_path / "ambient-agent"
+    ambient.mkdir(mode=0o700)
+    settings = ambient / "settings.json"
+    original = '{"packages":["npm:mutable-package"]}\n'
+    settings.write_text(original)
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(ambient))
+    monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(ambient))
+
+    session_directory = tmp_path / "managed-session"
+    launch = NativePiRpcLaunch.managed(
+        str(native_runtime_package.cli), (), package=native_runtime_package,
+        worktree=tmp_path, root=tmp_path, owner=PROOF_OWNER,
+        directory=session_directory,
+    )
+
+    private_agent = session_directory / NativeAgentSettings.directory_name
+    assert launch.env["PI_CODING_AGENT_DIR"] == str(private_agent)
+    assert launch.env["AGENT_COMMS_NATIVE_CONFIG_DIR"] == str(ambient)
+    assert launch.configuration.agent_directory == private_agent
+    assert launch.configuration.native_config == ambient
+    assert private_agent.is_dir()
+    assert settings.read_text() == original
 
 
 @pytest.mark.parametrize(('stop_reason','detail'), [
