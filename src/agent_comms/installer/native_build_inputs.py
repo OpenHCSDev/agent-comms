@@ -456,7 +456,6 @@ class NativeRepositoryInputs:
     package_files: tuple[PackageFile, ...]
     mcp_client: McpClientSource
     compaction_instruction: str
-    package_trees: tuple[str, ...] = ()
 
     @classmethod
     def of(cls, root: Path) -> NativeRepositoryInputs:
@@ -468,7 +467,6 @@ class NativeRepositoryInputs:
         object.__setattr__(
             self, "mcp_client", McpClientSource.of(cast(Mapping[str, object], self.mcp_client))
         )
-        object.__setattr__(self, "package_trees", tuple(self.package_trees))
 
     def pathspecs(self) -> tuple[str, ...]:
         return (
@@ -482,7 +480,6 @@ class NativeRepositoryInputs:
                 )
             ),
             self.compaction_instruction,
-            *self.package_trees,
         )
 
 
@@ -490,9 +487,20 @@ class NativeRepositoryInputs:
 class NativeBuildInputs(GitLaunch):
     root: Path
 
+    def submodule_pathspecs(self) -> tuple[str, ...]:
+        """Every pinned repository tree, derived from Git's own gitlink declarations."""
+        index = self._run(self.root, "ls-files", "--stage", "-z", "--cached")
+        index.check_returncode()
+        paths = tuple(
+            record.split("\t", 1)[1]
+            for record in index.stdout.decode().split("\0")
+            if record.startswith("160000 ")
+        )
+        return ((".gitmodules",) if paths else ()) + paths
+
     def paths(self) -> tuple[Path, ...]:
-        """The files the recipe in stack/native reads: that directory and the
-        repository inputs it declares.
+        """The files the recipe in stack/native reads: that directory, its declared
+        repository inputs and every pinned submodule tree.
         """
         tracked = self._run(
             self.root,
@@ -503,6 +511,7 @@ class NativeBuildInputs(GitLaunch):
             "--",
             "stack/native",
             *NativeRepositoryInputs.of(self.root).pathspecs(),
+            *self.submodule_pathspecs(),
         )
         tracked.check_returncode()
         paths = tracked.stdout.decode()

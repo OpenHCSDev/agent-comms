@@ -13,6 +13,5 @@
     "files": ["index.mjs", "README.md"],
     "trees": ["src", "bin"]
   },
-  "compaction_instruction": "src/agent_comms/instructions/coordination.md",
-  "package_trees": ["extensions/pi-clm"]
+  "compaction_instruction": "src/agent_comms/instructions/coordination.md"
 }
