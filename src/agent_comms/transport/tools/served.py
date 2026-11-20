@@ -1042,9 +1042,7 @@ class ServedMessageFileRead(MessageFileRead):
 
     def readable(self, comms: Comms, caller: ToolCaller,
                  references: tuple[MessageReference, ...]) -> tuple[MessageReference, ...]:
-        target = CommandTarget.named(
-            CommandTarget.named(self.conversation).canonical_name(
-                lambda name: comms.registry.require(name).name))
+        target = CommandTarget.named(self.conversation)
         scope = target.history_view(
             caller.history_viewer(self.participant), comms.bus.require_channel,
             ChannelHistory, DMHistory,

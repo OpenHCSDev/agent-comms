@@ -115,15 +115,22 @@ async def test_a_file_sent_from_a_remote_ui_is_the_file_its_recipient_reads(
     assert stored.body == "the trace"
 
 
-def test_an_agent_send_carries_files_and_a_send_without_files_names_none(threads: Comms) -> None:
+def test_an_agent_send_carries_files_after_its_sender_retires(threads: Comms) -> None:
     comms = threads
     sent = CommsSendTool(target="recipient", body="the log", files=(upload("log.txt", b"line\n", "text/plain"),))
     published = ThreadCaller("outsider").invoke(sent, comms)
     assert "files" not in FieldCodec.encode(CommsSendTool(target="recipient", body="none"))
-    listed = ThreadCaller("recipient").invoke(ServedCommsMessageFilesTool(
-        conversation="outsider", messages=(published.message.source,)), comms)
+    request = ServedCommsMessageFilesTool(
+        conversation="outsider", messages=(published.message.source,)
+    )
+    listed = ThreadCaller("recipient").invoke(request, comms)
+    comms.registry.remove("outsider")
+    retained = ThreadCaller("recipient").invoke(request, comms)
     assert isinstance(listed, MessageFilesRead)
-    assert [(file.name, file.mime_type, file.size) for file in listed.files] == [("log.txt", "text/plain", 5)]
+    assert retained == listed
+    assert [(file.name, file.mime_type, file.size) for file in listed.files] == [
+        ("log.txt", "text/plain", 5)
+    ]
 
 
 def test_files_over_the_message_limit_are_refused_before_anything_is_written(threads: Comms) -> None:
