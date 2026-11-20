@@ -207,11 +207,20 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
     received: str
 
     def reason(self) -> str:
-        """The refusal and the answer it refused, bounded for one published line."""
+        """The refusal and the answer it refused, bounded for one published line.
+
+        The error must spell the real wire contract: a JSON object keyed by the
+        family discriminator (`selected-triage-output.md`). Earlier text said
+        "Reply with exactly one decision: IGNORE, FULL" and invited the model
+        to emit a bare word, which `json.loads` then refused in an identical
+        loop (IDEN-3: one concept written two ways)."""
+        discriminator = SelectedTriage.family_discriminator
         accepted = ", ".join(SelectedTriage.names())
         received = " ".join(self.received.split())[:200]
         return (f"The selected model returned an invalid triage decision ({self.error}). "
-                f"Received: {received!r}. Reply with exactly one decision: {accepted}.")
+                f"Received: {received!r}. Reply with a JSON object "
+                f'{{"{discriminator}": "..."}} where ... is one of: {accepted}. '
+                f"No bare word, prose, or markdown.")
 
     def settle(self, participant: SelectedParticipant, stage: TriageNativeSend, claim_scope: PrivateSendClaim, context: NativeContextProof) -> tuple[WakeAssignment, ...]:
         return stage.fail_decision(participant.store, participant.identity,
