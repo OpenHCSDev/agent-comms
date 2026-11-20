@@ -95,16 +95,36 @@ class Sha256Digest:
 
 @dataclass(frozen=True, kw_only=True)
 class FileProvenance(Sha256Digest, Provenance):
+    """Authenticated file bytes whose public text view is deliberately bounded."""
+
+    max_public_text_bytes: ClassVar[int] = 8 * 1024 * 1024
     path: str
 
     def public_description(self) -> str:
         return f"File {self.path} · SHA256 {self.sha256}"
 
-    def public_text(self, comms) -> str:
-        raw = Path(self.path).read_bytes()
-        if hashlib.sha256(raw).hexdigest() != self.sha256:
+    def require_digest(self, observed: str) -> None:
+        if observed != self.sha256:
             raise ValueError("Original file bytes are unavailable: the source has changed")
-        return raw.decode("utf-8")
+
+    def verify(self) -> None:
+        """Verify arbitrary file bytes without materializing them in memory."""
+        with Path(self.path).open("rb") as stream:
+            self.require_digest(hashlib.file_digest(stream, "sha256").hexdigest())
+
+    def public_text(self, comms) -> str:
+        with Path(self.path).open("rb") as stream:
+            raw = stream.read(self.max_public_text_bytes + 1)
+        if len(raw) > self.max_public_text_bytes:
+            raise ValueError(
+                f"Original file is too large to be public text: {self.path!r} exceeds "
+                f"{self.max_public_text_bytes} bytes"
+            )
+        self.require_digest(hashlib.sha256(raw).hexdigest())
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise ValueError(f"Original file is not UTF-8 text: {self.path!r}") from error
 
 
 class HistoricalInstructionProvenance(Provenance, declared_name=None):
