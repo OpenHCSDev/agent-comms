@@ -81,7 +81,7 @@ class ChangeSignal(ChangedSources, asyncio.Queue[SourceChange]):
 
     def prepare(self) -> None:
         self._drain()
-        self.observed_paths = self._take_paths()
+        self.observed_paths = self._take_changes().declared
         try:
             change = self.get_nowait()
         except asyncio.QueueEmpty:

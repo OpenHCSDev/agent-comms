@@ -74,6 +74,10 @@ class RecordsCut(DeclaredFamily, affix="Cut"):
         """Whether ``current`` still contains the records this page read through."""
         return type(current) is type(self) and self.contains(current, through)
 
+    def appended_by(self, current: RecordsCut) -> bool:
+        """Whether ``current`` differs from this cut only by a forward suffix."""
+        return self.holds(current, self.offset)
+
     @abstractmethod
     def contains(self, current, through: int) -> bool: ...
 

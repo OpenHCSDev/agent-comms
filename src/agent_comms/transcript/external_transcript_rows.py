@@ -371,13 +371,20 @@ class ExternalRecord(TranscriptRecord):
 
 @dataclass(frozen=True)
 class ExternalCut(RecordsCut, TypedRow):
-    """The thread's newest finished item sequence when read."""
+    """The complete stored sequence bounds of one thread's finished items."""
 
     offset: Annotated[int, Column(generated="coalesce(max({seq}), 0)")]
+    start: Annotated[int, Column(generated="coalesce(min({seq}) - 1, 0)")] = 0
 
     def contains(self, current: ExternalCut, through: int) -> bool:
-        # Finished items are append-only: later items belong to the next update.
+        # A prepended page preserves every already-read item and cursor.
         return current.offset >= self.offset
+
+    def appended_by(self, current: RecordsCut) -> bool:
+        # An earlier page changes the answer below the old upper bound.
+        return isinstance(current, ExternalCut) and (
+            current.start == self.start and super().appended_by(current)
+        )
 
     def draft_current(self, current: RecordsCut) -> bool:
         # Finishing a CLI item retires its draft atomically. Its current draft
