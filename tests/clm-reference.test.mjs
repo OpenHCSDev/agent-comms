@@ -94,7 +94,7 @@ test("an applied edit replaces the editable region from the next request on, and
   raw.push(call);
   const edited = await turn(h, raw.slice(0, 3), `python3 edit ${file}`,
     () => "[[CTX_TURN 1 role=assistant]]\nran cat big\n\n[[CTX_TURN 2 role=tool]]\n[big output: 4000 x]");
-  assert.match(edited.input.command, /_dr_ec=\$\?/);
+  assert.equal(edited.input.command, `python3 edit ${file}`);
   assert.match(edited.result, /LIVE_CTX_MAIN\.txt: edit applied — context ~\d+->\d+ tokens, 3 turns/);
   assert.match(edited.result, /^\(no output\)\n\n\(exit_code=0\)\n\[context: ~\d+\/26624 tokens\]/);
   raw.push(toolResult("ok"));
