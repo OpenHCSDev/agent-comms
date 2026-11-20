@@ -566,7 +566,8 @@ class ClaudeUserHeader(WireHeader):
 
     def record_type(self) -> type:
         if self.origin.type == TaskNotification.declared_name:
-            return TaskUserRecord
+            return (TaskUserRecord if 'prompt_id' in self.model_fields_set
+                    else TaskNoticeRecord)
         if 'prompt_id' not in self.model_fields_set:
             return LocalCommandOutput
         if self.is_compact_summary:
@@ -1136,15 +1137,31 @@ class CompactSummary(UserRecord, declared_name='compact-summary'):
         return ''
 
 
-class TaskUserRecord(PromptRecord, declared_name='task-user'):
+class TaskRecord(ClaudeRecord, TimedRecord, declared_name=None):
+    """A task notification and its delivery evidence, whether or not it opens a turn."""
+
     origin: TaskNotification
     message: TaskMessage
 
-    def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+    def task_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.message.updates(self, session.turn.source)
 
     def delivered(self) -> tuple[MessageReference, ...]:
         return self.message.delivered()
+
+
+class TaskNoticeRecord(TaskRecord, declared_name='task-notice'):
+    """An asynchronous task notification within the already active source turn."""
+
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return self.task_updates(session)
+
+
+class TaskUserRecord(PromptRecord, TaskRecord, declared_name='task-user'):
+    """A task notification whose prompt identity opens its exact source turn."""
+
+    def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return self.task_updates(session)
 
 
 class SubtypeHeader(WireHeader):
