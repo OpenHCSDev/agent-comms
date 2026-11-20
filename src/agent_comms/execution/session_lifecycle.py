@@ -342,6 +342,7 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
             await self.effects.inputs.close_sessions((state,))
             await state.join_observations()
             await self.effects.turns.close_sessions((state,))
+            self.effects.cursors.close_session(state.identifier)
             await Coordination.run_worker(partial(
                 self.comms.owners.complete_session, state.owner, expected,
                 state.configuration.launch.process, claim.claimed_generation,

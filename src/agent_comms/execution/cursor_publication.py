@@ -330,3 +330,9 @@ class CursorPublication(CursorMetadataRead[CursorAdvancedUpdate]):
         for delivery in self.deliveries.values():
             delivery.close()
         self.deliveries.clear()
+
+    def close_session(self, session_id: AcpSessionId) -> None:
+        """Retire one stopped session's verified source without touching its siblings."""
+        delivery = self.deliveries.pop(session_id, None)
+        if delivery is not None:
+            delivery.close()
