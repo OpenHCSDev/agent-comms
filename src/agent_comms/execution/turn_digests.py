@@ -8,6 +8,7 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import JsonValue
 
+from agent_comms.agent_backend import RuntimeLocation
 from agent_comms.context_store import ContextStore
 from agent_comms.coordination.service_passes import ServiceReading
 from agent_comms.execution.historical_native_inputs import HistoricalNativeAnswers
@@ -197,10 +198,33 @@ class OrderRead[Result](TranscriptRead[Result]):
 
 
 @dataclass(frozen=True)
+class OrderEditSource:
+    """The facts that select one order's original transcript events."""
+
+    root: Path
+    thread: ThreadIncarnation
+    execution: type[Thread]
+    runtime: RuntimeLocation
+    bound: TurnsSince
+    problem: str
+
+
+@dataclass(frozen=True)
 class OrderEditRead[Result](OrderRead[Result]):
     """A held order's edits: the ones its workplaces own that no verdict names."""
     workplaces: EditWorkplaces
     progress: OrderProgress = NoCommitProgress()
+
+    @property
+    def source(self) -> OrderEditSource:
+        return OrderEditSource(
+            self.root,
+            self.thread.incarnation,
+            type(self.thread),
+            self.thread.runtime,
+            self.bound,
+            self.todo.id,
+        )
 
     def when_readable(self, operation: Callable[[], Result]) -> Result:
         self.progress.require_read()
@@ -305,11 +329,14 @@ class OrderEditCountCut:
         return tuple(counts)
 
     def following(
-        self, captured: CapturedTranscriptAppend, thread: str,
+        self,
+        captured: CapturedTranscriptAppend,
+        thread: str,
+        reads: tuple[OrderEditCountRead, ...],
     ) -> OrderEditCountCut:
         """Advance every order projection from the one appended transcript answer."""
         advanced = []
-        for read, (problem, retained) in zip(self.reads, self.edits, strict=True):
+        for read, (problem, retained) in zip(reads, self.edits, strict=True):
             if problem != read.todo.id:
                 raise ValueError("Retained edit projection belongs to another order")
             appended = (
@@ -320,7 +347,17 @@ class OrderEditCountCut:
             by_id = {edit.id: edit for edit in retained}
             by_id.update((edit.id, edit) for edit in appended)
             advanced.append((problem, tuple(by_id.values())))
-        return OrderEditCountCut(self.reads, captured.source, tuple(advanced))
+        return OrderEditCountCut(reads, captured.source, tuple(advanced))
+
+    def reproject(self, reads: tuple[OrderEditCountRead, ...]) -> OrderEditCountCut:
+        """Apply current ownership/progress facts to the same retained source events."""
+        if self.reads == reads:
+            return self
+        if tuple(problem for problem, _edits in self.edits) != tuple(
+            read.todo.id for read in reads
+        ):
+            raise ValueError("Retained edit projections belong to other orders")
+        return replace(self, reads=reads)
 
 
 @dataclass(frozen=True)
@@ -332,15 +369,17 @@ class OrderEditCountBatch(ThreadRead[OrderEditCountCut]):
 
     def following(self, source: TranscriptSource) -> OrderEditCountCut | None:
         """The retained answer advanced under one current source snapshot."""
-        if self.previous is None or self.previous.reads != self.reads:
+        if self.previous is None or tuple(
+            read.source for read in self.previous.reads
+        ) != tuple(read.source for read in self.reads):
             return None
         appended = source.capture_append(self.previous.source)
         if appended is None:
             return None
         return (
-            self.previous
+            self.previous.reproject(self.reads)
             if appended.source == self.previous.source
-            else self.previous.following(appended, self.thread.name)
+            else self.previous.following(appended, self.thread.name, self.reads)
         )
 
     def native(self) -> OrderEditCountCut:
