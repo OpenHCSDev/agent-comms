@@ -344,6 +344,11 @@ class TeamHud(TeamHudRecord):
         )
 
     @cached_property
+    def publication_identity(self) -> tuple[object, ...]:
+        """Every semantic value and exact occurrence supplying the stored recipient frame."""
+        return self, self.alarm_source
+
+    @cached_property
     def alarms(self) -> tuple[AlarmSection, ...]:
         return AlarmGroup.sections(self.packets, self.open_pings, self.stopped)
 
@@ -578,7 +583,8 @@ class TeamBoardPublicationStore(
         after = {hud.teammate: hud for hud in retained}
         changed = tuple(sorted(
             (owner for owner in before.keys() | after.keys()
-             if before.get(owner) != after.get(owner)),
+             if owner not in before or owner not in after
+             or before[owner].publication_identity != after[owner].publication_identity),
             key=lambda owner: (owner.name, owner.created_at),
         ))
         return TeamBoardPublication(plan, frames, changed)
@@ -609,7 +615,11 @@ class TeamBoardPublicationStore(
             hud.teammate: hud
             for hud in cls.retained_huds(plan, huds)
         }
-        if previous.plan == plan and before == after:
+        same_frames = before.keys() == after.keys() and all(
+            before[owner].publication_identity == hud.publication_identity
+            for owner, hud in after.items()
+        )
+        if previous.plan == plan and same_frames:
             # SharedJson is a storage encoding, not the board's equality owner.  Re-encoding
             # equal HUDs may choose different reference positions; comparing those raw graphs
             # made every recipient look changed and woke every reader on every heartbeat.

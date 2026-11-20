@@ -193,6 +193,24 @@ def test_steady_heartbeat_retains_its_board_derivations(held_bus, account_read, 
     changed.retaining_rendering(rendered)
     assert changed.alarms is not rendered.alarms
 
+    changed_huds = tuple(
+        changed if hud.teammate == rendered.teammate else hud
+        for hud in current.huds
+    )
+    published = TeamBoardPublicationStore.replace_all(
+        held_bus.root,
+        current.publication.plan,
+        changed_huds,
+        current,
+    )
+    assert published.publication != current.publication
+    assert published.publication.changed == (rendered.teammate,)
+    decoded = TeamBoardPublicationStore.at(held_bus.root).huds(
+        publication=published.publication,
+    )
+    changed_frame = next(hud for hud in decoded if hud.teammate == rendered.teammate)
+    assert changed_frame.open_pings[0].text == "changed exact rendering source"
+
 
 def test_owed_answer_family_reuses_its_unchanged_source_cut(held_bus, monkeypatch):
     acquisition = TeamBoardAcquisition()
