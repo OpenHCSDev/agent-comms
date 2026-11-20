@@ -1151,9 +1151,10 @@ class TaskRecord(ClaudeRecord, TimedRecord, declared_name=None):
 
 
 class TaskNoticeRecord(TaskRecord, declared_name='task-notice'):
-    """An asynchronous task notification within the already active source turn."""
+    """An asynchronous task notification joins the active turn or opens its own."""
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        session.open_turn(self)
         return self.task_updates(session)
 
 

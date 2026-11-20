@@ -483,7 +483,7 @@ def notification(line, record_id=transcript_record('notification-record'), *, pr
     return decoded_record(record)
 
 
-def test_promptless_task_notice_keeps_the_active_turn_and_following_records_decode():
+def test_promptless_task_notice_owns_the_available_source_turn():
     active = FieldCodec.decode(NativeTurnId, 'active-turn')
     session = ClaudeSession(turn=KnownTurn(active))
     notice = notification('ordinary task event', prompt_id=None)
@@ -492,6 +492,15 @@ def test_promptless_task_notice_keeps_the_active_turn_and_following_records_deco
     assert isinstance(observed, MonitorObservation)
     assert observed.source_turn.require_id() == active
     assert session.turn == KnownTurn(active)
+
+    cold_session = ClaudeSession()
+    cold = notification(
+        'reconnected task event', transcript_record('reconnected-notification'), prompt_id=None
+    )
+    (observed_cold,) = cold.updates(cold_session)
+    cold_turn = NativeTurnId(cold.uuid)
+    assert observed_cold.source_turn.require_id() == cold_turn
+    assert cold_session.turn == KnownTurn(cold_turn)
 
     prompted_session = ClaudeSession()
     prompted = notification('prompted task event', prompt_id='prompted-turn')
