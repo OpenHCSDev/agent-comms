@@ -2,19 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from textwrap import shorten
-from typing import TYPE_CHECKING
 
 from agent_comms.planning.orders import Todo, TodoStore
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from agent_comms.comms import Comms
 
 
 @dataclass(frozen=True)
@@ -41,14 +36,21 @@ class HeldOrders:
     orphaned: tuple[Todo, ...]
 
     @classmethod
-    def read(cls, comms: Comms) -> HeldOrders:
-        """Shared held work captured once; filtering never reopens the store."""
-        return cls.of(comms.goals.todos, comms.registry.snapshot())
-
-    @classmethod
     def of(cls, store: TodoStore, snapshot: RegistrySnapshot) -> HeldOrders:
         """Held work in ``store`` as this one registry cut registers its holders."""
         return cls.split(store.held_orders(), snapshot)
+
+    @classmethod
+    def from_open_orders(
+        cls, todos: Sequence[Todo], snapshot: RegistrySnapshot,
+    ) -> HeldOrders:
+        """Derive held work from an already captured open-order board."""
+        return cls.split(cls.assigned(todos), snapshot)
+
+    @staticmethod
+    def assigned(todos: Sequence[Todo]) -> tuple[Todo, ...]:
+        """Assigned rows in their open-board order, whether or not the holder remains live."""
+        return tuple(todo for todo in todos if todo.assignment is not None)
 
     @classmethod
     def split(cls, todos: Sequence[Todo], snapshot: RegistrySnapshot) -> HeldOrders:

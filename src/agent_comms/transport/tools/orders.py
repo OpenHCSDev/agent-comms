@@ -755,7 +755,7 @@ class CommsTeamStoryTool(ReadTool, NativeToolRequest, declared_name="comms_fleet
                    "order; orders held by unregistered participants collapse into one line.")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TeamStory:
-        return TeamStory.collect(HeldOrders.read(comms))
+        return TeamStory.collect(comms.goals.held_orders())
 
 
 @dataclass(frozen=True, kw_only=True)

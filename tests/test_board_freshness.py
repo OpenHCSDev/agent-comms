@@ -133,6 +133,28 @@ def test_acquisition_and_observation_share_one_registry_cut(held_bus, monkeypatc
     assert observed and all(board.frame.snapshot is cut for board in observed)
 
 
+def test_heartbeat_consumes_one_open_order_cut(held_bus, account_read, monkeypatch):
+    """Every merge, standing-rule and held-order reader consumes TeamInputs' board."""
+    board = TodoStore.board
+    calls = 0
+
+    def counted(store):
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            pytest.fail("one heartbeat reopened the open-order board")
+        return board(store)
+
+    monkeypatch.setattr(TodoStore, "board", counted)
+    monkeypatch.setattr(
+        TodoStore,
+        "held_orders",
+        lambda self, **kwargs: pytest.fail("held orders reopened their captured board"),
+    )
+    asyncio.run(TeamHeartbeat().run(lambda: nullcontext(held_bus)))
+    assert calls == 1
+
+
 def test_todo_commit_signal_is_a_board_input_not_a_database_mtime(held_bus):
     paths = WireRevision.source_paths(held_bus.views)
     assert paths["team_board"] == TodoStore.source_paths(held_bus.root)

@@ -81,6 +81,7 @@ from agent_comms.planning.goal_wait_recovery import OwnerWaitRead
 from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goal_waits import GoalWait, StandbyReview
 from agent_comms.planning.goals import Goal, GoalDeclaration
+from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
     Assignment,
@@ -283,6 +284,10 @@ class Goals(
     GoalReadyGrantSource[NativeThread, Generation],
     GoalSnapshots[Thread, GoalSnapshot, RegistrySnapshot, ActivityAnswers],
 ):
+    def held_orders(self) -> HeldOrders:
+        """Capture held work from the goal store against one current registry cut."""
+        return HeldOrders.of(self.todos, self.registry.snapshot())
+
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a teammate's child goal from its parent's active work."""
         text = ('\n'.join(goal.text for goal in parent.goal.active())

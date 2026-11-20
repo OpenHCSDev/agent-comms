@@ -58,7 +58,6 @@ from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.planning.delivery_evidence import DeliveryEvidence, TodoProblems, WorkingEvidence
 from agent_comms.planning.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.planning.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
-from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.order_phase import OrderPhase
 from agent_comms.planning.order_words import (
     BluntText,
@@ -778,7 +777,7 @@ class TeamContext(BaseModel):
 
     def held_orders(self) -> tuple[Todo, ...]:
         """The live holds Core lists unjudged edits under, so a verdict finds every edit shown."""
-        return HeldOrders.read(self.comms).todos
+        return self.comms.goals.held_orders().todos
 
     def held_by(self, unit: str) -> tuple[Todo, ...]:
         return self.comms.goals.todos.held_by(self.comms.registry.require(unit).incarnation)
@@ -1275,7 +1274,7 @@ class DirectiveVerb(TeamVerb):
         # Debts and replies follow the exact represented owners, not every request the
         # actor may maintain.
         owers = ctx.actor_identity.represented_owners
-        opened = OwedAnswer.read_scan(ctx.comms, owers, HeldOrders.read(ctx.comms))
+        opened = OwedAnswer.read_scan(ctx.comms, owers, ctx.comms.goals.held_orders())
         owed = frozenset(rule.message.message_id for rule in opened)
         snapshot = ctx.comms.registry.snapshot()
         problems: dict[str, str] = {}
@@ -1959,7 +1958,7 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
 
     def run(self, ctx: Team) -> OrderActionResult:
         for path in HuntDue.next_hunt(ctx.comms,
-                                      HeldOrders.read(ctx.comms).todos):
+                                      ctx.comms.goals.held_orders().todos):
             print(path)
         return self.unchanged(HuntQueueIdentity())
 

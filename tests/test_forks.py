@@ -374,7 +374,7 @@ def test_edits_under_a_merged_order_are_nobodys_review(fork_bus):
 
     comms, source, _ = fork_bus
     record_edits(comms, source, 3)
-    held = HeldOrders.read(comms)
+    held = comms.goals.held_orders()
     holds = held.live
     open_order = {hold.todo.id: NoCommitProgress() for hold in holds}
     merged = {hold.todo.id: MergedProgress("a" * 40) for hold in holds}

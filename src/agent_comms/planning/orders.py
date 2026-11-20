@@ -6741,7 +6741,7 @@ class EditWorkplaces:
                     for row in pulls.rows(repo.github, tuple(
                         link.number for link in links if link.repo == repo.github))
                     for link in links if link.repo == repo.github and link.number == row.number}
-        progress = pulls.progress(todos, goals.registry)
+        progress = pulls.progress(todos, goals.registry, snapshot=snapshot)
         source_orders: dict[Path, dict[str, Todo]] = {}
         for todo in todos:
             paths = {order.check.directory for order in todo.order.declarations}
