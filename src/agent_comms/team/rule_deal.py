@@ -865,7 +865,7 @@ class DealRecord(RuleGateSettings):
         """
         if all(DealtSource.find(path) is not None for path in self.dealt):
             return self
-        return UndealtRecord()
+        return UndealtRecord(**RuleGateSettings.field_values(self))
 
 
 @dataclass(frozen=True)
