@@ -22,13 +22,18 @@ import json
 import logging
 import urllib.error
 import urllib.request
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 from polystore.exceptions import StorageResolutionError
 from polystore.git import GitBackend
+
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.launch_runtime import RestartEnvironment
+from agent_comms.execution.native_arguments import ClmLocalProvider, TurnHost
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +260,31 @@ class ContextStateStore:
         if not (self.slots / f"{session}.bin").is_file():
             return ColdSlot("its saved state was deleted to fit the disk budget")
         return RestoredSlot(self.server.restore(f"{session}.bin"))
+
+
+class LlamaSlotHost(TurnHost):
+    """This machine, running a turn against a local llama-server."""
+
+    @asynccontextmanager
+    async def slot_turn(
+        self, provider: type[ClmLocalProvider], session_file: str | Path | None,
+    ) -> AsyncIterator[None]:
+        session = conversation(session_file)
+        if session is None:
+            # A thread that has saved nothing yet has no conversation to name its state by.
+            yield
+            return
+        store = ContextStateStore(
+            provider.state_directory.expanduser(),
+            SlotServer.configured(RestartEnvironment.default_agent_directory, provider.declared_name),
+            provider.slot_directory.expanduser(),
+        )
+        outcome = await Coordination.run_worker(partial(recoverable, store.enter, session))
+        logger.info("CLM slot for %s: %s", session, outcome)
+        try:
+            yield
+        finally:
+            await Coordination.run_worker(partial(recoverable, store.history(session).record))
 
 
 def conversation(session_file: str | Path | None) -> str | None:

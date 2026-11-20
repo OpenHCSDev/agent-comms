@@ -24,21 +24,24 @@ const DIGEST_NAME = "digest.py";
  * command output in the mirror with the notes on its standard input. The model supplies only
  * the notes. Writing the edit itself asked too much of iter44 on the second part of a paper
  * (CLM-read, 2026-11-20: one good digest, then ten refused commands and no edit). */
+export const DIGEST_PLACEHOLDER = "<replace this line with your own notes on that output>";
 export const DIGEST_SCRIPT = String.raw`import os, re, sys
 mirror = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LIVE_CTX_MAIN.txt")
 notes = sys.stdin.read().strip()
-if not notes:
-    sys.exit("digest: write your notes between the NOTES lines")
+if not notes or "<replace this line" in notes:
+    sys.exit("digest: nothing was digested. Put your own notes on the output between the NOTES lines.")
 text = open(mirror, encoding="utf-8").read()
 headers = list(re.finditer(r"^\[\[CTX_TURN\s+\d+\s+role=([A-Za-z]+)\]\]\s*$", text, re.M))
-spans = [(headers[i].end(), headers[i + 1].start() if i + 1 < len(headers) else len(text))
+spans = [(headers[i].start(), headers[i + 1].start() if i + 1 < len(headers) else len(text))
          for i in range(len(headers)) if headers[i].group(1).lower() == "tool"]
 if not spans:
     sys.exit("digest: no command output is left in your context")
-start, end = max(spans, key=lambda span: span[1] - span[0])
-text = text[:start] + "\nNOTES (raw output digested and removed):\n" + notes + "\n\n" + text[end:]
+# Every raw output goes. The notes are not copied here: the command that carries them is the
+# model's own next turn, and a second copy would cost their size again at every digest.
+for start, end in reversed(spans):
+    text = text[:start] + text[end:]
 open(mirror, "w", encoding="utf-8").write(text)
-print("digested: the raw output was replaced by your notes")
+print("digested: %d raw output(s) removed; your notes are this command" % len(spans))
 `;
 const PROTECT = 1; // Pi sends the system prompt separately: the protected prefix is the task.
 const TRIVIAL_EDIT_TOKENS = 32;
@@ -616,26 +619,31 @@ EditRule.declare("budget", BudgetPressure);
  * turns, both after a budget reminder), which cannot read a document larger than its window;
  * here each part's digestion is the precondition of fetching the next. */
 export class DigestEachOutput extends BudgetPressure {
-  /** An output smaller than this is not worth an edit of its own. */
+  /** Raw output may wait until this much of it has gathered: one long output, or several
+   * short ones (CLM-read2 left five tables of numbers raw, each under the size alone). */
   threshold = 500;
   /** Tokens of output brought in since the last compaction that removed them. */
   pending = 0;
+
+  get due() {
+    return this.pending >= this.threshold;
+  }
 
   /** What to run, in words a small model can follow to the letter. */
   told(ctxDir) {
     return `~${this.pending} tokens of command output are still raw in your context and must be ` +
       "digested before anything else runs. Run exactly this, with your own notes between the NOTES lines:\n" +
-      `python3 ${join(ctxDir, DIGEST_NAME)} <<'NOTES'\n- the facts you need from that output, as short bullets\nNOTES`;
+      `python3 ${join(ctxDir, DIGEST_NAME)} <<'NOTES'\n${DIGEST_PLACEHOLDER}\nNOTES`;
   }
 
   refusal(command, ctxDir) {
-    return this.pending > 0 && !command.includes(ctxDir)
+    return this.due && !command.includes(ctxDir)
       ? `COMMAND NOT RUN. Nothing is wrong with your command or the file: ${this.told(ctxDir)}\nThen run your command again.`
       : null;
   }
 
   observed(tokens) {
-    if (tokens >= this.threshold) this.pending += tokens;
+    this.pending += tokens;
   }
 
   /** Digested once an edit removed at least half of what the outputs brought in: a rewrite
@@ -645,7 +653,7 @@ export class DigestEachOutput extends BudgetPressure {
   }
 
   reminder(ctxDir) {
-    return this.pending > 0 ? `\n[DIGEST FIRST: ${this.told(ctxDir)}]` : "";
+    return this.due ? `\n[DIGEST FIRST: ${this.told(ctxDir)}]` : "";
   }
 }
 EditRule.declare("digest", DigestEachOutput);
@@ -919,7 +927,10 @@ export default function clmReference(pi) {
     const held = budget.count([system, toolsText, ...messageTexts(shown), ...(pending ? [renderedText(pending)] : [])]);
     const observation = Observation.entering(
       { block, code }, text, budget.strictTarget - held, budget.strictTarget, (part) => budget.count([part]), outputs);
-    if (!touched) rule.observed(observation.tokens);
+    // Output the command itself spelled out (echo "...", cat <<EOF) is the model's own words,
+    // already in its context as that command: nothing new was brought in.
+    const spoken = text.trim().length > 0 && command.includes(text.trim());
+    if (!touched && !spoken) rule.observed(observation.tokens);
     const tokensNow = held + budget.count([observation.text]);
     const over = tokensNow <= budget.strictTarget ? "" : ` — OVER; compact ${ctxFile} now`;
     const readout = `\n[context: ~${tokensNow}/${budget.strictTarget} tokens${over}]`;

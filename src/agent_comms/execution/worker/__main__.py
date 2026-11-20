@@ -13,6 +13,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.execution.acp import CommsAgent
+from agent_comms.execution.context_state import LlamaSlotHost
 from agent_comms.execution.child_process import (
     GitChildren,
     OwnedGitOpening,
@@ -20,6 +21,7 @@ from agent_comms.execution.child_process import (
     join_retirement,
 )
 from agent_comms.execution.launch_root import LaunchRoot, started
+from agent_comms.execution.native_arguments import TurnHost
 from agent_comms.execution.root_runtime import RootRuntimeStore
 from agent_comms.execution.worker import (
     hand_the_gil_back_quickly,
@@ -32,6 +34,8 @@ from agent_comms.transport.owner_connection import socket_path
 
 
 CORE_WORKER_PROCESS = ProcessName("ac-core-worker")
+# This process is the host of every native turn on its bus.
+TurnHost.here = LlamaSlotHost()
 
 
 @asynccontextmanager

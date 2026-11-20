@@ -8,9 +8,9 @@ import re
 import shlex
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, replace
-from functools import partial, reduce
+from functools import reduce
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -156,6 +156,37 @@ class ExtensionArgument(NamedOption, ValueArgument):
     shorts = ("-e",)
 
 
+class TurnHost(ABC):
+    """What the machine running a provider's turns offers them. Providers are declared for
+    every client, the phone app included; what a turn needs of its host (a model server's slot,
+    storage) is implemented beside the host's execution and never imported from here.
+
+    `here` is this process's host. A process runs no model turns until it declares otherwise:
+    the bus's worker, the one host of every native turn, declares itself at its start."""
+
+    here: ClassVar[TurnHost]
+
+    @abstractmethod
+    def slot_turn(
+        self, provider: type[ClmLocalProvider], session_file: str | Path | None,
+    ) -> AbstractAsyncContextManager[None]:
+        """Hold the provider's model-server slot for one turn of this conversation."""
+
+
+class ClientHost(TurnHost):
+    """A process that runs no model turns of its own: there is no slot here to hold."""
+
+    @asynccontextmanager
+    async def slot_turn(
+        self, provider: type[ClmLocalProvider], session_file: str | Path | None,
+    ) -> AsyncIterator[None]:
+        del provider, session_file
+        yield
+
+
+TurnHost.here = ClientHost()
+
+
 class ModelProvider(DeclaredFamily, affix="Provider"):
     """Provider declarations own the native extensions and the action space their models
     require."""
@@ -189,23 +220,11 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
     @classmethod
     @asynccontextmanager
     async def turn(cls, session_file: str | Path | None) -> AsyncIterator[None]:
-        """Around one turn on this provider, whichever path runs it: its start before the
-        first request, its end however the turn finished."""
-        from agent_comms.coordination.coordinator import Coordination
-
-        await Coordination.run_worker(partial(cls.turn_starting, session_file))
-        try:
-            yield
-        finally:
-            await Coordination.run_worker(partial(cls.turn_ended, session_file))
-
-    @classmethod
-    def turn_starting(cls, session_file: str | Path | None) -> None:
-        """Before a turn on this provider sends its first request."""
-
-    @classmethod
-    def turn_ended(cls, session_file: str | Path | None) -> None:
-        """After a turn on this provider finished, however it ended."""
+        """Around one turn on this provider, whichever path runs it. A provider whose turns
+        need something of the machine running them asks its host (TurnHost.here); most need
+        nothing."""
+        del session_file
+        yield
 
 
 class NoSelectedModel(ModelProvider, declared_name=None):
@@ -276,36 +295,10 @@ class ClmLocalProvider(ModelProvider, declared_name="clm-local"):
     slot_directory: ClassVar[Path] = Path("~/.cache/agent-comms/llama-slots")
 
     @classmethod
-    def context_state(cls):
-        from agent_comms.execution import context_state
-        from agent_comms.execution.launch_runtime import RestartEnvironment
-
-        return context_state.ContextStateStore(
-            cls.state_directory.expanduser(),
-            context_state.SlotServer.configured(
-                RestartEnvironment.default_agent_directory, cls.declared_name),
-            cls.slot_directory.expanduser(),
-        )
-
-    @classmethod
-    def turn_starting(cls, session_file: str | Path | None) -> None:
-        """Take the one llama-server slot for this conversation: the previous holder's state
-        is saved, and this conversation's is restored when it still matches its context."""
-        from agent_comms.execution import context_state
-
-        session = context_state.conversation(session_file)
-        if session is not None:
-            outcome = context_state.recoverable(cls.context_state().enter, session)
-            logger.info("CLM slot for %s: %s", session, outcome)
-
-    @classmethod
-    def turn_ended(cls, session_file: str | Path | None) -> None:
-        """Commit the context this conversation's harness last sent to its history."""
-        from agent_comms.execution import context_state
-
-        session = context_state.conversation(session_file)
-        if session is not None:
-            context_state.recoverable(cls.context_state().history(session).record)
+    def turn(cls, session_file: str | Path | None) -> AbstractAsyncContextManager[None]:
+        """A turn holds the one llama-server slot: the host saves the previous holder's state,
+        restores this conversation's, and records its context when the turn ends."""
+        return TurnHost.here.slot_turn(cls, session_file)
 
 
 @dataclass(frozen=True)

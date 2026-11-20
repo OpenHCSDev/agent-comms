@@ -216,7 +216,7 @@ test("under the digest rule a sizeable output must be noted and dropped before t
     const raw = [user("Read the paper"), read("sed -n 1,80p paper.txt")];
     const first = await step(h, raw, "sed -n 1,80p paper.txt", chunk);
     assert.match(first.result, /DIGEST FIRST: ~\d+ tokens of command output are still raw/);
-    assert.match(first.result, /python3 \/tmp\/\.live_ctx\/\S+\/digest\.py <<'NOTES'/);
+    assert.match(first.result, /python3 \/tmp\/\.live_ctx\/\S+\/digest\.py <<'NOTES'\n<replace this line with your own notes on that output>\nNOTES/);
 
     raw.push(toolResult(first.result), read("sed -n 81,160p paper.txt"));
     const next = await step(h, raw, "sed -n 81,160p paper.txt", chunk);
@@ -323,9 +323,10 @@ test("the digest command replaces the largest raw output with the notes it is gi
     assert.equal(admitted, undefined);
     const ran = spawnSync("python3", [script], { input: "- section 1 defines the mirror file\n", encoding: "utf8" });
     assert.equal(ran.status, 0, ran.stderr);
+    assert.match(ran.stdout, /1 raw output\(s\) removed; your notes are this command/);
     const mirror = readFileSync(file, "utf8");
-    assert.match(mirror, /NOTES \(raw output digested and removed\):\n- section 1 defines the mirror file/);
     assert.doesNotMatch(mirror, /paper text paper text/);
+    assert.doesNotMatch(mirror, /role=tool/);
     const result = await h.hooks.tool_result(
       { toolName: "bash", content: [{ type: "text", text: ran.stdout }], isError: false }, h.ctx);
     assert.match(result.content[0].text, /edit applied/);
@@ -333,6 +334,29 @@ test("the digest command replaces the largest raw output with the notes it is gi
 
     const empty = spawnSync("python3", [script], { input: "", encoding: "utf8" });
     assert.notEqual(empty.status, 0);
-    assert.match(empty.stderr, /write your notes between the NOTES lines/);
+    assert.match(empty.stderr, /nothing was digested/);
+    const template = spawnSync("python3", [script],
+      { input: "<replace this line with your own notes on that output>\n", encoding: "utf8" });
+    assert.notEqual(template.status, 0);
+    assert.match(template.stderr, /Put your own notes/);
+  });
+});
+
+test("short outputs gather until together they are due; the model's own printed words are not output", async () => {
+  await under({ CLM_EDIT_RULE: "digest" }, `t${process.pid}q`, async (h) => {
+    const table = "0.5x 2x 8x 24x ".repeat(80); // ~300 tokens: under the size alone
+    const raw = [user("Read the paper"), read("sed -n 1,20p paper.txt")];
+    const one = await step(h, raw, "sed -n 1,20p paper.txt", table);
+    assert.doesNotMatch(one.result, /DIGEST FIRST/);
+    raw.push(toolResult(one.result), read("sed -n 21,40p paper.txt"));
+    const two = await step(h, raw, "sed -n 21,40p paper.txt", table);
+    assert.match(two.result, /DIGEST FIRST: ~\d+ tokens/);
+  });
+  await under({ CLM_EDIT_RULE: "digest" }, `t${process.pid}r`, async (h) => {
+    const answer = "Ten bullets: " + "the model edits its own context. ".repeat(80);
+    const said = `cat <<'EOF'\n${answer}\nEOF`;
+    const raw = [user("Summarise"), read(said)];
+    const spoken = await step(h, raw, said, answer);
+    assert.doesNotMatch(spoken.result, /DIGEST FIRST/);
   });
 });

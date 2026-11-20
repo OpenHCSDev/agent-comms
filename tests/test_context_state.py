@@ -200,30 +200,51 @@ def test_a_conversation_is_named_by_its_transcript_header(tmp_path):
     assert context_state.conversation(None) is None
 
 
-def test_a_providers_turn_runs_its_start_then_its_end_even_when_the_turn_fails():
+def test_a_slot_turn_takes_the_slot_then_records_the_context_even_when_the_turn_fails(
+        tmp_path, llama, monkeypatch):
     import asyncio
 
-    from agent_comms.execution.native_arguments import ModelProvider
+    from agent_comms.execution.native_arguments import ClmLocalProvider, ConfiguredProvider
 
-    seen: list[str] = []
+    monkeypatch.setattr(context_state, "LIVE_CONTEXT_ROOT", tmp_path / "live")
+    monkeypatch.setattr(ClmLocalProvider, "state_directory", tmp_path / "state")
+    monkeypatch.setattr(ClmLocalProvider, "slot_directory", llama.slots)
+    monkeypatch.setattr(SlotServer, "configured", classmethod(lambda cls, *_: SlotServer(llama.url)))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text('{"id":"conv1","type":"session","version":3}\n')
+    from agent_comms.execution.native_arguments import ClientHost, TurnHost
 
-    class Recording(ModelProvider, declared_name="recording-test-provider"):
-        @classmethod
-        def turn_starting(cls, session_file):
-            seen.append(f"start {session_file}")
-
-        @classmethod
-        def turn_ended(cls, session_file):
-            seen.append(f"end {session_file}")
+    assert isinstance(TurnHost.here, ClientHost)  # a test process runs no model turns
+    monkeypatch.setattr(TurnHost, "here", context_state.LlamaSlotHost())
 
     async def failing_turn():
-        async with Recording.turn("s.jsonl"):
-            seen.append("turn")
+        async with ClmLocalProvider.turn(transcript):
+            publish(tmp_path, "conv1", ("user", "TASK"))
             raise RuntimeError("the model failed")
 
     with pytest.raises(RuntimeError):
         asyncio.run(failing_turn())
-    assert seen == ["start s.jsonl", "turn", "end s.jsonl"]
+    store = ContextStateStore(tmp_path / "state", SlotServer(llama.url), llama.slots)
+    assert store.holder() == "conv1"
+    assert store.history("conv1").branch().load_text("ctx/0001-user.txt") == "TASK"
+
+    async def plain_turn():
+        async with ConfiguredProvider.turn(transcript):
+            return "ran"
+
+    assert asyncio.run(plain_turn()) == "ran"
+    assert llama.calls == []
+
+    # A client process asked to run a clm-local turn holds no slot and records nothing.
+    monkeypatch.setattr(TurnHost, "here", ClientHost())
+    (tmp_path / "other.jsonl").write_text('{"id":"conv2","type":"session","version":3}\n')
+
+    async def client_turn():
+        async with ClmLocalProvider.turn(tmp_path / "other.jsonl"):
+            return "ran"
+
+    assert asyncio.run(client_turn()) == "ran"
+    assert store.holder() == "conv1"
 
 
 def test_a_provider_only_pi_configures_runs_as_the_base_provider():
