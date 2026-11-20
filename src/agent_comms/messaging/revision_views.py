@@ -79,6 +79,10 @@ class TeamBoardView(StatusSourceView):
     """Store changes requiring board preparation, excluding its own publications and clock."""
 
 
+class OwedAnswerView(TeamBoardView, StoresView):
+    """Board stores supplying the polymorphic owed-answer family."""
+
+
 class RetainedTeamFramesView(RevisionView):
     """Only the retained frames, plan and their service-health source."""
 

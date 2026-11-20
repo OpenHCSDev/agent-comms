@@ -23,8 +23,13 @@ from agent_comms.planning.orders import (
 )
 from agent_comms.presentation import WireRevision
 from agent_comms.task_attachments.team_pings import TeamUpdateStore
-from agent_comms.team.standing_rules import StandingRule
-from agent_comms.team.team_heartbeat import TeamBoardAcquisition, TeamHeartbeat, TeamObservation
+from agent_comms.team.standing_rules import OwedAnswer, StandingRule, TeamInputs
+from agent_comms.team.team_heartbeat import (
+    OwedAnswerCut,
+    TeamBoardAcquisition,
+    TeamHeartbeat,
+    TeamObservation,
+)
 from agent_comms.team.team_hud import (
     AllTeamBoards,
     CodexUsage,
@@ -101,6 +106,44 @@ def test_todo_commit_signal_is_a_board_input_not_a_database_mtime(held_bus):
 def test_frame_publication_and_expiry_do_not_request_another_preparation():
     before = WireRevision.empty()
     assert not replace(before, expiry_tick=60).changed_since(TeamBoardView(), before)
+
+
+def test_owed_answer_family_reuses_its_unchanged_source_cut(held_bus, monkeypatch):
+    acquisition = TeamBoardAcquisition()
+    snapshot = held_bus.registry.snapshot()
+    project = snapshot.team_project.require()
+    inputs = TeamInputs.prepare(held_bus, project, ProgressRead(), acquisition)
+    owners = tuple(
+        teammate.incarnation
+        for teammate in acquisition.teammates(snapshot, held_bus.goals)
+    )
+    calls = 0
+    read_scan = OwedAnswer.read_scan
+
+    def counted(comms, owners, scan):
+        nonlocal calls
+        calls += 1
+        return read_scan(comms, owners, scan)
+
+    monkeypatch.setattr(OwedAnswer, "read_scan", counted)
+    first = OwedAnswerCut.capture(
+        held_bus, inputs, owners, held_bus.views.revision(), None,
+    )
+    second = OwedAnswerCut.capture(
+        held_bus, inputs, owners, held_bus.views.revision(), first,
+    )
+    assert second.answers is first.answers
+    assert calls == 1
+
+    held_bus.goals.todos.add_request(
+        held_bus.registry.require("colleague").incarnation,
+        "A changed source invalidates the whole discovered answer family",
+    )
+    third = OwedAnswerCut.capture(
+        held_bus, inputs, owners, held_bus.views.revision(), second,
+    )
+    assert calls == 2
+    assert third.revision != second.revision
 
 
 def test_a_pass_that_throws_leaves_the_boards_it_could_not_replace(held_bus, account_read, monkeypatch):

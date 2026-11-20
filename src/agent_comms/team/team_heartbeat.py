@@ -13,10 +13,15 @@ from agent_comms.coordination.service_passes import ServicePassStore, TeamPass
 from agent_comms.execution.child_process import ReadWork
 from agent_comms.execution.watch_passes import PreparedWatchPass
 from agent_comms.heartbeat_subjects import TeamHistory
+from agent_comms.messaging.revision_views import OwedAnswerView
+from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.nominal_census import NominalPlanReadings
 from agent_comms.planning.orders import ProgressRead, Todo
-from agent_comms.projects.checkouts import RepositoryReads
 from agent_comms.planning.plan_reading import PlanReadings, RetainedPlanReadings
+from agent_comms.presentation import WireRevision
+from agent_comms.projects.checkouts import RepositoryReads
+from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.watch_phase import WatchPhase
 from agent_comms.task_attachments.team_pings import (
     AlarmGroup,
@@ -28,6 +33,7 @@ from agent_comms.task_attachments.team_pings import (
 )
 from agent_comms.team.standing_rules import (
     HeartbeatFrame,
+    OwedAnswer,
     ServicePassFailing,
     StandingRule,
     TeamInputs,
@@ -39,6 +45,46 @@ from agent_comms.ui_model.teammate_state import TeammateState
 
 
 @dataclass(frozen=True)
+class OwedAnswerCut:
+    """One retained answer-family result and every stored identity that supplied it.
+
+    Time never belongs to this cut: ``OwedAnswer.due`` and the remaining standing-rule
+    derivation run on every beat.  A source revision or the selected owners/holds changes
+    the cut; otherwise the four discovered answer providers keep their exact prior result.
+    """
+
+    revision: WireRevision
+    owners: tuple[ThreadIncarnation, ...]
+    holds: HeldOrders
+    answers: tuple[OwedAnswer, ...]
+
+    def serves(self, owners: tuple[ThreadIncarnation, ...], inputs: TeamInputs) -> bool:
+        return self.owners == owners and self.holds == HeldOrders(inputs.live, inputs.orphaned)
+
+    @classmethod
+    def capture(
+        cls,
+        comms: Comms,
+        inputs: TeamInputs,
+        owners: tuple[ThreadIncarnation, ...],
+        revision: WireRevision,
+        previous: OwedAnswerCut | None,
+    ) -> OwedAnswerCut:
+        holds = HeldOrders(inputs.live, inputs.orphaned)
+        if (
+            previous is not None
+            and previous.serves(owners, inputs)
+            and not revision.changed_since(OwedAnswerView(), previous.revision)
+        ):
+            return replace(previous, revision=revision)
+        answers = tuple({
+            answer.observation_key(): answer
+            for answer in OwedAnswer.read_scan(comms, owners, inputs)
+        }.values())
+        return cls(revision, owners, holds, answers)
+
+
+@dataclass(frozen=True)
 class TeamObservation:
     """One beat's single team board: every teammate reads the same frame, rules and cards."""
 
@@ -47,9 +93,19 @@ class TeamObservation:
     states: tuple[TeammateState, ...]
 
     @classmethod
-    def read(cls, comms: Comms, inputs: TeamInputs, *, plans: PlanReadings) -> TeamObservation:
+    def read(
+        cls,
+        comms: Comms,
+        inputs: TeamInputs,
+        *,
+        plans: PlanReadings,
+        answers: tuple[OwedAnswer, ...] | None = None,
+        snapshot: RegistrySnapshot | None = None,
+    ) -> TeamObservation:
         """Consume the prepared cut; Core observes the local Git, forge and plan answers."""
-        frame = HeartbeatFrame.capture(comms, inputs, plans)
+        frame = HeartbeatFrame.capture(
+            comms, inputs, plans, answers=answers, snapshot=snapshot,
+        )
         states = TeammateState.current(comms, frame)
         rules = StandingRule.broken(comms, observed=states, frame=frame)
         return cls(frame, rules, states)
@@ -79,6 +135,7 @@ class TeamBoardAcquisition(
     """Acquire and observe one board cut; heartbeat effects live separately."""
 
     _previous_reads: RepositoryReads | None = None
+    _answer_cuts: tuple[OwedAnswerCut, ...] = ()
 
     def _progress_read(self) -> ProgressRead:
         progress = (
@@ -102,11 +159,33 @@ class TeamBoardAcquisition(
         comms: Comms,
         prepared: tuple[TeamInputs, ...],
     ) -> tuple[TeamObservation, ...]:
-        observed = tuple(
-            TeamObservation.read(comms, inputs, plans=self) for inputs in prepared
+        revision = comms.views.revision()
+        snapshot = comms.registry.snapshot()
+        owners = tuple(
+            teammate.incarnation
+            for teammate in TeamService.teammates(snapshot, comms.goals)
         )
+        cuts: list[OwedAnswerCut] = []
+        observed: list[TeamObservation] = []
+        for inputs in prepared:
+            previous = next(
+                (cut for cut in self._answer_cuts if cut.serves(owners, inputs)),
+                None,
+            )
+            cut = OwedAnswerCut.capture(
+                comms, inputs, owners, revision, previous,
+            )
+            cuts.append(cut)
+            observed.append(TeamObservation.read(
+                comms,
+                inputs,
+                plans=self,
+                answers=cut.answers,
+                snapshot=snapshot,
+            ))
+        self._answer_cuts = tuple(cuts)
         self.finish_pass()
-        return observed
+        return tuple(observed)
 
 
 class TeamHeartbeatEffects(TeamService):
