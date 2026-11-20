@@ -142,6 +142,9 @@ def test_restart_cache_retains_exact_graph_and_postings_until_the_git_source_cha
     original = git(main, 'rev-parse', 'HEAD').strip()
 
     first = RepositoryReads().history_for(Checkout(main))
+    # Order evidence retains short commit identities; the cache must retain the supplied
+    # revision while proving that it resolves to exactly one captured full commit.
+    first.include(original[:9])
     expected = tuple(first.commits(('main',), selected=CommitsNaming('P1')))
     assert (main / '.git' / GitHistoryCache.relative_path).is_file()
 
