@@ -28,7 +28,9 @@ from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
 from agent_comms.team.meant_voice import BusVoice
+from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.team.rule_deal import (
+    DealRecord,
     AuditDue,
     DealDelivery,
     DealTrigger,
@@ -97,6 +99,11 @@ class PiThreadGate(PiRuleGate, BusVoice):
     def delivery(self) -> DealDelivery:
         """The gate mode owns the same launch member the native child holds."""
         return self.current().mode.delivery(SYSTEM_PROMPT)
+
+    def stored(self) -> DealRecord:
+        """The thread's deal on disk; one never dealt takes its model's defaults."""
+        return super().stored().for_model(
+            self.thread.model.native(NativeArguments(())).provider_type)
 
 
 @dataclass(frozen=True)

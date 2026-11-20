@@ -86,3 +86,22 @@ def test_every_clm_local_model_leaves_compaction_to_its_harness(tmp_path):
         assert json.loads((agent / "settings.json").read_text())["compaction"] == {
             "enabled": False, "keepRecentTokens": 0, "reserveTokens": 0,
         }
+
+
+def test_a_clm_local_thread_is_dealt_nothing_by_default(tmp_path):
+    """No papers, rules or audit for a context language model unless someone turns them on;
+    any other model keeps the fleet's default, and a deal already on disk keeps its own."""
+    from agent_comms.comms import wire
+    from agent_comms.projects.checkouts import Checkout
+    from agent_comms.registry.thread_model import DeclaredModel
+    from agent_comms.registry.threads import NativeThread
+    from agent_comms.team.pi_rule_gate import PiThreadGate
+    from agent_comms.team.rule_deal import CompactionDealMode, OffDealMode
+
+    comms = wire(tmp_path)
+    clm = NativeThread("clm", frozenset(), Checkout(tmp_path), model=DeclaredModel("clm-local/m.gguf"))
+    other = NativeThread("other", frozenset(), Checkout(tmp_path), model=DeclaredModel("openai-codex/gpt-5.6-sol"))
+    for thread in (clm, other):
+        comms.registry.register(thread)
+    assert PiThreadGate.seated(comms, clm).current().mode is OffDealMode
+    assert PiThreadGate.seated(comms, other).current().mode is CompactionDealMode

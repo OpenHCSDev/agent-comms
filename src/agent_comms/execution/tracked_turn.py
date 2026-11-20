@@ -261,8 +261,6 @@ class TrackedTurnSession(TurnSession, FollowingTurnSource[OwnedSend]):
     ) -> NativeTurnResult:
         if not prompt or not isinstance(prompt, str):
             raise ValueError("A native turn requires a nonempty prompt")
-        # The model's provider decides its action space; launch and session read one mode.
-        selected_tool_mode = model.provider_type.native_tool_mode(selected_tool_mode)
         measurements = startup.measurements
         # Independent execution acquires a fresh artifact. A selected stage
         # derives from its execution's original pre-claim factory; source/config and

@@ -404,18 +404,21 @@ def test_a_rejected_prompt_carries_the_providers_own_words():
     assert "rejected the tracked prompt" in said
 
 
-def test_a_context_language_model_runs_with_bash_alone_whatever_the_input_grants(tmp_path):
+def test_a_context_language_model_runs_with_owner_authorized_bash_alone(tmp_path):
     """The CLM reference harness gives the model exactly one action, bash, through which it
-    edits its mirrored context; a clm-local model keeps that action space under every input
-    mode, and the input's own mode still opens the owner transport."""
+    edits its mirrored context. A clm-local model is offered the fleet's declared bash alone,
+    on the coding transport its owner authorizes, whatever the input would grant; any other
+    model keeps the input's mode."""
+    from agent_comms.execution.channel_coding_tools import CodingToolMode
     from agent_comms.execution.context_language_model import ContextLanguageModelMode
 
     comms = wire(tmp_path)
     thread = NativeThread("clm", frozenset(), Checkout(tmp_path))
     comms.registry.register(thread)
     granted = ToollessMode(CodingChild(comms=comms, thread=thread))
-    mode = SelectedModel("clm-local", "model").provider_type.native_tool_mode(granted)
-    assert mode == ContextLanguageModelMode(granted)
+    owner = object()
+    mode = SelectedModel("clm-local", "model").provider_type.native_tool_mode(granted, owner)
+    assert mode == ContextLanguageModelMode(owner)
+    assert isinstance(mode, CodingToolMode)
     assert mode.allowed_tools() == ("bash",)
-    assert mode.launch_arguments(tmp_path) == ("--no-builtin-tools", "--tools", "bash")
-    assert SelectedModel("openai-codex", "gpt-5.6-sol").provider_type.native_tool_mode(granted) is granted
+    assert SelectedModel("openai-codex", "gpt-5.6-sol").provider_type.native_tool_mode(granted, owner) is granted

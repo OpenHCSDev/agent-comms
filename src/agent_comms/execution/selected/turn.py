@@ -251,7 +251,8 @@ class SelectedAttempt:
                 execution,
                 model=participant.model,
                 observe_event=self.observe_event,
-                selected_tool_mode=action.mode(tools),
+                selected_tool_mode=participant.model.provider_type.native_tool_mode(
+                    action.mode(tools), tools),
                 # Only the full answer takes later inputs; a triage call answers one question.
                 following=execution.following,
             )

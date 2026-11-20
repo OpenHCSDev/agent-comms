@@ -856,6 +856,10 @@ class DealRecord(RuleGateSettings):
         """The refreshes this deal declares that the context has reached."""
         return tuple(refresh for refresh in self.refreshes if refresh.due(usage))
 
+    def for_model(self, provider) -> DealRecord:
+        """A dealt session keeps the settings it was dealt under, whatever its model."""
+        return self
+
     def while_supplied(self) -> DealRecord:
         """This deal while every file it dealt is still installed.
 
@@ -874,6 +878,10 @@ class UndealtRecord(DealRecord):
 
     dealt: tuple[Path, ...] = ()
     due: AuditDue = AuditDue(())
+
+    def for_model(self, provider) -> DealRecord:
+        """A session never dealt starts from its model's defaults (ModelProvider.undealt)."""
+        return provider.undealt(self)
 
     def refreshes_passed(self, usage: ContextUsage) -> tuple[RefreshAt, ...]:
         """Nothing was dealt, so nothing comes back."""
