@@ -27,13 +27,14 @@ from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-
-from polystore.exceptions import StorageResolutionError
-from polystore.git import GitBackend
+from typing import TYPE_CHECKING
 
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.launch_runtime import RestartEnvironment
 from agent_comms.execution.native_arguments import ClmLocalProvider, TurnHost
+
+if TYPE_CHECKING:
+    from polystore.git import GitBackend
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,11 @@ class ContextHistory:
     session: str
 
     def branch(self) -> GitBackend:
+        # Polystore is imported where a branch is opened, which only the host of a turn does:
+        # every client imports this module to discover declarations (RootFile.load_declarations)
+        # and the phone app does not ship Polystore.
+        from polystore.git import GitBackend
+
         return GitBackend(self.repository, f"refs/clm/{self.session}")
 
     def record(self) -> str | None:
@@ -301,6 +307,7 @@ def recoverable(action, *arguments) -> object | None:
     """Run a recording step whose failure must not fail the turn it serves, and say so."""
     try:
         return action(*arguments)
-    except (StorageResolutionError, OSError, json.JSONDecodeError, KeyError) as error:
+    # Polystore's StorageResolutionError and a malformed view are both ValueErrors.
+    except (ValueError, OSError, KeyError) as error:
         logger.warning("Context state step %s failed: %s", action.__qualname__, error)
         return None

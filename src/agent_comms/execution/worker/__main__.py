@@ -34,8 +34,6 @@ from agent_comms.transport.owner_connection import socket_path
 
 
 CORE_WORKER_PROCESS = ProcessName("ac-core-worker")
-# This process is the host of every native turn on its bus.
-TurnHost.here = LlamaSlotHost()
 
 
 @asynccontextmanager
@@ -107,6 +105,9 @@ async def run_host(comms: Comms, listener_fd: int) -> None:
 
 def main() -> int:
     CORE_WORKER_PROCESS.publish()
+    # This process is the host of every native turn on its bus. Declared here, when it runs,
+    # and not at import: every client imports this module to discover declarations.
+    TurnHost.here = LlamaSlotHost()
     with suppress(KeyboardInterrupt):
         asyncio.run(run())
     return 0

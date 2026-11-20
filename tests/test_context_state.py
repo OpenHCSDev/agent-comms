@@ -256,3 +256,11 @@ def test_a_provider_only_pi_configures_runs_as_the_base_provider():
 
     assert SelectedModel("some-local-server", "m").provider_type is ConfiguredProvider
     assert SelectedModel("clm-local", "m").provider_type is ClmLocalProvider
+
+
+def test_importing_every_module_leaves_a_process_a_client():
+    from agent_comms.execution.native_arguments import ClientHost, TurnHost
+    from agent_comms.storage.locked_store import RootFile
+
+    RootFile.load_declarations()
+    assert isinstance(TurnHost.here, ClientHost)
