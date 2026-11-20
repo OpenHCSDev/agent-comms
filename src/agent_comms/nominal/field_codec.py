@@ -3396,7 +3396,7 @@ class _ChoiceDecoder[T](ChoiceEditors, ValueDecoder[T]):
 
 
 @dataclass(frozen=True, slots=True)
-class _ScalarDecoder[T, Target = object](ValueDecoder[T]):
+class _ScalarDecoder[T, Target](ValueDecoder[T]):
     """A plain target accepts no wire value unless a scalar below declares it."""
 
     target: Target
@@ -3417,7 +3417,7 @@ class _ScalarDecoder[T, Target = object](ValueDecoder[T]):
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
 
-class _OpaqueDecoder[T, Target = object](_ScalarDecoder[T, Target]):
+class _OpaqueDecoder[T, Target](_ScalarDecoder[T, Target]):
     """A represented value with no structure of its own: its representation is its content."""
 
     __slots__ = ()
@@ -3441,7 +3441,7 @@ class _OpaqueRecordDecoder[T](_OpaqueDecoder[T, type[T]]):
         _member_decoders[self.target].compile_comparison(compiled)
 
 
-class _ExactScalarDecoder[T](_ScalarDecoder[T], JsonScalar):
+class _ExactScalarDecoder[T](_ScalarDecoder[T, type[T]], JsonScalar):
     """A JSON scalar decoded only from its own type."""
 
     __slots__ = ()
@@ -3599,7 +3599,7 @@ def _declared_member[Family: DeclaredFamily](
 
 
 @dataclass(frozen=True, slots=True)
-class _TypeDecoder(_ScalarDecoder[type[DeclaredFamily]]):
+class _TypeDecoder(_ScalarDecoder[type[DeclaredFamily], type]):
     origins = (type,)
     bound: type[DeclaredFamily]
 
@@ -3806,7 +3806,7 @@ class _ArrayDecoder[T: Iterable[object]](ValueDecoder[T]):
     def representation_plan(
         cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
     ) -> ValueDecoder[T]:
-        return _OpaqueDecoder[T](cls.container)
+        return _OpaqueDecoder[T, type](cls.container)
 
     def decode_external(self, data: object, record: Mapping[str, object]) -> T:
         return self.decode_resolved(self.decode_items(
@@ -3955,7 +3955,7 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
     def representation_plan(
         cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
     ) -> ValueDecoder[dict[K, V]]:
-        return _OpaqueDecoder[dict[K, V]](dict)
+        return _OpaqueDecoder[dict[K, V], type](dict)
 
     def accepts_value(self, value: object) -> bool:
         return isinstance(value, get_origin(self.target) or self.target)
