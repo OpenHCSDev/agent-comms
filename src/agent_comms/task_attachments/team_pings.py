@@ -38,7 +38,6 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
     OrderId,
     PublicationExclude,
-    StructuralRepresentation,
     TaggedRecordMember,
     ThreadLookup,
     ValueEncoding,
@@ -100,10 +99,6 @@ class Ping(FrozenRecordMember, TaggedRecordMember, DeclaredFamily, affix="Ping")
         if not isinstance(value, cls):
             raise MalformedRecord(f"Expected {cls.__name__} record")
         return encoding.json_text(value._encoded_text)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return StructuralRepresentation.schema_for(cls)
 
     @ClassFact
     @staticmethod
