@@ -31,6 +31,7 @@ from agent_comms.team.rule_deal import (
     Asked,
     AuditDue,
     CompactionDealMode,
+    EmptyDealDelivery,
     FullDealMode,
     MeantAnswer,
     MeantRecord,
@@ -87,6 +88,20 @@ def test_a_retired_package_source_redeals_before_owner_binding(peer_deal):
     assert fresh_confession(peer_deal)
     with pytest.raises(RulesUnread):
         peer_deal.judge_tool("bash")
+
+
+def test_a_retired_package_source_does_not_reenable_a_disabled_deal(peer_deal):
+    peer_deal.start()
+    peer_deal.configure(RuleGateSettings(mode=OffDealMode))
+    old = peer_deal.current()
+    first = old.paths[0]
+    peer_deal.publish(replace(old, dealt=(first.with_name("retired-source.md"), *old.dealt[1:])))
+
+    assert peer_deal.current().mode is OffDealMode
+    assert peer_deal.delivery() == EmptyDealDelivery()
+    peer_deal.start()
+    assert peer_deal.current().mode is OffDealMode
+    assert peer_deal.delivery() == EmptyDealDelivery()
 
 
 def test_every_dealt_file_fits_one_default_read_on_every_backend():
