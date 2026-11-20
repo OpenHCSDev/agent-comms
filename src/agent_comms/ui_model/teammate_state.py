@@ -112,7 +112,9 @@ class TeammateObservation(TeammateEvidence):
 
     @cached_property
     def goal(self) -> GoalSnapshot:
-        return self.comms.goals.goal_snapshot(self.thread.name)
+        return self.comms.goals.goal_snapshot(
+            self.thread.name, snapshot=self.frame.snapshot,
+        )
 
     @cached_property
     def due_questions(self) -> tuple[Message, ...]:
@@ -170,11 +172,19 @@ class TeammateObservation(TeammateEvidence):
     @cached_property
     def sources(self) -> tuple[ProgressSource, ...]:
         return tuple(
-            ProgressSource.of(todo, self.comms.registry, self.frame.pulls) for todo in self.todos
+            ProgressSource.of(
+                todo,
+                self.comms.registry,
+                self.frame.pulls,
+                snapshot=self.frame.snapshot,
+            )
+            for todo in self.todos
         )
 
     def require_read(self) -> None:
-        for progress in self.frame.pulls.progress(self.todos, self.comms.registry).values():
+        for progress in self.frame.pulls.progress(
+            self.todos, self.comms.registry, snapshot=self.frame.snapshot,
+        ).values():
             progress.require_read()
         for todo in self.todos:
             reader = self.frame.pulls.checkout(todo.order.checked().check.directory).branches
@@ -259,7 +269,7 @@ class TeammateState(UndatedStandingRule, FamilyScan, ObservedTeammate, declared_
     def observations(
         cls, comms: Comms, frame: HeartbeatFrame
     ) -> tuple[TeammateObservation, ...]:
-        snapshot, now = comms.registry.snapshot(), time.time()
+        snapshot, now = frame.snapshot, time.time()
         held = frame.holders
         readings = tuple(
             TeammateObservation(

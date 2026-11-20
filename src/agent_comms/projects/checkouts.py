@@ -50,7 +50,7 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.projects.git_errors import GitCommandError, UnavailableCommitError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_environment import RepositoryEnvironment
-from agent_comms.storage.file_observation import DocumentBytes, FileObservation
+from agent_comms.storage.file_observation import DocumentBytes, FileObservation, FileRevision
 from agent_comms.storage.native_changes import ChangedSources, DirectorySource, FileSource
 
 
@@ -283,7 +283,7 @@ class Checkout(SingleFieldValue, PresentMember):
 
     def read(self) -> CheckoutHistory:
         """One operation's refs and commit graph; the caller owns this read's lifetime."""
-        return CheckoutHistory(self)
+        return CheckoutHistory.capture(self)
 
     def submodules(self) -> tuple[PinnedSubmodule, ...]:
         if not (self.path / ".gitmodules").is_file():
@@ -614,19 +614,6 @@ class CheckoutStatus:
     @staticmethod
     def _git_sources(checkout: Checkout) -> tuple[Path, ...]:
         common = checkout.common_dir
-        configuration = Repo.git_bytes(
-            checkout.path, "config", "--null", "--list", "--show-origin",
-        ).split(b"\0")
-        configured_files = []
-        for origin in configuration[::2]:
-            if not origin.startswith(b"file:"):
-                continue
-            configured = Path(os.fsdecode(origin.removeprefix(b"file:"))).expanduser()
-            configured_files.append(
-                configured.resolve()
-                if configured.is_absolute()
-                else (checkout.path / configured).resolve()
-            )
         paths = [
             checkout.path / ".git",
             Path(Repo.git(
@@ -644,10 +631,7 @@ class CheckoutStatus:
             ).strip()),
             common / "config",
             common / "info" / "exclude",
-            Path("/etc/gitconfig"),
-            Path.home() / ".gitconfig",
-            Path.home() / ".config" / "git" / "config",
-            *configured_files,
+            *Repo.configuration_files(checkout.path),
         ]
         sparse = Path(
             Repo.git(
@@ -733,6 +717,95 @@ class CheckoutStatus:
         self.changes.close()
 
 
+@dataclass(frozen=True)
+class GitSourceRevision:
+    """One captured set of filesystem sources that must remain a single Git cut."""
+
+    sources: tuple[tuple[Path, FileObservation], ...]
+
+    @staticmethod
+    def _tree_paths(root: Path) -> tuple[Path, ...]:
+        if not root.is_dir():
+            return (root,)
+        paths: list[Path] = [root]
+        for directory, names, files in os.walk(root):
+            parent = Path(directory)
+            paths.extend(parent / name for name in names)
+            paths.extend(parent / name for name in files)
+        return tuple(paths)
+
+    @classmethod
+    def source_paths(cls, checkout: Checkout) -> tuple[Path, ...]:
+        raise NotImplementedError
+
+    @classmethod
+    def capture(cls, checkout: Checkout) -> Self:
+        return cls(tuple(
+            (path, FileRevision.capture(path))
+            for path in cls.source_paths(checkout)
+        ))
+
+    def current(self) -> bool:
+        return all(FileRevision.capture(path) == observed
+                   for path, observed in self.sources)
+
+
+@dataclass(frozen=True)
+class GitGraphRevision(GitSourceRevision):
+    """The replacement and boundary sources a lazy graph command still reads."""
+
+    @classmethod
+    def source_paths(cls, checkout: Checkout) -> tuple[Path, ...]:
+        common = checkout.common_dir
+        return tuple(dict.fromkeys((
+            *cls._tree_paths(common / "refs" / "replace"),
+            common / "packed-refs",
+            common / "shallow",
+            common / "info" / "grafts",
+            Path(Repo.git(
+                checkout.path,
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-path",
+                "config.worktree",
+            ).strip()),
+            *Repo.configuration_files(checkout.path),
+        )))
+
+
+@dataclass(frozen=True)
+class GitHistoryRevision(GitSourceRevision):
+    """The filesystem sources of one Git refs, worktree-head and walk-policy cut."""
+
+    graph: GitGraphRevision
+
+    @classmethod
+    def source_paths(cls, checkout: Checkout) -> tuple[Path, ...]:
+        common = checkout.common_dir
+        return tuple(dict.fromkeys((
+            *cls._tree_paths(common / "refs"),
+            *cls._tree_paths(common / "worktrees"),
+            common / "HEAD",
+            *GitGraphRevision.source_paths(checkout),
+        )))
+
+    @classmethod
+    def capture(cls, checkout: Checkout) -> Self:
+        graph = GitGraphRevision.capture(checkout)
+        observed = dict(graph.sources)
+        return cls(
+            tuple(
+                (path, observed[path] if path in observed else FileRevision.capture(path))
+                for path in cls.source_paths(checkout)
+            ),
+            graph,
+        )
+
+    def graph_revision(self, checkout: Checkout) -> GitGraphRevision:
+        """Select the exact captured files a lazy graph command can still consult."""
+        return self.graph
+
+
 class RepositoryReads:
     """A pass's repository reads, keyed by Git's common directory, not worktree aliases."""
 
@@ -754,8 +827,11 @@ class RepositoryReads:
             if CheckoutHistory.graph.attrname not in history.__dict__:
                 continue
             try:
-                fresh = history.checkout.read()
-                retained[common_dir] = history.following(fresh)
+                retained[common_dir] = (
+                    history
+                    if history.sources_current()
+                    else history.following(CheckoutHistory.capture(history.checkout))
+                )
             except (GitCommandError, OSError):
                 # A later requested acquisition owns reporting its unreadable source.
                 continue
@@ -808,11 +884,19 @@ class RepositoryReads:
         if checkout.path not in self._worktree_histories:
             common = checkout.common_dir
             if common not in self._histories:
-                self._histories[common] = checkout.read()
+                try:
+                    self._histories[common] = CheckoutHistory.capture(checkout)
+                except (GitCommandError, OSError):
+                    # Keep acquisition lazy so the requested answer reports its own
+                    # unreadable ref, policy or boundary source, as before retention.
+                    self._histories[common] = CheckoutHistory(checkout)
             history = self._histories[common]
             self._worktree_histories.update((path, history) for path in history.heads)
             if checkout.path not in history.heads:
-                history = checkout.read()
+                try:
+                    history = CheckoutHistory.capture(checkout)
+                except (GitCommandError, OSError):
+                    history = CheckoutHistory(checkout)
             self._worktree_histories[checkout.path] = history
         return self._worktree_histories[checkout.path]
 
@@ -833,13 +917,19 @@ class GitCommit:
                    tuple(map(GitCommitText.from_text, parents.split())), float(at), message)
 
     @classmethod
-    def read(cls, repository: Path, heads: tuple[str, ...], *walk_options: str) -> dict[str, GitCommit]:
+    def read(cls, source: GitGraphSource, heads: tuple[str, ...],
+             *walk_options: str) -> dict[str, GitCommit]:
         """Git supplies these complete commit facts, in its own selected walk order."""
         if not heads:
             return {}
-        text = Repo.git(repository, "rev-list", "--stdin", "--no-commit-header",
-                        "--format=%H%x00%P%x00%ct%x00%B%x00", *walk_options,
-                        input="".join(f"{head}\n" for head in heads))
+        text = source.git(
+            "rev-list",
+            "--stdin",
+            "--no-commit-header",
+            "--format=%H%x00%P%x00%ct%x00%B%x00",
+            *walk_options,
+            input="".join(f"{head}\n" for head in heads),
+        )
         return {commit.sha: commit for commit in (
             cls.listed(row) for row in text.split("\0\n") if row)}
 
@@ -1068,6 +1158,25 @@ class GitGraphSource:
 
     repository: Path
     policy: GitHistoryPolicy
+    revision: GitGraphRevision | None = field(default=None, compare=False, repr=False)
+
+    def require_current(self) -> None:
+        """Refuse a live Git query after any source of this captured cut moved."""
+        if self.revision is None or not self.revision.current():
+            raise OSError("Git history sources changed after their captured cut")
+
+    def git(self, *args: str, input: str = "") -> str:
+        """Run a graph query under this cut's captured replacement policy."""
+        self.require_current()
+        answer = Repo.git(
+            self.repository,
+            "-c",
+            f"core.useReplaceRefs={self.policy.replacement_setting}",
+            *args,
+            input=input,
+        )
+        self.require_current()
+        return answer
 
 
 @dataclass(frozen=True)
@@ -1126,7 +1235,7 @@ class CommitGraph(Mapping[str, GitCommit]):
         return 0
 
     def following(self, source: GitGraphSource, heads: tuple[str, ...]) -> CapturedCommitGraph:
-        return CapturedCommitGraph(source, GitCommit.read(source.repository, heads))
+        return CapturedCommitGraph(source, GitCommit.read(source, heads))
 
 
 @dataclass(frozen=True, eq=False)
@@ -1154,11 +1263,10 @@ class CapturedCommitGraph(CommitGraph):
             return super().following(source, heads)
         if not heads:
             return type(self)(source, {})
-        order = Repo.git(source.repository, "rev-list", "--stdin",
-                         input="".join(f"{head}\n" for head in heads))
+        order = source.git("rev-list", "--stdin", input="".join(f"{head}\n" for head in heads))
         shas = tuple(map(GitCommitText.from_text, order.splitlines()))
         missing = tuple(sha for sha in shas if sha not in self)
-        added = (GitCommit.read(source.repository, missing, "--no-walk=unsorted")
+        added = (GitCommit.read(source, missing, "--no-walk=unsorted")
                  if missing else {})
         return type(self)(source, {
             sha: self[sha] if sha in self else added[sha] for sha in shas})
@@ -1369,8 +1477,22 @@ class CheckoutHistory:
     acquisition cannot silently change an answer already observed in this cut.
     """
 
+    @classmethod
+    def capture(cls, checkout: Checkout) -> Self:
+        """Read a stable source cut and retain the exact files that keep it valid."""
+        for _attempt in range(ChangedSources.reconcile_attempts):
+            before = GitHistoryRevision.capture(checkout)
+            history = cls(checkout)
+            history.refs, history.heads, history.policy
+            after = GitHistoryRevision.capture(checkout)
+            if before == after:
+                history.source_revision = after
+                return history
+        raise OSError("Git history sources did not stabilize while reading refs and policy")
+
     def __init__(self, checkout: Checkout) -> None:
         self.checkout = checkout
+        self.source_revision: GitHistoryRevision | None = None
         self.required: set[str] = set()
         self._ancestry: dict[frozenset[str], int] = {}
         self._remote_selections: dict[str, int] = {}
@@ -1379,6 +1501,9 @@ class CheckoutHistory:
         self._message_seed: CommitMessages = NoCommitMessages()
         self._graph_seed: CommitGraph = CommitGraph()
         self._cache: GitHistoryCache | None = None
+
+    def sources_current(self) -> bool:
+        return self.source_revision is not None and self.source_revision.current()
 
     @cached_property
     def repository(self) -> Repo:
@@ -1399,8 +1524,8 @@ class CheckoutHistory:
         ).removesuffix("\n")) for name in ("shallow", "info/grafts"))
         return GitHistoryPolicy(
             tuple(GitReference.read(common, "refs/replace/").values()),
-            Repo.git(common, "config", "--show-origin", "--show-scope", "--type=bool",
-                     "--default", "true", "--get", "core.useReplaceRefs"),
+            Repo.git(self.checkout.path, "config", "--type=bool", "--default", "true", "--get",
+                     "core.useReplaceRefs").strip(),
             tuple((path, DocumentBytes.capture(path)) for path in boundaries),
         )
 
@@ -1420,6 +1545,8 @@ class CheckoutHistory:
         """Only agreeing Git sources share a graph; acquired message work can survive."""
         if (fresh.refs == self.refs and fresh.heads == self.heads
                 and fresh.policy == self.policy):
+            self.source_revision = fresh.source_revision
+            self.__dict__.pop(CheckoutHistory.graph_request.attrname, None)
             return self
         fresh._graph_seed = self.__dict__.get(CheckoutHistory.graph.attrname, self._graph_seed)
         fresh._message_seed = self._message_seed.acquired_index()
@@ -1436,7 +1563,12 @@ class CheckoutHistory:
     @cached_property
     def graph_request(self) -> tuple[GitGraphSource, tuple[str, ...]]:
         # Capture sources before Git walks; a later cut never rereads this one's policy.
-        source = GitGraphSource(self.checkout.common_dir, self.policy)
+        revision = (
+            self.source_revision.graph_revision(self.checkout)
+            if self.source_revision is not None
+            else None
+        )
+        source = GitGraphSource(self.checkout.common_dir, self.policy, revision)
         heads = tuple(dict.fromkeys((
             *self.required, *(reference.commit for reference in self.refs.values()),
             *(sha for head in self.heads.values() for sha in head.required()),
@@ -1586,7 +1718,7 @@ class CheckoutHistory:
         tips = tuple(revision if revision in self.required and Repo.full_commit.fullmatch(revision)
                      else self.resolve(revision) for revision in (left, right))
         try:
-            bases = tuple(Repo.git(self.checkout.common_dir, "merge-base", "--all", *tips).splitlines())
+            bases = tuple(self.graph_request[0].git("merge-base", "--all", *tips).splitlines())
         except GitCommandError as error:
             if not error.unrelated_history():
                 raise

@@ -168,9 +168,12 @@ class TeamBoardAcquisition(
     def acquire_board(self, comms: Comms) -> tuple[TeamInputs, ...]:
         self.begin_pass()
         progress = self._progress_read()
+        snapshot = comms.registry.snapshot()
         return tuple(
-            TeamInputs.prepare(comms, project, progress, self)
-            for project in comms.registry.snapshot().team_project.boards()
+            TeamInputs.prepare(
+                comms, project, progress, self, snapshot=snapshot,
+            )
+            for project in snapshot.team_project.boards()
         )
 
     def observe(
@@ -179,7 +182,9 @@ class TeamBoardAcquisition(
         prepared: tuple[TeamInputs, ...],
     ) -> tuple[TeamObservation, ...]:
         revision = comms.views.revision()
-        snapshot = comms.registry.snapshot()
+        snapshot = prepared[0].snapshot if prepared else comms.registry.snapshot()
+        if any(inputs.snapshot is not snapshot for inputs in prepared):
+            raise ValueError("One board acquisition must carry one registry cut")
         owners = tuple(
             teammate.incarnation
             for teammate in TeamService.teammates(snapshot, comms.goals)
@@ -213,7 +218,12 @@ class TeamHeartbeatEffects(TeamService):
     _retained_board: RetainedTeamBoard | None = None
 
     def prepare_effects(self, comms: Comms, inputs: tuple[TeamInputs, ...]) -> None:
-        repositories = comms.registry.snapshot().team_project.repository_names()
+        if not inputs:
+            return
+        snapshot = inputs[0].snapshot
+        if any(board.snapshot is not snapshot for board in inputs):
+            raise ValueError("One board preparation must carry one registry cut")
+        repositories = snapshot.team_project.repository_names()
         for board in inputs:
             for repository in repositories:
                 board.pulls.carry_reviews(comms.goals, repository)
@@ -227,7 +237,10 @@ class TeamHeartbeatEffects(TeamService):
         plan = TeamPlan()
         completed = []
         now = time.time()
-        duty = self.duty(comms.registry, comms.goals)
+        snapshot = boards[0].frame.snapshot if boards else comms.registry.snapshot()
+        if any(board.frame.snapshot is not snapshot for board in boards):
+            raise ValueError("One heartbeat must carry one registry cut")
+        duty = self.duty(comms.registry, comms.goals, snapshot=snapshot)
         retained_store = TeamBoardPublicationStore.at(comms.root)
         publication = retained_store.read()
         if (
@@ -238,7 +251,9 @@ class TeamHeartbeatEffects(TeamService):
         retained_packets = self._retained_board.packet_map()
         try:
             for observed in boards:
-                recipients = self.served(comms.registry, comms.goals)
+                recipients = self.served(
+                    comms.registry, comms.goals, snapshot=snapshot,
+                )
                 held = {
                     recipient.incarnation: retained_packets.get(recipient.incarnation, ())
                     for recipient in recipients
@@ -274,7 +289,9 @@ class TeamHeartbeatEffects(TeamService):
                     )),
                 )
                 usage = CodexConnection.usage()
-                history = TeamHistory.of_team(comms)
+                history = TeamHistory.of(
+                    comms, snapshot, TeamService.actors(snapshot),
+                )
                 states = tuple(
                     state for state in observed.states if state not in rejected
                 )
@@ -348,7 +365,7 @@ class TeamHeartbeatEffects(TeamService):
                 tuple(completed),
                 (
                     thread.incarnation
-                    for thread in comms.registry.all_threads().values()
+                    for thread in snapshot.threads.values()
                 ),
             )
         return plan, tuple(huds.values())

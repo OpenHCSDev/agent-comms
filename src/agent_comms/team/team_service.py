@@ -119,12 +119,17 @@ class TeamService:
         return teammate
 
     @classmethod
-    def served(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
+    def served(cls, registry: Registration, goals: Goals, *,
+               snapshot: RegistrySnapshot | None = None) -> tuple[Thread, ...]:
         """Every teammate a pass reads one team board for and sends its packet to."""
-        return cls.teammates(registry.snapshot(), goals)
+        return cls.teammates(
+            snapshot if snapshot is not None else registry.snapshot(), goals,
+        )
 
     @classmethod
-    def duty(cls, registry: Registration, goals: Goals) -> HeartbeatDuty:
+    def duty(cls, registry: Registration, goals: Goals, *,
+             snapshot: RegistrySnapshot | None = None) -> HeartbeatDuty:
         """Owed while any live teammate holds an open owner request; the pass acts only then."""
-        owed = any(cls.requested_by(thread, goals) for thread in cls.running(registry.snapshot()))
+        snapshot = snapshot if snapshot is not None else registry.snapshot()
+        owed = any(cls.requested_by(thread, goals) for thread in cls.running(snapshot))
         return OwedHeartbeat() if owed else UnownedHeartbeat()

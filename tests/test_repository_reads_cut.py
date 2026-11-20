@@ -11,6 +11,7 @@ import pytest
 import fixture_git
 from agent_comms.projects.checkouts import (
     Checkout,
+    CheckoutHistory,
     CommitMessages,
     CommitsNaming,
     GitCommit,
@@ -181,6 +182,69 @@ def test_retaining_reloads_changed_replacement_setting(main: Path) -> None:
     restored = RepositoryReads.retaining(following_reads).history_for(Checkout(main))
     assert restored.graph == before
     assert following.messages.naming('P303') == {original}
+
+
+def test_retaining_reloads_a_new_linked_worktree_replacement_setting(main: Path) -> None:
+    git(main, 'config', 'extensions.worktreeConfig', 'true')
+    git(main, 'commit', '--allow-empty', '-m', 'P303 linked original')
+    original = git(main, 'rev-parse', 'HEAD')
+    replacement = git(main, 'commit-tree', 'HEAD^{tree}', '-m', 'P304 linked replacement')
+    git(main, 'replace', original, replacement)
+    linked = main.parent / 'linked'
+    git(main, 'worktree', 'add', '-b', 'linked', str(linked))
+    reads = RepositoryReads()
+    previous = reads.history_for(Checkout(linked))
+    previous.graph
+    assert previous.messages.naming('P304') == {original}
+
+    worktree_config = Path(git(
+        linked, 'rev-parse', '--path-format=absolute', '--git-path', 'config.worktree',
+    ))
+    assert worktree_config in dict(previous.source_revision.sources)
+    assert not worktree_config.exists()
+    git(linked, 'config', '--worktree', 'core.useReplaceRefs', 'false')
+
+    following = RepositoryReads.retaining(reads).history_for(Checkout(linked))
+    assert following.policy.replacement_setting == 'false'
+    assert following.messages.naming('P303') == {original}
+
+
+def test_equal_graph_source_adopts_its_fresh_file_revision(main: Path, monkeypatch) -> None:
+    reads = RepositoryReads()
+    previous = reads.history_for(Checkout(main))
+    head = git(main, 'rev-parse', 'HEAD')
+    previous.include(head)
+    previous.graph
+    (Checkout(main).common_dir / 'config').touch()
+
+    retained = RepositoryReads.retaining(reads)
+    following = retained.history_for(Checkout(main))
+    assert following is previous
+    assert following.sources_current()
+    assert following.merge_base(head, head) == (head,)
+
+    monkeypatch.setattr(
+        CheckoutHistory,
+        'capture',
+        classmethod(lambda cls, checkout: pytest.fail('current retained source recaptured')),
+    )
+    assert RepositoryReads.retaining(retained).history_for(Checkout(main)) is following
+
+
+@pytest.mark.parametrize('read', ('graph', 'merge-base'))
+def test_lazy_git_query_refuses_a_moved_captured_source(main: Path, read: str) -> None:
+    git(main, 'commit', '--allow-empty', '-m', 'captured original')
+    original = git(main, 'rev-parse', 'HEAD')
+    history = Checkout(main).read()
+    history.include(original)
+    replacement = git(main, 'commit-tree', 'HEAD^{tree}', '-m', 'late replacement')
+    git(main, 'replace', original, replacement)
+
+    with pytest.raises(OSError, match='changed after their captured cut'):
+        if read == 'graph':
+            history.graph
+        else:
+            history.merge_base(original, original)
 
 
 def test_changed_invalid_policy_reports_its_source_failure(main: Path) -> None:

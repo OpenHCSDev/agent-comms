@@ -96,6 +96,38 @@ def test_preparing_a_board_has_no_service_or_publication_effects(held_bus, accou
     assert not before.changed_since(TeamBoardView(), held_bus.views.revision())
 
 
+def test_acquisition_and_observation_share_one_registry_cut(held_bus, monkeypatch):
+    registry_type = type(held_bus.registry)
+    snapshot = registry_type.snapshot
+    captured = []
+    direct_reads = []
+
+    def counted(registry):
+        cut = snapshot(registry)
+        captured.append(cut)
+        return cut
+
+    def direct(method):
+        def counted_direct(registry, *args, **kwargs):
+            direct_reads.append(method.__name__)
+            return method(registry, *args, **kwargs)
+
+        return counted_direct
+
+    monkeypatch.setattr(registry_type, "snapshot", counted)
+    monkeypatch.setattr(registry_type, "require", direct(registry_type.require))
+    monkeypatch.setattr(registry_type, "active_threads", direct(registry_type.active_threads))
+    acquisition = TeamBoardAcquisition()
+    prepared = acquisition.acquire_board(held_bus)
+    observed = acquisition.observe(held_bus, prepared)
+
+    assert len(captured) == 1
+    assert direct_reads == []
+    cut = captured[0]
+    assert prepared and all(inputs.snapshot is cut for inputs in prepared)
+    assert observed and all(board.frame.snapshot is cut for board in observed)
+
+
 def test_todo_commit_signal_is_a_board_input_not_a_database_mtime(held_bus):
     paths = WireRevision.source_paths(held_bus.views)
     assert paths["team_board"] == TodoStore.source_paths(held_bus.root)
