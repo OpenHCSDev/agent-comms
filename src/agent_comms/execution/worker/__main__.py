@@ -44,6 +44,8 @@ async def team_heartbeat_host(comms: Comms) -> AsyncIterator[None]:
     """
     children = GitChildren()
     heartbeat = TeamHeartbeat()
+    passes = ServicePassStore.at(comms.root)
+    passes.sync_failures()
 
     @contextmanager
     def opened_wire() -> Iterator[Comms]:
@@ -52,11 +54,7 @@ async def team_heartbeat_host(comms: Comms) -> AsyncIterator[None]:
 
     with OwnedGitOpening(children).bound():
         pending = asyncio.create_task(
-            Coordination.watch_worker(
-                heartbeat,
-                opened_wire,
-                ServicePassStore.at(comms.root),
-            ),
+            Coordination.watch_worker(heartbeat, opened_wire, passes),
             name=type(heartbeat).__name__,
         )
     try:

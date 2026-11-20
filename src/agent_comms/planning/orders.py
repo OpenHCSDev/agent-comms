@@ -1480,9 +1480,38 @@ class CheckoutReads(RepositoryReads):
 class ProgressRead(PullRequests, CheckoutReads):
     """One read of order progress: its GitHub facts and its checkouts' Git facts."""
 
+    @classmethod
+    def retaining(cls, previous: ProgressRead) -> Self:
+        """Retain closed forge rows, advance identities and reacquire open check state."""
+        refreshed = super().retaining(previous)
+        refreshed._read = {
+            identity: captured
+            for identity, captured in previous._read.items()
+            if captured.done() and captured.exception() is None
+        }
+        refreshed._open = dict(previous._open)
+        refreshed._forge_at = time.time()
+        repositories = tuple(dict.fromkeys((*previous._open, *previous._linked)))
+        for repository in repositories:
+            delta = PullRequests()
+            changed = delta.updated_since(repository, previous._forge_at)
+            changed_numbers = {row.number for row in changed}
+            opened = set(refreshed._open.get(repository, ()))
+            for row in changed:
+                refreshed._read[repository, row.number] = delta._read[repository, row.number]
+                if row.as_unmerged():
+                    opened.add(row.number)
+                else:
+                    opened.discard(row.number)
+            for number in opened - changed_numbers:
+                refreshed._read.pop((repository, number), None)
+            refreshed._open[repository] = tuple(sorted(opened))
+        return refreshed
+
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         super().__init__(todos)
         self._progress: dict[str, OrderProgress] = {}
+        self._forge_at = time.time()
 
     def unread(self, todos: Iterable[Todo], error: Exception) -> None:
         for todo in todos:

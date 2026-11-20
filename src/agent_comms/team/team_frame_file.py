@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.storage.locked_store import PatternFile, RuntimeFile
 
 
@@ -15,4 +14,4 @@ class TeamBoardFile(RuntimeFile, PatternFile):
 
     @classmethod
     def source_paths(cls, root: Path) -> tuple[Path, ...]:
-        return (cls.path_in(root), ServicePassStore.path_in(root))
+        return (cls.path_in(root),)

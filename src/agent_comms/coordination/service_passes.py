@@ -11,7 +11,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.messaging.watched import Watched
 from agent_comms.nominal.field_codec import WireExclude, WireTransient, projected
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from agent_comms.storage.locked_store import DocumentChange, DurableFile, LockedStore
+from agent_comms.storage.locked_store import DocumentChange, DurableFile, LockedStore, RuntimeFile
 from agent_comms.storage.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 from agent_comms.transport.tool_result import ToolResult
@@ -114,6 +114,39 @@ class BoardUnavailable(ToolRefusedError):
         super().__init__('\n'.join((*reading.service_status, f'Board unavailable: {reason}')))
 
 
+@dataclass(frozen=True)
+class ServiceFailures:
+    """Stable failing-watch membership; retry clocks do not change this answer."""
+
+    failures: tuple[tuple[str, float, str], ...] = ()
+
+    @classmethod
+    def of(cls, passes: ServicePasses) -> ServiceFailures:
+        return cls(tuple(sorted(
+            (watch, failure.since, failure.error)
+            for watch, failure in passes.failing.items()
+        )))
+
+
+@dataclass(frozen=True, slots=True)
+class ServiceFailureStore(
+    SingleFileStore, RuntimeFile, LockedStore[ServiceFailures], DependentStateTier, Watched
+):
+    """Derived wake source changed only by semantic service failure state."""
+
+    filename: ClassVar[str] = "service_failures.json"
+    record_type = ServiceFailures
+
+    def empty(self) -> ServiceFailures:
+        return ServiceFailures()
+
+    def sync(self, passes: ServicePasses) -> None:
+        failures = ServiceFailures.of(passes)
+        self.update(lambda current: DocumentChange.to(
+            current if current == failures else failures
+        ))
+
+
 @dataclass(frozen=True, slots=True)
 class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses], DependentStateTier,
                        Watched):
@@ -121,6 +154,9 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
 
     filename: ClassVar[str] = "service_passes.json"
     record_type = ServicePasses
+
+    def sync_failures(self) -> None:
+        ServiceFailureStore.at(self.path.parent).sync(self.read())
 
     def empty(self) -> ServicePasses:
         return ServicePasses()
@@ -134,6 +170,7 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
             return DocumentChange.to(replace(passes, failing=passes.failing | {watch: failing}))
 
         self.update(change)
+        self.sync_failures()
 
     def passed(self, watch: str) -> None:
         """A pass that succeeds ends its failure; an unfailed watch writes nothing."""
@@ -144,6 +181,7 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
                     failing={name: failure for name, failure in passes.failing.items() if name != watch},
                 ))
             )
+            self.sync_failures()
 
     def heartbeat_passed(
         self, recipients: Iterable[ThreadIncarnation], registered: Iterable[ThreadIncarnation]
