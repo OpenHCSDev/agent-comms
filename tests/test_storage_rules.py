@@ -44,6 +44,7 @@ from agent_comms.projects.storage_projection import StorageProjection, StoragePr
 from agent_comms.projects.storage_rules import (
     CheckoutAllocation,
     GoalCheckoutAllocation,
+    MemoryHolder,
     ScopedDirectory,
     StorageRule,
     UnitStorage,
@@ -65,6 +66,35 @@ from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tool_denial import SelectedToolDenied, StorageDenied
 from source_revision_fixture import SourceRepository
 from agent_comms.cli_verbs.repositories import RepositoriesCliCommand
+
+
+def test_memory_cleanup_candidates_are_admitted_only_when_memory_is_low(
+    tmp_path: Path, monkeypatch,
+):
+    proc = tmp_path / "proc"
+    proc.mkdir()
+    meminfo = proc / "meminfo"
+    temp = tmp_path / "tmp"
+    (temp / "pytest-of-ts" / "readable").mkdir(parents=True)
+    (temp / "pytest-of-ts" / "disconnected").mkdir()
+    rule = StorageRule(memory_gib=3, idle_minutes=0, proc=proc, temp_root=temp)
+    sized = []
+
+    def tree_gib(path):
+        sized.append(path.name)
+        if path.name == "disconnected":
+            raise OSError(107, "Transport endpoint is not connected", path)
+        return 2.0
+
+    monkeypatch.setattr(StorageRule, "tree_gib", staticmethod(tree_gib))
+    meminfo.write_text("MemAvailable: 4194304 kB\n")
+    assert rule.memory().idle_dirs == ()
+    assert sized == []
+
+    meminfo.write_text("MemAvailable: 2097152 kB\n")
+    memory = rule.memory()
+    assert memory.idle_dirs == (MemoryHolder(str(temp / "pytest-of-ts" / "readable"), 2.0),)
+    assert set(sized) == {"readable", "disconnected"}
 
 
 def test_isolated_policy_is_durable_and_preserves_existing_private_limits(tmp_path: Path):
