@@ -121,7 +121,6 @@ def test_captured_draft_cannot_delete_a_later_turns_draft(tmp_path):
 async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
     turn_turn_id = NativeTurnId('turn')
     from agent_comms.execution.transcript_sources import TurnDraftPublication
-    from agent_comms.execution.transcript_sources import TurnDraftPublication
 
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread('cli', frozenset(), Checkout(tmp_path)))
@@ -139,6 +138,26 @@ async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
                 draft = reader.current_draft(transcript.root, transcript.incarnation)
             assert draft.events[0].text == 'Streaming'
             publication.retire_message()
+
+
+def test_next_assistant_message_atomically_replaces_the_prior_draft(tmp_path):
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(NativeThread("cli", frozenset(), Checkout(tmp_path)))
+    transcript = comms.transcripts.external("cli")
+    with transcript.writer_connection(check_same_thread=False) as connection:
+        publication = TurnDraftPublication(transcript, connection, NativeTurnId("turn"))
+        publication.begin_message(1.0)
+        publication.append_parts(("first",))
+        first_item = publication.item_id
+
+        # A provider may start its next message without delivering the previous
+        # message-end event first.  The first append is the atomic identity cut.
+        publication.begin_message(2.0)
+        publication.append_parts(("second",))
+        with transcript.reading() as reader:
+            current = reader.current_draft(transcript.root, transcript.incarnation)
+        assert current.item_id != first_item
+        assert tuple(event.text for event in current.events) == ("second",)
 
 
 def test_turn_owned_draft_refuses_maintenance_without_changing_the_saved_draft(tmp_path):
