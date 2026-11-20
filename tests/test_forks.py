@@ -408,6 +408,17 @@ def test_edits_under_a_merged_order_are_nobodys_review(
         raise AssertionError("An appended transcript must advance its retained source cut")
 
     monkeypatch.setattr(StoreRead, "unjudged", reject_full_query)
+    reads = tuple(replace(
+        read,
+        thread=replace(read.thread, tags=read.thread.tags | {"changed-non-source-state"}),
+    ) for read in reads)
+    retained.begin_pass()
+    assert retained.read_all(reads) == {"P40": 3}
+    retained.finish_pass()
+    reprojected, = retained.cuts.values()
+    assert reprojected.source == second.source
+    assert reprojected.reads == reads
+
     record_edits(comms, source, 1, turn="following-work", start=3)
     retained.begin_pass()
     assert retained.read_all(reads) == {"P40": 4}
