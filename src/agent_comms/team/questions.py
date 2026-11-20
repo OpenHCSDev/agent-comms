@@ -3,77 +3,69 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from typing import ClassVar
 
 from agent_comms.messaging.bus import BusReader
-from agent_comms.messaging.message_page import MessageReadRequest
-from agent_comms.messaging.messages import Message, MessageInput, MessageKind, NeedsAnswerKind
-from agent_comms.messaging.read_basis import RepliesDisplayScope
+from agent_comms.messaging.messages import Message, MessageKind, NeedsAnswerKind
 from agent_comms.planning.orders import Todo
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
 
-@dataclass(frozen=True, slots=True)
-class SenderMessages(MessageReadRequest[tuple[Message, ...]]):
-    """Messages from the other side, with one captured SQL paging lifetime."""
-
-    scope: RepliesDisplayScope
-    since: float
-    before: float
-    empty: ClassVar[tuple[Message, ...]] = ()
-
-    def lower_bound(self, source: BusReader) -> float:
-        return self.since
-
-    def page(self, source: BusReader, lower: float, upper: int) -> tuple[Message, ...]:
-        requesters = tuple(self.scope.second_names - self.scope.first_names)
-        marks = ",".join("?" for _ in requesters)
-        predicate = f"sender IN ({marks}) AND " + MessageInput.table._sql(
-            "{timestamp} >= ? AND {timestamp} <= ?")
-        return source.scoped_page(
-            predicate, (*requesters, lower, self.before), upper=upper, descending=True,
-        )
-
-    def read_opened(self, source: BusReader) -> tuple[Message, ...]:
-        found: list[Message] = []
-        with source.reading() as reader:
-            lower = self.lower_bound(reader)
-            upper = reader.revision() + 1
-            while page := self.page(reader, lower, upper):
-                found.extend(message for message in page if self.scope.includes(message))
-                upper = page[-1].seq
-        return tuple(found)
-
-
-@dataclass(frozen=True, slots=True)
-class UnansweredTeammateAsks(SenderMessages):
+class UnansweredTeammateAsks:
     """Individual requests without an answer to their exact original reference."""
 
     @classmethod
-    def for_orders(
-        cls, source: BusReader, snapshot: RegistrySnapshot, teammate: str,
-        held: Mapping[ThreadIncarnation, Sequence[Todo]], before: float,
-    ) -> dict[ThreadIncarnation, tuple[Message, ...]]:
-        if not held:
+    def for_debtors(
+        cls,
+        source: BusReader,
+        snapshot: RegistrySnapshot,
+        debtors: Sequence[ThreadIncarnation],
+        held: Mapping[ThreadIncarnation, Sequence[Todo]],
+        before: float,
+    ) -> dict[ThreadIncarnation, dict[ThreadIncarnation, tuple[Message, ...]]]:
+        """Derive every debtor's unanswered asks from one owner-preserving bus relation."""
+        if not held or not debtors:
             return {}
-        peers = frozenset(name for owner in held for name in snapshot.names_for(owner.name))
-        since = min(
-            todo.first_ordered_at
-            for todos in held.values() for todo in todos
+        debtor_by_name = {debtor.name: debtor for debtor in debtors}
+        owners_by_name = {owner.name: owner for owner in held}
+        selected: dict[str, dict[str, list[Message]]] = {
+            debtor.name: {} for debtor in debtors
+        }
+        aliases = tuple(
+            (debtor.name, tuple(sorted(snapshot.names_for(debtor.name))))
+            for debtor in debtors
         )
-        questions = cls(
-            RepliesDisplayScope(snapshot.names_for(teammate), peers), since, before,
-        ).read_opened(source)
-        by_sender: dict[str, list[Message]] = {}
-        for message in questions:
-            by_sender.setdefault(snapshot.canonical_name(message.sender), []).append(message)
-        return {owner: tuple(by_sender.get(owner.name, ())) for owner in held}
-
-    def page(self, source: BusReader, lower: float, upper: int) -> tuple[Message, ...]:
-        return source.unanswered_page(
-            self.scope,
-            since=lower, before=self.before, upper=upper,
-            kinds=MessageKind.members_with(NeedsAnswerKind),
-        )
-
+        requesters = tuple(sorted({
+            name
+            for owner in held
+            for name in snapshot.names_for(owner.name)
+        }))
+        since = min(todo.first_ordered_at for todos in held.values() for todo in todos)
+        page_size = 100
+        with source.reading() as reader:
+            upper = reader.revision() + 1
+            while True:
+                page, more = reader.unanswered_for_debtors(
+                    aliases,
+                    requesters,
+                    since=since,
+                    before=before,
+                    upper=upper,
+                    limit=page_size,
+                    kinds=MessageKind.members_with(NeedsAnswerKind),
+                )
+                if not page:
+                    break
+                for debtor, message in page:
+                    owner = snapshot.canonical_name(message.sender)
+                    if owner in owners_by_name:
+                        selected[debtor].setdefault(owner, []).append(message)
+                if not more:
+                    break
+                upper = min(message.seq for _, message in page)
+        return {
+            debtor_by_name[debtor]: {
+                owners_by_name[owner]: tuple(messages)
+                for owner, messages in by_owner.items()
+            }
+            for debtor, by_owner in selected.items()
+        }
