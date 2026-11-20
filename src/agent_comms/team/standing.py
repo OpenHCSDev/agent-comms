@@ -170,7 +170,7 @@ class InstallDue(UndatedStandingRule, FamilyScan):
         """Launch Core's installer for every configured main the installed build lacks: the
         one launch `order install` and the remote install tool both make."""
         pulls = ProgressRead()
-        cls.prepare(comms, HeldOrders.read(comms), pulls)
+        cls.prepare(comms, comms.goals.held_orders(), pulls)
         return tuple(f"{due.repo.to_wire()} main {due.main[:12]}: {due.launch(comms)}"
                      for due in cls.due(comms, pulls))
 
@@ -544,7 +544,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
     @classmethod
     def read_idle(cls, comms: Comms) -> list[Thread]:
         """A fresh read and an already captured frame share the same idle selection."""
-        return cls.idle(comms, HeldOrders.read(comms))
+        return cls.idle(comms, comms.goals.held_orders())
 
     @classmethod
     def idle(cls, comms: Comms, scan: HeldOrders, *,
@@ -576,10 +576,12 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
     def violations(cls, comms: Comms, *,
                    snapshot: RegistrySnapshot | None = None) -> tuple[UnownedWheelSpin, ...]:
         snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
+        open_orders = comms.goals.todos.board()
         return cls.scan_orders(
             comms,
-            HeldOrders.of(comms.goals.todos, snapshot),
+            HeldOrders.from_open_orders(open_orders, snapshot),
             PullRequests(),
+            open_orders=open_orders,
             snapshot=snapshot,
         )
 
@@ -587,15 +589,19 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[UnownedWheelSpin, ...]:
         return cls.scan_orders(
-            comms, frame, frame.pulls, snapshot=frame.snapshot,
+            comms, frame, frame.pulls,
+            open_orders=frame.open_orders, snapshot=frame.snapshot,
         )
 
     @classmethod
     def scan_orders(cls, comms: Comms,
                     scan: HeldOrders, pulls: PullRequests, *,
+                    open_orders: Iterable[Todo] | None = None,
                     snapshot: RegistrySnapshot | None = None) -> tuple[UnownedWheelSpin, ...]:
         return cls.paired(
-            comms, comms.goals.todos.board(), scan, pulls, snapshot=snapshot,
+            comms,
+            comms.goals.todos.board() if open_orders is None else open_orders,
+            scan, pulls, snapshot=snapshot,
         )
 
     @classmethod
@@ -627,7 +633,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
                 *(WaitingUnownedWheelSpin(todo) for todo in rows if todo.id not in covered))
 
     def redecided(self, comms: Comms, current: Todo) -> tuple[StandingRule, ...]:
-        return type(self).paired(comms, (current,), HeldOrders.read(comms), PullRequests())
+        return type(self).paired(comms, (current,), comms.goals.held_orders(), PullRequests())
 
     def line(self) -> str:
         return (f"STAFF {self.todo.id} has no owner and waits for a new teammate. who's taking it?"
@@ -681,7 +687,7 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedWheelSpin, ...]], ConnectorWatch)
         if not available:
             return ()
         return UnownedWheelSpin.paired(
-            comms, available, HeldOrders.read(comms), PullRequests(available))
+            comms, available, comms.goals.held_orders(), PullRequests(available))
 
     def pass_body(self, comms: Comms, observed: tuple[UnownedWheelSpin, ...]) -> None:
         for rule, error in StandingRule.enforce_all(comms, observed).items():
@@ -925,8 +931,18 @@ class Scrutinize(IndependentStandingRule, UndatedStandingRule):
     @classmethod
     def violations(cls, comms: Comms, *,
                    snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
+        return cls.in_orders(comms.goals.todos.held_orders())
+
+    @classmethod
+    def scan_observed(cls, comms: Comms,
+                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return cls.in_orders(HeldOrders.assigned(frame.open_orders))
+
+    @classmethod
+    def in_orders(cls, todos: Iterable[Todo]) -> tuple[Self, ...]:
+        """Derive strike alarms from a caller-owned held-order cut."""
         return tuple(cls(held, todo, count)
-                     for todo in comms.goals.todos.held_orders()
+                     for todo in todos
                      for held in todo.current_holder.current_assignments()
                      for count in (todo.strikes_against(held.owner_identity),)
                      if count >= cls.threshold)

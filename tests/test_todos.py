@@ -36,7 +36,6 @@ from agent_comms.planning.goals import (
     OrderCheck,
     ProblemGoalOrder,
 )
-from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.order_phase import UnplannedPhase
 from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.planning.order_words import StrikeReason
@@ -639,7 +638,7 @@ def test_released_open_work_restores_its_own_holder_never_swaps(released_publish
     goals = {row.holder: c.registry.require(row.holder).goal for row in originals.values()}
     with LaunchRoot.from_path(ctx.root).selected():
         rules = UnownedWheelSpin.paired(
-            c, c.goals.todos.reassignable(), HeldOrders.read(c),
+            c, c.goals.todos.reassignable(), c.goals.held_orders(),
             ProgressRead(tuple(c.goals.todos.get(pid) for pid in originals)))
         assert {rule.todo.id for rule in rules} == set(originals)
         assert all(isinstance(rule, RetainedHolderWheelSpin) for rule in rules)
@@ -869,10 +868,10 @@ def test_associations_register_and_selected_reads_are_linear_in_independent_sour
 def test_empty_dispatch_associations_do_not_acquire_held_orders(pr_team, monkeypatch):
     assert pr_team.comms.goals.todos.reassignable() == ()
 
-    def unexpected_read(comms):
+    def unexpected_read(goals):
         raise AssertionError('An empty dispatch set has no held-order dependency.')
 
-    monkeypatch.setattr(HeldOrders, 'read', unexpected_read)
+    monkeypatch.setattr(type(pr_team.comms.goals), 'held_orders', unexpected_read)
     assert UnownedOrderWatch().observe(pr_team.comms, None) == ()
 
 

@@ -945,7 +945,7 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
 
     @classmethod
     def opened(cls, comms: Comms, owner: ThreadIncarnation) -> tuple[Self, ...]:
-        return cls.read_scan(comms, (owner,), HeldOrders.read(comms))
+        return cls.read_scan(comms, (owner,), comms.goals.held_orders())
 
     @classmethod
     def read_scan(cls, comms: Comms, owners: tuple[ThreadIncarnation, ...],
@@ -1030,13 +1030,15 @@ class TeamInputs(HeldOrders):
 
     pulls: ProgressRead
     plan: PlanReading
+    open_orders: tuple[Todo, ...]
     snapshot: RegistrySnapshot = field(compare=False, repr=False)
 
     @classmethod
     def prepare(cls, comms: Comms, project: RegisteredTeamProject, pulls: ProgressRead,
                 plans: PlanReadings, *, snapshot: RegistrySnapshot | None = None) -> Self:
         snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
-        holds = HeldOrders.of(comms.goals.todos, snapshot)
+        open_orders = comms.goals.todos.board()
+        holds = HeldOrders.from_open_orders(open_orders, snapshot)
         pulls.register(holds.todos)
         repositories = project.repository_names()
         pulls.read_open(repositories)
@@ -1048,7 +1050,7 @@ class TeamInputs(HeldOrders):
             history=pulls.checkout(repository.checkout).branches.history,
         )
         StandingRule.prepare_all(comms, holds, pulls, snapshot=snapshot)
-        return cls(holds.live, holds.orphaned, pulls, plan, snapshot)
+        return cls(holds.live, holds.orphaned, pulls, plan, open_orders, snapshot)
 
 
 @dataclass(frozen=True)
@@ -1120,6 +1122,7 @@ class HeartbeatFrame(TeamInputs):
             orphaned=inputs.orphaned,
             pulls=inputs.pulls,
             plan=plan,
+            open_orders=inputs.open_orders,
             snapshot=snapshot,
             answers=answers if answers is not None else tuple({
                 answer.observation_key(): answer
@@ -1326,14 +1329,18 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
     @classmethod
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.scan_reviews(comms.goals, frame.pulls, snapshot=frame.snapshot)
+        return cls.scan_reviews(
+            comms.goals, frame.pulls,
+            open_orders=frame.open_orders, snapshot=frame.snapshot,
+        )
 
     @classmethod
     def scan_reviews(cls, goals: Goals, pulls: ProgressRead, *,
+                     open_orders: Sequence[Todo] | None = None,
                      snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         now = time.time()
         snapshot = snapshot if snapshot is not None else goals.registry.snapshot()
-        todos = goals.todos.board()
+        todos = goals.todos.board() if open_orders is None else open_orders
         return tuple(
             rule
             for repo in snapshot.team_project.repository_names()
@@ -1432,9 +1439,9 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
     @classmethod
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        ordered = comms.goals.todos.board()
         return cls.scan_pulls(
-            comms.goals, frame.pulls, frame.todos, ordered, snapshot=frame.snapshot,
+            comms.goals, frame.pulls, frame.todos, frame.open_orders,
+            snapshot=frame.snapshot,
         )
 
     @classmethod
@@ -1503,13 +1510,17 @@ class OrderlessPullRequest(IdlePullRequest):
     @classmethod
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.scan_orderless(comms.goals, frame.pulls, snapshot=frame.snapshot)
+        return cls.scan_orderless(
+            comms.goals, frame.pulls,
+            open_orders=frame.open_orders, snapshot=frame.snapshot,
+        )
 
     @classmethod
     def scan_orderless(cls, goals: Goals, pulls: ProgressRead, *,
+                       open_orders: Sequence[Todo] | None = None,
                        snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         now = time.time()
-        orders = goals.todos.board()
+        orders = goals.todos.board() if open_orders is None else open_orders
         snapshot = snapshot if snapshot is not None else goals.registry.snapshot()
         found = (
             cls(request=PullRequestHead(repo, row.number, row.head),

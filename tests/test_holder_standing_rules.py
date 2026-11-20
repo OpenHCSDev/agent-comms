@@ -70,7 +70,6 @@ from agent_comms.planning.goal_actions import (
 from agent_comms.planning.goal_presentation import RunnableExecution
 from agent_comms.planning.goal_states import ActiveGoal
 from agent_comms.planning.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
-from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.order_runs import MechanicalOrderRun
 from agent_comms.planning.order_story import TeamStory
 from agent_comms.planning.order_words import StrikeReason
@@ -88,6 +87,7 @@ from agent_comms.planning.orders import (
     ProgressRead,
     ReleaseTodo,
     ResumeClaimOrder,
+    StrikeTodo,
     TodoConflict,
     VerdictAudience,
     WithdrawTodo,
@@ -120,6 +120,7 @@ from agent_comms.team.standing import (
     HeartbeatSilent,
     HolderGone,
     MissedHeartbeat,
+    Scrutinize,
     UnitAskUnanswered,
 )
 from agent_comms.team.standing_rules import DirectiveUnacted, OwedAnswer, StandingRule
@@ -361,6 +362,13 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     with what clears it, and the fleet story, todo list and edit counts read the same split."""
     comms = held_bus
     original = comms.goals.todos.get("P1")
+    colleague = comms.registry.require("colleague").incarnation
+    for ordinal in range(Scrutinize.threshold):
+        original = comms.goals.todos.apply(original.id, StrikeTodo(
+            original.revision, colleague, original.held(),
+            f"Review {ordinal + 1} found the same duplicated owner still present in the source.",
+            evidence=(original.order.checked().owner,),
+        ))
     comms.goals.update_goal("outsider", CreateProblemGoalAction(
         problem="P3", request=original.request,
         assigner=comms.registry.require("colleague").incarnation, repo=original.repo,
@@ -384,6 +392,11 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     assert "order withdraw P1" in gone["P1"] and "order close P2" in gone["P2"]
     assert {rule.todo.id for rule in HolderGone.violations(comms)} == set(gone)
     assert frame.todos == ()
+    observed_scrutiny = tuple(rule for rule in broken if isinstance(rule, Scrutinize))
+    standalone_scrutiny = Scrutinize.violations(comms)
+    assert tuple((rule.todo.id, rule.count) for rule in observed_scrutiny) == tuple(
+        (rule.todo.id, rule.count) for rule in standalone_scrutiny
+    ) == (("P1", Scrutinize.threshold),)
     fleet, = FieldCodec.decode(
         TeamStory, CommsTeamStoryTool.invoke(comms, {}, caller=NoThreadCaller())).lines
     count, named = fleet.split(": ")
@@ -998,7 +1011,7 @@ def test_batched_private_answers_do_not_clear_another_frozen_recipient(held_bus,
         reads.append((thread.incarnation, references))
         return frozenset(references) if thread.name == answered_owner else frozenset()
     monkeypatch.setattr(type(held_bus.transcripts), 'answered_inputs', transcript_answers)
-    answers = OwedAnswer.read_scan(held_bus, (*owners, owners[0]), HeldOrders.read(held_bus))
+    answers = OwedAnswer.read_scan(held_bus, (*owners, owners[0]), held_bus.goals.held_orders())
     assert requests_read == [True]
     directives = tuple(rule for rule in answers if isinstance(rule, DirectiveUnacted))
     expected = tuple(owner for owner in owners if owner.name != answered_owner)
@@ -1081,7 +1094,7 @@ def test_channel_messages_without_a_team_addressee_are_not_a_question(held_bus, 
     with held_bus.bus.bus.reading() as source:
         questions = UnansweredTeammateAsks.for_orders(
             source, held_bus.registry.snapshot(), 'colleague',
-            HeldOrders.read(held_bus).holders, time.time(),
+            held_bus.goals.held_orders().holders, time.time(),
         )
     assert not any(questions.values())
 
