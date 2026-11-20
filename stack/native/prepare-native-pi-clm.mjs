@@ -16,6 +16,7 @@ const result = await build({
     format: 'esm',
     target: 'node22',
     charset: 'utf8',
+    banner: { js: 'process.env.PI_CLM_NATIVE_COMPACTION ??= "off";' },
     external: Object.keys(metadata.peerDependencies),
 });
 if (result.outputFiles.length !== 1) throw new Error('pi-clm must build as one native extension');
