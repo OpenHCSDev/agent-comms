@@ -4595,10 +4595,25 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
 
     @classmethod
     def head_reviews_among(cls, db: sqlite3.Connection, requests: Iterable[PullRequestHead]) -> dict[PullRequestHead, tuple[HeadReviewRecord, ...]]:
-        """The caller's snapshot owns both prepared heads and their exact-head decisions."""
-        return {request: tuple(row.record for row in cls.select(
-            db, request=request, order_by=("seq",), descending=True, limit=1,
-        )) for request in dict.fromkeys(requests)}
+        """The caller's snapshot owns one indexed batch of exact-head decisions."""
+        selected = tuple(dict.fromkeys(requests))
+        answers: dict[PullRequestHead, tuple[HeadReviewRecord, ...]] = {
+            request: () for request in selected
+        }
+        table = f'"{cls.declared_name}"'
+        for requested in cls.requested_keys(
+            db, tuple({"request": request} for request in selected),
+        ):
+            rows = cls.iterate(db.execute(
+                f"WITH {requested.values} "
+                f"SELECT {cls.qualified(*cls.column_projection())} {requested.join} "
+                f"WHERE {table}.\"seq\"=(SELECT MAX(latest.\"seq\") FROM {table} latest "
+                f"WHERE latest.\"request\" IS {table}.\"request\")",
+                requested.bindings,
+            ))
+            for row in rows:
+                answers[row.record.request] = (row.record,)
+        return answers
 
     @classmethod
     def latest_for_pull_request(

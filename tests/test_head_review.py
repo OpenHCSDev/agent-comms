@@ -198,6 +198,24 @@ def review_posts(github: GitHubFixture, head: str) -> tuple[tuple[str, ...], ...
                  and f"context={HeadReview.context}" in call)
 
 
+def test_head_review_family_reads_requested_latest_heads_in_one_query(head_bus):
+    comms, _, request = head_bus
+    invoke(comms, request, UnderReviewHeadVerdict())
+    recorded, = StoredHeadReview.head_reviews(comms.goals.todos, request)
+    missing = replace(request, pr=request.pr + 1, head="f" * 40)
+    statements: list[str] = []
+    with comms.goals.todos.snapshot() as db:
+        db.set_trace_callback(statements.append)
+        reviews = StoredHeadReview.head_reviews_among(db, (request, missing))
+        db.set_trace_callback(None)
+
+    assert reviews == {request: (recorded,), missing: ()}
+    assert sum(
+        statement.startswith("WITH requested") and "stored_head_review" in statement
+        for statement in statements
+    ) == 1
+
+
 def test_qualification_records_each_open_order_cut_without_promoting_or_finishing_work(
         linked_head_bus, claim_order):
     """A ready companion's source stage is a decision, not permission to ship its incomplete pair."""

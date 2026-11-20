@@ -778,28 +778,68 @@ class GitHistoryRevision(GitSourceRevision):
     """The filesystem sources of one Git refs, worktree-head and walk-policy cut."""
 
     graph: GitGraphRevision
+    ref_sources: tuple[tuple[Path, FileObservation], ...]
+    head_sources: tuple[tuple[Path, FileObservation], ...]
 
     @classmethod
-    def source_paths(cls, checkout: Checkout) -> tuple[Path, ...]:
+    def ref_paths(cls, checkout: Checkout) -> tuple[Path, ...]:
         common = checkout.common_dir
         return tuple(dict.fromkeys((
             *cls._tree_paths(common / "refs"),
+            common / "packed-refs",
+        )))
+
+    @classmethod
+    def head_paths(cls, checkout: Checkout) -> tuple[Path, ...]:
+        common = checkout.common_dir
+        return tuple(dict.fromkeys((
             *cls._tree_paths(common / "worktrees"),
             common / "HEAD",
+        )))
+
+    @classmethod
+    def source_paths(cls, checkout: Checkout) -> tuple[Path, ...]:
+        return tuple(dict.fromkeys((
+            *cls.ref_paths(checkout),
+            *cls.head_paths(checkout),
             *GitGraphRevision.source_paths(checkout),
         )))
 
     @classmethod
-    def capture(cls, checkout: Checkout) -> Self:
-        graph = GitGraphRevision.capture(checkout)
-        observed = dict(graph.sources)
-        return cls(
-            tuple(
-                (path, observed[path] if path in observed else FileRevision.capture(path))
-                for path in cls.source_paths(checkout)
-            ),
-            graph,
+    def capture(cls, checkout: Checkout, previous: Self | None = None) -> Self:
+        """Refresh refs, worktree heads and graph policy as separate source families.
+
+        A linked worktree HEAD moves whenever an agent commits.  That does not change Git's
+        configuration topology or replacement policy, so rediscovering that family with Git
+        commands on every heartbeat rebuilt an unchanged source.  Reuse the exact graph cut
+        while it remains current; refs and worktree heads still recapture completely.
+        """
+        graph = (
+            previous.graph
+            if previous is not None and previous.graph.current()
+            else GitGraphRevision.capture(checkout)
         )
+        ref_sources = tuple(
+            (path, FileRevision.capture(path)) for path in cls.ref_paths(checkout)
+        )
+        head_sources = tuple(
+            (path, FileRevision.capture(path)) for path in cls.head_paths(checkout)
+        )
+        observed = dict((*graph.sources, *ref_sources, *head_sources))
+        return cls(
+            tuple((path, observed[path]) for path in dict.fromkeys(observed)),
+            graph,
+            ref_sources,
+            head_sources,
+        )
+
+    def same_refs(self, other: Self) -> bool:
+        # Local branch upstreams are configuration-owned fields of GitReference.
+        return self.ref_sources == other.ref_sources and self.graph == other.graph
+
+    def same_heads(self, other: Self) -> bool:
+        # An attached worktree's reported commit moves with its branch ref.
+        return self.ref_sources == other.ref_sources and self.head_sources == other.head_sources
 
     def graph_revision(self, checkout: Checkout) -> GitGraphRevision:
         """Select the exact captured files a lazy graph command can still consult."""
@@ -833,7 +873,7 @@ class RepositoryReads:
                 successor = (
                     history
                     if history.sources_current()
-                    else history.following(CheckoutHistory.capture(history.checkout))
+                    else history.following(CheckoutHistory.capture(history.checkout, history))
                 )
                 retained[common_dir] = successor
                 successors[id(history)] = successor
@@ -1489,13 +1529,21 @@ class CheckoutHistory:
     """
 
     @classmethod
-    def capture(cls, checkout: Checkout) -> Self:
+    def capture(cls, checkout: Checkout, previous: CheckoutHistory | None = None) -> Self:
         """Read a stable source cut and retain the exact files that keep it valid."""
         for _attempt in range(ChangedSources.reconcile_attempts):
-            before = GitHistoryRevision.capture(checkout)
+            previous_revision = None if previous is None else previous.source_revision
+            before = GitHistoryRevision.capture(checkout, previous_revision)
             history = cls(checkout)
+            if previous is not None and previous_revision is not None:
+                if before.same_refs(previous_revision):
+                    history.__dict__[CheckoutHistory.refs.attrname] = previous.refs
+                if before.same_heads(previous_revision):
+                    history.__dict__[CheckoutHistory.heads.attrname] = previous.heads
+                if before.graph == previous_revision.graph:
+                    history.__dict__[CheckoutHistory.policy.attrname] = previous.policy
             history.refs, history.heads, history.policy
-            after = GitHistoryRevision.capture(checkout)
+            after = GitHistoryRevision.capture(checkout, before)
             if before == after:
                 history.source_revision = after
                 return history

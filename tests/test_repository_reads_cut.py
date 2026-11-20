@@ -15,6 +15,7 @@ from agent_comms.projects.checkouts import (
     CommitMessages,
     CommitsNaming,
     GitCommit,
+    GitGraphRevision,
     RepositoryReads,
 )
 from agent_comms.projects.git_errors import FailedGitCommand
@@ -250,6 +251,24 @@ def test_equal_graph_source_adopts_its_fresh_file_revision(main: Path, monkeypat
         classmethod(lambda cls, checkout: pytest.fail('current retained source recaptured')),
     )
     assert RepositoryReads.retaining(retained).history_for(Checkout(main)) is following
+
+
+def test_moved_worktree_head_does_not_rediscover_unchanged_graph_sources(
+    main: Path, monkeypatch,
+) -> None:
+    reads = RepositoryReads()
+    previous = reads.history_for(Checkout(main))
+    git(main, 'commit', '--allow-empty', '-m', 'move only the branch and worktree head')
+    moved = git(main, 'rev-parse', 'HEAD')
+
+    monkeypatch.setattr(
+        GitGraphRevision,
+        'capture',
+        classmethod(lambda cls, checkout: pytest.fail('unchanged graph sources rediscovered')),
+    )
+    following = RepositoryReads.retaining(reads).history_for(Checkout(main))
+    assert following.head_for(Checkout(main)).revision() == moved
+    assert following.source_revision.graph is previous.source_revision.graph
 
 
 @pytest.mark.parametrize('read', ('graph', 'merge-base'))
