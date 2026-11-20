@@ -30,6 +30,7 @@ dependencies = [
     "metaclass-registry @ git+https://github.com/OpenHCSDev/metaclass-registry@main",
     "nominal-refactor-advisor @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor@main",
     "packaging>=24",
+    "polystore @ git+https://github.com/OpenHCSDev/polystore@main",
     "pydantic>=2.13",
     "pytest>=7.0",
     "python-introspect @ git+https://github.com/OpenHCSDev/python-introspect@main",

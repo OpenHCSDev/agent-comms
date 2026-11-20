@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shlex
@@ -24,6 +25,8 @@ if TYPE_CHECKING:
     from agent_comms.team.rule_deal import UndealtRecord
     from agent_comms.transport.native_tool_transport import NativeToolMode
     from agent_comms.registry.thread_model import ThreadModel
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -175,6 +178,14 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
         """The rule-gate settings a never-dealt thread on this provider starts from."""
         return record
 
+    @classmethod
+    def turn_starting(cls, session_file: str | Path | None) -> None:
+        """Before a turn on this provider sends its first request."""
+
+    @classmethod
+    def turn_ended(cls, session_file: str | Path | None) -> None:
+        """After a turn on this provider finished, however it ended."""
+
 
 class NoSelectedModel(ModelProvider, declared_name=None):
     """A thread with no native model selected."""
@@ -224,6 +235,44 @@ class ClmLocalProvider(ModelProvider, declared_name="clm-local"):
         from agent_comms.team.rule_deal import OffDealMode
 
         return replace(record, mode=OffDealMode)
+
+    # The conversations' recorded contexts and the slot's holder: durable state, outside the
+    # bus root, which is carried between bus versions by its own roster.
+    state_directory: ClassVar[Path] = Path("~/.local/state/agent-comms/clm")
+    # The llama-server unit's --slot-save-path: the server does not report it.
+    slot_directory: ClassVar[Path] = Path("~/.cache/agent-comms/llama-slots")
+
+    @classmethod
+    def context_state(cls):
+        from agent_comms.execution import context_state
+        from agent_comms.execution.launch_runtime import RestartEnvironment
+
+        return context_state.ContextStateStore(
+            cls.state_directory.expanduser(),
+            context_state.SlotServer.configured(
+                RestartEnvironment.default_agent_directory, cls.declared_name),
+            cls.slot_directory.expanduser(),
+        )
+
+    @classmethod
+    def turn_starting(cls, session_file: str | Path | None) -> None:
+        """Take the one llama-server slot for this conversation: the previous holder's state
+        is saved, and this conversation's is restored when it still matches its context."""
+        from agent_comms.execution import context_state
+
+        session = context_state.conversation(session_file)
+        if session is not None:
+            outcome = context_state.recoverable(cls.context_state().enter, session)
+            logger.info("CLM slot for %s: %s", session, outcome)
+
+    @classmethod
+    def turn_ended(cls, session_file: str | Path | None) -> None:
+        """Commit the context this conversation's harness last sent to its history."""
+        from agent_comms.execution import context_state
+
+        session = context_state.conversation(session_file)
+        if session is not None:
+            context_state.recoverable(cls.context_state().history(session).record)
 
 
 @dataclass(frozen=True)
