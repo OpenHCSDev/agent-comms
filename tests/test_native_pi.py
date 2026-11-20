@@ -250,7 +250,7 @@ def test_native_launch_arguments_and_identity_follow_delivery(tmp_path, native_r
         root=tmp_path,
         worktree=tmp_path,
         session=SelectedSession(tmp_path / "tracked"),
-        model=SelectedModel("provider", "model"),
+        model=SelectedModel("clm-local", "model"),
         selected_tool_mode=ToollessMode(
             CodingChild(
                 comms=comms,
@@ -260,6 +260,7 @@ def test_native_launch_arguments_and_identity_follow_delivery(tmp_path, native_r
         delivery=empty,
     )
     assert "--append-system-prompt" not in tracked.argv
+    assert tracked.env["PI_CLM_NATIVE_COMPACTION"] == "off"
 
 
 @pytest.mark.parametrize('provider,model', [('', 'model'),('provider',''),('--bad','model')])

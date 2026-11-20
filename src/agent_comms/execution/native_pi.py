@@ -361,6 +361,10 @@ class NativePiRpcLaunch:
         arguments.extend(session.proof_arguments(root))
         if session_file is not None:
             arguments.extend(("--session", str(session_file)))
+        environment = {
+            **(environment or {}),
+            **model.provider_type.extension_environment(),
+        }
         env, configuration = session.launch_environment(agent_dir, environment)
         return cls._build(package, tuple(arguments), worktree, env, session, configuration,
                           runtime, root, delivery)
