@@ -380,8 +380,10 @@ class TeamHeartbeatEffects(TeamService):
                 self._retained_board,
             )
         except BaseException:
+            TeamBoardPublicationStore.write_all(
+                comms.root, tuple(huds.values()), self._retained_board
+            )
             self._retained_board = None
-            TeamBoardPublicationStore.write_all(comms.root, tuple(huds.values()))
             raise
         finally:
             ServicePassStore.at(comms.root).heartbeat_passed(
@@ -428,19 +430,24 @@ class TeamHeartbeat(
             actions = TeamHistory.of(comms, snapshot, self.actors(snapshot))
             duty = self.duty(comms.registry, comms.goals)
             publication_store = TeamBoardPublicationStore.at(comms.root)
-            publication = publication_store.read()
+            retained_board = publication_store.retained()
+            retained_packets = retained_board.packet_map()
             retained_huds = {
                 hud.teammate: hud
-                for hud in publication_store.huds(publication=publication)
+                for hud in retained_board.huds
             }
+            served = tuple(self.served(comms.registry, comms.goals))
+            published = TeamUpdate.published_among(
+                comms, tuple(thread.incarnation for thread in served)
+            )
             changed_huds = []
             publications = []
-            for thread in self.served(comms.registry, comms.goals):
+            for thread in served:
                 update = TeamUpdate.report_failure(
                     thread.incarnation,
                     failure,
-                    TeamUpdate.latest(comms, thread.incarnation),
-                    published=TeamUpdate.published(comms, thread.incarnation),
+                    retained_packets.get(thread.incarnation, ()),
+                    published=published[thread.incarnation],
                     now=now,
                 )
                 if update is None:
@@ -463,7 +470,9 @@ class TeamHeartbeat(
                     ))
                 publications.append((update, sections))
             self._retained_board = None
-            TeamBoardPublicationStore.write_all(comms.root, tuple(changed_huds))
+            TeamBoardPublicationStore.write_all(
+                comms.root, tuple(changed_huds), retained_board
+            )
             for update, sections in publications:
                 duty.publish(
                     lambda update=update, sections=sections: update.send(
