@@ -690,6 +690,18 @@ class CommitMessages:
         """Only an index actually read by the old cut is carried into a fresh cut."""
         return self if CommitMessages.word_names.attrname in self.__dict__ else NoCommitMessages()
 
+    def cache_postings(
+        self, positions: Mapping[str, int],
+    ) -> tuple[CommitWordPosting, ...]:
+        """Encode the acquired index in the cache's positional representation."""
+        return tuple(
+            CommitWordPosting(
+                word,
+                tuple(sorted(positions[sha] for sha in posting if sha in positions)),
+            )
+            for word, posting in sorted(self.word_names.items())
+        )
+
     def following(self, commits: tuple[GitCommit, ...]) -> CommitMessages:
         """New source messages share immutable postings, never a mutable answer cache."""
         return RetainedCommitMessages(commits, self)
@@ -734,13 +746,12 @@ class RetainedCommitMessages(CommitMessages):
 
     def __init__(self, commits: tuple[GitCommit, ...], earlier: CommitMessages) -> None:
         super().__init__(commits)
-        self._earlier_messages = earlier.messages_by_sha
-        self._earlier_words = earlier.word_names
+        self._earlier = earlier
 
     @cached_property
     def word_names(self) -> Map[str, Map[str, None]]:
         """Update only changed messages over immutable word and posting roots."""
-        previous, current = self._earlier_messages, self.messages_by_sha
+        previous, current = self._earlier.messages_by_sha, self.messages_by_sha
         changed = {sha for sha in set(previous).union(current)
                    if previous.get(sha) != current.get(sha)}
         edits: dict[str, MapMutation[str, None]] = {}
@@ -749,12 +760,12 @@ class RetainedCommitMessages(CommitMessages):
             after = set(self.words.findall(current[sha])) if sha in current else set()
             for word in before ^ after:
                 if word not in edits:
-                    edits[word] = self._earlier_words.get(word, Map()).mutate()
+                    edits[word] = self._earlier.word_names.get(word, Map()).mutate()
                 if word in after:
                     edits[word][sha] = None
                 else:
                     del edits[word][sha]
-        result = self._earlier_words.mutate()
+        result = self._earlier.word_names.mutate()
         for word, edited in edits.items():
             posting = edited.finish()
             if posting:
@@ -762,6 +773,37 @@ class RetainedCommitMessages(CommitMessages):
             else:
                 del result[word]
         return result.finish()
+
+    def cache_postings(
+        self, positions: Mapping[str, int],
+    ) -> tuple[CommitWordPosting, ...]:
+        """Apply changed messages directly to retained positional postings.
+
+        The cache already owns compact posting positions. Expanding those positions into
+        nested immutable SHA maps merely to collapse them back to positions made a one-commit
+        worker restart rebuild the entire index.
+        """
+        previous, current = self._earlier.messages_by_sha, self.messages_by_sha
+        postings = {
+            posting.word: posting.positions
+            for posting in self._earlier.cache_postings(positions)
+        }
+        edits: dict[str, set[int]] = {}
+        for sha in set(previous).union(current):
+            if previous.get(sha) == current.get(sha):
+                continue
+            before = set(self.words.findall(previous[sha])) if sha in previous else set()
+            after = set(self.words.findall(current[sha])) if sha in current else set()
+            position = positions.get(sha)
+            for word in before ^ after:
+                posting = edits.setdefault(word, set(postings.get(word, ())))
+                if word in after and position is not None:
+                    posting.add(position)
+                elif position is not None:
+                    posting.discard(position)
+        postings.update((word, tuple(sorted(posting))) for word, posting in edits.items())
+        return tuple(CommitWordPosting(word, tuple(posting))
+                     for word, posting in sorted(postings.items()) if posting)
 
 
 @dataclass(frozen=True)
@@ -925,6 +967,7 @@ class RestoredCommitMessages(CommitMessages):
     ) -> None:
         super().__init__(commits)
         self._commits = commits
+        self._postings = postings
         self._positions = {posting.word: posting.positions for posting in postings}
 
     def following(self, commits: tuple[GitCommit, ...]) -> CommitMessages:
@@ -932,6 +975,16 @@ class RestoredCommitMessages(CommitMessages):
 
     def acquired_index(self) -> CommitMessages:
         return self
+
+    def cache_postings(
+        self, positions: Mapping[str, int],
+    ) -> tuple[CommitWordPosting, ...]:
+        """Remap retained positions without expanding them into SHA maps."""
+        return tuple(CommitWordPosting(
+            posting.word,
+            tuple(sorted(positions[sha] for old in posting.positions
+                         if (sha := self.shas[old]) in positions)),
+        ) for posting in self._postings)
 
     def naming(self, token: str) -> frozenset[str]:
         token = token.lower()
@@ -972,8 +1025,8 @@ class GitHistorySnapshot(DeclaredWireType):
         commits = {commit.sha for commit in self.commits}
         if len(commits) != len(self.commits):
             raise ValueError("Cached Git commits must have distinct identities")
-        if not set(self.heads) <= commits:
-            raise ValueError("Cached Git heads must name cached commits")
+        if any(sum(commit.startswith(head) for commit in commits) != 1 for head in self.heads):
+            raise ValueError("Each cached Git revision must resolve to one cached commit")
         words: set[str] = set()
         for posting in self.postings:
             if posting.word in words or not CommitMessages.words.fullmatch(posting.word):
@@ -1041,8 +1094,7 @@ class GitHistorySnapshot(DeclaredWireType):
         positions = {commit.sha: position for position, commit in enumerate(graph.values())}
         return cls(
             GitGraphCacheSource.capturing(source), heads, tuple(graph.values()),
-            tuple(CommitWordPosting(word, tuple(sorted(positions[sha] for sha in posting)))
-                  for word, posting in sorted(messages.word_names.items())),
+            messages.cache_postings(positions),
         )
 
     def graph(self) -> CapturedCommitGraph:
