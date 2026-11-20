@@ -32,6 +32,7 @@ from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.transport.serving.owner_launch import ServedReadNativeChildProcessRuntimeRequest
 
 # -- registry ---------------------------------------------------------------
 
@@ -41,6 +42,20 @@ def test_registry_holds_the_pi_backends_and_selects_native_for_new_threads():
     assert ab.AgentBackend.member_named("pi_native") is PiNativeBackend
     assert ab.AgentBackend.member_named("pi_durable") is PiDurableBackend
     assert ab.NewThreadBackend.selected() is PiNativeBackend
+
+
+@pytest.mark.asyncio
+async def test_native_child_process_reply_reads_the_attached_session_runner():
+    process = ProcessIdentity.capture(os.getpid())
+    turns = SimpleNamespace(native_child_process=lambda session: process)
+    context = SimpleNamespace(
+        session=AcpSessionId("owner"),
+        server=SimpleNamespace(agent=SimpleNamespace(turns=turns)),
+    )
+
+    reply = await ServedReadNativeChildProcessRuntimeRequest(thread="owner").result(context)
+
+    assert reply.process == process
 
 
 def test_a_backend_declared_after_sealing_fails_loud():
