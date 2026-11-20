@@ -668,14 +668,27 @@ class StorageRule(RoomAllocation, DurableFile, ThreadCheckoutSource[Thread], Rep
         return shutil.disk_usage(self.volume).free / 2**30
 
     def memory(self) -> MemoryUse:
-        """Available memory, the largest idle pytest temp dirs and the largest test processes."""
-        available = self.memory_available_bytes()
+        """Measure cleanup candidates only when available memory makes them relevant."""
+        available_gib = self.memory_available_bytes() / 2**30
+        if available_gib >= self.memory_gib:
+            return MemoryUse(available_gib, (), ())
         idle = time.time() - self.idle_minutes * 60
-        dirs = (MemoryHolder(str(path), self.tree_gib(path))
-                for path in self.temp_root.glob('pytest-of-*/*')
-                if path.is_dir() and path.stat().st_mtime < idle)
-        return MemoryUse(available / 2**30, self.largest(dirs),
-                         self.largest(self.test_processes()))
+        return MemoryUse(
+            available_gib,
+            self.largest(self.idle_temp_dirs(idle)),
+            self.largest(self.test_processes()),
+        )
+
+    def idle_temp_dirs(self, older_than: float) -> Iterator[MemoryHolder]:
+        """Readable idle pytest trees: the candidates this rule can actually size."""
+        for path in self.temp_root.glob('pytest-of-*/*'):
+            try:
+                if path.is_dir() and path.stat().st_mtime < older_than:
+                    yield MemoryHolder(str(path), self.tree_gib(path))
+            except OSError:
+                # Volatile foreign test mounts may disappear or become disconnected while
+                # inspected.  They supply no measured size and therefore no MemoryHolder.
+                continue
 
     def memory_available_bytes(self):
         lines = (self.proc / 'meminfo').read_text().splitlines()
