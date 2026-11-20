@@ -684,6 +684,7 @@ class AlarmSection:
     def heading(self) -> str:
         return self.group.count_heading(len(self.pings))
 
+    @cached_property
     def by_kind(self) -> Mapping[type[DeclaredFamily], tuple[Ping, ...]]:
         """Rows of one rule share what they ask, so the reader takes them as one decision."""
         grouped: dict[type[DeclaredFamily], list[Ping]] = {}
@@ -696,17 +697,25 @@ class AlarmSection:
         """Retain the rule/action shape; only row ages are painted for each heartbeat."""
         return tuple(
             FoldedRule.of(kind, pings, self.recipient)
-            for kind, pings in self.by_kind().items()
+            for kind, pings in self.by_kind.items()
         )
+
+    @cached_property
+    def digest_source(self) -> tuple[Ping, str, str]:
+        """The age-independent digest owned by this exact alarm membership."""
+        oldest = min(self.pings, key=lambda ping: ping.since.chronology())
+        words = oldest.text.split(" ")
+        named = " ".join(words[:14]) + (" …" if len(words) > 14 else "")
+        counts = ", ".join(
+            f"{len(pings)} {kind.display_label().lower()}"
+            for kind, pings in self.by_kind.items()
+        )
+        return oldest, counts, named
 
     def digest(self, now: float) -> str:
         """The section in one line: how many of each rule, and the line left longest, so the
         reader sees what is owed and for how long before reading any row."""
-        oldest = min(self.pings, key=lambda ping: ping.since.chronology())
-        words = oldest.text.split(" ")
-        named = " ".join(words[:14]) + (" …" if len(words) > 14 else "")
-        counts = ", ".join(f"{len(pings)} {kind.display_label().lower()}"
-                           for kind, pings in self.by_kind().items())
+        oldest, counts, named = self.digest_source
         return f"{self.heading()}: {counts}. Oldest, {oldest.since.age(now)}: {named}"
 
     def text_lines(self, now: float) -> tuple[str, ...]:
@@ -762,7 +771,7 @@ class FlagValue(RowWord):
 
     def filled(self, row: RuleRow) -> tuple[str, ...]:
         value = row.action[self.position]
-        return () if value in row.shown() else (f"{self.flag}={value}",)
+        return () if value in row.shown else (f"{self.flag}={value}",)
 
 
 @dataclass(frozen=True)
@@ -773,6 +782,7 @@ class RuleRow:
     words: tuple[str, ...]
     action: tuple[str, ...]
 
+    @cached_property
     def shown(self) -> str:
         """Its own words, each short commit spelled in full when its action names that commit,
         so the line carries the full head once instead of twice."""
@@ -837,6 +847,7 @@ class FoldedRule:
                 else RowWord(position))
         return tuple(template)
 
+    @cached_property
     def header(self) -> str:
         head = f"{self.kind.declared_name} · {len(self.rows)}"
         shape = " ".join((*self.prefix, "…", *self.suffix)) if self.prefix or self.suffix else ""
@@ -844,11 +855,22 @@ class FoldedRule:
                   if self.template else "")
         return f"{head}: {shape}{action}" if shape or action else head
 
-    def row_line(self, row: RuleRow, now: float) -> str:
-        values = tuple(value for word in self.template for value in word.filled(row))
-        own = f"{self.arrow}{' '.join(row.action)}" if row.action and not self.template else ""
-        tail = f" [{' '.join(values)}]" if values else ""
-        return f"  {row.shown()}{tail}{own} · {row.ping.since.age(now)}"
+    @cached_property
+    def row_stems(self) -> tuple[str, ...]:
+        """The exact recipient-bound row text; heartbeat time owns only the trailing ages."""
+        result = []
+        for row in self.rows:
+            values = tuple(value for word in self.template for value in word.filled(row))
+            own = f"{self.arrow}{' '.join(row.action)}" if row.action and not self.template else ""
+            tail = f" [{' '.join(values)}]" if values else ""
+            result.append(f"  {row.shown}{tail}{own}")
+        return tuple(result)
 
     def lines(self, now: float) -> tuple[str, ...]:
-        return (self.header(), *(self.row_line(row, now) for row in self.rows))
+        return (
+            self.header,
+            *(
+                f"{stem} · {row.ping.since.age(now)}"
+                for stem, row in zip(self.row_stems, self.rows, strict=True)
+            ),
+        )

@@ -24,7 +24,12 @@ from agent_comms.planning.orders import (
 )
 from agent_comms.presentation import WireRevision
 from agent_comms.task_attachments.owner_notices import VibeCheckNotice
-from agent_comms.task_attachments.team_pings import FoldedRule, TeamUpdateStore
+from agent_comms.task_attachments.team_pings import (
+    AlarmSection,
+    FoldedRule,
+    RuleRow,
+    TeamUpdateStore,
+)
 from agent_comms.team.standing_rules import OwedAnswer, StandingRule, TeamInputs
 from agent_comms.team.team_heartbeat import (
     OwedAnswerCut,
@@ -156,7 +161,11 @@ def test_steady_heartbeat_retains_its_board_derivations(held_bus, account_read, 
     for hud in before.values():
         _ = hud.alarms, hud.plain_group_text, hud.publication_facts
         for section in hud.alarms:
-            _ = section.folded_rules
+            _ = section.digest_source
+            for folded in section.folded_rules:
+                _ = folded.lines(0)
+                for row in folded.rows:
+                    row.__dict__.pop("shown", None)
 
     monkeypatch.setattr(
         TeamBoardPublicationStore,
@@ -167,6 +176,21 @@ def test_steady_heartbeat_retains_its_board_derivations(held_bus, account_read, 
         FoldedRule,
         "of",
         lambda *args, **kwargs: pytest.fail("an equal alarm rebuilt its fold shape"),
+    )
+    monkeypatch.setattr(
+        FoldedRule,
+        "header",
+        lambda self: pytest.fail("an equal alarm rebuilt its static header"),
+    )
+    monkeypatch.setattr(
+        AlarmSection,
+        "by_kind",
+        property(lambda self: pytest.fail("an equal alarm regrouped its digest")),
+    )
+    monkeypatch.setattr(
+        RuleRow,
+        "shown",
+        property(lambda self: pytest.fail("an equal alarm rebuilt its static row")),
     )
     asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
 
