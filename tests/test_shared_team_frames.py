@@ -170,6 +170,39 @@ def test_unchanged_heartbeat_does_not_replace_retained_packet_or_board(tmp_path)
     assert board_path.stat().st_ino != board_inode
 
 
+def test_unchanged_heartbeat_reuses_the_decoded_board_until_its_source_changes(
+    tmp_path, monkeypatch
+):
+    original = huds()
+    retained = TeamBoardPublicationStore.replace_all(
+        tmp_path, TeamPlan(), original
+    )
+    store = TeamBoardPublicationStore.at(tmp_path)
+    decoded = []
+    decode = TeamBoardPublicationStore.huds
+
+    def counted(self, *args, **kwargs):
+        decoded.append(self.read())
+        return decode(self, *args, **kwargs)
+
+    monkeypatch.setattr(TeamBoardPublicationStore, "huds", counted)
+    retained = TeamBoardPublicationStore.replace_all(
+        tmp_path, TeamPlan(), original, retained
+    )
+    assert decoded == []
+    assert retained.packet_map() == {
+        hud.teammate: hud.packets for hud in original
+    }
+
+    changed = replace(original[0], packets=(), open_pings=())
+    TeamBoardPublicationStore.write_all(tmp_path, (changed,))
+    decoded.clear()
+    TeamBoardPublicationStore.replace_all(
+        tmp_path, TeamPlan(), original, retained
+    )
+    assert len(decoded) == 1
+
+
 @pytest.mark.parametrize("selection, names", [
     (AllTeamBoards(), ("first", "second", "third")),
     (NamedTeamBoards(frozenset(("second",))), ("second",)),
