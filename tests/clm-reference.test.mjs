@@ -82,7 +82,9 @@ test("an applied edit replaces the editable region from the next request on, and
   const session = `t${process.pid}a`;
   const h = harness(session);
   await h.hooks.session_start({}, h.ctx);
-  const prompt = await h.hooks.before_agent_start({ systemPrompt: "pi default" }, h.ctx);
+  const prompt = await h.hooks.before_agent_start(
+    { systemPrompt: "pi default", systemPromptOptions: { appendSystemPrompt: "THE DEAL" } }, h.ctx);
+  assert.doesNotMatch(prompt.systemPrompt, /THE DEAL/);
   assert.match(prompt.systemPrompt, /mirrored to `\/tmp\/\.live_ctx\/.+\/LIVE_CTX_MAIN\.txt`/);
   assert.doesNotMatch(prompt.systemPrompt, /pi default/);
   const file = `/tmp/.live_ctx/${session}/LIVE_CTX_MAIN.txt`;

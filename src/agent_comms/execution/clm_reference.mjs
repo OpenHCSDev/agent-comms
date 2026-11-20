@@ -579,12 +579,12 @@ export default function clmReference(pi) {
 
   pi.on("session_tree", async (_event, ctx) => restore(ctx));
 
-  pi.on("before_agent_start", async (event) => {
-    const budgetText = `${budget.strictTarget} tokens`;
-    const appended = event.systemPromptOptions?.appendSystemPrompt;
-    const extra = Array.isArray(appended) ? appended.join("\n\n") : appended || "";
-    return { systemPrompt: systemPrompt(budgetText, ctxFile) + (extra ? `\n\n---\n\n${extra}` : "") };
-  });
+  // The reference's system prompt is its template alone. Anything Pi would add, the fleet's
+  // dealt rules included (123,111 tokens for a 49,152-token window on 2026-11-20), is
+  // context the checkpoint never saw and cannot hold.
+  pi.on("before_agent_start", async () => ({
+    systemPrompt: systemPrompt(`${budget.strictTarget} tokens`, ctxFile),
+  }));
 
   pi.on("context", async (event, ctx) => {
     const raw = event.messages;
