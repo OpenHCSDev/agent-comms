@@ -156,6 +156,10 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
     def extension_arguments(cls, package: Path) -> tuple[str, ...]:
         return ()
 
+    @classmethod
+    def extension_environment(cls) -> Mapping[str, str]:
+        return {}
+
 
 class NoSelectedModel(ModelProvider, declared_name=None):
     """A thread with no native model selected."""
@@ -182,6 +186,10 @@ class ClmLocalProvider(ModelProvider, declared_name="clm-local"):
             "-e",
             str(package / "agent-comms-extensions/pi-clm/src/index.mjs"),
         )
+
+    @classmethod
+    def extension_environment(cls) -> Mapping[str, str]:
+        return {"PI_CLM_NATIVE_COMPACTION": "off"}
 
 
 @dataclass(frozen=True)
@@ -394,6 +402,14 @@ class NativeArguments:
             tuple(kept for entry in self.entries for kept in entry.kept_on_thinking_change())
             + selected.native_arguments(ThinkingArgument)
         )
+
+    def managed_environment(
+        self, environment: Mapping[str, str] | None,
+    ) -> dict[str, str]:
+        return {
+            **(environment or {}),
+            **self.provider_type.extension_environment(),
+        }
 
     def managed_rpc(self, package: Path) -> tuple[str, ...]:
         """Managed sessions load only the packaged extensions, never discovered copies of them."""

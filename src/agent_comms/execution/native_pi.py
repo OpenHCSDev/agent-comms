@@ -250,7 +250,9 @@ class NativePiRpcLaunch:
     ) -> NativePiRpcLaunch:
         """Prepare managed ACP/headless execution; native evidences remain separate."""
         try:
-            arguments = NativeArguments.parse(arguments).managed_rpc(package.path)
+            native_arguments = NativeArguments.parse(arguments)
+            environment = native_arguments.managed_environment(environment)
+            arguments = native_arguments.managed_rpc(package.path)
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
         runtime = LaunchRuntime.running()
@@ -301,9 +303,11 @@ class NativePiRpcLaunch:
             return None
         agent_dir = self.session.directory / NativeAgentSettings.directory_name
         NativeSessionFiles.prepare_private_directory(agent_dir)
+        native_arguments = NativeArguments.parse(arguments)
+        environment = native_arguments.managed_environment(environment)
         environment, configuration = self.session.launch_environment(agent_dir, environment)
         return self._managed(
-            self.package, NativeArguments.parse(arguments).managed_rpc(self.package.path),
+            self.package, native_arguments.managed_rpc(self.package.path),
             worktree, environment, self.session, configuration, self.runtime, root, delivery
         )
 
