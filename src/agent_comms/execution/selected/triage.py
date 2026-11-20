@@ -62,8 +62,14 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
 
     @classmethod
     def parse(cls, text: str) -> SelectedTriage:
+        """The decision a model's reply is. The reply is asked for as a JSON object; a reply
+        that is nothing but one declared name says the same thing and is taken as that
+        decision. Refusing it lost the message: triage is not retried."""
         if not 0 < len(text.encode("utf-8")) <= 256:
             raise InvalidTriageDecision("triage response is not bounded")
+        named = text.strip()
+        if named in cls.names():
+            return cls.member_named(named)()
         try:
             return FieldCodec.decode(cls, FieldCodec.parse(text))
         except MalformedRecord as error:

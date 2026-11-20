@@ -7,8 +7,11 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.native_input_record import TriageNativeExecution
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.selected.triage import (
+    FullSelectedTriage,
+    IgnoreSelectedTriage,
     InvalidTriageDecision,
     RejectedTriageOutcome,
+    SelectedTriage,
 )
 from test_coordinated_runtime import tmp_path  # noqa: F401
 from test_live_context_notifications import acknowledge_context, recorded_input_context
@@ -17,6 +20,21 @@ from test_native_failure_recovery import prepared_native_triage
 
 def refusal() -> str:
     return RejectedTriageOutcome(InvalidTriageDecision("bad"), "nonsense").reason()
+
+
+@pytest.mark.parametrize("reply,decision", [
+    ('{"decision": "FULL"}', FullSelectedTriage()),
+    ("FULL", FullSelectedTriage()),            # what curate-laptop1b's model kept answering
+    ("  IGNORE\n", IgnoreSelectedTriage()),
+])
+def test_a_reply_that_is_one_declared_name_is_that_decision(reply: str, decision: SelectedTriage):
+    assert SelectedTriage.parse(reply) == decision
+
+
+@pytest.mark.parametrize("reply", ["full", "FULL, I think", '"FULL"', "IGNORE FULL", "", "MAYBE"])
+def test_a_reply_that_says_anything_else_is_still_refused(reply: str):
+    with pytest.raises(InvalidTriageDecision):
+        SelectedTriage.parse(reply)
 
 
 async def test_an_unreadable_decision_leaves_the_claim_deferred(tmp_path: Path):
