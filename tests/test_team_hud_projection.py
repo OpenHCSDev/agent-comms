@@ -206,14 +206,14 @@ def test_alarm_text_names_each_rule_once_above_all_of_its_rows() -> None:
     hud = example_hud()
     section = hud.alarms[0]
     lines = section.text_lines(1000)
-    for kind, pings in section.by_kind().items():
+    for kind, pings in section.by_kind.items():
         start = next(index for index, line in enumerate(lines)
                      if line.startswith(f"{kind.declared_name} · {len(pings)}"))
         rows = lines[start + 1:start + 1 + len(pings)]
         assert all(row.startswith("  ") for row in rows)
         assert all(shows_every_word(ping, (lines[start], *rows)) for ping in pings)
     assert "Kind:" not in "\n".join(lines)
-    assert sum(len(pings) for pings in section.by_kind().values()) == len(section.pings)
+    assert sum(len(pings) for pings in section.by_kind.values()) == len(section.pings)
 
 
 def test_rows_of_one_rule_print_their_shared_words_once() -> None:
@@ -249,4 +249,4 @@ def test_board_opens_with_what_is_owed_and_the_oldest_line() -> None:
         assert digest in plain[:plain.index(section.heading())]
         assert oldest.since.age(1000) in digest
         assert all(f"{len(pings)} {kind.declared_name.replace('_', ' ')}" in digest
-                   for kind, pings in section.by_kind().items())
+                   for kind, pings in section.by_kind.items())
