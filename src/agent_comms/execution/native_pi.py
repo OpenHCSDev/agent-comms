@@ -325,6 +325,7 @@ class NativePiRpcLaunch:
         thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         environment: dict[str, str] | None = None,
         selected_tool_mode: NativeToolMode,
+        delivery: DealDelivery,
     ) -> NativePiRpcLaunch:
         """Construct a complete launch through its acquired immutable artifact.
 
@@ -358,7 +359,7 @@ class NativePiRpcLaunch:
             arguments.extend(("--session", str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
         return cls._build(package, tuple(arguments), worktree, env, session, configuration,
-                          runtime, root, SystemPromptDelivery(SYSTEM_PROMPT))
+                          runtime, root, delivery)
 
 
 def read_tracked_input_commitment(

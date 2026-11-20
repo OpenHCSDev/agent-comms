@@ -84,7 +84,11 @@ class SelectedExecution(ExecutionRoot, PackagedNativeExecution, ConsidersSelecte
         """Every stage derives its complete launch from the original acquired artifact."""
         if package != self.native_package:
             raise IdentityConflict("Selected launch differs from its execution package")
-        return NativePiRpcLaunch.tracked(package, **options)
+        from agent_comms.team.pi_rule_gate import PiRuleGate
+
+        comms = wire(self.root)
+        delivery = PiRuleGate.of(comms, comms.registry.require(self.owner_name)).delivery()
+        return NativePiRpcLaunch.tracked(package, delivery=delivery, **options)
 
     def retained_source(self, session_file: Path):
         """The owner's idle child on this saved source with this package, if still current."""
