@@ -18,7 +18,7 @@ from agent_comms.execution.launch_runtime import RestartEnvironment
 from agent_comms.execution.native_child import PiChild
 from agent_comms.execution.native_entries import StoredEntry
 from agent_comms.execution.native_records import StoredRecord
-from agent_comms.execution.native_session_files import SessionFiles
+from agent_comms.execution.native_session_files import NativeModelConfiguration, SessionFiles
 from agent_comms.execution.pi_commands import Compact, ExactResponse, PiCommand, SetModel
 from agent_comms.execution.pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from agent_comms.execution.pi_vocabulary import ThinkingLevelField
@@ -147,6 +147,7 @@ class Open(HostQuery):
     model_id: Annotated[str | PiOmitted, field_codec.WireName("modelId")]
     thinking_level: Annotated[ThinkingLevelField, field_codec.WireName("thinkingLevel")]
     auth_path: Annotated[str, field_codec.WireName("authPath")]
+    models_path: Annotated[str, field_codec.WireName("modelsPath")]
     response_payload = RecoveryData
 
 
@@ -224,7 +225,12 @@ class PiDurableBackend(AgentBackend, Compacts):
                         cwd=thread.worktree.path, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
                 async with child.failures():
                     model = thread.model.set_model(SetModel)
-                    await child.request(Open(str(path), str(thread.worktree), model.provider, model.model_id, thread.thinking_level, str(RestartEnvironment.inherit(os.environ).auth_file)))
+                    configuration = RestartEnvironment.inherit(os.environ)
+                    await child.request(Open(
+                        str(path), str(thread.worktree), model.provider, model.model_id,
+                        thread.thinking_level, str(configuration.auth_file),
+                        str(configuration.native_config / NativeModelConfiguration.filename),
+                    ))
                     await child.request(Resume())
                 self.child = child
             return self.child

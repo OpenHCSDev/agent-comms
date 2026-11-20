@@ -5,6 +5,7 @@ import socket
 import pytest
 
 from agent_comms.cli_verbs.configure import ConfigureCliCommand
+from agent_comms.cli_verbs.target_fields import ChoiceTargetField
 from agent_comms.config_options import CatalogChoice, ModelConfigOption, ThinkingLevelConfigOption
 from agent_comms.execution.runtime_observations import NativeMetadataObservation
 from agent_comms.messaging.channel_targets import CommandTarget
@@ -58,8 +59,15 @@ async def test_configure_form_keeps_its_thread_context_and_observer(comms, tmp_p
             answer, = (reply for reply in replies if isinstance(reply, CoreReadAnswered))
             from agent_comms.cli_verbs.cli_command import PreparedTargetAction
             prepared = FieldCodec.decode(PreparedTargetAction, answer.wire)
-            assert {field.name for field in prepared.editable_fields} == {"model", "thinking_level", "service_tier"}
+            assert {field.name for field in prepared.editable_fields} == {
+                "max_context", "model", "thinking_level", "service_tier",
+            }
+            max_context = next(field for field in prepared.fields if field.name == "max_context")
+            assert max_context.label == "Max context"
+            assert max_context.editor_default == "null"
             for field in prepared.fields:
+                if not isinstance(field, ChoiceTargetField):
+                    continue
                 assert field.choice_value(field.editor_default) is None
                 assert None in {choice.value for choice in field.offered()}
             viewer.send(ReadNotifications(str(comms.root), LiveNotificationRead(()), request_id=2))

@@ -1,9 +1,7 @@
 // The sole pi-durable importer. All Pi records terminate at this JSONL boundary.
 import { createInterface } from 'node:readline';
-import { readFile } from 'node:fs/promises';
 import { BACKGROUND_CONTEXT as context } from '@earendil-works/chord/context';
-import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
-import { builtinModels } from '@earendil-works/pi-ai/providers/all';
+import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { Harness, ROOT_CONVERSATION_ID, createRegistry, defineDoc, watchEvents } from '@earendil-works/pi-durable';
 import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite/node';
 import { NodeExecutionEnv } from '@earendil-works/pi-durable/env/node';
@@ -33,14 +31,11 @@ const text = (entry) => (entry.model ?? []).flatMap(message => typeof message.co
 const handlers = {
   async open(request) {
     if (harness) throw new Error('Host already open');
-    const credentials = new InMemoryCredentialStore();
-    // Verification uses an isolated credential snapshot. Never mutate original auth.
-    if (request.authPath) {
-      for (const [provider, credential] of Object.entries(JSON.parse(await readFile(request.authPath, 'utf8')))) {
-        await credentials.modify(provider, async () => credential);
-      }
-    }
-    models = builtinModels({ credentials });
+    models = await ModelRuntime.create({
+      authPath: request.authPath,
+      modelsPath: request.modelsPath,
+      allowModelNetwork: false,
+    });
     const registry = createRegistry();
     registry.install(CodingTools);
     harness = await Harness.open(await openNodeSqliteStorage(request.path), {
@@ -55,7 +50,11 @@ const handlers = {
   },
   async open_history(request) {
     if (harness) throw new Error('Host already open');
-    models = builtinModels({ credentials: new InMemoryCredentialStore() });
+    models = await ModelRuntime.create({
+      modelsPath: null,
+      allowModelNetwork: false,
+      refreshOnCreate: false,
+    });
     harness = await Harness.open(await openNodeSqliteStorage(request.path), {
       models, registry: createRegistry(),
       env: ({ cwd }) => new NodeExecutionEnv({ cwd }),
@@ -131,6 +130,7 @@ const handlers = {
   async get_available_models() { requireOpen(); return { models: await models.getAvailable() }; },
   async set_model(request) {
     requireOpen();
+    await models.refresh({ allowNetwork: false, providers: [request.provider] });
     await root.configure({ model: { provider: request.provider, modelId: request.modelId } }, context);
     return ack;
   },

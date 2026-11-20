@@ -1,6 +1,7 @@
 """Typed durable JSONL ingress and real-host replies, without provider work."""
 import asyncio
 import json
+import os
 
 import pytest
 
@@ -11,8 +12,11 @@ from agent_comms.agent_backend import (
     StaleCompaction,
 )
 from agent_comms.agent_events import Chunk, Error, Thinking, ToolStart
+from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.native_entries import NativeEntry, StoredEntry, TranscriptProjection
-from agent_comms.execution.pi_commands import GetSessionStats
+from agent_comms.execution.launch_runtime import RestartEnvironment
+from agent_comms.execution.native_session_files import NativeModelConfiguration
+from agent_comms.execution.pi_commands import GetSessionStats, SetModel
 from agent_comms.execution.pi_durable_backend import (
     CompactDurable,
     DurableDatabase,
@@ -31,6 +35,7 @@ from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_payloads import PiContextUsage, ReportedContextUsage
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.storage.recorded_time import UnrecordedTimeError
 from agent_comms.transport.tool_declaration import ReadAction
 
@@ -143,4 +148,33 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thr
             assert backend.child.proc.alive()
         finally:
             await backend.close_idle()
+    asyncio.run(journey())
+
+
+def test_real_host_reloads_selected_model_context(tmp_path, thread_registration, durable_home,
+                                                  durable_host_packages):
+    configuration = RestartEnvironment.inherit(os.environ).native_config
+    selected = SelectedModel("openai-codex", "gpt-5.6-sol")
+    NativeModelConfiguration.set_context_window(configuration, selected, 1_050_000)
+
+    async def journey():
+        backend = PiDurableBackend()
+        location = DurableDatabase(str(tmp_path / "model-context.sqlite3"))
+        thread = NativeThread(
+            "model-context", frozenset(), Checkout(tmp_path), backend=PiDurableBackend,
+            model=DeclaredModel(selected.qualified),
+            session_file=RegistrySessionLocation.from_path(location.path, tmp_path),
+        )
+        try:
+            host = await backend.open(thread)
+            before = (await host.request(GetSessionStats())).context_usage
+            assert before.value.context_window.matches(1_050_000)
+
+            NativeModelConfiguration.set_context_window(configuration, selected, 900_000)
+            await host.request(SetModel(provider=selected.provider, model_id=selected.model))
+            after = (await host.request(GetSessionStats())).context_usage
+            assert after.value.context_window.matches(900_000)
+        finally:
+            await backend.close_idle()
+
     asyncio.run(journey())

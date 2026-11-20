@@ -53,6 +53,7 @@ def test_new_thread_project_edits_are_path_text_not_json(tmp_path):
     command, = NewThreadCliCommand.project_bindings(None, Checkout(tmp_path))
     action = TargetAction((command,), (), NewThreadCliCommand)
     values = {field.name: field.editor_default for field in action.editable_fields}
+    assert values["max_context"] == "null"
     project = tmp_path / 'a project with "quotes"'
     values.update(name='new-child', task='Keep the original task text', project=str(project))
     edited, = action.edited(values).bound
