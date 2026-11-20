@@ -387,17 +387,11 @@ query($owner: String!, $name: String!, $after: String) {
         One ``status`` answers both halves: every heartbeat pass asks it of every checkout.
         A renamed or copied entry also names its source, which is listed too.
         """
-        fields = iter(self._git(
-            "--no-optional-locks", "status", "--porcelain=v1", "-z",
-            "--untracked-files=all", "--ignore-submodules=all",
-        ).split("\0"))
-        listed: list[str] = []
-        for entry in fields:
-            if entry:
-                listed.append(entry[3:])
-                if {"R", "C"} & set(entry[:2]):
-                    listed.append(next(fields))
-        return tuple(self.checkout / name for name in listed)
+        return self.reads.status_for(Checkout(self.checkout), self.head).paths
+
+    def uncommitted_edits(self) -> tuple[float, ...]:
+        """Newest extant dirty-file clock from the same retained status cut."""
+        return self.reads.status_for(Checkout(self.checkout), self.head).edits
 
     @property
     def local_work(self) -> bool:
@@ -730,6 +724,9 @@ class CheckoutRead(DeclaredFamily, affix="CheckoutRead"):
     def uncommitted(self) -> tuple[Path, ...]: ...
 
     @abstractmethod
+    def uncommitted_edits(self) -> tuple[float, ...]: ...
+
+    @abstractmethod
     def errors(self) -> tuple[str, ...]: ...
 
     @abstractmethod
@@ -747,6 +744,9 @@ class ReadableCheckoutRead(CheckoutRead):
 
     def uncommitted(self) -> tuple[Path, ...]:
         return self.branches.uncommitted()
+
+    def uncommitted_edits(self) -> tuple[float, ...]:
+        return self.branches.uncommitted_edits()
 
     def errors(self) -> tuple[str, ...]:
         return ()
@@ -767,6 +767,9 @@ class UnreadableCheckoutRead(CheckoutRead):
         return True
 
     def uncommitted(self) -> tuple[Path, ...]:
+        return ()
+
+    def uncommitted_edits(self) -> tuple[float, ...]:
         return ()
 
     def errors(self) -> tuple[str, ...]:

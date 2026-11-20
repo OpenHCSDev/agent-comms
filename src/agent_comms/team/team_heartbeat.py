@@ -155,6 +155,11 @@ class TeamBoardAcquisition(
         self._previous_reads = progress
         return progress
 
+    def close(self) -> None:
+        if self._previous_reads is not None:
+            self._previous_reads.close()
+            self._previous_reads = None
+
     def acquire_board(self, comms: Comms) -> tuple[TeamInputs, ...]:
         self.begin_pass()
         progress = self._progress_read()

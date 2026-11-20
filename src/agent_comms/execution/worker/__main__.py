@@ -65,6 +65,7 @@ async def team_heartbeat_host(comms: Comms) -> AsyncIterator[None]:
         with suppress(asyncio.CancelledError):
             await pending
         await join_retirement(retirement)
+        heartbeat.close()
 
 
 async def run() -> None:
