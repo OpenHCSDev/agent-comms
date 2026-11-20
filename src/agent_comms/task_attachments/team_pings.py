@@ -847,6 +847,7 @@ class FoldedRule:
                 else RowWord(position))
         return tuple(template)
 
+    @cached_property
     def header(self) -> str:
         head = f"{self.kind.declared_name} · {len(self.rows)}"
         shape = " ".join((*self.prefix, "…", *self.suffix)) if self.prefix or self.suffix else ""
@@ -867,7 +868,7 @@ class FoldedRule:
 
     def lines(self, now: float) -> tuple[str, ...]:
         return (
-            self.header(),
+            self.header,
             *(
                 f"{stem} · {row.ping.since.age(now)}"
                 for stem, row in zip(self.row_stems, self.rows, strict=True)

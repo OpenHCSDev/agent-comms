@@ -163,7 +163,7 @@ def test_steady_heartbeat_retains_its_board_derivations(held_bus, account_read, 
         for section in hud.alarms:
             _ = section.digest_source
             for folded in section.folded_rules:
-                _ = folded.row_stems
+                _ = folded.lines(0)
                 for row in folded.rows:
                     row.__dict__.pop("shown", None)
 
@@ -176,6 +176,11 @@ def test_steady_heartbeat_retains_its_board_derivations(held_bus, account_read, 
         FoldedRule,
         "of",
         lambda *args, **kwargs: pytest.fail("an equal alarm rebuilt its fold shape"),
+    )
+    monkeypatch.setattr(
+        FoldedRule,
+        "header",
+        lambda self: pytest.fail("an equal alarm rebuilt its static header"),
     )
     monkeypatch.setattr(
         AlarmSection,
