@@ -292,6 +292,7 @@ class TeamHud(TeamHudRecord):
         # replacement deliberately drops cached properties; without carrying this derived
         # owner every recipient rebuilt every table and field-dispatch plan independently.
         object.__setattr__(hud, "groups", self.groups)
+        object.__setattr__(hud, "plain_group_text", self.plain_group_text)
         return hud
 
     @property
@@ -340,6 +341,21 @@ class TeamHud(TeamHudRecord):
     def status_strip(self, now: float) -> str:
         return "\n".join((*self.health_lines(), *self.status_table(now).labelled_lines()))
 
+    def group_text(self, *, colour: bool = False) -> tuple[str, ...]:
+        """The shared board cards, independent of packet recipient and paint-time ages."""
+        result: list[str] = []
+        for section in self.groups:
+            group = section.group
+            result.extend(("", group.paint(section.heading(), colour)))
+            result.extend(group.paint(row, colour) for row in group.table_lines(
+                table.folded_lines() for table in section.tables
+            ))
+        return tuple(result)
+
+    @cached_property
+    def plain_group_text(self) -> tuple[str, ...]:
+        return self.group_text()
+
     @cached_property
     def display_facts(self) -> HudDisplayFacts:
         """Compare declared displayed cells, not excluded tool clocks or paint-time ages."""
@@ -377,11 +393,7 @@ class TeamHud(TeamHudRecord):
         result.extend(("", *self.alarm_text(
             tuple(section for section in self.alarms if section.group.needs_disposal()), now, colour=colour),
                        *(line for packet in self.packets for line in packet.not_applied)))
-        for section in self.groups:
-            group = section.group
-            result.extend(("", group.paint(section.heading(), colour)))
-            result.extend(group.paint(line, colour) for line in group.table_lines(
-                table.folded_lines() for table in section.tables))
+        result.extend(self.group_text(colour=True) if colour else self.plain_group_text)
         result.extend(("", *self.alarm_text(
             tuple(section for section in self.alarms if not section.group.needs_disposal()), now, colour=colour)))
         return tuple(result)

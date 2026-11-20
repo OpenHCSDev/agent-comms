@@ -243,12 +243,10 @@ class TeamHeartbeatEffects(TeamService):
                     recipient.incarnation: retained_packets.get(recipient.incarnation, ())
                     for recipient in recipients
                 }
-                announced = {
-                    recipient.incarnation: TeamUpdate.published(
-                        comms, recipient.incarnation
-                    )
-                    for recipient in recipients
-                }
+                announced = TeamUpdate.published_among(
+                    comms,
+                    tuple(recipient.incarnation for recipient in recipients),
+                )
                 known = (
                     frozenset.intersection(*(
                         frozenset(

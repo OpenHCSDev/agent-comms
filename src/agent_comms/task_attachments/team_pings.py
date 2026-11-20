@@ -442,6 +442,28 @@ class TeamUpdate(OwnerNotice, TeamObservation, PingLines, declared_name=None):
                      for packet in message.task.team_update(lookup))
 
     @classmethod
+    def published_among(
+        cls,
+        comms: Comms,
+        recipients: tuple[ThreadIncarnation, ...],
+    ) -> dict[ThreadIncarnation, tuple[TeamUpdate, ...]]:
+        """The last actual publication for each selected recipient from one bus cut."""
+        by_lookup = {
+            recipient.require_recorded().lookup: recipient
+            for recipient in recipients
+        }
+        with comms.bus.bus.observing() as db:
+            messages = TeamUpdatePosition.latest_among(db, tuple(by_lookup))
+        return {
+            recipient: tuple(
+                packet
+                for message in messages.get(lookup, ())
+                for packet in message.task.team_update(lookup)
+            )
+            for lookup, recipient in by_lookup.items()
+        }
+
+    @classmethod
     def current_board(cls, comms: Comms, reader: ThreadIncarnation) -> tuple[BoardEntry, ...]:
         """The retained observation's rows for ``reader``'s tool calls, derived when asked."""
         return tuple(entry for latest in cls.latest(comms, reader)
