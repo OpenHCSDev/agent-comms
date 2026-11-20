@@ -7,9 +7,10 @@ import os
 import re
 import shlex
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
-from functools import reduce
+from functools import partial, reduce
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -137,7 +138,7 @@ class ProviderArgument(NamedOption, ValueArgument, ProviderChoice):
         return SelectedModel(self.value, model.removeprefix(self.value + "/")).qualified
 
     def provider_type(self) -> type[ModelProvider]:
-        return ModelProvider.member_named(self.value)
+        return ModelProvider.configured(self.value)
 
     def kept_on_model_change(self) -> tuple[NativeArgument, ...]:
         return ()
@@ -160,6 +161,13 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
     require."""
 
     @classmethod
+    def configured(cls, name: str) -> type[ModelProvider]:
+        """The provider Pi's model configuration calls `name`: its declaration here, or the
+        one member for every provider nothing here specializes. Provider names are Pi's to
+        add, so an undeclared one is a provider, not an error."""
+        return cls.member_or_default(name, ConfiguredProvider)
+
+    @classmethod
     def extension_arguments(cls, package: Path) -> tuple[str, ...]:
         return ()
 
@@ -179,6 +187,19 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
         return record
 
     @classmethod
+    @asynccontextmanager
+    async def turn(cls, session_file: str | Path | None) -> AsyncIterator[None]:
+        """Around one turn on this provider, whichever path runs it: its start before the
+        first request, its end however the turn finished."""
+        from agent_comms.coordination.coordinator import Coordination
+
+        await Coordination.run_worker(partial(cls.turn_starting, session_file))
+        try:
+            yield
+        finally:
+            await Coordination.run_worker(partial(cls.turn_ended, session_file))
+
+    @classmethod
     def turn_starting(cls, session_file: str | Path | None) -> None:
         """Before a turn on this provider sends its first request."""
 
@@ -189,6 +210,11 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
 
 class NoSelectedModel(ModelProvider, declared_name=None):
     """A thread with no native model selected."""
+
+
+class ConfiguredProvider(ModelProvider):
+    """Every provider that Pi's own model configuration names and nothing here specializes;
+    it runs as the base does."""
 
 
 class AnthropicProvider(ModelProvider, declared_name="anthropic"):
@@ -297,7 +323,7 @@ class SelectedModel:
 
     @property
     def provider_type(self) -> type[ModelProvider]:
-        return ModelProvider.member_named(self.provider)
+        return ModelProvider.configured(self.provider)
 
     @property
     def qualified(self) -> str:

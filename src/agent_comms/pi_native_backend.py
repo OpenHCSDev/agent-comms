@@ -227,12 +227,9 @@ class PiNativeBackend(
         provider = thread.model.native(NativeArguments(())).provider_type
         # A thread that has saved nothing yet has no session to name its conversation by.
         session_file = thread.writable_runtime.arguments().get("session_file")
-        await Coordination.run_worker(partial(provider.turn_starting, session_file))
-        try:
+        async with provider.turn(session_file):
             async for event in self._turn_events(thread, content, delivery, images, package):
                 yield event
-        finally:
-            await Coordination.run_worker(partial(provider.turn_ended, session_file))
 
     def _turn_events(self, thread, content, delivery, images, package):
         from agent_comms.execution import backend
