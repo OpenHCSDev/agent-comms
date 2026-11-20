@@ -26,6 +26,7 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.watch_phase import WatchPhase
 from agent_comms.task_attachments.team_pings import (
     AlarmGroup,
+    AlarmSection,
     RulePing,
     TeammatePing,
     TeamPings,
@@ -353,7 +354,7 @@ class TeamHeartbeatEffects(TeamService):
                     )
                     recipient = delivery.packet.teammate
                     huds[recipient] = hud
-                    facts = hud.publication_facts
+                    facts = hud.display.publication
                     if delivery.packet.should_publish(
                         facts, announced[recipient]
                     ):
@@ -440,10 +441,13 @@ class TeamHeartbeat(
                 )
                 if update is None:
                     continue
-                sections = AlarmGroup.sections(
-                    (update,),
-                    update.open_pings(actions),
-                    update.stopped(snapshot),
+                sections = AlarmSection.bind(
+                    AlarmGroup.displays(
+                        (update,),
+                        update.open_pings(actions),
+                        update.stopped(snapshot),
+                    ),
+                    update.teammate,
                 )
                 current = retained_huds.get(thread.incarnation)
                 if current is not None:

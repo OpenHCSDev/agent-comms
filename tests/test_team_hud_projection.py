@@ -16,6 +16,7 @@ from agent_comms.task_attachments.disclosure_text import (
     ViewTable,
 )
 from agent_comms.task_attachments.team_pings import (
+    AlarmDisplay,
     AlarmSection,
     FoldedRule,
     NewAlarms,
@@ -112,12 +113,12 @@ def test_shared_hud_groups_strip_full_alarms_and_plain_text() -> None:
     assert [plain.index(heading) for heading in headings] == sorted(plain.index(heading) for heading in headings)
     assert "Teammate" not in "\n".join(plain)
     assert "\x1b[" in "\n".join(hud.hud_text(1000, colour=True))
-    assert sum(len(section.pings) for section in hud.alarms) == len(hud.packets[0].handled)
+    assert sum(len(section.display.pings) for section in hud.alarms) == len(hud.packets[0].handled)
     assert all(shows_every_word(ping, hud.alarm_text(hud.alarms, 1000))
                for ping in hud.packets[0].handled)
     assert hud.board == ()
     details = hud.alarm_detail(hud.alarms, 1000)
-    assert all(section.heading() not in details for section in hud.alarms)
+    assert all(section.display.heading() not in details for section in hud.alarms)
     assert all(ping.text in "\n".join(details) for ping in hud.packets[0].handled)
     for section in groups:
         for table in section.tables:
@@ -138,18 +139,27 @@ def test_display_facts_ignore_only_hidden_clocks_and_paint_time() -> None:
     hud = replace(hud, units=(unit, *hud.units[1:]))
     later = replace(hud, units=(replace(unit, clock=PendingClock(1, 3)), *hud.units[1:]),
                     heartbeat=RecordedEventTime(999))
-    assert hud.display_facts == later.display_facts
+    assert hud.display.facts == later.display.facts
     assert hud.status_table(1000).facts == hud.status_table(1060).facts
-    assert hud.display_facts != replace(hud, usage=CodexUsage(
-        UnreadableUsage(reason="a different visible usage observation"))).display_facts
-    assert hud.display_facts != replace(hud, units=(replace(unit, state=Stuck), *hud.units[1:])).display_facts
+    assert hud.display.facts != replace(hud, usage=CodexUsage(
+        UnreadableUsage(reason="a different visible usage observation"))).display.facts
+    assert hud.display.facts != replace(
+        hud, units=(replace(unit, state=Stuck), *hud.units[1:])
+    ).display.facts
 
 
 def test_recipient_huds_reuse_the_heartbeat_shared_tables() -> None:
     hud = example_hud()
     delivered = hud.for_delivery(TeamDelivery(hud.packets[0], hud.open_pings))
+    other_packet = replace(hud.packets[0], teammate=hud.units[0].unit)
+    other = hud.for_delivery(TeamDelivery(other_packet, hud.open_pings))
 
     assert delivered.groups is hud.groups
+    assert delivered.alarm_displays is hud.alarm_displays
+    assert other.alarm_displays is hud.alarm_displays
+    assert delivered.display is hud.display
+    assert other.display is hud.display
+    assert other.display.publication is hud.display.publication
 
 
 def test_disclosure_reuses_original_children_and_declared_identity() -> None:
@@ -186,9 +196,12 @@ def test_heartbeat_prints_every_alarm_with_watching_below_the_unit_tables() -> N
 
     hud = example_hud()
     pings = hud.packets[0].handled
-    hud.__dict__["alarms"] = (AlarmSection(NewAlarms, pings[:1]), AlarmSection(WatchingAlarms, pings[1:] or pings))
+    hud.__dict__["alarms"] = (
+        AlarmSection(AlarmDisplay(NewAlarms, pings[:1])),
+        AlarmSection(AlarmDisplay(WatchingAlarms, pings[1:] or pings)),
+    )
     plain = hud.hud_text(1000)
-    new, watching = (plain.index(section.heading()) for section in hud.alarms)
+    new, watching = (plain.index(section.display.heading()) for section in hud.alarms)
     units = [plain.index(section.heading()) for section in hud.groups]
     assert new < min(units) and max(units) < watching
     assert all(shows_every_word(ping, plain) for ping in pings)
@@ -206,14 +219,14 @@ def test_alarm_text_names_each_rule_once_above_all_of_its_rows() -> None:
     hud = example_hud()
     section = hud.alarms[0]
     lines = section.text_lines(1000)
-    for kind, pings in section.by_kind.items():
+    for kind, pings in section.display.by_kind.items():
         start = next(index for index, line in enumerate(lines)
                      if line.startswith(f"{kind.declared_name} · {len(pings)}"))
         rows = lines[start + 1:start + 1 + len(pings)]
         assert all(row.startswith("  ") for row in rows)
         assert all(shows_every_word(ping, (lines[start], *rows)) for ping in pings)
     assert "Kind:" not in "\n".join(lines)
-    assert sum(len(pings) for pings in section.by_kind.values()) == len(section.pings)
+    assert sum(len(pings) for pings in section.display.by_kind.values()) == len(section.display.pings)
 
 
 def test_rows_of_one_rule_print_their_shared_words_once() -> None:
@@ -244,9 +257,9 @@ def test_board_opens_with_what_is_owed_and_the_oldest_line() -> None:
     hud = example_hud()
     plain = hud.hud_text(1000)
     for section in hud.alarms:
-        oldest = min(section.pings, key=lambda ping: ping.since.chronology())
-        digest = section.digest(1000)
-        assert digest in plain[:plain.index(section.heading())]
+        oldest = min(section.display.pings, key=lambda ping: ping.since.chronology())
+        digest = section.display.digest(1000)
+        assert digest in plain[:plain.index(section.display.heading())]
         assert oldest.since.age(1000) in digest
         assert all(f"{len(pings)} {kind.declared_name.replace('_', ' ')}" in digest
-                   for kind, pings in section.by_kind.items())
+                   for kind, pings in section.display.by_kind.items())

@@ -40,6 +40,7 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.locked_store import JsonDocument
 from agent_comms.task_attachments.disclosure_text import ViewFacts, ViewSectionFacts, ViewTable
 from agent_comms.task_attachments.team_pings import (
+    AlarmDisplay,
     AlarmGroup,
     AlarmSection,
     Ping,
@@ -164,18 +165,44 @@ class TeamStatus(DisclosedRecord):
     unjudged: int
     forks: int
     usage: str
-    heartbeat: Annotated[str, PublicationExclude()]
+    heartbeat: Annotated[str, PublicationExclude()] = field(compare=False)
 
 
 @dataclass(frozen=True)
 class HudDisplayFacts:
-    teammate: ThreadIncarnation
     status: ViewFacts
     groups: tuple[ViewSectionFacts, ...]
     alarms: tuple[ViewSectionFacts, ...]
-    alarm_membership: tuple[AlarmSection, ...]
+    alarm_membership: tuple[AlarmDisplay, ...]
     not_applied: tuple[str, ...]
     failures: ServiceFailures
+
+
+@dataclass(frozen=True)
+class HudDisplay:
+    """The exact recipient-neutral sources of one published display."""
+
+    status: TeamStatus
+    groups: tuple[HudSection, ...]
+    alarms: tuple[AlarmDisplay, ...]
+    not_applied: tuple[str, ...]
+    failures: ServiceFailures
+
+    @cached_property
+    def facts(self) -> HudDisplayFacts:
+        return HudDisplayFacts(
+            ViewTable(TeamStatus, HudExclude, (self.status,)).facts,
+            tuple(ViewSectionFacts(section.heading(), tuple(table.facts for table in section.tables))
+                  for section in self.groups),
+            tuple(alarm.facts for alarm in self.alarms),
+            self.alarms,
+            self.not_applied,
+            self.failures,
+        )
+
+    @cached_property
+    def publication(self) -> PublishedFacts:
+        return PublishedFacts.of(self.facts)
 
 
 @dataclass(frozen=True)
@@ -294,30 +321,36 @@ class TeamHud(TeamHudRecord):
         # owner every recipient rebuilt every table and field-dispatch plan independently.
         object.__setattr__(hud, "groups", self.groups)
         object.__setattr__(hud, "plain_group_text", self.plain_group_text)
+        displays = AlarmGroup.displays(hud.packets, hud.open_pings, hud.stopped)
+        object.__setattr__(
+            hud,
+            "alarm_displays",
+            self.alarm_displays if displays == self.alarm_displays else displays,
+        )
+        display = hud.display
+        if display == self.display:
+            object.__setattr__(hud, "display", self.display)
         return hud
 
     def retaining_rendering(self, previous: TeamHud | None) -> TeamHud:
-        """Carry projections whose declared semantic owner is unchanged.
+        """Carry each derived owner only when its complete source remains unchanged.
 
-        Service completion clocks are transient and remain fresh on ``self``. Board groups,
-        alarm folds and display facts are derived copies; their reuse follows the same
-        equality and service-failure identities that suppress an equal board publication.
+        Service completion clocks remain fresh on ``self``. Recipient-neutral display
+        sources retain their facts independently of recipient-bound action rendering.
         """
-        if previous is None or self != previous:
+        if previous is None:
             return self
-        for name in ("groups", "plain_group_text"):
-            if name in previous.__dict__:
-                object.__setattr__(self, name, previous.__dict__[name])
-        same_alarms = self.alarm_source == previous.alarm_source
-        if same_alarms and "alarms" in previous.__dict__:
-            object.__setattr__(self, "alarms", previous.__dict__["alarms"])
-        if (
-            same_alarms
-            and ServiceFailures.of(self.services) == ServiceFailures.of(previous.services)
-        ):
-            for name in ("display_facts", "publication_facts"):
+        if self == previous:
+            for name in ("groups", "plain_group_text"):
                 if name in previous.__dict__:
                     object.__setattr__(self, name, previous.__dict__[name])
+        same_alarms = self.alarm_source == previous.alarm_source
+        if same_alarms:
+            for name in ("alarm_displays", "alarms"):
+                if name in previous.__dict__:
+                    object.__setattr__(self, name, previous.__dict__[name])
+        if self.display == previous.display:
+            object.__setattr__(self, "display", previous.display)
         return self
 
     @property
@@ -346,11 +379,15 @@ class TeamHud(TeamHudRecord):
     @cached_property
     def publication_identity(self) -> tuple[object, ...]:
         """Every semantic value and exact occurrence supplying the stored recipient frame."""
-        return self, self.alarm_source
+        return self.display,
+
+    @cached_property
+    def alarm_displays(self) -> tuple[AlarmDisplay, ...]:
+        return AlarmGroup.displays(self.packets, self.open_pings, self.stopped)
 
     @cached_property
     def alarms(self) -> tuple[AlarmSection, ...]:
-        return AlarmGroup.sections(self.packets, self.open_pings, self.stopped)
+        return AlarmSection.bind(self.alarm_displays, self.teammate)
 
     @cached_property
     def groups(self) -> tuple[HudSection, ...]:
@@ -380,11 +417,14 @@ class TeamHud(TeamHudRecord):
                 held.setdefault(order, []).append(unit.unit)
         return held
 
-    def status_table(self, now: float) -> ViewTable[TeamStatus]:
-        return ViewTable(TeamStatus, HudExclude, (TeamStatus(
+    def status(self, now: float) -> TeamStatus:
+        return TeamStatus(
             self.load.total, self.load.timers_up, self.load.unjudged,
             len(self.forks), self.usage.line(), self.heartbeat.age(now),
-        ),))
+        )
+
+    def status_table(self, now: float) -> ViewTable[TeamStatus]:
+        return ViewTable(TeamStatus, HudExclude, (self.status(now),))
 
     def status_strip(self, now: float) -> str:
         return "\n".join((*self.health_lines(), *self.status_table(now).labelled_lines()))
@@ -405,50 +445,43 @@ class TeamHud(TeamHudRecord):
         return self.group_text()
 
     @cached_property
-    def display_facts(self) -> HudDisplayFacts:
-        """Compare declared displayed cells, not excluded tool clocks or paint-time ages."""
-        alarms = self.alarms
-        return HudDisplayFacts(
-            self.teammate, self.status_table(0).facts,
-            tuple(ViewSectionFacts(section.heading(), tuple(table.facts for table in section.tables))
-                  for section in self.groups),
-            tuple(ViewSectionFacts(section.heading(), tuple(table.facts for table in section.tables(0)))
-                  for section in alarms),
-            alarms,  # Original ping equality retains hidden overflow membership, not paint-time age/text.
+    def display(self) -> HudDisplay:
+        """The publication owner: content sources only; recipient routing stays on the HUD."""
+        return HudDisplay(
+            self.status(0),
+            self.groups,
+            self.alarm_displays,
             tuple(line for packet in self.packets for line in packet.not_applied),
             ServiceFailures.of(self.services),
         )
-
-    @cached_property
-    def publication_facts(self) -> PublishedFacts:
-        """The committed-display identity, retained with the HUD that supplied it."""
-        return PublishedFacts.of(self.display_facts)
 
     @staticmethod
     def alarm_text(sections: tuple[AlarmSection, ...], now: float, *,
                    colour: bool = False) -> tuple[str, ...]:
         return tuple(line for section in sections for line in (
-            section.group.paint(section.heading(), colour),
+            section.display.group.paint(section.display.heading(), colour),
             *section.text_lines(now),
         ))
 
     @staticmethod
     def alarm_detail(sections: tuple[AlarmSection, ...], now: float) -> tuple[str, ...]:
         """Every original line; the section title already owns its compact heading."""
-        return tuple(ping.render(now) for section in sections for ping in section.pings)
+        return tuple(ping.render(now) for section in sections for ping in section.display.pings)
 
     def hud_text(self, now: float, *, colour: bool = False) -> tuple[str, ...]:
         """The heartbeat has no viewport; native readers own their concrete geometry."""
         result = list(self.status_strip(now).splitlines())
         # What is owed, by how much and for how long, before any row: one line per section.
-        result.extend(("", *(section.digest(now) for section in self.alarms),
+        result.extend(("", *(section.display.digest(now) for section in self.alarms),
                        "Cards: " + ", ".join(section.heading() for section in self.groups)))
         result.extend(("", *self.alarm_text(
-            tuple(section for section in self.alarms if section.group.needs_disposal()), now, colour=colour),
+            tuple(section for section in self.alarms
+                  if section.display.group.needs_disposal()), now, colour=colour),
                        *(line for packet in self.packets for line in packet.not_applied)))
         result.extend(self.group_text(colour=True) if colour else self.plain_group_text)
         result.extend(("", *self.alarm_text(
-            tuple(section for section in self.alarms if not section.group.needs_disposal()), now, colour=colour)))
+            tuple(section for section in self.alarms
+                  if not section.display.group.needs_disposal()), now, colour=colour)))
         return tuple(result)
 
     @projected(view=WireExclude)
