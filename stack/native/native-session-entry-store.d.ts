@@ -1,3 +1,4 @@
+import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { FileEntry, SessionEntry, SessionHeader } from './session-manager.js';
 
 export declare abstract class StoreAvailability {
@@ -87,6 +88,12 @@ export declare class MemoryEntryStore extends EntryStore {
     storedAt(file: string): DiskEntryStore;
     close(): void;
 }
+
+export declare function buildSessionContext(entries: SessionEntry[], leafId?: string | null): {
+    messages: AgentMessage[];
+    thinkingLevel: string;
+    model: {provider: string; modelId: string} | null;
+};
 
 export declare class DiskEntryStore extends EntryStore {
     constructor(file: string, options?: {indexDirectory?: string});
