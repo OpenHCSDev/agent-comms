@@ -110,6 +110,11 @@ class Ping(FrozenRecordMember, TaggedRecordMember, DeclaredFamily, affix="Ping")
         """Process packets carry the declared occurrence, never its derived JSON cache."""
         return {name: getattr(self, name) for name in self._occurrence_fields}
 
+    @cached_property
+    def occurrence_identity(self) -> tuple[object, ...]:
+        """Every exact field that supplies this occurrence's retained rendering."""
+        return (type(self), *(getattr(self, name) for name in self._occurrence_fields))
+
     @staticmethod
     def stored_threads(threads: tuple[ThreadIncarnation, ...]) -> tuple[str, ...]:
         """The threads a line names, in the shape packets on the bus already carry: names.
@@ -318,19 +323,28 @@ class PingLines:
 class TeamPings(PingLines):
     """Prepare one board's alarm ages and captures for all its recipients."""
 
+    @staticmethod
+    def capture(
+        states: tuple[TeammateState, ...],
+        rules: tuple[StandingRule, ...],
+    ) -> tuple[Ping, ...]:
+        """The observation's one action-bearing ping projection."""
+        return (
+            *(TeammatePing.capture(state) for state in states if state.attention()),
+            *(RulePing.capture_actions(rule) for rule in rules),
+        )
+
     def __init__(self, states: tuple[TeammateState, ...], rules: tuple[StandingRule, ...],
                  previous: tuple[TeamUpdate, ...], *, now: float, history: TeamHistory,
-                 not_applied: tuple[str, ...] = ()) -> None:
+                 not_applied: tuple[str, ...] = (),
+                 captured: tuple[Ping, ...] | None = None) -> None:
         began: dict[Ping, EventTime] = {}
         for packet in previous:
             for ping in packet.handled:
                 # On equal clocks the later occurrence wins, as in the old stable sort.
                 began[ping] = min(ping.since, began.get(ping, ping.since),
                                   key=lambda since: since.chronology())
-        captures = (
-            *(TeammatePing.capture(state) for state in states if state.attention()),
-            *(RulePing.capture_actions(rule) for rule in rules),
-        )
+        captures = self.capture(states, rules) if captured is None else captured
         self.handled = tuple(sorted(
             (replace(ping, since=began.get(ping, ping.since).continued_from(now))
              for ping in captures),
@@ -573,8 +587,7 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
     @classmethod
     def row_lines(cls, section: AlarmSection, now: float) -> tuple[str, ...]:
         """Every line of every rule, its shared words printed once in the rule's header."""
-        return tuple(line for kind, pings in section.by_kind().items()
-                     for line in FoldedRule.of(kind, pings, section.recipient).lines(now))
+        return tuple(line for folded in section.folded_rules for line in folded.lines(now))
 
     @classmethod
     def sections(cls, packets: tuple[TeamUpdate, ...], opened: tuple[Ping, ...],
@@ -677,6 +690,14 @@ class AlarmSection:
         for ping in self.pings:
             grouped.setdefault(ping.alarm_kind, []).append(ping)
         return {kind: tuple(pings) for kind, pings in grouped.items()}
+
+    @cached_property
+    def folded_rules(self) -> tuple[FoldedRule, ...]:
+        """Retain the rule/action shape; only row ages are painted for each heartbeat."""
+        return tuple(
+            FoldedRule.of(kind, pings, self.recipient)
+            for kind, pings in self.by_kind().items()
+        )
 
     def digest(self, now: float) -> str:
         """The section in one line: how many of each rule, and the line left longest, so the

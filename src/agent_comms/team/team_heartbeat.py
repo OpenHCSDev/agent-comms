@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.comms import Comms
@@ -25,7 +26,6 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.watch_phase import WatchPhase
 from agent_comms.task_attachments.team_pings import (
     AlarmGroup,
-    PublishedFacts,
     RulePing,
     TeammatePing,
     TeamPings,
@@ -105,6 +105,14 @@ class TeamObservation:
     frame: HeartbeatFrame = field(compare=False)
     rules: tuple[StandingRule, ...]
     states: tuple[TeammateState, ...]
+
+    @cached_property
+    def state_pings(self) -> tuple[TeammatePing, ...]:
+        return tuple(TeammatePing.capture(state) for state in self.states if state.attention())
+
+    @cached_property
+    def rule_pings(self) -> tuple[RulePing, ...]:
+        return tuple(RulePing.capture_actions(rule) for rule in self.rules)
 
     @classmethod
     def read(
@@ -241,14 +249,10 @@ class TeamHeartbeatEffects(TeamService):
         if any(board.frame.snapshot is not snapshot for board in boards):
             raise ValueError("One heartbeat must carry one registry cut")
         duty = self.duty(comms.registry, comms.goals, snapshot=snapshot)
-        retained_store = TeamBoardPublicationStore.at(comms.root)
-        publication = retained_store.read()
-        if (
-            self._retained_board is None
-            or self._retained_board.publication != publication
-        ):
-            self._retained_board = retained_store.retained(publication)
+        if self._retained_board is None:
+            self._retained_board = TeamBoardPublicationStore.at(comms.root).retained()
         retained_packets = self._retained_board.packet_map()
+        retained_huds = {hud.teammate: hud for hud in self._retained_board.huds}
         try:
             for observed in boards:
                 recipients = self.served(
@@ -272,19 +276,26 @@ class TeamHeartbeatEffects(TeamService):
                     if held
                     else frozenset()
                 )
+                observed_rules = tuple(zip(
+                    observed.rules, observed.rule_pings, strict=True,
+                ))
+                observed_states = tuple(zip(
+                    (state for state in observed.states if state.attention()),
+                    observed.state_pings,
+                    strict=True,
+                ))
                 rejected = StandingRule.enforce_all(
                     comms,
                     duty.actionable((
                         *(
                             rule
-                            for rule in observed.rules
-                            if RulePing.capture(rule) not in known
+                            for rule, ping in observed_rules
+                            if ping not in known
                         ),
                         *(
                             state
-                            for state in observed.states
-                            if state.attention()
-                            and TeammatePing.capture(state) not in known
+                            for state, ping in observed_states
+                            if ping not in known
                         ),
                     )),
                 )
@@ -296,6 +307,10 @@ class TeamHeartbeatEffects(TeamService):
                     state for state in observed.states if state not in rejected
                 )
                 rules = tuple(rule for rule in observed.rules if rule not in rejected)
+                captured = (
+                    *(ping for state, ping in observed_states if state not in rejected),
+                    *(ping for rule, ping in observed_rules if rule not in rejected),
+                )
                 not_applied = tuple(
                     rule.rejected_line(error)
                     for rule, error in rejected.items()
@@ -312,6 +327,7 @@ class TeamHeartbeatEffects(TeamService):
                     now=now,
                     history=history,
                     not_applied=not_applied,
+                    captured=captured,
                 )
                 deliveries = tuple(
                     pings.delivery(
@@ -332,10 +348,12 @@ class TeamHeartbeatEffects(TeamService):
                 )
                 plan = TeamPlan(board.phases)
                 for delivery in deliveries:
-                    hud = board.for_delivery(delivery)
+                    hud = board.for_delivery(delivery).retaining_rendering(
+                        retained_huds.get(delivery.packet.teammate)
+                    )
                     recipient = delivery.packet.teammate
                     huds[recipient] = hud
-                    facts = PublishedFacts.of(hud.display_facts)
+                    facts = hud.publication_facts
                     if delivery.packet.should_publish(
                         facts, announced[recipient]
                     ):

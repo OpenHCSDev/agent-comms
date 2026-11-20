@@ -24,7 +24,7 @@ from agent_comms.planning.orders import (
 )
 from agent_comms.presentation import WireRevision
 from agent_comms.task_attachments.owner_notices import VibeCheckNotice
-from agent_comms.task_attachments.team_pings import TeamUpdateStore
+from agent_comms.task_attachments.team_pings import FoldedRule, TeamUpdateStore
 from agent_comms.team.standing_rules import OwedAnswer, StandingRule, TeamInputs
 from agent_comms.team.team_heartbeat import (
     OwedAnswerCut,
@@ -141,6 +141,75 @@ def test_todo_commit_signal_is_a_board_input_not_a_database_mtime(held_bus):
 def test_frame_publication_and_expiry_do_not_request_another_preparation():
     before = WireRevision.empty()
     assert not replace(before, expiry_tick=60).changed_since(TeamBoardView(), before)
+
+
+def test_steady_heartbeat_retains_its_board_derivations(held_bus, account_read, monkeypatch):
+    """The sole writer reuses its exact publication and equal derived render owners."""
+    colleague = held_bus.registry.require("colleague")
+    held_bus.registry.register(
+        replace(colleague, process_identity=ProcessIdentity.capture(os.getpid())))
+    heartbeat = TeamHeartbeat()
+    asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
+    retained = heartbeat._retained_board
+    assert retained is not None
+    before = {hud.teammate: hud for hud in retained.huds}
+    for hud in before.values():
+        _ = hud.alarms, hud.plain_group_text, hud.publication_facts
+        for section in hud.alarms:
+            _ = section.folded_rules
+
+    monkeypatch.setattr(
+        TeamBoardPublicationStore,
+        "read",
+        lambda self: pytest.fail("the board writer reread its own retained publication"),
+    )
+    monkeypatch.setattr(
+        FoldedRule,
+        "of",
+        lambda *args, **kwargs: pytest.fail("an equal alarm rebuilt its fold shape"),
+    )
+    asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
+
+    current = heartbeat._retained_board
+    assert current is not None
+    after = {hud.teammate: hud for hud in current.huds}
+    assert after.keys() == before.keys()
+    for teammate, hud in after.items():
+        assert [
+            name for name, declared in hud.__dataclass_fields__.items()
+            if declared.compare and getattr(hud, name) != getattr(before[teammate], name)
+        ] == []
+        assert hud.alarms is before[teammate].alarms
+        assert hud.plain_group_text is before[teammate].plain_group_text
+        assert hud.publication_facts is before[teammate].publication_facts
+
+    rendered = next(hud for hud in after.values() if hud.open_pings)
+    changed_ping = replace(rendered.open_pings[0], text="changed exact rendering source")
+    changed = replace(
+        rendered,
+        open_pings=(changed_ping, *rendered.open_pings[1:]),
+    )
+    assert changed == rendered  # Occurrence evidence is deliberately outside ping equality.
+    changed.retaining_rendering(rendered)
+    assert changed.alarms is not rendered.alarms
+
+    changed_huds = tuple(
+        changed if hud.teammate == rendered.teammate else hud
+        for hud in current.huds
+    )
+    published = TeamBoardPublicationStore.replace_all(
+        held_bus.root,
+        current.publication.plan,
+        changed_huds,
+        current,
+    )
+    assert published.publication != current.publication
+    assert published.publication.changed == (rendered.teammate,)
+    decoded = TeamBoardPublicationStore.at(held_bus.root).huds(
+        publication=published.publication,
+    )
+    changed_frame = next(hud for hud in decoded if hud.teammate == rendered.teammate)
+    assert changed_frame.open_pings[0].text == "changed exact rendering source"
 
 
 def test_owed_answer_family_reuses_its_unchanged_source_cut(held_bus, monkeypatch):
