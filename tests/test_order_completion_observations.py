@@ -1,6 +1,7 @@
 """Checked deliveries and existing PR links survive later source observations."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,10 +13,12 @@ from agent_comms.errors import TodoError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.planning.order_runs import ApplicationOrderRun
 from agent_comms.planning.orders import (
-    CorrectRunTodo, DeliveredProblemOrder, InstalledEvidence, ProgressRead,
-    RecordPullRequest, TodoConflict,
+    CorrectRunTodo, DeliveredProblemOrder, InstalledEvidence, MergedProgress,
+    ProgressRead, RecordPullRequest, TodoConflict,
 )
 from agent_comms.planning.pull_requests import PullRequestLink
+from agent_comms.projects.git_errors import UnavailableCommitError
+from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.team.order import main
 from test_held_problem_orders import merge_two_commit_fix
@@ -90,6 +93,41 @@ def test_checked_delivery_survives_later_merge_observations(
         if observation:
             assert current.revision == previous.revision
         previous = current
+
+
+def test_merge_observation_retains_candidate_order_across_commit_acquisition(
+    application_team: Team, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    first, second = ("1" * 40, "2" * 40)
+    candidates = (MergedProgress(first), MergedProgress(second))
+    monkeypatch.setattr(
+        MergedProgress, "found", classmethod(lambda cls, source: iter(candidates)),
+    )
+    monkeypatch.setattr(Repo, "require_commits", classmethod(lambda cls, *args: None))
+
+    def retained_contains(sha: str, head: str) -> bool:
+        assert head == "3" * 40
+        if sha == first:
+            raise UnavailableCommitError(tmp_path, (sha,))
+        return sha == second
+
+    checkout = SimpleNamespace(
+        head="3" * 40,
+        branches=SimpleNamespace(history=SimpleNamespace(contains=retained_contains)),
+    )
+    source = SimpleNamespace(
+        pulls=SimpleNamespace(checkout=lambda path: checkout),
+    )
+    repo = SimpleNamespace(
+        checkout=tmp_path,
+        remote="origin",
+        contains=lambda sha, head: sha == first and head == checkout.head,
+    )
+    order = application_team.comms.goals.todos.get("P1").order
+
+    assert tuple(merged.sha for merged in order.observed_merges(repo, source)) == (
+        first, second,
+    )
 
 
 def test_late_adoption_rejects_open_and_later_merged_work(

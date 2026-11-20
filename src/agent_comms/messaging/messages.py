@@ -158,6 +158,33 @@ class TeamUpdatePosition(BusProjectionTables, declared_name="team_update_positio
         headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
+    @classmethod
+    def latest_among(
+        cls,
+        db: sqlite3.Connection,
+        recipients: tuple[ThreadLookup, ...],
+    ) -> dict[ThreadLookup, tuple[BusRecord, ...]]:
+        """The newest packet for every selected birth from one indexed bus cut."""
+        recipients = tuple(dict.fromkeys(recipients))
+        if not recipients:
+            return {}
+        encoded = tuple(FieldCodec.encode(recipient) for recipient in recipients)
+        marks = ",".join("?" for _recipient in encoded)
+        positions = db.execute(
+            cls._sql(
+                f'SELECT {{teammate_lookup}}, MAX({{seq}}) FROM "{cls.declared_name}" '
+                f'WHERE {{teammate_lookup}} IN ({marks}) GROUP BY {{teammate_lookup}}'
+            ),
+            encoded,
+        )
+        result: dict[ThreadLookup, tuple[BusRecord, ...]] = {}
+        for raw_lookup, raw_seq in positions:
+            lookup = FieldCodec.decode(ThreadLookup, raw_lookup)
+            seq = FieldCodec.decode(int, raw_seq)
+            header = BusRow.require(db, seq=seq)
+            result[lookup] = (header.kind.read_from(db, header.seq),)
+        return result
+
 
 @dataclass(frozen=True)
 class EscalationPosition(BusProjectionTables):

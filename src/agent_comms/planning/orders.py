@@ -169,7 +169,11 @@ from agent_comms.projects.checkouts import (
     EveryCommit,
     RepositoryReads,
 )
-from agent_comms.projects.git_errors import FailedGitCommand, SourceReadFailure
+from agent_comms.projects.git_errors import (
+    FailedGitCommand,
+    SourceReadFailure,
+    UnavailableCommitError,
+)
 from agent_comms.projects.head_review import (
     HeadReview,
     HeadReviewOrder,
@@ -2371,8 +2375,26 @@ class CheckedProblemOrder(CheckCorrectionSource, ProblemOrder, declared_name=Non
         self, repo: Repo, source: PullRequestSource
     ) -> tuple[MergedProblemOrder, ...]:
         candidates = tuple(MergedProgress.found(source))
-        Repo.require_commits(repo.checkout, repo.remote, *(merged.sha for merged in candidates))
-        return tuple(self.merged(merged.sha) for merged in candidates if repo.contains(merged.sha))
+        checkout = source.pulls.checkout(repo.checkout)
+        history = checkout.branches.history
+        contained: set[str] = set()
+        unresolved: list[MergedProgress] = []
+        for merged in candidates:
+            try:
+                if history.contains(merged.sha, checkout.head):
+                    contained.add(merged.sha)
+            except UnavailableCommitError:
+                unresolved.append(merged)
+        if unresolved:
+            Repo.require_commits(
+                repo.checkout, repo.remote, *(merged.sha for merged in unresolved)
+            )
+            contained.update(
+                merged.sha for merged in unresolved
+                if repo.contains(merged.sha, checkout.head)
+            )
+        return tuple(self.merged(merged.sha) for merged in candidates
+                     if merged.sha in contained)
 
     def open_pull_request(self, todo: Todo, source: Repo, title: str, body: str,
                           store: TodoStore, actor: ThreadIncarnation) -> PullRequestLink:
