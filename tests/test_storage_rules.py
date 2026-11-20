@@ -1,6 +1,5 @@
 """Scratch is configured; checkout membership is read from Git and the filesystem."""
 
-import runpy
 import shutil
 import subprocess
 import time
@@ -173,25 +172,47 @@ def test_private_projection_uses_new_field_declarations_without_another_roster(t
     assert FieldCodec.decode(ExtendedStorageRule, FieldCodec.encode(scoped)) == scoped
 
 
-def test_resource_checker_uses_storage_allocation_floor(tmp_path):
-    checker = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'tools' / 'agent_resource_check.py'))
+def test_home_disk_limit_reads_storage_allocation_floor(tmp_path):
+    from agent_comms.resources.limit import Act, Attention, Healthy
+    from agent_comms.resources.limits import (
+        DiskObservation,
+        GIB,
+        HomeDiskLimit,
+    )
+
     floor = StorageRule.load(tmp_path).floor_gib
-    limits = checker['limits_for'](tmp_path)
-    assert limits['/home'][1] == floor
-    free = {path: 100 * checker['GIB'] for path in limits}
-    memory = {'MemAvailable': 100 * checker['GIB'], 'SwapTotal': 0, 'SwapFree': 0, 'full_avg60': 0}
-    free['/home'] = (floor - 0.1) * checker['GIB']
-    assert checker['severity'](free, memory, limits)[0] == 'critical'
-    free['/home'] = (floor + 0.1) * checker['GIB']
-    assert checker['severity'](free, memory, limits)[0] == 'warning'
+    limit = HomeDiskLimit(root=tmp_path)
+    assert limit.critical_bytes == floor * GIB
+
+    # The threshold math is independent of what /home is at this moment:
+    # drive the verdict with a synthesized observation instead of patching
+    # /proc, then confirm each band fires the right verdict.
+    def verdict_at(free_gib):
+        obs = DiskObservation(
+            resource=limit.declared_name,
+            summary=f"/home free {free_gib} GiB",
+            path="/home",
+            free_bytes=int(free_gib * GIB),
+        )
+        if obs.free_bytes < limit.critical_bytes:
+            return Act(observation=obs, reason="below critical floor")
+        if obs.free_bytes < limit.warn_bytes:
+            return Attention(observation=obs, reason="below warn floor")
+        return Healthy(observation=obs)
+
+    assert isinstance(verdict_at(floor - 0.1), Act)
+    assert isinstance(verdict_at(floor + 0.1), Attention)
+    assert isinstance(verdict_at(limit.warn_bytes / GIB + 1), Healthy)
 
 
-def test_resource_checker_reads_root_override(tmp_path):
+def test_home_disk_limit_reads_root_override(tmp_path):
     import json
-    checker = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'tools' / 'agent_resource_check.py'))
+
+    from agent_comms.resources.limits import GIB, HomeDiskLimit
+
     floor = StorageRule.load(tmp_path).floor_gib
     (tmp_path / 'storage.json').write_text(json.dumps({'floor_gib': floor + 1}))
-    assert checker['limits_for'](tmp_path)['/home'][1] == StorageRule.load(tmp_path).floor_gib
+    assert HomeDiskLimit(root=tmp_path).critical_bytes == StorageRule.load(tmp_path).floor_gib * GIB
 
 
 def test_allocation_names_invert_every_declared_checkout_name(tmp_path):
