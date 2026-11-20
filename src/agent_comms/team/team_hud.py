@@ -15,7 +15,7 @@ from agent_comms.cli_bridges.usage_reading import RateLimitReading
 from agent_comms.comms import Comms
 from agent_comms.coordination.service_passes import (
     BoardUnavailable,
-    FailingPass,
+    ServiceFailures,
     ServicePassStore,
     ServiceReading,
 )
@@ -43,6 +43,7 @@ from agent_comms.task_attachments.team_pings import (
     AlarmGroup,
     AlarmSection,
     Ping,
+    PublishedFacts,
     TeamDelivery,
     TeamUpdate,
 )
@@ -174,7 +175,7 @@ class HudDisplayFacts:
     alarms: tuple[ViewSectionFacts, ...]
     alarm_membership: tuple[AlarmSection, ...]
     not_applied: tuple[str, ...]
-    failures: tuple[tuple[str, FailingPass], ...]
+    failures: ServiceFailures
 
 
 @dataclass(frozen=True)
@@ -230,7 +231,7 @@ class TeamHud(TeamHudRecord):
     """
 
     def with_plan(self, plan: TeamPlan) -> Self:
-        return replace(self, phases=plan.phases)
+        return self if self.phases == plan.phases else replace(self, phases=plan.phases)
 
     @classmethod
     def of(cls, comms: Comms, frame: HeartbeatFrame,
@@ -295,10 +296,52 @@ class TeamHud(TeamHudRecord):
         object.__setattr__(hud, "plain_group_text", self.plain_group_text)
         return hud
 
+    def retaining_rendering(self, previous: TeamHud | None) -> TeamHud:
+        """Carry projections whose declared semantic owner is unchanged.
+
+        Service completion clocks are transient and remain fresh on ``self``. Board groups,
+        alarm folds and display facts are derived copies; their reuse follows the same
+        equality and service-failure identities that suppress an equal board publication.
+        """
+        if previous is None or self != previous:
+            return self
+        for name in ("groups", "plain_group_text"):
+            if name in previous.__dict__:
+                object.__setattr__(self, name, previous.__dict__[name])
+        same_alarms = self.alarm_source == previous.alarm_source
+        if same_alarms and "alarms" in previous.__dict__:
+            object.__setattr__(self, "alarms", previous.__dict__["alarms"])
+        if (
+            same_alarms
+            and ServiceFailures.of(self.services) == ServiceFailures.of(previous.services)
+        ):
+            for name in ("display_facts", "publication_facts"):
+                if name in previous.__dict__:
+                    object.__setattr__(self, name, previous.__dict__[name])
+        return self
+
     @property
     def board(self) -> tuple[BoardEntry, ...]:
         """The one action-filtered set captured from Ping.on_board for this observation."""
         return tuple(ping.board_entry() for ping in self.open_pings)
+
+    @cached_property
+    def alarm_source(self) -> tuple[object, ...]:
+        """The exact occurrences supplying alarm membership, words, actions and clocks."""
+        return (
+            self.stopped,
+            tuple(
+                (
+                    type(packet),
+                    packet.teammate,
+                    packet.not_applied,
+                    tuple(ping.occurrence_identity for ping in packet.handled),
+                    tuple(ping.occurrence_identity for ping in packet.new_pings()),
+                )
+                for packet in self.packets
+            ),
+            tuple(ping.occurrence_identity for ping in self.open_pings),
+        )
 
     @cached_property
     def alarms(self) -> tuple[AlarmSection, ...]:
@@ -368,8 +411,13 @@ class TeamHud(TeamHudRecord):
                   for section in alarms),
             alarms,  # Original ping equality retains hidden overflow membership, not paint-time age/text.
             tuple(line for packet in self.packets for line in packet.not_applied),
-            tuple(sorted(self.services.failing.items())),
+            ServiceFailures.of(self.services),
         )
+
+    @cached_property
+    def publication_facts(self) -> PublishedFacts:
+        """The committed-display identity, retained with the HUD that supplied it."""
+        return PublishedFacts.of(self.display_facts)
 
     @staticmethod
     def alarm_text(sections: tuple[AlarmSection, ...], now: float, *,
@@ -546,7 +594,7 @@ class TeamBoardPublicationStore(
         store = cls.at(root)
         store.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         try:
-            previous = store.read()
+            previous = retained.publication if retained is not None else store.read()
         except RecordProblems:
             successor = cls.publication(plan, huds, {})
             store._publish_unlocked(successor)
