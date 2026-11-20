@@ -214,6 +214,7 @@ class PiNativeBackend(
         self, thread: Thread, content: InputContent, delivery: TurnDelivery
     ) -> AsyncIterator[AgentEvent]:
         from agent_comms.execution import backend
+        from agent_comms.team.pi_rule_gate import PiRuleGate
 
         images = {"images": content.images} if content.images else {}
         package = self.comms.owners.require_private_launch().native_package
@@ -238,6 +239,7 @@ class PiNativeBackend(
             root=self.comms.root,
             owner=thread.incarnation.require_recorded(),
             session_directory=thread.native_session_directory(self.comms.root),
+            deal_delivery=PiRuleGate.of(self.comms, thread).delivery(),
             ui_request=delivery.ui_request,
             tool_mode=delivery.tool_mode,
         ):

@@ -103,6 +103,7 @@ from agent_comms.execution.turn_watchdog import (
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import InputId, MalformedRecord
 from agent_comms.pi_payloads import AssistantMessage, UserMessage
+from agent_comms.team.rule_deal import DealDelivery
 from agent_comms.transport.native_tool_transport import (
     NativeToolMode,
     ToolTransport,
@@ -158,6 +159,7 @@ async def stream_agent_events(
     root: Path,
     owner: ParticipantIdentity,
     session_directory: Path,
+    deal_delivery: DealDelivery,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
     request_observer: RequestObserver = NO_REQUEST_OBSERVER,
@@ -182,6 +184,7 @@ async def stream_agent_events(
                 owner=owner,
                 directory=session_directory,
                 worktree=Path(cwd),
+                delivery=deal_delivery,
                 environment=env_extra,
                 session_file=session_file,
             ))

@@ -38,6 +38,7 @@ from agent_comms.projects.repo import Repo
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
+from agent_comms.team.rule_deal import EmptyDealDelivery
 from compaction_loopback import LoopbackProvider
 from delivery_owner_fixture import canonical_agent
 
@@ -176,6 +177,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 root=self.root, owner=self.participant, session_file=str(self.session),
                 persistent_session=self.persistent,
                 package=self.package,
+                deal_delivery=EmptyDealDelivery(),
                 tool_mode=self.toolless(self.root, self.project),
                 steering_queue=queue,
                 input_start=self,
