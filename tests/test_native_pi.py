@@ -261,6 +261,7 @@ def test_native_launch_arguments_and_identity_follow_delivery(tmp_path, native_r
     )
     assert "--append-system-prompt" not in tracked.argv
     assert (tracked.env["CLM_CONTEXT_BUDGET"], tracked.env["CLM_CONTEXT_RESERVE"]) == ("28672", "2048")
+    assert tracked.env["CLM_EDIT_RULE"] == "digest"
     provider_extension = str(native_runtime_package.path / "dist/clm_reference.mjs")
     assert tracked.argv.count(provider_extension) == 1
 

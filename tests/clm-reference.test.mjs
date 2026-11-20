@@ -9,7 +9,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import clmReference, {
-  BudgetController, normalizedTurns, renderEditable,
+  BudgetController, BudgetPressure, DigestEachOutput, EditRule, normalizedTurns, renderEditable,
 } from "../src/agent_comms/execution/clm_reference.mjs";
 
 const GOLDEN = {"rendered": "[[CTX_TURN 1 role=assistant]]\nthink a\nTHOUGHT: look\nbash {\"command\": \"ls\"}\n\n[[CTX_TURN 2 role=tool]]\na.txt\n\n(exit_code=0)\n\n[[CTX_TURN 3 role=assistant]]\ndone", "edits": ["[[CTX_TURN 1 role=assistant]]\nthink a\nTHOUGHT: look\nbash {\"command\": \"ls\"}\n\n[[CTX_TURN 2 role=tool]]\na.txt\n\n(exit_code=0)\n\n[[CTX_TURN 3 role=assistant]]\ndone", "lead note\n\n[[CTX_TURN 1 role=assistant]]\nkept\n\n[[CTX_TURN 2 role=tool]]\n\n[[CTX_TURN 3 role=notes]]\nmy notes\n\n[[CTX_TURN 4 role=user]]\nmore", "no headers at all\njust text", "[[CTX_TURN 1 role=assistant]]\na\n[[CTX_TURN 2 role=assistant]]\nb\n[[CTX_TURN 3 role=tool]]\nt\n[[CTX_TURN 4 role=system]]\ns", ""], "parsed": [[{"role": "assistant", "content": "think a\nTHOUGHT: look\nbash {\"command\": \"ls\"}"}, {"role": "user", "content": "a.txt\n\n(exit_code=0)"}, {"role": "assistant", "content": "done"}], [{"role": "user", "content": "lead note"}, {"role": "assistant", "content": "kept"}, {"role": "user", "content": "my notes\n\nmore"}], [{"role": "user", "content": "no headers at all\njust text"}], [{"role": "assistant", "content": "a\n\nb"}, {"role": "user", "content": "t\n\ns"}], []], "nudges": {"0.25": "CONTEXT BUDGET NUDGE: context is at ~25% of your 28672-token budget (12345 tokens). No action needed. Before your next few searches, make sure your notes record which queries and documents you already tried.", "0.5": "CONTEXT BUDGET NUDGE: context is at ~50% of your 28672-token budget (12345 tokens). Finish the unit of work in flight, then tidy ONCE. When you write a replacement note, COPY facts forward from the text you are replacing (quote them): every RULED OUT candidate with its reason and the words 'do not retry'; the exact queries/commands already tried; exact values marked VERIFIED or UNVERIFIED; and a NEXT line. HINT", "0.75": "CONTEXT BUDGET NUDGE: context is at ~75% of your 28672-token budget (12345 tokens) \u2014 close to the limit. Compact settled spans now \u2014 but do NOT wipe: edits keeping under 25% of the region they touch are usually followed by re-doing the deleted work. When you write a replacement note, COPY facts forward from the text you are replacing (quote them): every RULED OUT candidate with its reason and the words 'do not retry'; the exact queries/commands already tried; exact values marked VERIFIED or UNVERIFIED; and a NEXT line. if you cross the limit you get one final turn and then the session ends. HINT"}, "rollback": "[SYSTEM NOTICE \u2014 CONTEXT LIMIT HIT (retry 2/50)] Your context crossed the 28672-token limit, so your 3 most recent turn(s) were ROLLED BACK and are gone \u2014 that work is no longer in your context and cannot be recovered (7 turn(s) lost so far). You are now at ~20000/26624 tokens, which leaves room for exactly one thing: CONDENSE YOUR CONTEXT THIS TURN and do nothing else. Replace stale regions with short summaries. HINT\nThese commands already ran and their output is what blew your budget, so their turns were discarded. Re-running them will just lose the context again \u2014 if you need one, make it print far less (head/grep/count instead of dumping):\n  - ls -R /\n  - cat big.log", "final": "[SYSTEM NOTICE] You have reached your context budget (30000/28672 tokens). This is your FINAL turn: make sure your solution is complete and in place \u2014 write any required output/answer to the location the task specifies (or run your submit command) \u2014 because after this turn the session ends and your work is evaluated as-is.", "urgent": "CONTEXT BUDGET NUDGE (URGENT): You are at 25000/26624 tokens \u2014 over 90% of your hard context limit and about to be cut off. Compact your context THIS TURN (do nothing else): remove stale regions now. If you cross the limit you get exactly one final turn and then the session ends with your work graded as-is. HINT", "strict_target": 26624};
@@ -167,4 +167,110 @@ test("each request publishes the live view it sent, atomically, for the owner to
   assert.equal(view.turns[1].text, 'plan\nbash {"command": "ls"}');
   assert.equal(view.turns.length, messages.length);
   assert.equal(view.budget.strict_target, 26624);
+});
+
+/** One model step: the request, the command, and the command's output as Pi delivers it. */
+async function step(h, raw, command, output, editTo) {
+  await h.hooks.context({ messages: raw }, h.ctx);
+  await h.hooks.turn_start({}, h.ctx);
+  const refused = await h.hooks.tool_call({ toolName: "bash", toolCallId: "c1", input: { command } }, h.ctx);
+  if (refused?.block) return { refused: refused.reason };
+  const file = command.match(/(\S+LIVE_CTX_MAIN\.txt)/)?.[1];
+  if (file && editTo) writeFileSync(file, editTo(readFileSync(file, "utf8")));
+  const result = await h.hooks.tool_result(
+    { toolName: "bash", content: [{ type: "text", text: output }], isError: false }, h.ctx);
+  return { result: result.content[0].text };
+}
+
+/** The harness under one provider environment. */
+async function under(environment, session, body) {
+  const before = { ...process.env };
+  Object.assign(process.env, environment);
+  try {
+    const h = harness(session);
+    await h.hooks.session_start({}, h.ctx);
+    await body(h, `/tmp/.live_ctx/${session}/LIVE_CTX_MAIN.txt`);
+  } finally {
+    for (const name of Object.keys(environment)) {
+      if (name in before) process.env[name] = before[name]; else delete process.env[name];
+    }
+  }
+}
+
+const read = (command) => assistant([{ type: "toolCall", id: "c1", name: "bash", arguments: { command } }]);
+
+test("an edit rule is named by its declaration, and the reference rule never refuses", () => {
+  assert.ok(EditRule.named("budget") instanceof BudgetPressure);
+  assert.ok(EditRule.named("digest") instanceof BudgetPressure);
+  assert.throws(() => EditRule.named("nonsense"), /Unknown CLM edit rule/);
+  const reference = EditRule.named("budget");
+  reference.observed(5000);
+  assert.equal(reference.refusal("cat more", "F"), null);
+  assert.equal(reference.reminder("F"), "");
+});
+
+test("under the digest rule a sizeable output must be noted and dropped before the next command runs", async () => {
+  await under({ CLM_EDIT_RULE: "digest" }, `t${process.pid}g`, async (h, file) => {
+    const chunk = "paper text ".repeat(300); // ~825 tokens
+    const raw = [user("Read the paper"), read("sed -n 1,80p paper.txt")];
+    const first = await step(h, raw, "sed -n 1,80p paper.txt", chunk);
+    assert.match(first.result, /DIGEST FIRST: ~\d+ tokens of command output are still raw/);
+
+    raw.push(toolResult(first.result), read("sed -n 81,160p paper.txt"));
+    const next = await step(h, raw, "sed -n 81,160p paper.txt", chunk);
+    assert.match(next.refused, /Your next command must edit .*LIVE_CTX_MAIN\.txt/);
+
+    // Writing the same text back frees nothing: still refused afterwards.
+    const same = await step(h, raw, `python3 rewrite.py ${file}`, "", (text) => text);
+    assert.match(same.result, /DIGEST FIRST/);
+    assert.match((await step(h, raw, "sed -n 81,160p paper.txt", chunk)).refused, /DIGEST FIRST/);
+
+    // Notes in place of the raw output digest it: the next read runs.
+    const noted = await step(h, raw, `python3 note.py ${file}`, "",
+      (text) => text.replace(/paper text (paper text )+/g, "NOTE: section 1 defines the mirror file. "));
+    assert.match(noted.result, /edit applied/);
+    assert.doesNotMatch(noted.result, /DIGEST FIRST/);
+    const after = await step(h, raw, "sed -n 81,160p paper.txt", "short");
+    assert.equal(after.refused, undefined);
+  });
+});
+
+test("the reference rule lets the same commands run undigested", async () => {
+  await under({ CLM_EDIT_RULE: "budget" }, `t${process.pid}h`, async (h) => {
+    const raw = [user("Read the paper"), read("sed -n 1,80p paper.txt")];
+    const first = await step(h, raw, "sed -n 1,80p paper.txt", "paper text ".repeat(300));
+    assert.doesNotMatch(first.result, /DIGEST FIRST/);
+    raw.push(toolResult(first.result), read("sed -n 81,160p paper.txt"));
+    assert.equal((await step(h, raw, "sed -n 81,160p paper.txt", "x")).refused, undefined);
+  });
+});
+
+test("an output that would not fit is stored and described, not shown, and the turn goes on", async () => {
+  await under({ CLM_CONTEXT_BUDGET: "4096", CLM_CONTEXT_RESERVE: "2048" }, `t${process.pid}s`, async (h) => {
+    const big = Array.from({ length: 400 }, (_, line) => `line ${line} of the log`).join("\n"); // ~2,000 tokens
+    const raw = [user("TASK ".repeat(200)), read("cat big.log")];
+    const stored = await step(h, raw, "cat big.log", big);
+
+    const file = stored.result.match(/saved in (\S+)\./)[1];
+    assert.match(stored.result, /OUTPUT STORED, NOT SHOWN: this command's output is ~\d+ tokens \(400 lines\)/);
+    assert.match(stored.result, /\(exit_code=0\)/);
+    assert.doesNotMatch(stored.result, /line 200 of the log/);
+    assert.equal(readFileSync(file, "utf8"), big);
+    assert.doesNotMatch(file, /\.live_ctx/);
+
+    // A small output is shown even with no room left: storing it would cost more than it holds.
+    raw.push(toolResult(stored.result), read("echo ok"));
+    assert.match((await step(h, raw, "echo ok", "ok")).result, /^ok\n\n\(exit_code=0\)/);
+  });
+});
+
+test("under the digest rule a stored output is not counted as raw text in the context", async () => {
+  await under({ CLM_EDIT_RULE: "digest", CLM_CONTEXT_BUDGET: "4096", CLM_CONTEXT_RESERVE: "2048" },
+    `t${process.pid}d`, async (h) => {
+      const big = Array.from({ length: 400 }, (_, line) => `line ${line} of the log`).join("\n");
+      const raw = [user("TASK ".repeat(200)), read("cat big.log")];
+      const stored = await step(h, raw, "cat big.log", big);
+      assert.match(stored.result, /OUTPUT STORED/);
+      assert.doesNotMatch(stored.result, /DIGEST FIRST/);
+    });
 });
