@@ -15,6 +15,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.presentation import SentMessageSummary
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_catalog import ThreadCatalog
+from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import ChosenServiceTier, NativeThread, NextTurnConfiguration
 from agent_comms.transport.connector_caller import DirectorCaller
 from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller
@@ -24,6 +25,21 @@ from agent_comms_hooks import ToolRefusedError
 
 
 class TestToolCatalog:
+    def test_native_launch_loads_selected_provider_extension(self, comms, tmp_path):
+        thread = NativeThread(
+            name="clm-owner", tags=frozenset(), worktree=Checkout(Path("/wt")),
+            model=DeclaredModel("clm-local/model.gguf"),
+        )
+        comms.registry.declare(thread)
+
+        arguments = comms.threads.native_launch_arguments(
+            thread, NativeArguments(()), tmp_path / "package",
+        )
+
+        assert arguments[:2] == (
+            "-e", str(tmp_path / "package/agent-comms-extensions/pi-clm/src/index.mjs"),
+        )
+
     def test_native_launch_carries_the_existing_catalog_and_thread_tier(self, comms, tmp_path, monkeypatch):
 
         monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path / "config"))
