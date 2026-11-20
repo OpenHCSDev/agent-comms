@@ -18,6 +18,7 @@ from typing import Annotated, ClassVar, Self
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.coordination.errors import DMPaintedBoundChanged
 from agent_comms.display_order import ChannelSort, NameChannelSort
+from agent_comms.execution.child_process import NoProcess, ProcessState
 from agent_comms.execution.runtime_info import RuntimeInfo
 from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.messaging.activity_clocks import ChannelActivity
@@ -343,6 +344,9 @@ class ThreadRecord(CliResult):
     goal_execution: GoalExecution
     pending: Annotated[InboxCount, WireOmitDefault()] = field(
         default=UncountedInbox(), kw_only=True
+    )
+    native_process_identity: Annotated[ProcessState, WireOmitDefault()] = field(
+        default_factory=NoProcess, kw_only=True
     )
 
     @classmethod

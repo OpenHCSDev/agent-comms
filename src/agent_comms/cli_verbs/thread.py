@@ -10,6 +10,7 @@ from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize
 from agent_comms.presentation import CountedRead, InboxRead, UncountedRead
+from agent_comms.transport.owner_requests import NativeChildProcessReply
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -29,4 +30,8 @@ class ThreadCliCommand(NameArgument, CliCommand):
     ] = dataclasses.field(default_factory=CountedRead)
 
     def apply(self, ctx: Comms) -> CliResult:
-        return ctx.views.thread_detail(self.name, self.read)
+        record = ctx.views.thread_detail(self.name, self.read)
+        return dataclasses.replace(
+            record,
+            native_process_identity=NativeChildProcessReply.read(ctx.root, record.thread).process,
+        )

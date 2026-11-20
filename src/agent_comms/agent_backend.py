@@ -26,6 +26,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.execution.agent_event import AgentEvent
+from agent_comms.execution.child_process import NoProcess, ProcessState
 from agent_comms.execution.history_view import OwnHistory
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_input_proof import NativeContextProof
@@ -285,6 +286,11 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
 
     async def close_idle(self) -> None:
         """A backend without a retained process has nothing to retire."""
+
+    @property
+    def runtime_process(self) -> ProcessState:
+        """The per-session runtime child, never the shared worker hosting this backend."""
+        return NoProcess()
 
     async def inspect(self, thread: Thread, request: NativeQuery) -> PiResponseData:
         """A runtime without native queries refuses this capability explicitly."""

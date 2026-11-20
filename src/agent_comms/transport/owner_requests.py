@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution import launch_runtime
-from agent_comms.execution.child_process import Platform, ProcessIdentity
+from agent_comms.execution.child_process import NoProcess, Platform, ProcessIdentity, ProcessState
 from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
     InheritedArguments,
@@ -21,7 +21,7 @@ from agent_comms.execution.native_arguments import (
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ClaimedIdentity, OwnerIdentity
-from agent_comms.transport.owner_connection import OwnerConnection
+from agent_comms.transport.owner_connection import OwnerConnection, socket_path
 from agent_comms.transport.runtime_request import AttachedResultRuntimeRequest, ResultRuntimeRequest
 from agent_comms.transport.tool_result import DeclaredReply
 
@@ -97,8 +97,28 @@ class OwnerRetiredReply(DeclaredReply):
     owner: OwnerIdentity
 
 
+@dataclass(frozen=True)
+class NativeChildProcessReply(DeclaredReply):
+    """One thread session's native child, never the shared worker hosting it."""
+
+    process: ProcessState = field(default_factory=NoProcess)
+
+    @classmethod
+    def read(cls, root: Path, thread) -> NativeChildProcessReply:
+        if not thread.process_alive or not socket_path(root, thread.require_process().pid).exists():
+            return cls()
+        return FieldCodec.decode(cls, OwnerConnection.exchange_at(
+            root, thread, ReadNativeChildProcessRuntimeRequest(thread=thread.name),
+        ))
+
+
 @dataclass(frozen=True, kw_only=True)
 class ReadHostResourcesRuntimeRequest(AttachedResultRuntimeRequest):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReadNativeChildProcessRuntimeRequest(AttachedResultRuntimeRequest):
     pass
 
 

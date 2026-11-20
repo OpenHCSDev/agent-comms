@@ -271,6 +271,14 @@ async def test_runner_obtains_one_backend_per_session_from_the_thread_declaratio
         assert backend.arguments(thread) == session.configuration.agent_args.with_model("p/m").argv
 
         agent.turns.persistent_backends["other"] = PersistentPiSession()
+        assert not agent.turns.native_child_process("other").alive()
+        child_identity = ProcessIdentity.capture(os.getpid())
+        empty = agent.turns.persistent_backends["other"].child_state
+        agent.turns.persistent_backends["other"].child_state = SimpleNamespace(
+            process_identity=child_identity
+        )
+        assert agent.turns.native_child_process("other") == child_identity
+        agent.turns.persistent_backends["other"].child_state = empty
         with pytest.raises(RelationViolationError):
             agent.turns.backend_for("other", thread)
     finally:

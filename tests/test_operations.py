@@ -270,6 +270,7 @@ class TestThreadOps:
         records = {name: FieldCodec.decode(dict[str, JsonValue], row) for name, row in rows.items()}
         record = records["detail"]
         assert ("pending" in record) is counted
+        assert "process_identity" not in record
         assert record["is_fork"] is True and record["task"] == "fix auth"
         for row in records.values():
             assert {key: row[key] for key in record} == record
