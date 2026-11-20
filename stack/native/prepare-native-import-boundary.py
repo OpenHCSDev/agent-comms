@@ -232,6 +232,10 @@ def prepare_pi_clm(stack: Path, package: Path, environment: dict[str, str]) -> N
         )
         source = staging / "node_modules/@lolipopshock/pi-clm"
         subprocess.run(
+            [sys.executable, str(stack / "patch-native-pi-clm-headers.py"), str(source)],
+            env=environment, check=True, timeout=60,
+        )
+        subprocess.run(
             ["node", str(stack / "prepare-native-pi-clm.mjs"), str(package), str(source)],
             env=environment, check=True, timeout=60,
         )
