@@ -27,10 +27,13 @@ from agent_comms.planning.orders import (
 )
 from agent_comms.projects.checkouts import (
     Checkout,
+    CheckoutStatus,
     CommitsNaming,
     EveryCommit,
+    RepositoryReads,
 )
 from agent_comms.projects.git_errors import GitCommandError
+from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.work_branches import WorkBranchError, WorkBranches
 from agent_comms.registry.threads import NativeThread
@@ -101,6 +104,78 @@ def test_a_submodule_with_a_missing_git_directory_does_not_stop_reading_edits(tm
     assert WorkBranches(worktree).uncommitted() == (worktree / 'owner.py',)
     assert tuple(PresentCheckout(worktree).edits) == (700.0,)
     assert WorkBranches(worktree).local_work
+
+
+def test_unchanged_worktree_status_is_retained_until_its_native_source_changes(
+    tmp_path, monkeypatch,
+):
+    """A heartbeat retains one exact status cut; a real nested edit invalidates it once."""
+    worktree = holder_checkout(tmp_path / 'worker--P1')
+    status_calls = 0
+    git_bytes = Repo.git_bytes.__func__
+
+    def counted(cls, checkout, *arguments, **options):
+        nonlocal status_calls
+        if 'status' in arguments:
+            status_calls += 1
+        return git_bytes(cls, checkout, *arguments, **options)
+
+    monkeypatch.setattr(Repo, 'git_bytes', classmethod(counted))
+    first = RepositoryReads()
+    assert WorkBranches(worktree, reads=first).uncommitted() == ()
+    assert status_calls == 1
+
+    retained = RepositoryReads.retaining(first)
+    assert WorkBranches(worktree, reads=retained).uncommitted() == ()
+    assert status_calls == 1
+
+    nested = worktree / 'evidence' / 'result.txt'
+    nested.parent.mkdir()
+    edited(nested.parent, nested.name, 700.0)
+    changed = RepositoryReads.retaining(retained)
+    branches = WorkBranches(worktree, reads=changed)
+    assert branches.uncommitted() == (nested,)
+    assert branches.uncommitted_edits() == (700.0,)
+    assert status_calls == 2
+    changed.close()
+
+
+def test_failed_status_replacement_does_not_poison_the_retained_reader(
+    tmp_path, monkeypatch,
+):
+    worktree = holder_checkout(tmp_path / 'worker--P1')
+    reads = RepositoryReads()
+    assert WorkBranches(worktree, reads=reads).uncommitted() == ()
+    retained = reads._statuses[worktree.resolve()]
+    closed = []
+    close = CheckoutStatus.close
+
+    def tracked_close(status):
+        closed.append(status)
+        close(status)
+
+    monkeypatch.setattr(CheckoutStatus, 'close', tracked_close)
+    edited(worktree, 'owner.py', 700.0)
+    capture = CheckoutStatus.capture.__func__
+    attempts = 0
+
+    def fail_once(cls, checkout, head):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError('transient capture failure')
+        return capture(cls, checkout, head)
+
+    monkeypatch.setattr(CheckoutStatus, 'capture', classmethod(fail_once))
+    with pytest.raises(OSError, match='transient capture failure'):
+        WorkBranches(worktree, reads=reads).uncommitted()
+    assert closed == [retained]
+    assert reads._statuses == {}
+
+    assert WorkBranches(worktree, reads=reads).uncommitted() == (worktree / 'owner.py',)
+    live = reads._statuses[worktree.resolve()]
+    reads.close()
+    assert closed == [retained, live]
 
 
 @pytest.fixture

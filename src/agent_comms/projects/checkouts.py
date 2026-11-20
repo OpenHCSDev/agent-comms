@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import heapq
+import os
 import re
 import shutil
 import string
@@ -50,6 +51,7 @@ from agent_comms.projects.git_errors import GitCommandError, UnavailableCommitEr
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_environment import RepositoryEnvironment
 from agent_comms.storage.file_observation import DocumentBytes, FileObservation
+from agent_comms.storage.native_changes import ChangedSources, DirectorySource, FileSource
 
 
 class CheckoutHoldsWorkError(ValueError):
@@ -556,6 +558,181 @@ class DetachedGitHead(CommittedGitHead):
         return self.reference
 
 
+@dataclass
+class CheckoutStatus:
+    """One exact worktree-status cut, retained until one of its native sources changes.
+
+    Git owns path classification.  The filesystem owns edit clocks.  The native
+    registration keeps that joined answer valid without rebuilding every pathname
+    and restatting every dirty file on every heartbeat.
+    """
+
+    checkout: Checkout
+    head: GitHead
+    paths: tuple[Path, ...]
+    edits: tuple[float, ...]
+    changes: ChangedSources
+
+    @staticmethod
+    def _excluded_directories(checkout: Checkout) -> frozenset[Path]:
+        ignored = Repo.git_bytes(
+            checkout.path,
+            "--no-optional-locks",
+            "ls-files",
+            "--others",
+            "--ignored",
+            "--exclude-standard",
+            "--directory",
+            "-z",
+        )
+        gitlinks = Repo.git_bytes(checkout.path, "ls-files", "--stage", "-z")
+        return frozenset((
+            Path(os.fsdecode(name[:-1]))
+            for name in ignored.split(b"\0")
+            if name.endswith(b"/")
+        )).union(
+            Path(os.fsdecode(entry.split(b"\t", 1)[1]))
+            for entry in gitlinks.split(b"\0")
+            if entry.startswith(b"160000 ")
+        )
+
+    @classmethod
+    def _directories(cls, checkout: Checkout) -> tuple[Path, ...]:
+        excluded = cls._excluded_directories(checkout)
+        directories: list[Path] = []
+        for root, names, _files in os.walk(checkout.path):
+            root_path = Path(root)
+            relative = root_path.relative_to(checkout.path)
+            names[:] = [
+                name
+                for name in names
+                if name != ".git" and relative / name not in excluded
+            ]
+            directories.append(root_path)
+        return tuple(directories)
+
+    @staticmethod
+    def _git_sources(checkout: Checkout) -> tuple[Path, ...]:
+        common = checkout.common_dir
+        configuration = Repo.git_bytes(
+            checkout.path, "config", "--null", "--list", "--show-origin",
+        ).split(b"\0")
+        configured_files = []
+        for origin in configuration[::2]:
+            if not origin.startswith(b"file:"):
+                continue
+            configured = Path(os.fsdecode(origin.removeprefix(b"file:"))).expanduser()
+            configured_files.append(
+                configured.resolve()
+                if configured.is_absolute()
+                else (checkout.path / configured).resolve()
+            )
+        paths = [
+            checkout.path / ".git",
+            Path(Repo.git(
+                checkout.path, "rev-parse", "--path-format=absolute", "--git-path", "HEAD",
+            ).strip()),
+            Path(Repo.git(
+                checkout.path, "rev-parse", "--path-format=absolute", "--git-path", "index",
+            ).strip()),
+            Path(Repo.git(
+                checkout.path,
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-path",
+                "config.worktree",
+            ).strip()),
+            common / "config",
+            common / "info" / "exclude",
+            Path("/etc/gitconfig"),
+            Path.home() / ".gitconfig",
+            Path.home() / ".config" / "git" / "config",
+            *configured_files,
+        ]
+        sparse = Path(
+            Repo.git(
+                checkout.path,
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-path",
+                "info/sparse-checkout",
+            ).strip()
+        )
+        paths.append(sparse)
+        excludes = Repo._run(
+            checkout.path, "config", "--path", "--get", "core.excludesfile",
+        )
+        if excludes.returncode not in (0, 1):
+            Repo._output(checkout.path, excludes)
+        configured = excludes.stdout.decode().strip()
+        if configured:
+            paths.append(Path(configured).expanduser().resolve())
+        return tuple(dict.fromkeys(paths))
+
+    @staticmethod
+    def _status(checkout: Checkout) -> tuple[tuple[Path, ...], tuple[float, ...]]:
+        fields = iter(
+            Repo.git_bytes(
+                checkout.path,
+                "--no-optional-locks",
+                "status",
+                "--porcelain=v1",
+                "-z",
+                "--untracked-files=all",
+                "--ignore-submodules=all",
+            ).split(b"\0")
+        )
+        names: list[str] = []
+        for entry in fields:
+            if entry:
+                names.append(os.fsdecode(entry[3:]))
+                if {b"R", b"C"} & {entry[:1], entry[1:2]}:
+                    names.append(os.fsdecode(next(fields)))
+        paths = tuple(checkout.path / name for name in names)
+        newest: float | None = None
+        descriptor = os.open(checkout.path, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            for name in names:
+                try:
+                    modified = os.stat(name, dir_fd=descriptor).st_mtime
+                except (FileNotFoundError, NotADirectoryError):
+                    continue
+                newest = modified if newest is None else max(newest, modified)
+        finally:
+            os.close(descriptor)
+        return paths, (() if newest is None else (newest,))
+
+    @classmethod
+    def capture(cls, checkout: Checkout, head: GitHead) -> Self:
+        checkout = checkout.resolved()
+        for _attempt in range(ChangedSources.reconcile_attempts):
+            directories = cls._directories(checkout)
+            git_sources = cls._git_sources(checkout)
+            changes = ChangedSources(
+                *(DirectorySource(path) for path in directories),
+                *(FileSource(path) for path in git_sources),
+            )
+            try:
+                paths, edits = cls._status(checkout)
+                if (
+                    directories == cls._directories(checkout)
+                    and git_sources == cls._git_sources(checkout)
+                    and not changes.changed_paths()
+                ):
+                    return cls(checkout, head, paths, edits, changes)
+            except BaseException:
+                changes.close()
+                raise
+            changes.close()
+        raise OSError("Worktree sources did not stabilize while reading status")
+
+    def current(self, head: GitHead) -> bool:
+        return self.head == head and not self.changes.changed_paths()
+
+    def close(self) -> None:
+        self.changes.close()
+
+
 class RepositoryReads:
     """A pass's repository reads, keyed by Git's common directory, not worktree aliases."""
 
@@ -563,6 +740,7 @@ class RepositoryReads:
         self._histories: dict[Path, CheckoutHistory] = {}
         self._worktree_histories: dict[Path, CheckoutHistory] = {}
         self._remote_cuts: dict[Path, dict[str, dict[str, str]]] = {}
+        self._statuses: dict[Path, CheckoutStatus] = {}
 
     @classmethod
     def retaining(cls, previous: RepositoryReads) -> Self:
@@ -583,7 +761,34 @@ class RepositoryReads:
                 continue
         reads = cls()
         reads._histories = retained
+        reads._statuses = previous._statuses
+        previous._statuses = {}
         return reads
+
+    def status_for(self, checkout: Checkout, head: GitHead) -> CheckoutStatus:
+        checkout = checkout.resolved()
+        retained = self._statuses.pop(checkout.path, None)
+        if retained is not None:
+            try:
+                if retained.current(head):
+                    self._statuses[checkout.path] = retained
+                    return retained
+            except BaseException:
+                retained.close()
+                raise
+            retained.close()
+        captured = CheckoutStatus.capture(checkout, head)
+        self._statuses[checkout.path] = captured
+        return captured
+
+    def close(self) -> None:
+        statuses, self._statuses = self._statuses, {}
+        for status in statuses.values():
+            status.close()
+
+    def __del__(self) -> None:
+        if hasattr(self, "_statuses"):
+            self.close()
 
     def remote_cuts(self, checkout: Checkout) -> dict[str, dict[str, str]]:
         """Each remote's published refs: worktrees of one repository share their remotes. The

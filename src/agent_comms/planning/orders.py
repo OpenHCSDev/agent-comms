@@ -1379,9 +1379,7 @@ class PresentCheckout(ProgressCheckout):
     @cached_property
     def edits(self) -> tuple[float, ...]:
         """When each uncommitted change in this checkout was last written; a deletion has none."""
-        return tuple(path.stat().st_mtime
-                     for path in self.branches.read_checkout().uncommitted()
-                     if path.exists())
+        return self.branches.read_checkout().uncommitted_edits()
 
     def readings(self, source: ProgressSource, refs: tuple[str, ...]) -> DistanceReadings:
         """Read bounded recorded results; an absent remote default supplies no invented base."""
@@ -1599,8 +1597,8 @@ class ProgressSource(PullRequestSource):
     @cached_property
     def edited_at(self) -> tuple[float, ...]:
         """The newest uncommitted change in the holder's own checkouts: work no commit shows yet."""
-        return tuple(sorted((edited for worktree in self.worktrees for edited in worktree.edits),
-                            reverse=True)[:1])
+        edited = tuple(edited for worktree in self.worktrees for edited in worktree.edits)
+        return () if not edited else (max(edited),)
 
     @cached_property
     def moved_at(self) -> float:
