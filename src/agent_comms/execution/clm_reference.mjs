@@ -523,6 +523,40 @@ function pendingAssistant(ctx) {
   return null;
 }
 
+/** The request the model is working on now: the newest input among the turns an edit covers.
+ * The reference protects one task, the conversation's first message, because there one
+ * conversation is one task. A thread takes many inputs, and each later one was an ordinary
+ * editable turn: a compaction could delete it, leaving only the first task pinned, which the
+ * model then answered again (CLM-ref2, 2026-11-20: asked to read a paper, it compacted and
+ * returned the sum from its first task). An edit may reword anything else; the current
+ * request is restored when an edit drops it. */
+export class CurrentTask {
+  static among(raw, covers) {
+    for (let index = Math.min(covers, raw.length) - 1; index >= PROTECT; index--) {
+      const message = raw[index];
+      if (message?.role === "user" && message.inputId !== undefined) return new CurrentTask(renderedText(message));
+    }
+    return new NoCurrentTask();
+  }
+
+  constructor(text) {
+    this.text = text;
+  }
+
+  /** `edited` with the task still in it; `restored` says whether it had to be put back. */
+  keptIn(edited) {
+    if (!this.text.trim() || edited.includes(this.text.trim())) return { text: edited, restored: false };
+    return { text: `${edited.trimEnd()}\n\n[[CTX_TURN 0 role=user]]\n${this.text}`, restored: true };
+  }
+}
+
+/** The covered turns hold no input after the protected first one: nothing to keep. */
+export class NoCurrentTask extends CurrentTask {
+  constructor() {
+    super("");
+  }
+}
+
 /** When the model must compact its context, beyond what the budget presses for. The
  * provider names the rule its models run under (CLM_EDIT_RULE); each member is one rule. */
 export class EditRule {
@@ -822,8 +856,14 @@ export default function clmReference(pi) {
     let readBack = null;
     try { readBack = readFileSync(ctxFile, "utf8"); } catch { readBack = null; }
     let note = "";
+    let taskNote = "";
     const touched = command.includes("LIVE_CTX_MAIN") || command.includes(CTX_ROOT);
     if (readBack !== null && readBack.trim() !== rendered.trim()) {
+      const kept = CurrentTask.among(sent.raw, covers).keptIn(readBack);
+      readBack = kept.text;
+      if (kept.restored) {
+        taskNote = "\n[LIVE_CTX_MAIN.txt: your edit removed the request you are working on; it was restored as the last user turn. Compact everything else, never the current request.]";
+      }
       const turns = (t) => normalizedTurns(t).map((turn) => turn.text);
       const baseline = budget.count([system, toolsText, ...messageTexts(sent.messages.slice(0, PROTECT)), ...turns(rendered)]);
       const after = budget.count([system, toolsText, ...messageTexts(sent.messages.slice(0, PROTECT)), ...turns(readBack)]);
@@ -859,7 +899,7 @@ export default function clmReference(pi) {
     const over = tokensNow <= budget.strictTarget ? "" : ` — OVER; compact ${ctxFile} now`;
     const readout = `\n[context: ~${tokensNow}/${budget.strictTarget} tokens${over}]`;
     return {
-      content: [{ type: "text", text: observation.text + readout + note + rule.reminder(ctxFile) }],
+      content: [{ type: "text", text: observation.text + readout + note + taskNote + rule.reminder(ctxFile) }],
       isError: false,
     };
   });
