@@ -451,10 +451,13 @@ class TeamBoardPublicationStore(
         publication: TeamBoardPublication | None = None,
     ) -> dict[ThreadIncarnation, tuple[TeamUpdate, ...]]:
         """Per-recipient packets derived from the one shared retained frame cut."""
-        return {
-            hud.teammate: hud.packets
-            for hud in self.huds(publication=publication)
-        }
+        records = self.records(publication)
+        packets = FieldCodec.record_key(TeamHudRecord, "packets")
+        decoded = FieldCodec.decode_shared(
+            tuple[tuple[TeamUpdate, ...], ...],
+            [raw[packets] for raw in records.values()],
+        )
+        return dict(zip(records, decoded, strict=True))
 
     @staticmethod
     def captured_frames(huds: tuple[TeamHud, ...]) -> SharedJson:
@@ -471,11 +474,10 @@ class TeamBoardPublicationStore(
         cls,
         plan: TeamPlan,
         huds: tuple[TeamHud, ...],
-        previous: TeamBoardPublication,
+        before: dict[ThreadIncarnation, TeamHud],
     ) -> TeamBoardPublication:
         frames = cls.captured_frames(huds)
-        before = cls.frame_records(previous.frames)
-        after = cls.frame_records(frames)
+        after = {hud.teammate: hud.with_plan(plan) for hud in huds}
         changed = tuple(sorted(
             (owner for owner in before.keys() | after.keys()
              if before.get(owner) != after.get(owner)),
@@ -495,9 +497,21 @@ class TeamBoardPublicationStore(
         try:
             previous = store.read()
         except RecordProblems:
-            store._publish_unlocked(cls.publication(plan, huds, TeamBoardPublication()))
+            store._publish_unlocked(cls.publication(plan, huds, {}))
             return
-        successor = cls.publication(plan, huds, previous)
+        before = {
+            hud.teammate: hud.with_plan(previous.plan)
+            for hud in store.huds(publication=previous)
+        }
+        after = {hud.teammate: hud.with_plan(plan) for hud in huds}
+        if previous.plan == plan and before == after:
+            # SharedJson is a storage encoding, not the board's equality owner.  Re-encoding
+            # equal HUDs may choose different reference positions; comparing those raw graphs
+            # made every recipient look changed and woke every reader on every heartbeat.
+            if previous.changed:
+                store._publish_unlocked(replace(previous, changed=()))
+            return
+        successor = cls.publication(plan, huds, before)
         if successor != previous:
             store._publish_unlocked(successor)
 
@@ -507,15 +521,18 @@ class TeamBoardPublicationStore(
             return frozenset()
         store = cls.at(root)
         publication = store.read()
+        huds_before = store.huds(publication=publication)
+        before = {
+            hud.teammate: hud.with_plan(publication.plan) for hud in huds_before
+        }
         retained = {
-            hud.teammate.require_recorded().lookup: hud
-            for hud in store.huds(publication=publication)
+            hud.teammate.require_recorded().lookup: hud for hud in huds_before
         }
         retained.update(
             (hud.teammate.require_recorded().lookup, hud) for hud in huds
         )
         store._publish_unlocked(cls.publication(
-            publication.plan, tuple(retained.values()), publication
+            publication.plan, tuple(retained.values()), before
         ))
         return frozenset((store.path,))
 

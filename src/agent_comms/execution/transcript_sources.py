@@ -1142,6 +1142,15 @@ class DraftAppendRow(ExternalTranscriptRows, TypedTable, declared_name="external
                events: tuple[TranscriptEvent, ...]) -> None:
         if not events:
             return
+        # A thread exposes one live draft identity.  Starting the next assistant
+        # message must retire the prior item in the same transaction as its first
+        # append; a reader must never observe the event-loop gap between those
+        # two message lifecycle events.
+        connection.execute(
+            f'DELETE FROM "{cls.declared_name}" WHERE thread=? '
+            'AND (turn_id<>? OR item_id<>?)',
+            (thread, turn_id, item_id),
+        )
         row = connection.execute(
             f'SELECT coalesce(max(ordinal), -1) FROM "{cls.declared_name}" '
             'WHERE thread=? AND turn_id=? AND item_id=?',

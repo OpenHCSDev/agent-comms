@@ -119,6 +119,18 @@ def test_one_snapshot_preserves_every_recipient_and_encodes_each_ping_once(tmp_p
     assert values(TeamBoardPublicationStore.read_all(tmp_path)) == expected
 
 
+def test_packet_projection_does_not_decode_whole_huds(tmp_path, monkeypatch):
+    original = huds()
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
+    store = TeamBoardPublicationStore.at(tmp_path)
+    monkeypatch.setattr(TeamBoardPublicationStore, "huds", lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("packet projection decoded whole HUDs")
+    ))
+    assert store.packet_map() == {
+        hud.teammate: hud.packets for hud in original
+    }
+
+
 def test_unchanged_heartbeat_does_not_replace_retained_packet_or_board(tmp_path):
     original = huds()
     packet = original[0].packets[0]
@@ -141,6 +153,17 @@ def test_unchanged_heartbeat_does_not_replace_retained_packet_or_board(tmp_path)
     board_inode = board_path.stat().st_ino
     TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
     assert board_path.stat().st_ino == board_inode
+
+    # Decoding and rebuilding the same values may choose a different SharedJson reference
+    # layout.  The semantic HUDs, not that storage layout, own change identity.
+    store = TeamBoardPublicationStore.at(tmp_path)
+    publication = store.read()
+    rebuilt = tuple(
+        hud.with_plan(publication.plan)
+        for hud in store.huds(publication=publication)
+    )
+    TeamBoardPublicationStore.replace_all(tmp_path, publication.plan, rebuilt)
+    assert TeamBoardPublicationStore.path_in(tmp_path).stat().st_ino == board_inode
 
     changed = (replace(original[0], packets=(), open_pings=()), *original[1:])
     TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), changed)
@@ -178,11 +201,24 @@ def test_atomic_publication_names_only_the_changed_recipient(tmp_path):
     TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
     first = TeamBoardPublicationStore.read_cut(tmp_path)
     assert first.changed == frozenset(hud.teammate for hud in original)
-    changed = replace(original[0], packets=(), open_pings=())
-    TeamBoardPublicationStore.write_all(tmp_path, (changed,))
+    publication = TeamBoardPublicationStore.at(tmp_path).read()
+    rebuilt = tuple(
+        hud.with_plan(publication.plan)
+        for hud in TeamBoardPublicationStore.at(tmp_path).huds(publication=publication)
+    )
+    changed = replace(rebuilt[0], packets=(), open_pings=())
+    TeamBoardPublicationStore.replace_all(
+        tmp_path, publication.plan, (changed, *rebuilt[1:])
+    )
     second = TeamBoardPublicationStore.read_cut(tmp_path)
     assert second.changed == frozenset((changed.teammate,))
     assert values(second.huds) == values((changed, *original[1:]))
+
+    partial = replace(original[1], packets=(), open_pings=())
+    TeamBoardPublicationStore.write_all(tmp_path, (partial,))
+    third = TeamBoardPublicationStore.read_cut(tmp_path)
+    assert third.changed == frozenset((partial.teammate,))
+    assert values(third.huds) == values((changed, partial, original[2]))
 
 
 def test_shared_board_decodes_each_original_ping_once_and_detaches_every_membership(tmp_path, monkeypatch):
