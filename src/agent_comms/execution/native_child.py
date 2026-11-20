@@ -31,6 +31,7 @@ from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.pi_payloads import PiResponseData, StateData
 from agent_comms.storage.private_path import PrivateSocketRole
+from agent_comms.team.rule_deal import DealDelivery
 
 if TYPE_CHECKING:
 
@@ -325,10 +326,10 @@ class NativeChildState(ABC):
 
     retained = False
 
-    def managed_launch(self, command: str, arguments: tuple[str, ...], *, package: VerifiedNativePackage, root: Path, owner: ParticipantIdentity, directory: Path, worktree: Path, environment: dict[str, str] | None, session_file: str | None) -> NativePiRpcLaunch:
+    def managed_launch(self, command: str, arguments: tuple[str, ...], *, package: VerifiedNativePackage, root: Path, owner: ParticipantIdentity, directory: Path, worktree: Path, delivery: DealDelivery, environment: dict[str, str] | None, session_file: str | None) -> NativePiRpcLaunch:
         return NativePiRpcLaunch.managed(
             command, arguments, package=package, root=root, owner=owner, directory=directory,
-            worktree=worktree, environment=environment, session_file=session_file,
+            worktree=worktree, delivery=delivery, environment=environment, session_file=session_file,
         )
 
     def reuse(self, key: tuple[NativePiRpcLaunch, tuple[int, int]]) -> PiSessionChild | None:
@@ -453,18 +454,19 @@ class RetainedNative(ChildNative):
             return self.child
         return None
 
-    def managed_launch(self, command: str, arguments: tuple[str, ...], *, package: VerifiedNativePackage, root: Path, owner: ParticipantIdentity, directory: Path, worktree: Path, environment: dict[str, str] | None, session_file: str | None) -> NativePiRpcLaunch:
+    def managed_launch(self, command: str, arguments: tuple[str, ...], *, package: VerifiedNativePackage, root: Path, owner: ParticipantIdentity, directory: Path, worktree: Path, delivery: DealDelivery, environment: dict[str, str] | None, session_file: str | None) -> NativePiRpcLaunch:
         if self.current and self.child.key[0].package == package:
             original, authentication = self.child.key
             candidate = original.retained_managed(command, arguments,
-                root=root, owner=owner, directory=directory, worktree=worktree, environment=environment, session_file=session_file)
+                root=root, owner=owner, directory=directory, worktree=worktree, delivery=delivery,
+                environment=environment, session_file=session_file)
             if candidate is not None and (candidate, candidate.configuration.auth_revision()) == (
                 original, authentication
             ):
                 return original
         return super().managed_launch(
             command, arguments, package=package, root=root, owner=owner, directory=directory,
-            worktree=worktree, environment=environment, session_file=session_file,
+            worktree=worktree, delivery=delivery, environment=environment, session_file=session_file,
         )
 
     def _shutdown_successor(self) -> NativeChildState:

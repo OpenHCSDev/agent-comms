@@ -59,11 +59,9 @@ from agent_comms.execution.session_revision import (
     SessionRevisionUnavailable,
 )
 from agent_comms.execution.turn_inbox import InputContent
-from agent_comms.installer.native_package import SYSTEM_PROMPT
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.pi_payloads import PiResponseData, StateData
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
-from agent_comms.team.rule_deal import SystemPromptDelivery
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -113,10 +111,6 @@ class PiSessionFile(RuntimeLocation):
 
     def history_source(self, root, incarnation):
         return NativeTranscript(Path(self.path))
-
-    def deal_delivery(self) -> SystemPromptDelivery:
-        """Native Pi always launches with the prepared prompt (NativePiRpcLaunch.bootstrap)."""
-        return SystemPromptDelivery(SYSTEM_PROMPT)
 
     def imported_sources(self):
         return NativeTranscript(Path(self.path)).imported_sources()
@@ -186,6 +180,7 @@ class PiNativeBackend(
         from agent_comms.execution.native_session_prepare import (
             NativeSessionPreparation,
         )
+        from agent_comms.team.pi_rule_gate import PiRuleGate
 
         if open_native is None:
             open_native = NativeSessionPreparation.open
@@ -203,6 +198,7 @@ class PiNativeBackend(
             root=self.comms.root,
             owner=thread.incarnation.require_recorded(),
             session_directory=thread.native_session_directory(self.comms.root),
+            delivery=PiRuleGate.of(self.comms, thread).delivery(),
             environment=environment,
             session_file=thread.writable_runtime.read_key,
             observe=partial(self.observe, thread),

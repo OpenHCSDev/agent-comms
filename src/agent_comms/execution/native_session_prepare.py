@@ -20,6 +20,7 @@ from agent_comms.execution.runtime_observations import AgentInfo
 from agent_comms.execution.session_retention import NativeSessionRetention
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.pi_payloads import StateData
+from agent_comms.team.rule_deal import DealDelivery
 
 
 
@@ -49,20 +50,22 @@ class NativeSessionPreparation(NativeSession):
         root: Path,
         owner: ParticipantIdentity,
         session_directory: Path,
+        delivery: DealDelivery,
         environment: dict[str, str],
         session_file: str,
         observe: Callable[[StateData, AgentInfo], Awaitable[None]],
     ) -> StateData:
         async with persistent.lock:
             return await cls.open_acquired(persistent, agent_bin, agent_args,
-                package=package, worktree=worktree, root=root, owner=owner, session_directory=session_directory, environment=environment,
+                package=package, worktree=worktree, root=root, owner=owner,
+                session_directory=session_directory, delivery=delivery, environment=environment,
                 session_file=session_file, observe=observe)
 
     @classmethod
     async def open_acquired(
         cls, persistent: NativeSessionRetention[PiSessionChild, NativeChildState, NativeSessionIdentity], agent_bin: str, agent_args: Sequence[str], *,
         package: VerifiedNativePackage, worktree: str, root: Path, owner: ParticipantIdentity, session_directory: Path,
-        environment: dict[str, str], session_file: str,
+        delivery: DealDelivery, environment: dict[str, str], session_file: str,
         observe: Callable[[StateData, AgentInfo], Awaitable[None]],
     ) -> StateData:
         """Keep the session's child owned through launch, observation and retention."""
@@ -70,7 +73,7 @@ class NativeSessionPreparation(NativeSession):
             persistent.child_state.managed_launch,
             agent_bin, tuple(agent_args), worktree=Path(worktree),
             package=package, root=root, owner=owner, directory=session_directory,
-            environment=environment, session_file=session_file,
+            delivery=delivery, environment=environment, session_file=session_file,
         ))
         preparation = cls(launch, native_session=persistent,
                           startup=NativeStartup.for_launch(launch))

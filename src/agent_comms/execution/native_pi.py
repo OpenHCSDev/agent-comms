@@ -35,6 +35,7 @@ from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.installer.active_route import ActiveRoute, resolve_comms_route
 from agent_comms.installer.native_package import MANIFEST, SYSTEM_PROMPT, VerifiedNativePackage
 from agent_comms.nominal.field_codec import InputId
+from agent_comms.team.rule_deal import DealDelivery, EmptyDealDelivery, SystemPromptDelivery
 from agent_comms.transport.native_tool_transport import NativeToolMode
 
 CAPABILITY = "pi-native-input-v1-live-only"
@@ -118,7 +119,7 @@ def main() -> int:
     argv, environment = NativePiRpcLaunch.bootstrap(
         package, tuple(sys.argv[1:]), Path.cwd(), environment,
         RestartEnvironment.inherit(environment),
-        LaunchRuntime.running(),
+        LaunchRuntime.running(), SystemPromptDelivery(SYSTEM_PROMPT),
     )
     os.execvpe(argv[0], list(argv), environment)
     return 0
@@ -143,6 +144,7 @@ class NativePiRpcLaunch:
     env: dict[str, str]
     session: SelectedSession
     package: VerifiedNativePackage
+    delivery: DealDelivery
 
     root: Path = field(kw_only=True)
     configuration: RestartEnvironment = field(kw_only=True)
@@ -151,27 +153,27 @@ class NativePiRpcLaunch:
     @classmethod
     def bootstrap(
         cls, package: VerifiedNativePackage, arguments, cwd, environment, configuration: RestartEnvironment,
-        runtime: LaunchRuntime,
+        runtime: LaunchRuntime, delivery: DealDelivery,
     ):
-        """Encode the held launch configuration at the native process boundary."""
+        """Encode the held launch configuration and deal identity at the process boundary."""
         try:
-            instructions = SYSTEM_PROMPT.resolve(strict=True)
+            delivery_arguments = delivery.launch_arguments()
         except OSError as error:
-            raise NativePiUnavailable("The system prompt was not prepared with the native package") from error
+            raise NativePiUnavailable("The selected system prompt is unavailable") from error
         env = package.node_environment(environment)
         env[ThreadLaunch.variable("worktree")] = str(cwd)
         env = runtime.environment(env)
         env.update(configuration.encode_native())
-        argv = (
-            *package.node("agent-comms-project-bootstrap.mjs"),
-            *arguments, "--append-system-prompt", str(instructions),
-        )
+        argv = (*package.node("agent-comms-project-bootstrap.mjs"), *arguments, *delivery_arguments)
         return argv, env
 
     @classmethod
-    def _build(cls, package, arguments, cwd, environment, session, configuration, runtime, root):
-        argv, env = cls.bootstrap(package, arguments, cwd, environment, configuration, runtime)
-        return cls(argv, cwd, env, session, package, root=root, configuration=configuration, runtime=runtime)
+    def _build(cls, package, arguments, cwd, environment, session, configuration, runtime, root, delivery):
+        argv, env = cls.bootstrap(
+            package, arguments, cwd, environment, configuration, runtime, delivery,
+        )
+        return cls(argv, cwd, env, session, package, delivery,
+                   root=root, configuration=configuration, runtime=runtime)
 
     @classmethod
     def _command_selection(
@@ -227,7 +229,7 @@ class NativePiRpcLaunch:
         cwd = worktree.resolve(strict=True)
         return cls._managed(package, (*arguments, "--no-extensions", "--no-skills",
             "--no-context-files", "--no-session"), cwd, configuration.encode(),
-            SelectedSession(cwd), runtime, root)
+            SelectedSession(cwd), runtime, root, EmptyDealDelivery())
 
     @classmethod
     def managed(
@@ -240,6 +242,7 @@ class NativePiRpcLaunch:
         root: Path,
         owner: ParticipantIdentity,
         directory: Path,
+        delivery: DealDelivery,
         environment: dict[str, str] | None = None,
         session_file: str | None = None,
     ) -> NativePiRpcLaunch:
@@ -254,10 +257,10 @@ class NativePiRpcLaunch:
         saved = Path(session_file).absolute() if session_file is not None else None
         NativeSessionFiles.prepare_private_directory(directory)
         session = SelectedSession.for_launch(directory, saved, root=root, worktree=cwd, owner=owner)
-        return cls._managed(package, arguments, cwd, environment, session, runtime, root)
+        return cls._managed(package, arguments, cwd, environment, session, runtime, root, delivery)
 
     @classmethod
-    def _managed(cls, package, arguments, cwd, environment, session, runtime, root):
+    def _managed(cls, package, arguments, cwd, environment, session, runtime, root, delivery):
         """Assemble the entire key from one acquired package and selected source."""
         cwd = Path(cwd).resolve(strict=True)
         if not cwd.is_dir():
@@ -269,11 +272,12 @@ class NativePiRpcLaunch:
         arguments += session.proof_arguments(root)
         if session.path is not None:
             arguments += ("--session", str(session.path))
-        return cls._build(package, arguments, cwd, env, session, RestartEnvironment.inherit(env), runtime, root)
+        return cls._build(package, arguments, cwd, env, session,
+                          RestartEnvironment.inherit(env), runtime, root, delivery)
 
     def retained_managed(
         self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
-        directory: Path, owner: ParticipantIdentity,
+        directory: Path, owner: ParticipantIdentity, delivery: DealDelivery,
         environment: dict[str, str] | None, session_file: str | None,
     ) -> NativePiRpcLaunch | None:
         """Derive a candidate from this acquired immutable launch, not a path cache.
@@ -289,7 +293,7 @@ class NativePiRpcLaunch:
             return None
         return self._managed(self.package,
             NativeArguments.parse(arguments).managed_rpc(self.package.path),
-            worktree, environment, self.session, self.runtime, root)
+            worktree, environment, self.session, self.runtime, root, delivery)
 
     @classmethod
     def tracked(cls, package: VerifiedNativePackage, **options) -> NativePiRpcLaunch:
@@ -341,7 +345,8 @@ class NativePiRpcLaunch:
         if session_file is not None:
             arguments.extend(("--session", str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
-        return cls._build(package, tuple(arguments), worktree, env, session, configuration, runtime, root)
+        return cls._build(package, tuple(arguments), worktree, env, session, configuration,
+                          runtime, root, SystemPromptDelivery(SYSTEM_PROMPT))
 
 
 def read_tracked_input_commitment(
