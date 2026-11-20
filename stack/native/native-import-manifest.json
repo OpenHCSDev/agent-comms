@@ -5,6 +5,9 @@
       "entry": "agent-comms-extensions/pi-mcp-client/index.mjs"
     },
     {
+      "entry": "agent-comms-extensions/pi-clm/src/index.mjs"
+    },
+    {
       "entry": "dist/selected_claimed_write.mjs"
     },
     {

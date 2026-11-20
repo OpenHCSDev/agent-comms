@@ -150,7 +150,11 @@ class ExtensionArgument(NamedOption, ValueArgument):
 
 
 class ModelProvider(DeclaredFamily, affix="Provider"):
-    """Provider declarations; unknown names are refused."""
+    """Provider declarations own the native extensions their models require."""
+
+    @classmethod
+    def extension_arguments(cls, package: Path) -> tuple[str, ...]:
+        return ()
 
 
 class NoSelectedModel(ModelProvider, declared_name=None):
@@ -167,6 +171,17 @@ class OpenAIProvider(ModelProvider, declared_name="openai"):
 
 class OpenAICodexProvider(ModelProvider, declared_name="openai-codex"):
     """Declared by name."""
+
+
+class ClmLocalProvider(ModelProvider, declared_name="clm-local"):
+    """Local context-language models edit their next request through pi-clm."""
+
+    @classmethod
+    def extension_arguments(cls, package: Path) -> tuple[str, ...]:
+        return (
+            "-e",
+            str(package / "agent-comms-extensions/pi-clm/src/index.mjs"),
+        )
 
 
 @dataclass(frozen=True)
@@ -384,7 +399,12 @@ class NativeArguments:
         """Managed sessions load only the packaged extensions, never discovered copies of them."""
         from agent_comms.transport.native_tools import NativeToolDeclaration
 
-        return ("--no-extensions", *NativeToolDeclaration.extension_arguments(package), *self.rpc())
+        return (
+            "--no-extensions",
+            *NativeToolDeclaration.extension_arguments(package),
+            *self.provider_type.extension_arguments(package),
+            *self.rpc(),
+        )
 
     def rpc(self) -> tuple[str, ...]:
         for entry in self.entries:
