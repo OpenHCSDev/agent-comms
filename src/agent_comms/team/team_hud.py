@@ -666,23 +666,30 @@ class TeamBoardPublicationStore(
         return RetainedTeamBoard(successor, tuple(after.values()))
 
     @classmethod
-    def write_all(cls, root: Path, huds: tuple[TeamHud, ...]) -> frozenset[Path]:
+    def write_all(
+        cls,
+        root: Path,
+        huds: tuple[TeamHud, ...],
+        retained_board: RetainedTeamBoard | None = None,
+    ) -> frozenset[Path]:
         if not huds:
             return frozenset()
         store = cls.at(root)
         publication = store.read()
-        huds_before = store.huds(publication=publication)
+        if retained_board is None or retained_board.publication != publication:
+            retained_board = store.retained(publication)
+        huds_before = retained_board.huds
         before = {
-            hud.teammate: hud.with_plan(publication.plan) for hud in huds_before
+            hud.teammate: hud for hud in huds_before
         }
-        retained = {
+        retained_huds = {
             hud.teammate.require_recorded().lookup: hud for hud in huds_before
         }
-        retained.update(
+        retained_huds.update(
             (hud.teammate.require_recorded().lookup, hud) for hud in huds
         )
         store._publish_unlocked(cls.publication(
-            publication.plan, tuple(retained.values()), before
+            publication.plan, tuple(retained_huds.values()), before
         ))
         return frozenset((store.path,))
 

@@ -195,11 +195,10 @@ def test_unchanged_heartbeat_reuses_the_decoded_board_until_its_source_changes(
     }
 
     changed = replace(original[0], packets=(), open_pings=())
-    TeamBoardPublicationStore.write_all(tmp_path, (changed,))
+    TeamBoardPublicationStore.write_all(tmp_path, (changed,), retained)
+    assert decoded == []
     decoded.clear()
-    TeamBoardPublicationStore.replace_all(
-        tmp_path, TeamPlan(), original, retained
-    )
+    TeamBoardPublicationStore.write_all(tmp_path, (original[1],), retained)
     assert len(decoded) == 1
 
 
