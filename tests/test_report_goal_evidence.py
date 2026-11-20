@@ -12,7 +12,7 @@ from agent_comms.execution.turn_context import FileProvenance
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goals import ProblemGoalOrder
-from agent_comms.planning.progress_claims import ProgressClaim, ReportClaim
+from agent_comms.planning.progress_claims import ArtifactClaim, ProgressClaim, ReportClaim
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tool_caller import ThreadCaller
@@ -61,6 +61,13 @@ def relative(path, source):
     return claimed(FileProvenance(path=path.name, sha256=source.sha256))
 
 
+def oversized(path, source):
+    path.unlink()
+    with path.open("wb") as stream:
+        stream.truncate(FileProvenance.max_public_text_bytes + 1)
+    return claimed(FileProvenance(path=str(path), sha256="0" * 64))
+
+
 def unclaimed(path, source):
     return []
 
@@ -72,7 +79,7 @@ def complete(comms, goal, claims):
     )
 
 
-@pytest.mark.parametrize("tamper", (missing, changed, blank, binary, relative, unclaimed),
+@pytest.mark.parametrize("tamper", (missing, changed, blank, binary, relative, oversized, unclaimed),
                          ids=lambda tamper: tamper.__name__)
 def test_report_completion_refuses_content_it_cannot_authenticate(comms, tmp_path, report_goal, tamper):
     path = tmp_path / "consensus.md"
@@ -96,6 +103,27 @@ def test_report_completion_authenticates_content_before_transition(comms, tmp_pa
     assert completed.state.declared_name == "completed"
     assert completed.progress == "Report delivered"
     assert path.read_bytes() == ORIGINAL
+
+
+def test_artifact_completion_streams_digest_without_decoding(comms, tmp_path, report_goal, monkeypatch):
+    path = tmp_path / "model.gguf"
+    with path.open("wb") as stream:
+        stream.truncate(FileProvenance.max_public_text_bytes + 1)
+    with path.open("rb") as stream:
+        source = FileProvenance(
+            path=str(path), sha256=hashlib.file_digest(stream, "sha256").hexdigest()
+        )
+    claim = FieldCodec.decode(
+        ProgressClaim, {"kind": "artifact", "source": FieldCodec.encode(source)}
+    )
+    assert claim == ArtifactClaim(source)
+    with monkeypatch.context() as patched:
+        patched.setattr(
+            type(path), "read_bytes", lambda self: pytest.fail("artifact was buffered")
+        )
+        assert ProgressClaim.require_all((claim,), comms, tmp_path) == {
+            claim: (source.public_description(),)
+        }
 
 
 def test_report_is_not_implementation_order_completion(comms, tmp_path, report_goal):

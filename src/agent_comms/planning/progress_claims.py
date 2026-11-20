@@ -105,14 +105,28 @@ class WorkingClaim(ProgressClaim):
 
 
 @dataclass(frozen=True)
-class ReportClaim(ProgressClaim):
-    """A delivered report names its original UTF-8 file and exact content digest."""
+class FileClaim(ProgressClaim, declared_name=None):
+    """A claimed file is absolute; each member owns how its bytes are interpreted."""
 
     source: FileProvenance
 
     def __post_init__(self) -> None:
         if not Path(self.source.path).is_absolute():
-            raise ValueError("A report claim needs an absolute source path.")
+            raise ValueError("A file claim needs an absolute source path.")
+
+
+@dataclass(frozen=True)
+class ArtifactClaim(FileClaim):
+    """A binary artifact is authenticated as bytes and is never decoded as report text."""
+
+    def verify(self, comms: Comms, worktree: Path) -> tuple[str, ...]:
+        self.source.verify()
+        return (self.source.public_description(),)
+
+
+@dataclass(frozen=True)
+class ReportClaim(FileClaim):
+    """A delivered report names its original bounded UTF-8 file and exact content digest."""
 
     def verify(self, comms: Comms, worktree: Path) -> tuple[str, ...]:
         if not self.source.public_text(comms).strip():
