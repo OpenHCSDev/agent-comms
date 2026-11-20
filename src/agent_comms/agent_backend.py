@@ -41,7 +41,6 @@ from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_payloads import PiResponseData
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
-from agent_comms.team.rule_deal import DealDelivery
 from agent_comms.transport.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
@@ -118,11 +117,6 @@ class RuntimeLocation(DeclaredFamily, TranscriptRuntime, affix='Runtime'):
 
     def session_observation(self, root: Path, thread: Thread) -> SessionObservation:
         return NoSessionObservation()
-
-    def deal_delivery(self) -> DealDelivery:
-        """How a session on this runtime receives its deal: through the strongest channel its
-        launcher has. A runtime whose launcher puts nothing in the system prompt reads it."""
-        return DealDelivery()
 
     @property
     def saved_model(self) -> ThreadModel:

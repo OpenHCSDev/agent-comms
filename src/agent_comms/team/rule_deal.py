@@ -235,10 +235,12 @@ class Mute(Voice):
         return
 
 
-class DealDelivery:
-    """How a session receives the sources it is dealt. The runtime that launches the session
-    owns the answer, through the strongest channel it has. By default nothing reaches the
-    session until it reads each file with its own read tool."""
+class DealDelivery(DeclaredFamily, ABC, affix="Delivery"):
+    """How a session receives the sources it is dealt. The launch identity and the gate both
+    hold this member, so they cannot disagree about what entered the system prompt."""
+
+    @abstractmethod
+    def launch_arguments(self) -> tuple[str, ...]: ...
 
     open_meanwhile: ClassVar[str] = (
         "Until the deal is read and answered, the gate refuses every tool except reading these"
@@ -265,11 +267,22 @@ class DealDelivery:
 
 
 @dataclass(frozen=True)
+class EmptyDealDelivery(DealDelivery):
+    """The session starts without dealt sources in its system prompt."""
+
+    def launch_arguments(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
 class SystemPromptDelivery(PreparedPrompt, DealDelivery):
     """The deal arrived in the session's system prompt, papers first, the way its launcher
     prepared it: the session read it all before its first token, with the system prompt's
     authority. It owes the witness, not the reads: the audit and "did you mean it?" still stand
     before the first tool call (Tristan, 2026-11-01)."""
+
+    def launch_arguments(self) -> tuple[str, ...]:
+        return ("--append-system-prompt", str(self.prompt.resolve(strict=True)))
 
     def reads(self) -> tuple[DealtRead, ...]:
         return FieldCodec.decode(PromptReads, FieldCodec.parse(self.manifest.read_bytes())).reads
@@ -597,6 +610,10 @@ class DealMode(DeclaredFamily, affix="DealMode"):
     """Session gate policy, retained with the deal and shared by every backend."""
 
     @classmethod
+    def delivery(cls, prompt: Path) -> DealDelivery:
+        return SystemPromptDelivery(prompt)
+
+    @classmethod
     def answer(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> ToolGateState:
         return Open()
 
@@ -612,6 +629,10 @@ class DealMode(DeclaredFamily, affix="DealMode"):
 
 class OffDealMode(DealMode):
     """Do not enforce the read/audit gate or automatically redeal."""
+
+    @classmethod
+    def delivery(cls, prompt: Path) -> DealDelivery:
+        return EmptyDealDelivery()
 
 
 class StartupDealMode(DealMode):
@@ -1172,7 +1193,7 @@ class RuleDeal(State, DealtCalls):
 
     def delivery(self) -> DealDelivery:
         """How the session receives what it is dealt; a deal that knows no launcher reads."""
-        return DealDelivery()
+        return EmptyDealDelivery()
 
     def audit_written(self) -> None:
         """A successful audit edit settles its exact question, then asks about new rules."""

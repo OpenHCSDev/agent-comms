@@ -18,9 +18,12 @@ from agent_comms.team.prompt_reads import (
 from agent_comms.team.rule_deal import (
     AuditDue,
     DealtRuleGate,
+    EmptyDealDelivery,
+    OffDealMode,
     OpenedReads,
     SessionRuleDeal,
     StartedDeal,
+    StartupDealMode,
     SystemPromptDelivery,
     Unaudited,
     Unread,
@@ -38,6 +41,16 @@ class PromptedDeal(SessionRuleDeal, DealtRuleGate):
 
     def refuse(self, reason: str) -> None:
         raise PermissionError(reason)
+
+
+def test_deal_modes_own_native_launch_delivery(tmp_path):
+    prompt = DealPrompt.prepare(tmp_path / "SYSTEM_PROMPT.md")
+    empty = OffDealMode.delivery(prompt)
+    supplied = StartupDealMode.delivery(prompt)
+    assert empty == EmptyDealDelivery()
+    assert empty.launch_arguments() == ()
+    assert supplied == SystemPromptDelivery(prompt)
+    assert supplied.launch_arguments() == ("--append-system-prompt", str(prompt.resolve()))
 
 
 def test_prompt_carries_the_owner_instructions_then_every_dealt_file_once(tmp_path):

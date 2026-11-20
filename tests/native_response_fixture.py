@@ -10,12 +10,13 @@ from agent_comms.execution.native_session_prepare import NativeSessionPreparatio
 from agent_comms.execution.native_startup import NativeStartup
 from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.execution.persistent_pi_session import PersistentPiSession
+from agent_comms.team.rule_deal import EmptyDealDelivery
 
 
 @pytest.fixture
 def native_response_session(tmp_path: Path) -> NativeSessionPreparation:
     launch = NativePiRpcLaunch(
-        ("unused",), tmp_path, {}, SelectedSession(tmp_path), tmp_path,
+        ("unused",), tmp_path, {}, SelectedSession(tmp_path), tmp_path, EmptyDealDelivery(),
         root=tmp_path, runtime=LaunchRuntime.running(),
         configuration=RestartEnvironment.inherit({}),
     )

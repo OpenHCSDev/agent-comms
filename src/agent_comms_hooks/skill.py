@@ -39,6 +39,7 @@ from agent_comms.team.rule_deal import (
     CompactionDeal,
     DealDelivery,
     DealTrigger,
+    EmptyDealDelivery,
     PrimedDeal,
     StartedDeal,
     SystemPromptDelivery,
@@ -307,7 +308,7 @@ class DeckStart(DealtDeck):
     def delivery(self) -> DealDelivery:
         """A session claude_launch started holds the deal in its system prompt; any other reads
         it. The hook record's field is the boundary where that foreign fact becomes ours."""
-        return SystemPromptDelivery(Path(self.system_prompt)) if self.system_prompt else DealDelivery()
+        return SystemPromptDelivery(Path(self.system_prompt)) if self.system_prompt else EmptyDealDelivery()
 
     def dealt(self, reader: DeckReader, trigger: DealTrigger, comms: Comms,
               snapshot: RegistrySnapshot) -> tuple[str, ...]:

@@ -22,6 +22,7 @@ from typing import Self
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.transcript_sources import TranscriptSource
+from agent_comms.installer.native_package import SYSTEM_PROMPT
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.registry.registry_document import RegistrySnapshot
@@ -94,8 +95,8 @@ class PiThreadGate(PiRuleGate, BusVoice):
         return self.thread.name
 
     def delivery(self) -> DealDelivery:
-        """The thread's runtime knows what its launcher put in the system prompt."""
-        return self.thread.runtime.deal_delivery()
+        """The gate mode owns the same launch member the native child holds."""
+        return self.current().mode.delivery(SYSTEM_PROMPT)
 
 
 @dataclass(frozen=True)
