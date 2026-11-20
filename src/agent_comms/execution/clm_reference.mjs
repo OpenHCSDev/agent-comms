@@ -521,18 +521,6 @@ function pendingAssistant(ctx) {
   return null;
 }
 
-function persistentWrap(command, stateDir) {
-  return (
-    `cd "$(cat ${stateDir}/cwd)" 2>/dev/null || true\n` +
-    `. ${stateDir}/env 2>/dev/null || true\n` +
-    `${command}\n` +
-    "_dr_ec=$?\n" +
-    `pwd > ${stateDir}/cwd\n` +
-    `export -p > ${stateDir}/env\n` +
-    "exit $_dr_ec"
-  );
-}
-
 export default function clmReference(pi) {
   const budgetTokens = Number(process.env.CLM_CONTEXT_BUDGET || 28672);
   const reserve = Number(process.env.CLM_CONTEXT_RESERVE || 2048);
@@ -545,7 +533,6 @@ export default function clmReference(pi) {
   let view;
   let ctxDir;
   let ctxFile;
-  let stateDir;
   let rolledBackCmds = [];
   // The request most recently sent, and the mirror written for the command it produced.
   let sent = { raw: [], messages: [], origin: [] };
@@ -576,9 +563,7 @@ export default function clmReference(pi) {
     const session = String(ctx.sessionManager.getSessionId()).replace(/[^A-Za-z0-9_-]/g, "_");
     ctxDir = join(CTX_ROOT, session);
     ctxFile = join(ctxDir, CTX_NAME);
-    stateDir = join("/tmp/.bash_ctx_state", session);
     mkdirSync(ctxDir, { recursive: true, mode: 0o700 });
-    mkdirSync(stateDir, { recursive: true, mode: 0o700 });
     restore(ctx);
   });
 
@@ -670,7 +655,10 @@ export default function clmReference(pi) {
     const rendered = renderEditable([null, ...editable], 1);
     writeFileSync(ctxFile, rendered, { encoding: "utf8", mode: 0o600 });
     mirror = { rendered, covers: sent.raw.length, command };
-    event.input.command = persistentWrap(command, stateDir);
+    // The command runs exactly as the model declared it: the owner authorizes each call
+    // against its declaration and refuses one that differs ("Native tool request/event differs
+    // from the declared call", CLM-ref2 2026-11-20), so the reference's persistent-shell
+    // wrapper does not apply; its system prompt promises no persistence either.
     return undefined;
   });
 
