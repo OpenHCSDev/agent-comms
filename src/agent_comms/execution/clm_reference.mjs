@@ -550,6 +550,11 @@ export default function clmReference(pi) {
   // The request most recently sent, and the mirror written for the command it produced.
   let sent = { raw: [], messages: [], origin: [] };
   let mirror = null; // {rendered, covers, command}
+  // The request's tool schemas, as the last provider payload carried them: counted with the
+  // messages, so the estimate covers what is sent. The reference's one bash schema is a
+  // rounding error; a fixed overhead of several thousand tokens is not, and a multiplicative
+  // calibration cannot absorb it (CLM-ref, 2026-11-20: ratio drifted 2.6 -> 1.2).
+  let toolsText = "";
   const turnCalls = new Set();
 
   function persist(data) {
@@ -592,13 +597,13 @@ export default function clmReference(pi) {
     // Calibrate on the request whose answer is now the newest assistant message.
     const promptTokens = (template?.usage?.input ?? 0) + (template?.usage?.cacheRead ?? 0);
     if (promptTokens > 0 && sent.messages.length) {
-      budget.calibrate(promptTokens, [ctx.getSystemPrompt?.() ?? "", ...messageTexts(sent.messages)]);
+      budget.calibrate(promptTokens, [ctx.getSystemPrompt?.() ?? "", toolsText, ...messageTexts(sent.messages)]);
     }
     let [messages, origin] = view.build(raw, template);
     const system = ctx.getSystemPrompt?.() ?? "";
     const tools = messages.filter((message) => message.role === "toolResult").map(renderedText);
     const droppable = origin.some((index) => index >= PROTECT);
-    const decision = budget.evaluate([system, ...messageTexts(messages)], tools, droppable);
+    const decision = budget.evaluate([system, toolsText, ...messageTexts(messages)], tools, droppable);
     if (decision.action === "rollback") {
       [messages, origin] = rollback(raw, template, system);
     } else if (decision.action === "stop") {
@@ -621,7 +626,7 @@ export default function clmReference(pi) {
       const trial = new LiveView();
       Object.assign(trial, { base: view.base, inserts: view.inserts, ledger: view.ledger,
                              dropped: [...view.dropped, { from: end, to }] });
-      return budget.count([system, ...messageTexts(trial.build(raw, template)[0])]);
+      return budget.count([system, toolsText, ...messageTexts(trial.build(raw, template)[0])]);
     };
     const floor = Math.max(PROTECT, view.base?.covers ?? PROTECT);
     while (from > floor && size(from) > target) {
@@ -645,6 +650,11 @@ export default function clmReference(pi) {
     persist({ kind: "rollback", from, to, ledger: budget.rollbackMessage(dropped.length, after, rolledBackCmds) });
     return view.build(raw, template);
   }
+
+  pi.on("before_provider_request", (event) => {
+    toolsText = JSON.stringify(event.payload?.tools ?? []);
+    return undefined;
+  });
 
   pi.on("turn_start", () => turnCalls.clear());
 
@@ -671,15 +681,15 @@ export default function clmReference(pi) {
     const text = (event.content ?? []).filter((part) => part.type === "text").map((part) => part.text).join("");
     const { block, code } = formatToolResult(text, event.isError);
     const system = ctx.getSystemPrompt?.() ?? "";
-    const before = budget.count([system, ...messageTexts(sent.messages)]);
+    const before = budget.count([system, toolsText, ...messageTexts(sent.messages)]);
     let readBack = null;
     try { readBack = readFileSync(ctxFile, "utf8"); } catch { readBack = null; }
     let note = "";
     const touched = command.includes("LIVE_CTX_MAIN") || command.includes(CTX_ROOT);
     if (readBack !== null && readBack.trim() !== rendered.trim()) {
       const turns = (t) => normalizedTurns(t).map((turn) => turn.text);
-      const baseline = budget.count([system, ...messageTexts(sent.messages.slice(0, PROTECT)), ...turns(rendered)]);
-      const after = budget.count([system, ...messageTexts(sent.messages.slice(0, PROTECT)), ...turns(readBack)]);
+      const baseline = budget.count([system, toolsText, ...messageTexts(sent.messages.slice(0, PROTECT)), ...turns(rendered)]);
+      const after = budget.count([system, toolsText, ...messageTexts(sent.messages.slice(0, PROTECT)), ...turns(readBack)]);
       const limit = budget.strictTarget;
       if (after > baseline && !(limit && after <= limit)) {
         note = rejectedNote(baseline, after, before, `An edit must FIT the ${limit}-token limit`);
@@ -703,7 +713,7 @@ export default function clmReference(pi) {
     const template = [...sent.raw].reverse().find((message) => message.role === "assistant");
     const shown = view.build(sent.raw, template)[0];
     const pending = pendingAssistant(ctx);
-    const tokensNow = budget.count([system, ...messageTexts(shown), ...(pending ? [renderedText(pending)] : []), block]);
+    const tokensNow = budget.count([system, toolsText, ...messageTexts(shown), ...(pending ? [renderedText(pending)] : []), block]);
     const over = tokensNow <= budget.strictTarget ? "" : ` — OVER; compact ${ctxFile} now`;
     const readout = `\n[context: ~${tokensNow}/${budget.strictTarget} tokens${over}]`;
     return { content: [{ type: "text", text: block + readout + note }], isError: false };
