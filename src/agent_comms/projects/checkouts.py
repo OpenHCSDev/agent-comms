@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import base64
 import heapq
+import re
 import shutil
 import string
-import re
 from abc import (
     ABC,
     abstractmethod,
@@ -37,15 +38,18 @@ from immutables import Map, MapMutation
 from agent_comms.errors import MissingSourceLine
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
+    DeclaredWireType,
     FieldCodec,
     GitCommitText,
+    JsonValue,
+    PathText,
     PresentMember,
     SingleFieldValue,
 )
 from agent_comms.projects.git_errors import GitCommandError, UnavailableCommitError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_environment import RepositoryEnvironment
-from agent_comms.storage.file_observation import DocumentBytes
+from agent_comms.storage.file_observation import DocumentBytes, FileObservation
 
 
 class CheckoutHoldsWorkError(ValueError):
@@ -819,6 +823,49 @@ class GitGraphSource:
     policy: GitHistoryPolicy
 
 
+@dataclass(frozen=True)
+class GitBoundarySource:
+    """One exact policy file cut in the restart-safe Git graph source."""
+
+    path: Annotated[Path, PathText]
+    revision: FileObservation
+    content: str
+
+    @classmethod
+    def capturing(cls, path: Path, document: DocumentBytes) -> GitBoundarySource:
+        return cls(path, document.revision, base64.b64encode(document.content).decode("ascii"))
+
+    def document(self) -> DocumentBytes:
+        return DocumentBytes(self.revision, base64.b64decode(self.content, validate=True))
+
+
+@dataclass(frozen=True)
+class GitGraphCacheSource:
+    """The recoverable Git source stored beside its derived graph."""
+
+    repository: Annotated[Path, PathText]
+    replacements: tuple[GitReference, ...]
+    replacement_setting: str
+    boundaries: tuple[GitBoundarySource, ...]
+
+    @classmethod
+    def capturing(cls, source: GitGraphSource) -> GitGraphCacheSource:
+        return cls(
+            source.repository,
+            source.policy.replacements,
+            source.policy.replacement_setting,
+            tuple(GitBoundarySource.capturing(path, document)
+                  for path, document in source.policy.boundary_files),
+        )
+
+    def graph_source(self) -> GitGraphSource:
+        return GitGraphSource(self.repository, GitHistoryPolicy(
+            self.replacements,
+            self.replacement_setting,
+            tuple((boundary.path, boundary.document()) for boundary in self.boundaries),
+        ))
+
+
 class CommitGraph(Mapping[str, GitCommit]):
     """No acquired graph. Its first cut reads all original facts through GitCommit."""
 
@@ -863,10 +910,199 @@ class CapturedCommitGraph(CommitGraph):
         order = Repo.git(source.repository, "rev-list", "--stdin",
                          input="".join(f"{head}\n" for head in heads))
         shas = tuple(map(GitCommitText.from_text, order.splitlines()))
-        added = GitCommit.read(source.repository, tuple(sha for sha in shas if sha not in self),
-                               "--no-walk=unsorted")
+        missing = tuple(sha for sha in shas if sha not in self)
+        added = (GitCommit.read(source.repository, missing, "--no-walk=unsorted")
+                 if missing else {})
         return type(self)(source, {
             sha: self[sha] if sha in self else added[sha] for sha in shas})
+
+
+class RestoredCommitMessages(CommitMessages):
+    """A persisted index resolves only the posting this process actually asks for."""
+
+    def __init__(
+        self, commits: tuple[GitCommit, ...], postings: tuple[CommitWordPosting, ...],
+    ) -> None:
+        super().__init__(commits)
+        self._commits = commits
+        self._positions = {posting.word: posting.positions for posting in postings}
+
+    def following(self, commits: tuple[GitCommit, ...]) -> CommitMessages:
+        return self if commits == self._commits else super().following(commits)
+
+    def acquired_index(self) -> CommitMessages:
+        return self
+
+    def naming(self, token: str) -> frozenset[str]:
+        token = token.lower()
+        if token not in self._named:
+            self._named[token] = (
+                frozenset(self.shas[position] for position in self._positions.get(token, ()))
+                if self.words.fullmatch(token)
+                else frozenset(self._occurrences(token))
+            )
+        return self._named[token]
+
+    @cached_property
+    def word_names(self) -> Map[str, Map[str, None]]:
+        return Map(
+            (word, Map(dict.fromkeys(self.shas[position] for position in positions)))
+            for word, positions in self._positions.items())
+
+
+@dataclass(frozen=True)
+class CommitWordPosting:
+    """One derived exact-word posting retained with its commit messages."""
+
+    word: str
+    positions: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class GitHistorySnapshot(DeclaredWireType):
+    """A restart-safe derived graph whose complete supplying source remains recoverable."""
+
+    wire_type: ClassVar[object] = JsonValue
+    source: GitGraphCacheSource
+    heads: tuple[Annotated[str, GitCommitText], ...]
+    commits: tuple[GitCommit, ...]
+    postings: tuple[CommitWordPosting, ...]
+
+    def __post_init__(self) -> None:
+        commits = {commit.sha for commit in self.commits}
+        if len(commits) != len(self.commits):
+            raise ValueError("Cached Git commits must have distinct identities")
+        if not set(self.heads) <= commits:
+            raise ValueError("Cached Git heads must name cached commits")
+        words: set[str] = set()
+        for posting in self.postings:
+            if posting.word in words or not CommitMessages.words.fullmatch(posting.word):
+                raise ValueError("Cached Git message postings must have distinct exact words")
+            if (tuple(sorted(set(posting.positions))) != posting.positions
+                    or any(position < 0 or position >= len(self.commits)
+                           for position in posting.positions)):
+                raise ValueError("Cached Git message postings must index cached commits")
+            words.add(posting.word)
+
+    def to_wire(self) -> JsonValue:
+        return [
+            1,
+            FieldCodec.encode(self.source, GitGraphCacheSource),
+            list(self.heads),
+            [[commit.sha, list(commit.parents), commit.at, commit.message]
+             for commit in self.commits],
+            [[posting.word, list(posting.positions)] for posting in self.postings],
+        ]
+
+    @classmethod
+    def from_wire(cls, data: object) -> GitHistorySnapshot:
+        if (not isinstance(data, list) or len(data) != 5
+                or not isinstance(data[0], int) or isinstance(data[0], bool) or data[0] != 1):
+            raise ValueError("Git history cache must have supported versioned fields")
+        source = FieldCodec.decode(GitGraphCacheSource, data[1])
+        raw_heads, raw_commits, raw_postings = data[2:]
+        if not all(isinstance(value, list) for value in (raw_heads, raw_commits, raw_postings)):
+            raise ValueError("Git history cache collections must be arrays")
+        if any(not isinstance(value, str) for value in raw_heads):
+            raise ValueError("Git history cache heads must be commit text")
+        heads = tuple(GitCommitText.from_text(value) for value in raw_heads)
+        commits: list[GitCommit] = []
+        for row in raw_commits:
+            if not isinstance(row, list) or len(row) != 4 or not isinstance(row[1], list):
+                raise ValueError("Git history cache commit rows are malformed")
+            sha, parents, at, message = row
+            if (not isinstance(sha, str) or any(not isinstance(parent, str) for parent in parents)
+                    or isinstance(at, bool) or not isinstance(at, (int, float))
+                    or not isinstance(message, str)):
+                raise ValueError("Git history cache commit facts are malformed")
+            commits.append(GitCommit(
+                GitCommitText.from_text(sha),
+                tuple(GitCommitText.from_text(parent) for parent in parents),
+                float(at), message,
+            ))
+        postings: list[CommitWordPosting] = []
+        for row in raw_postings:
+            if (not isinstance(row, list) or len(row) != 2
+                    or not isinstance(row[0], str) or not isinstance(row[1], list)
+                    or any(isinstance(position, bool) or not isinstance(position, int)
+                           for position in row[1])):
+                raise ValueError("Git history cache posting rows are malformed")
+            postings.append(CommitWordPosting(row[0], tuple(row[1])))
+        return cls(source, heads, tuple(commits), tuple(postings))
+
+    @classmethod
+    def capturing(
+        cls,
+        source: GitGraphSource,
+        heads: tuple[str, ...],
+        graph: Mapping[str, GitCommit],
+        messages: CommitMessages,
+    ) -> GitHistorySnapshot:
+        positions = {commit.sha: position for position, commit in enumerate(graph.values())}
+        return cls(
+            GitGraphCacheSource.capturing(source), heads, tuple(graph.values()),
+            tuple(CommitWordPosting(word, tuple(sorted(positions[sha] for sha in posting)))
+                  for word, posting in sorted(messages.word_names.items())),
+        )
+
+    def graph(self) -> CapturedCommitGraph:
+        return CapturedCommitGraph(
+            self.source.graph_source(), {commit.sha: commit for commit in self.commits})
+
+    def messages(self) -> CommitMessages:
+        return RestoredCommitMessages(self.commits, self.postings)
+
+
+class GitHistoryCache:
+    """One atomic current graph per Git common directory; never a version pile."""
+
+    maximum_bytes: ClassVar[int] = 64 * 1024 * 1024
+    relative_path: ClassVar[Path] = Path("agent-comms/history.json")
+
+    def __init__(self, repository: Path) -> None:
+        self.path = repository / self.relative_path
+        self.loaded: GitHistorySnapshot | None = None
+
+    def read(self, source: GitGraphSource) -> GitHistorySnapshot | None:
+        try:
+            if self.path.stat().st_size > self.maximum_bytes:
+                return None
+            decoded = FieldCodec.decode(
+                GitHistorySnapshot, FieldCodec.parse(self.path.read_text()))
+        except (OSError, TypeError, ValueError):
+            return None
+        if decoded.source.graph_source() != source:
+            return None
+        self.loaded = decoded
+        return decoded
+
+    def write(self, snapshot: GitHistorySnapshot) -> None:
+        if snapshot == self.loaded:
+            return
+        try:
+            # store_files reaches process launch, which already imports Checkout.
+            from agent_comms.storage.store_files import AtomicFile
+            encoded = FieldCodec.compact(FieldCodec.encode(snapshot, GitHistorySnapshot))
+            if len(encoded.encode("utf-8")) > self.maximum_bytes:
+                return
+            AtomicFile(self.path).write_text(encoded)
+        except OSError:
+            # This derived acceleration never owns whether the source can be answered.
+            return
+        self.loaded = snapshot
+
+    def retains(
+        self,
+        source: GitGraphSource,
+        heads: tuple[str, ...],
+        graph: Mapping[str, GitCommit],
+    ) -> bool:
+        return (
+            self.loaded is not None
+            and self.loaded.source.graph_source() == source
+            and self.loaded.heads == heads
+            and self.loaded.commits == tuple(graph.values())
+        )
 
 
 class CheckoutHistory:
@@ -885,6 +1121,7 @@ class CheckoutHistory:
         self._walks: dict[CommitSelection, CommitWalk] = {}
         self._message_seed: CommitMessages = NoCommitMessages()
         self._graph_seed: CommitGraph = CommitGraph()
+        self._cache: GitHistoryCache | None = None
 
     @cached_property
     def repository(self) -> Repo:
@@ -940,13 +1177,24 @@ class CheckoutHistory:
         self.required.update(heads)
 
     @cached_property
-    def graph(self) -> Mapping[str, GitCommit]:
+    def graph_request(self) -> tuple[GitGraphSource, tuple[str, ...]]:
         # Capture sources before Git walks; a later cut never rereads this one's policy.
         source = GitGraphSource(self.checkout.common_dir, self.policy)
         heads = tuple(dict.fromkeys((
             *self.required, *(reference.commit for reference in self.refs.values()),
             *(sha for head in self.heads.values() for sha in head.required()),
         )))
+        return source, heads
+
+    @cached_property
+    def graph(self) -> Mapping[str, GitCommit]:
+        source, heads = self.graph_request
+        if type(self._graph_seed) is CommitGraph:
+            self._cache = GitHistoryCache(source.repository)
+            restored = self._cache.read(source)
+            if restored is not None:
+                self._graph_seed = restored.graph()
+                self._message_seed = restored.messages()
         return self._graph_seed.following(source, heads)
 
     def resolve(self, revision: str) -> str:
@@ -1047,6 +1295,11 @@ class CheckoutHistory:
     def messages(self) -> CommitMessages:
         captured = self._message_seed.following(tuple(self.graph.values()))
         self._message_seed = captured
+        source, heads = self.graph_request
+        cache = self._cache or GitHistoryCache(source.repository)
+        if not cache.retains(source, heads, self.graph):
+            cache.write(GitHistorySnapshot.capturing(source, heads, self.graph, captured))
+        self._cache = cache
         return captured
 
     def commits(self, refs: tuple[str, ...], *excluded: str, selected: CommitFilter = EveryCommit(),

@@ -6,7 +6,14 @@ from unittest.mock import Mock, patch
 import pytest
 
 import fixture_git
-from agent_comms.projects.checkouts import Checkout, CommitMessages, CommitsNaming, GitCommit, RepositoryReads
+from agent_comms.projects.checkouts import (
+    Checkout,
+    CommitMessages,
+    CommitsNaming,
+    GitCommit,
+    GitHistoryCache,
+    RepositoryReads,
+)
 from agent_comms.projects.repo import Repo
 
 
@@ -122,3 +129,45 @@ def test_retention_does_not_acquire_new_graph_or_an_unused_word_index(tmp_path: 
         following = RepositoryReads.retaining(reads).history_for(Checkout(main))
         assert following is not earlier
     observed.findall.assert_not_called()
+
+
+def test_restart_cache_retains_exact_graph_and_postings_until_the_git_source_changes(
+    tmp_path: Path,
+):
+    git = fixture_git.run
+    main = tmp_path / 'main'
+    main.mkdir()
+    git(main, 'init', '--initial-branch=main')
+    git(main, 'commit', '--allow-empty', '-m', 'P1 original')
+    original = git(main, 'rev-parse', 'HEAD').strip()
+
+    first = RepositoryReads().history_for(Checkout(main))
+    expected = tuple(first.commits(('main',), selected=CommitsNaming('P1')))
+    assert (main / '.git' / GitHistoryCache.relative_path).is_file()
+
+    scanned = Mock(wraps=CommitMessages.words)
+    with patch.object(GitCommit, 'read', side_effect=AssertionError('cold graph read')), \
+            patch.object(CommitMessages, 'words', scanned):
+        restart_reads = RepositoryReads()
+        restarted = restart_reads.history_for(Checkout(main))
+        assert tuple(restarted.commits(('main',), selected=CommitsNaming('P1'))) == expected
+        git(main, 'branch', 'cached-alias')
+        retained = RepositoryReads.retaining(restart_reads).history_for(Checkout(main))
+        assert retained is not restarted
+        assert tuple(retained.commits(('main',), selected=CommitsNaming('P1'))) == expected
+    scanned.findall.assert_not_called()
+
+    git(main, 'commit', '--allow-empty', '-m', 'P2 added')
+    added = git(main, 'rev-parse', 'HEAD').strip()
+    acquired = Mock(wraps=GitCommit.read)
+    with patch.object(GitCommit, 'read', acquired):
+        advanced = RepositoryReads().history_for(Checkout(main))
+        assert len(tuple(advanced.commits(('main',), selected=CommitsNaming('P2')))) == 1
+    assert [call.args[1] for call in acquired.call_args_list] == [(added,)]
+
+    git(main, 'config', 'core.useReplaceRefs', 'false')
+    acquired = Mock(wraps=GitCommit.read)
+    with patch.object(GitCommit, 'read', acquired):
+        changed = RepositoryReads().history_for(Checkout(main))
+        assert tuple(changed.commits(('main',), selected=CommitsNaming('P1'))) == expected
+    assert [call.args[1] for call in acquired.call_args_list] == [(original, added)]
