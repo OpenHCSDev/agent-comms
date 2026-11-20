@@ -66,7 +66,8 @@ def test_delivery_uses_declared_overview_and_preserves_typed_rows():
     ({'type': 'user', 'promptId': 'turn', 'isMeta': True}, 'harness-note'),
     ({'type': 'user', 'promptId': 'turn', 'isMeta': True, 'origin': {'kind': 'peer'}}, 'user'),
     ({'type': 'user', 'promptId': 'turn', 'isMeta': True, 'turnOrigin': 'scheduled'}, 'user'),
-    ({'type': 'user', 'origin': {'kind': 'task-notification'}, 'isCompactSummary': True}, 'task-user'),
+    ({'type': 'user', 'origin': {'kind': 'task-notification'}, 'isCompactSummary': True}, 'task-notice'),
+    ({'type': 'user', 'promptId': 'turn', 'origin': {'kind': 'task-notification'}}, 'task-user'),
     ({'type': 'assistant', 'origin': 'not a user header'}, 'assistant'),
 ))
 def test_claude_header_preserves_sparse_field_presence_and_precedence(payload, expected):

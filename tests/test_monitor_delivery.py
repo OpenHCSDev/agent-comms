@@ -23,6 +23,8 @@ from agent_comms.cli_bridges.claude_protocol import (
     ForeignTaskNotification,
     KnownTurn,
     ReadResultObserved,
+    TaskNoticeRecord,
+    TaskUserRecord,
 )
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.cli_bridges.harness_delivery_states import (
@@ -471,11 +473,34 @@ def decoded_record(data):
 
 
 def notification(line, record_id=transcript_record('notification-record'), *, prompt_id='prompt'):
-    return decoded_record(dict(
+    record = dict(
         type='user', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
-        sessionId='session', promptId=prompt_id, origin=dict(kind='task-notification'),
+        sessionId='session', origin=dict(kind='task-notification'),
         message=dict(content='<task-notification><event>'+escape(line)+
-                     '</event></task-notification>')))
+                     '</event></task-notification>'))
+    if prompt_id is not None:
+        record['promptId'] = prompt_id
+    return decoded_record(record)
+
+
+def test_promptless_task_notice_keeps_the_active_turn_and_following_records_decode():
+    active = FieldCodec.decode(NativeTurnId, 'active-turn')
+    session = ClaudeSession(turn=KnownTurn(active))
+    notice = notification('ordinary task event', prompt_id=None)
+    assert isinstance(notice, TaskNoticeRecord)
+    (observed,) = notice.updates(session)
+    assert isinstance(observed, MonitorObservation)
+    assert observed.source_turn.require_id() == active
+    assert session.turn == KnownTurn(active)
+
+    prompted_session = ClaudeSession()
+    prompted = notification('prompted task event', prompt_id='prompted-turn')
+    assert isinstance(prompted, TaskUserRecord)
+    (observed_prompt,) = prompted.updates(prompted_session)
+    prompted_turn = NativeTurnId(prompted.uuid)
+    assert observed_prompt.source_turn.require_id() == prompted_turn
+    assert prompted_session.turn == KnownTurn(prompted_turn)
+    assert decoded_record(dict(type='system', subtype='informational')).updates(session) == ()
 
 
 def attachment_notification(line, record_id=transcript_record('notification-record')):
