@@ -1486,6 +1486,13 @@ class ProgressRead(PullRequests, CheckoutReads):
     def retaining(cls, previous: ProgressRead) -> Self:
         """Retain closed forge rows, advance identities and reacquire open check state."""
         refreshed = super().retaining(previous)
+        refreshed._worktrees = {
+            path: worktrees
+            for path, worktrees in previous._worktrees.items()
+            if path in refreshed._worktree_histories
+            and refreshed._worktree_histories[path]
+            is previous._worktree_histories.get(path)
+        }
         refreshed._read = {
             identity: captured
             for identity, captured in previous._read.items()

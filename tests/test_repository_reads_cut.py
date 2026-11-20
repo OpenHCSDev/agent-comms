@@ -18,6 +18,9 @@ from agent_comms.projects.checkouts import (
     RepositoryReads,
 )
 from agent_comms.projects.git_errors import FailedGitCommand
+from agent_comms.projects.repo import Repo
+from agent_comms.projects.repository_name import RepositoryName
+from agent_comms.planning.orders import ProgressRead
 
 git = fixture_git.run
 
@@ -58,6 +61,24 @@ def test_a_worktree_gone_before_the_pass_reads_it_refuses_by_its_git_error(main:
     git(main, "worktree", "remove", str(gone))
     with pytest.raises(FailedGitCommand):
         reads.history_for(Checkout(gone))
+
+
+def test_retention_keeps_an_unconsumed_repository_cut_and_its_worktree_projection(
+    main: Path,
+) -> None:
+    reads = ProgressRead()
+    repository = Repo(
+        checkout=main,
+        github=RepositoryName('example', 'retained-cut'),
+    )
+    history = reads.history_for(Checkout(main))
+    worktrees = reads.worktrees(repository)
+    assert CheckoutHistory.graph.attrname not in history.__dict__
+
+    retained = ProgressRead.retaining(reads)
+
+    assert retained.history_for(Checkout(main)) is history
+    assert retained.worktrees(repository) is worktrees
 
 
 @pytest.mark.parametrize("change", ("loose", "deleted", "detached", "worktree", "unchanged"))

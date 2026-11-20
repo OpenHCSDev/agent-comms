@@ -363,6 +363,82 @@ class AnsweredSource(BusProjectionTables):
         headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
+    @classmethod
+    def unanswered_for_debtors(
+        cls,
+        db: sqlite3.Connection,
+        debtors: tuple[tuple[str, tuple[str, ...]], ...],
+        requesters: tuple[str, ...],
+        since: float,
+        before: float,
+        upper: int,
+        limit: int,
+        kinds: tuple[type[MessageKind], ...] = (),
+    ) -> tuple[tuple[tuple[str, BusRecord], ...], bool]:
+        """Read the complete debtor relation once, not the same question scan per debtor.
+
+        Each debtor carries every registry name that can address or answer for it. The CTE
+        retains that owner identity while joining the append-time recipient and exact-answer
+        indexes, so aliases share one query without merging independently owed answers.
+        """
+        aliases = tuple(
+            (debtor, alias)
+            for debtor, names in debtors
+            for alias in names
+        )
+        if not aliases or not requesters:
+            return (), False
+        values = ",".join("(?, ?)" for _ in aliases)
+        asking = ",".join("?" for _ in requesters)
+        kind_filter = (
+            "AND " + MessageInput.table._sql("message.{type}")
+            + " IN (" + ",".join("?" for _ in kinds) + ") "
+            if kinds else ""
+        )
+        identity = MessageIdentitySource.declared_name
+        rows = tuple(db.execute(
+            f'WITH debtors(debtor, alias) AS (VALUES {values}) '
+            'SELECT debtor, seq, page_position FROM ('
+            'SELECT DISTINCT debtors.debtor AS debtor, asked.seq AS seq, '
+            'DENSE_RANK() OVER (ORDER BY asked.seq DESC) AS page_position FROM debtors '
+            f'JOIN "{AwaitingAnswerSource.declared_name}" AS awaiting '
+            f'ON awaiting.recipient=debtors.alias '
+            f'JOIN "{identity}" AS asked ON asked.seq=awaiting.seq '
+            f'JOIN "{MessageInput.table.declared_name}" AS message USING(seq) '
+            f'WHERE asked.sender IN ({asking}) AND '
+            + MessageInput.table._sql('message.{timestamp} BETWEEN ? AND ? ')
+            + f'AND asked.seq < ? {kind_filter}'
+            + 'AND NOT EXISTS (SELECT 1 FROM debtors AS self '
+              'WHERE self.debtor=debtors.debtor AND self.alias=asked.sender) '
+            + f'AND NOT EXISTS (SELECT 1 FROM "{cls.declared_name}" AS answered '
+              f'JOIN "{identity}" AS author ON author.seq=answered.seq '
+            + cls._sql('WHERE answered.{original}=asked.seq ')
+            + 'AND EXISTS (SELECT 1 FROM debtors AS responder '
+              'WHERE responder.debtor=debtors.debtor AND responder.alias=author.sender)) '
+            + ') WHERE page_position <= ? ORDER BY seq DESC',
+            (
+                *(value for pair in aliases for value in pair),
+                *requesters,
+                since,
+                before,
+                upper,
+                *(kind.declared_name for kind in kinds),
+                limit + 1,
+            ),
+        ))
+        more = any(FieldCodec.decode(int, position) > limit for _, _, position in rows)
+        positions = tuple(
+            (FieldCodec.decode(str, debtor), FieldCodec.decode(int, sequence))
+            for debtor, sequence, position in rows
+            if FieldCodec.decode(int, position) <= limit
+        )
+        records = {
+            sequence: header.kind.read_from(db, header.seq)
+            for sequence in dict.fromkeys(sequence for _, sequence in positions)
+            for header in (BusRow.require(db, seq=sequence),)
+        }
+        return tuple((debtor, records[sequence]) for debtor, sequence in positions), more
+
 
 @dataclass(frozen=True)
 class RecipientReply(AnsweredSource, SentSource, MessageReference, Timestamped, PublishedMessageRead,

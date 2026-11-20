@@ -402,11 +402,16 @@ class UnitAskUnanswered(TeammateOwedAnswer, UndatedStandingRule):
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], debtors: tuple[Thread, ...],
                   requests: Mapping[ThreadIncarnation, Sequence[OwnerRequest]]) -> tuple[Self, ...]:
+        by_debtor = UnansweredTeammateAsks.for_debtors(
+            source,
+            snapshot,
+            tuple(debtor.incarnation for debtor in debtors),
+            held,
+            math.inf,
+        )
         return tuple(cls(message, owner, debtor=debtor.incarnation)
                      for debtor in debtors
-                     for owner, questions in UnansweredTeammateAsks.for_orders(
-                         source, snapshot, debtor.name, held, math.inf,
-                     ).items()
+                     for owner, questions in by_debtor.get(debtor.incarnation, {}).items()
                      for message in questions)
 
     def clearing_action(self) -> str:

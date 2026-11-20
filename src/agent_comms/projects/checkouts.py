@@ -817,26 +817,37 @@ class RepositoryReads:
 
     @classmethod
     def retaining(cls, previous: RepositoryReads) -> Self:
-        """Retain a graph only while refs, every worktree HEAD and walk policy agree.
+        """Retain a repository cut while refs, every worktree HEAD and walk policy agree.
 
         Packed refs alone cannot observe loose refs, detached HEADs or worktree births.
-        Read a fresh cut each pass; unchanged cuts share their immutable graph work.
+        A cut owns refs, heads and policy before any consumer happens to ask for its graph;
+        graph consumption is not the identity of that source.  Changed cuts keep only the
+        derived graph/message work whose own acquisition contracts allow it.
         """
         retained: dict[Path, CheckoutHistory] = {}
+        successors: dict[int, CheckoutHistory] = {}
         for common_dir, history in previous._histories.items():
-            if CheckoutHistory.graph.attrname not in history.__dict__:
+            if history.source_revision is None:
                 continue
             try:
-                retained[common_dir] = (
+                successor = (
                     history
                     if history.sources_current()
                     else history.following(CheckoutHistory.capture(history.checkout))
                 )
+                retained[common_dir] = successor
+                successors[id(history)] = successor
             except (GitCommandError, OSError):
                 # A later requested acquisition owns reporting its unreadable source.
                 continue
         reads = cls()
         reads._histories = retained
+        reads._worktree_histories = {
+            path: successor
+            for path, history in previous._worktree_histories.items()
+            if (successor := successors.get(id(history))) is not None
+            and path in successor.heads
+        }
         reads._statuses = previous._statuses
         previous._statuses = {}
         return reads

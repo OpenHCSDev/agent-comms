@@ -30,6 +30,7 @@ from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.execution.turn_digests import OrderEditCountRead
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.backup import StoreBackup
+from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import (
     CommandTarget,
@@ -655,6 +656,37 @@ def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
     )
 
 
+def test_unanswered_question_relation_reads_all_debtors_in_one_query(held_bus, monkeypatch):
+    asked = held_bus.bus.publisher.publish_ordinary(
+        Message(sender='worker', target='#comms', type=QuestionKind,
+                body='@colleague @outsider One question, two independently owed answers',
+                timestamp=time.time() - 900),
+        destination=CommandTarget.named('#comms'), origin=AgentOrigin())
+    calls = 0
+    original = BusReader.unanswered_for_debtors
+
+    def counted(self, *args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(BusReader, 'unanswered_for_debtors', counted)
+    debtors = tuple(held_bus.registry.require(name) for name in ('colleague', 'outsider'))
+    with held_bus.bus.bus.reading() as source:
+        answers = UnitAskUnanswered.read_open(
+            source,
+            held_bus.registry.snapshot(),
+            held_bus.goals.held_orders().holders,
+            debtors,
+            {},
+        )
+    assert calls == 1
+    assert {(answer.message.reference, answer.debtor.name) for answer in answers} == {
+        (asked.reference, 'colleague'),
+        (asked.reference, 'outsider'),
+    }
+
+
 @pytest.mark.parametrize('read', (
     lambda comms: OwedAnswer.violations(comms),
     lambda comms: capture_frame(comms, ProgressRead()).answers,
@@ -1091,12 +1123,13 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
 @pytest.mark.parametrize('body', ['@outsider This question is yours', 'The worker broadcasts its result'])
 def test_channel_messages_without_a_team_addressee_are_not_a_question(held_bus, body):
     held_bus.messaging.send('worker', '#comms', body, type=QuestionKind)
+    colleague = held_bus.registry.require('colleague').incarnation
     with held_bus.bus.bus.reading() as source:
-        questions = UnansweredTeammateAsks.for_orders(
-            source, held_bus.registry.snapshot(), 'colleague',
+        questions = UnansweredTeammateAsks.for_debtors(
+            source, held_bus.registry.snapshot(), (colleague,),
             held_bus.goals.held_orders().holders, time.time(),
         )
-    assert not any(questions.values())
+    assert not any(questions[colleague].values())
 
 
 def test_send_and_check_accept_a_deletion_check_on_fresh_main(

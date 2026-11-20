@@ -539,6 +539,22 @@ class BusReader(
                 db, scope, since, before, upper, limit, kinds,
             )
 
+    def unanswered_for_debtors(
+        self,
+        debtors: tuple[tuple[str, tuple[str, ...]], ...],
+        requesters: tuple[str, ...],
+        *,
+        since: float,
+        before: float,
+        upper: int,
+        limit: int = 100,
+        kinds: tuple[type[MessageKind], ...] = (),
+    ) -> tuple[tuple[tuple[str, BusRecord], ...], bool]:
+        with self.observing() as db:
+            return AnsweredSource.unanswered_for_debtors(
+                db, debtors, requesters, since, before, upper, limit, kinds,
+            )
+
     def latest_reply(self, references: tuple[MessageReference, ...],
                      responders: frozenset[str]) -> tuple[BusRecord, ...]:
         with self.observing() as db:
@@ -770,4 +786,3 @@ class BusSnapshot(PresentPath, BusReader):
     @contextmanager
     def reading(self) -> Iterator[BusSnapshot]:
         yield self
-
