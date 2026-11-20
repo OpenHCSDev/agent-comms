@@ -185,7 +185,7 @@ def test_steady_heartbeat_retains_its_board_derivations(held_bus, account_read, 
         _ = hud.alarms, hud.plain_group_text, hud.display.publication
         for section in hud.alarms:
             _ = section.display.digest_source
-            for folded in section.folded_rules:
+            for folded in section.display.folded_rules:
                 _ = folded.lines(0)
                 for row in folded.rows:
                     row.__dict__.pop("shown", None)

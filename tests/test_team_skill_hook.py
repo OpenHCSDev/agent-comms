@@ -1118,10 +1118,10 @@ def test_rows_waiting_on_a_stopped_thread_leave_the_main_view():
                       subjects=(worker,), since=since, threads=("pi-stopped",))
     claude = RecordedThreadIncarnation("claude", 1.0)
     packet = TeamDecisions(claude, (live, parked), (live, parked), ())
-    sections = AlarmSection.bind(
+    sections = tuple(map(
+        AlarmSection,
         AlarmGroup.displays((packet,), (live, parked), frozenset({"pi-stopped"})),
-        claude,
-    )
+    ))
     groups = {section.display.group: section for section in sections}
     assert groups[NewAlarms].display.pings == (live,)
     assert groups[ParkedAlarms].display.pings == (parked,)

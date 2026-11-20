@@ -1085,15 +1085,16 @@ class HeartbeatFrame(TeamInputs):
 
     def edit_counts(self, comms: Comms) -> Mapping[str, int]:
         """Count through each source's own query; retain the answer within this frame."""
-        for read in OrderEditCountRead.judgeable(
+        reads = tuple(OrderEditCountRead.judgeable(
                 comms.root,
                 self.live,
                 self.pulls.progress(
                     self.todos, comms.registry, snapshot=self.snapshot,
                 ),
-                self.workplaces):
-            if read.todo.id not in self._edit_counts:
-                self._edit_counts[read.todo.id] = read.read()
+                self.workplaces))
+        self._edit_counts.update(OrderEditCountRead.read_all(
+            read for read in reads if read.todo.id not in self._edit_counts
+        ))
         for todo in self.todos:
             self._edit_counts.setdefault(todo.id, 0)
         return self._edit_counts

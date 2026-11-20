@@ -436,14 +436,14 @@ class TeamHeartbeat(
                 )
                 if update is None:
                     continue
-                sections = AlarmSection.bind(
+                sections = tuple(map(
+                    AlarmSection,
                     AlarmGroup.displays(
                         (update,),
                         update.open_pings(actions),
                         update.stopped(snapshot),
                     ),
-                    update.teammate,
-                )
+                ))
                 current = retained_huds.get(thread.incarnation)
                 if current is not None:
                     changed_huds.append(replace(

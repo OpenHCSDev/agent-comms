@@ -273,11 +273,52 @@ class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):
 class OrderEditCountRead(OrderEditRead[int]):
     """Load counts the edits each order owns; ownership reads each edit's path."""
 
+    @classmethod
+    def read_all(cls, reads: Iterable[Self]) -> dict[str, int]:
+        """Read each holder's source once, then project each order from that cut."""
+        counts: dict[str, int] = {}
+        by_holder: dict[ThreadIncarnation, list[Self]] = {}
+        for read in reads:
+            selected = read.progress.unjudged(lambda: 1)
+            if selected:
+                by_holder.setdefault(read.thread.incarnation, []).append(read)
+            else:
+                counts[read.todo.id] = 0
+        for selected in by_holder.values():
+            counts.update(OrderEditCountBatch(
+                selected[0].root, selected[0].thread, tuple(selected),
+            ).read())
+        return counts
+
     def when_readable(self, operation: Callable[[], int]) -> int:
         return self.progress.unjudged(operation)
 
     def project_edits(self, edits: tuple[EditCall, ...]) -> int:
         return len(edits)
+
+
+@dataclass(frozen=True)
+class OrderEditCountBatch(ThreadRead[dict[str, int]]):
+    """One holder transcript cut supplying every live order's edit count."""
+
+    reads: tuple[OrderEditCountRead, ...]
+
+    def native(self) -> dict[str, int]:
+        source = self.thread.runtime.history_source(self.root, self.thread.incarnation)
+        turns = source.turns(TurnsSince(min(read.bound.at for read in self.reads)))
+        return {
+            read.todo.id: read.project_edits(read.edits_from_turns(turns))
+            for read in self.reads
+        }
+
+    def external(self) -> dict[str, int]:
+        with ExternalTranscript(self.root, self.thread.incarnation).reading() as source:
+            return {
+                read.todo.id: read.project_edits(read.owned(
+                    source.unjudged(read.todo, read.bound.at)
+                ))
+                for read in self.reads
+            }
 
 
 @dataclass(frozen=True)

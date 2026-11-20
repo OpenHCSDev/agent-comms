@@ -640,7 +640,7 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
     @classmethod
     def row_lines(cls, section: AlarmSection, now: float) -> tuple[str, ...]:
         """Every line of every rule, its shared words printed once in the rule's header."""
-        return tuple(line for folded in section.folded_rules for line in folded.lines(now))
+        return tuple(line for folded in section.display.folded_rules for line in folded.lines(now))
 
     @classmethod
     def displays(cls, packets: tuple[TeamUpdate, ...], opened: tuple[Ping, ...],
@@ -750,6 +750,11 @@ class AlarmDisplay:
         return {kind: tuple(pings) for kind, pings in grouped.items()}
 
     @cached_property
+    def folded_rules(self) -> tuple[FoldedRule, ...]:
+        """The recipient-neutral words shared by every projection of this display."""
+        return tuple(FoldedRule.of(kind, pings) for kind, pings in self.by_kind.items())
+
+    @cached_property
     def digest_source(self) -> tuple[Ping, str, str]:
         """The age-independent digest owned by this exact alarm membership."""
         oldest = min(self.pings, key=lambda ping: ping.since.chronology())
@@ -778,26 +783,9 @@ class AlarmDisplay:
 
 @dataclass(frozen=True)
 class AlarmSection:
-    """Recipient-bound actions over one shared alarm display source."""
+    """One projection of a shared alarm display source."""
 
     display: AlarmDisplay
-    recipient: ThreadIncarnation | None = None
-
-    @classmethod
-    def bind(
-        cls,
-        displays: tuple[AlarmDisplay, ...],
-        recipient: ThreadIncarnation | None,
-    ) -> tuple[AlarmSection, ...]:
-        return tuple(cls(display, recipient) for display in displays)
-
-    @cached_property
-    def folded_rules(self) -> tuple[FoldedRule, ...]:
-        """Bind only the action words; display membership remains recipient-neutral."""
-        return tuple(
-            FoldedRule.of(kind, pings, self.recipient)
-            for kind, pings in self.display.by_kind.items()
-        )
 
     def text_lines(self, now: float) -> tuple[str, ...]:
         return self.display.group.row_lines(self, now)
@@ -883,10 +871,9 @@ class FoldedRule:
     @classmethod
     def of(
         cls, kind: type[DeclaredFamily], pings: tuple[Ping, ...],
-        recipient: ThreadIncarnation | None = None,
     ) -> FoldedRule:
         words = tuple(tuple(ping.text.split(" ")) for ping in pings)
-        actions = tuple(cls.action_words(ping.board_actions(recipient)) for ping in pings)
+        actions = tuple(cls.action_words(ping.board_actions()) for ping in pings)
         # A lone row shares nothing with anyone: it keeps every word it has.
         room = min(len(row) for row in words) - 1 if len(pings) > 1 else 0
         prefix = cls.common(words, room)
