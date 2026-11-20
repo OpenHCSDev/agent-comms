@@ -239,12 +239,12 @@ class TeamHud(TeamHudRecord):
         """The one team board, prepared with its first teammate's delivery; for_delivery gives
         every other teammate the same board. Cards follow ``states``, already in the
         TeammateState family's declared order."""
-        snapshot = comms.registry.snapshot()
+        snapshot = frame.snapshot
         owner = delivery.packet.teammate.require_recorded()
         pulls, reading = frame.pulls, frame.plan
         todo_history = reading.todos
         held = frame.todos
-        progress = pulls.progress(held, comms.registry)
+        progress = pulls.progress(held, comms.registry, snapshot=snapshot)
         timers = frame.review_timers
         installed = InstalledBuild.read()
         edits = frame.edit_counts(comms)

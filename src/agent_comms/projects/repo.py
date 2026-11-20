@@ -305,6 +305,42 @@ class Repo(GitLaunch, BaseModel, WireValue):
                              "--git-common-dir").strip()).resolve()
 
     @classmethod
+    def configuration_files(cls, checkout: Path | str) -> tuple[Path, ...]:
+        """Every file supplying Git's effective configuration, including declared includes."""
+        fields = cls.git_bytes(
+            checkout, "config", "--null", "--list", "--show-origin",
+        ).removesuffix(b"\0").split(b"\0")
+        paths: list[Path] = []
+        if not os.environ.get("GIT_CONFIG_NOSYSTEM"):
+            paths.append(Path(os.environ.get("GIT_CONFIG_SYSTEM") or "/etc/gitconfig"))
+        global_config = os.environ.get("GIT_CONFIG_GLOBAL")
+        if global_config:
+            paths.append(Path(global_config).expanduser())
+        else:
+            paths.extend((
+                Path.home() / ".gitconfig",
+                Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+                / "git" / "config",
+            ))
+        root = Path(checkout)
+        for raw_origin, raw_entry in zip(fields[::2], fields[1::2], strict=True):
+            if not raw_origin.startswith(b"file:"):
+                continue
+            origin = Path(os.fsdecode(raw_origin.removeprefix(b"file:"))).expanduser()
+            origin = origin.resolve() if origin.is_absolute() else (root / origin).resolve()
+            paths.append(origin)
+            key, _separator, raw_value = raw_entry.partition(b"\n")
+            if not key.lower().startswith(b"include") or not key.lower().endswith(b".path"):
+                continue
+            included = Path(os.fsdecode(raw_value)).expanduser()
+            paths.append(
+                included.resolve()
+                if included.is_absolute()
+                else (origin.parent / included).resolve()
+            )
+        return tuple(dict.fromkeys(path.resolve() for path in paths))
+
+    @classmethod
     def store_serves(cls, store: Path, *args: str) -> bool:
         """A question to one submodule store, pinned as the git directory so Git never
         discovers the repository around it: any failure, a store holding no repository

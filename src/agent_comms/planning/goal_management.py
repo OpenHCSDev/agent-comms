@@ -458,12 +458,14 @@ class Goals(
             )
             return tuple(source.change(name, previous) for name, previous in requests)
 
-    def goal_snapshot(self, name: str) -> GoalSnapshot:
+    def goal_snapshot(self, name: str, *,
+                      snapshot: RegistrySnapshot | None = None) -> GoalSnapshot:
         """Read current goal and its scheduling projection as one owner snapshot."""
-        return self._goal_snapshot(name)
+        return self._goal_snapshot(name, snapshot=snapshot)
 
-    def _goal_snapshot(self, name: str) -> GoalSnapshot:
-        snapshot = self.registry.snapshot()
+    def _goal_snapshot(self, name: str, *,
+                       snapshot: RegistrySnapshot | None = None) -> GoalSnapshot:
+        snapshot = snapshot if snapshot is not None else self.registry.snapshot()
         canonical = snapshot.canonical_name(name)
         # One owner's wait is one keyed row; decoding every wait to pick it cost 70% of each
         # goal_changed, once per hosted session on every goal store change (2026-10-30).

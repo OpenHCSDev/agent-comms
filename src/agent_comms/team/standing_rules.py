@@ -433,14 +433,14 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
 
     @classmethod
     def prepare(cls, comms: Comms, holds: HeldOrders,
-                pulls: ProgressRead) -> None:
+                pulls: ProgressRead, *, snapshot: RegistrySnapshot | None = None) -> None:
         """Rules acquire nothing unless their scan owner declares an input effect."""
 
     @classmethod
     def prepare_all(cls, comms: Comms, holds: HeldOrders,
-                    pulls: ProgressRead) -> None:
+                    pulls: ProgressRead, *, snapshot: RegistrySnapshot | None = None) -> None:
         for owner in cls.scan_owners():
-            owner.prepare(comms, holds, pulls)
+            owner.prepare(comms, holds, pulls, snapshot=snapshot)
 
     @classmethod
     def broken(cls, comms: Comms, after: float = 0.0, *,
@@ -507,12 +507,13 @@ class IndependentStandingRule(StandingRule, declared_name=None):
 
     @classmethod
     @abstractmethod
-    def violations(cls, comms: Comms) -> tuple[Self, ...]: ...
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]: ...
 
     @classmethod
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.violations(comms)
+        return cls.violations(comms, snapshot=frame.snapshot)
 
 
 class UndatedStandingRule(StandingRule, declared_name=None):
@@ -535,13 +536,14 @@ class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
         # a unit whose declared home is gone is that card and a missing home.
         held = frame.holders
         return cls.for_teammates(comms, (state.unit for state in observed if state.unit in held),
-                             frame.pulls)
+                                 frame.pulls, snapshot=frame.snapshot)
 
     @classmethod
     def for_teammates(cls, comms: Comms, units: Iterable[ThreadIncarnation],
-                  reads: ProgressRead) -> tuple[Self, ...]:
+                      reads: ProgressRead, *,
+                      snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         registry = comms.registry
-        snapshot = registry.snapshot()
+        snapshot = snapshot if snapshot is not None else registry.snapshot()
         members = cls.members_with(cls)
         found: list[Self] = []
         for unit in sorted(set(units), key=lambda unit: unit.name):
@@ -678,7 +680,7 @@ class HeldBranchRule(HolderProblemLine, UndatedStandingRule, FamilyScan, declare
 
     @classmethod
     def prepare(cls, comms: Comms, holds: HeldOrders,
-                pulls: ProgressRead) -> None:
+                pulls: ProgressRead, *, snapshot: RegistrySnapshot | None = None) -> None:
         storage = comms.registry.storage_rule
         prepared: list[PreparedBranch] = []
         for held in holds.live:
@@ -923,12 +925,16 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         return math.inf
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         """Every live teammate's due debts, with shared team debts read once."""
         now = time.time()
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
         owners = tuple(teammate.incarnation for teammate in
-                       TeamService.teammates(comms.registry.snapshot(), comms.goals))
-        return tuple(rule for rule in cls.read_scan(comms, owners, HeldOrders.read(comms))
+                       TeamService.teammates(snapshot, comms.goals))
+        return tuple(rule for rule in cls.read_scan(
+            comms, owners, HeldOrders.of(comms.goals.todos, snapshot),
+        )
                      if rule.due(now))
 
     @classmethod
@@ -1024,11 +1030,13 @@ class TeamInputs(HeldOrders):
 
     pulls: ProgressRead
     plan: PlanReading
+    snapshot: RegistrySnapshot = field(compare=False, repr=False)
 
     @classmethod
     def prepare(cls, comms: Comms, project: RegisteredTeamProject, pulls: ProgressRead,
-                plans: PlanReadings) -> Self:
-        holds = HeldOrders.read(comms)
+                plans: PlanReadings, *, snapshot: RegistrySnapshot | None = None) -> Self:
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
+        holds = HeldOrders.of(comms.goals.todos, snapshot)
         pulls.register(holds.todos)
         repositories = project.repository_names()
         pulls.read_open(repositories)
@@ -1039,8 +1047,8 @@ class TeamInputs(HeldOrders):
             tuple(phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)),
             history=pulls.checkout(repository.checkout).branches.history,
         )
-        StandingRule.prepare_all(comms, holds, pulls)
-        return cls(holds.live, holds.orphaned, pulls, plan)
+        StandingRule.prepare_all(comms, holds, pulls, snapshot=snapshot)
+        return cls(holds.live, holds.orphaned, pulls, plan, snapshot)
 
 
 @dataclass(frozen=True)
@@ -1076,7 +1084,11 @@ class HeartbeatFrame(TeamInputs):
     def edit_counts(self, comms: Comms) -> Mapping[str, int]:
         """Count through each source's own query; retain the answer within this frame."""
         for read in OrderEditCountRead.judgeable(
-                comms.root, self.live, self.pulls.progress(self.todos, comms.registry),
+                comms.root,
+                self.live,
+                self.pulls.progress(
+                    self.todos, comms.registry, snapshot=self.snapshot,
+                ),
                 self.workplaces):
             if read.todo.id not in self._edit_counts:
                 self._edit_counts[read.todo.id] = read.read()
@@ -1095,7 +1107,7 @@ class HeartbeatFrame(TeamInputs):
         snapshot: RegistrySnapshot | None = None,
     ) -> Self:
         """One team board: every teammate's owed answers, never one lead's."""
-        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
+        snapshot = snapshot if snapshot is not None else inputs.snapshot
         project = snapshot.team_project.require()
         with comms.goals.todos.snapshot() as db:
             closed = StoredClosedHead.current(db, project.repository_names())
@@ -1104,21 +1116,30 @@ class HeartbeatFrame(TeamInputs):
         plan = plans.observe_reading(inputs.plan,
             tuple(phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)))
         return cls(
-            inputs.live,
-            inputs.orphaned,
-            inputs.pulls,
-            plan,
-            answers if answers is not None else tuple({
+            live=inputs.live,
+            orphaned=inputs.orphaned,
+            pulls=inputs.pulls,
+            plan=plan,
+            snapshot=snapshot,
+            answers=answers if answers is not None else tuple({
                 answer.observation_key(): answer
                 for answer in OwedAnswer.read_scan(comms, tuple(
                     teammate.incarnation
                     for teammate in TeamService.teammates(snapshot, comms.goals)
                 ), inputs)
             }.values()),
-            closed,
-            reviews,
-            EditWorkplaces.capture(comms.goals, snapshot, inputs.holders, inputs.pulls),
-            TodoStore.timers_up_in(inputs.todos, time.time(), inputs.pulls.progress(inputs.todos, comms.registry)),
+            closed=closed,
+            head_reviews=reviews,
+            workplaces=EditWorkplaces.capture(
+                comms.goals, snapshot, inputs.holders, inputs.pulls,
+            ),
+            review_timers=TodoStore.timers_up_in(
+                inputs.todos,
+                time.time(),
+                inputs.pulls.progress(
+                    inputs.todos, comms.registry, snapshot=snapshot,
+                ),
+            ),
         )
 
 
@@ -1305,12 +1326,13 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
     @classmethod
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.scan_reviews(comms.goals, frame.pulls)
+        return cls.scan_reviews(comms.goals, frame.pulls, snapshot=frame.snapshot)
 
     @classmethod
-    def scan_reviews(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
+    def scan_reviews(cls, goals: Goals, pulls: ProgressRead, *,
+                     snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         now = time.time()
-        snapshot = goals.registry.snapshot()
+        snapshot = snapshot if snapshot is not None else goals.registry.snapshot()
         todos = goals.todos.board()
         return tuple(
             rule
@@ -1364,10 +1386,12 @@ class StuckMerge(HeadLine, DatedStandingRule):
     @classmethod
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.scan_pulls(comms.goals, frame.pulls)
+        return cls.scan_pulls(comms.goals, frame.pulls, snapshot=frame.snapshot)
 
     @classmethod
-    def scan_pulls(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
+    def scan_pulls(cls, goals: Goals, pulls: ProgressRead, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
+        snapshot = snapshot if snapshot is not None else goals.registry.snapshot()
         return tuple(
             cls(request=PullRequestHead(repo, row.number, row.head), blocks=blocks,
                 holders=tuple(dict.fromkeys((
@@ -1375,7 +1399,7 @@ class StuckMerge(HeadLine, DatedStandingRule):
                       for todo in pulls.linked(repo).get(row.number, ())
                       for held in todo.current_holder.current_assignments()),
                     *pulls.working_on(goals, repo, row)))))
-            for repo in goals.registry.snapshot().team_project.repository_names()
+            for repo in snapshot.team_project.repository_names()
             for row in pulls.open(repo)
             for blocks in (row.stuck(),) if blocks
         )
@@ -1409,15 +1433,19 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         ordered = comms.goals.todos.board()
-        return cls.scan_pulls(comms.goals, frame.pulls, frame.todos, ordered)
+        return cls.scan_pulls(
+            comms.goals, frame.pulls, frame.todos, ordered, snapshot=frame.snapshot,
+        )
 
     @classmethod
     def scan_pulls(cls, goals: Goals, pulls: ProgressRead,
-                   held: Sequence[Todo], ordered: Sequence[Todo]) -> tuple[Self, ...]:
+                   held: Sequence[Todo], ordered: Sequence[Todo], *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         """Holders are the live holds whose orders link the request, as the HUD cards read;
         the teammate's orders' links own which requests are its fleet's."""
         now = time.time()
-        repos = goals.registry.snapshot().team_project.repository_names()
+        snapshot = snapshot if snapshot is not None else goals.registry.snapshot()
+        repos = snapshot.team_project.repository_names()
         linked = {repo: pulls.linked_among(ordered, repo) for repo in repos}
         holders: dict[tuple[RepositoryName, int], tuple[ThreadIncarnation, ...]] = {}
         for todo in held:
@@ -1475,17 +1503,19 @@ class OrderlessPullRequest(IdlePullRequest):
     @classmethod
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.scan_orderless(comms.goals, frame.pulls)
+        return cls.scan_orderless(comms.goals, frame.pulls, snapshot=frame.snapshot)
 
     @classmethod
-    def scan_orderless(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
+    def scan_orderless(cls, goals: Goals, pulls: ProgressRead, *,
+                       snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         now = time.time()
         orders = goals.todos.board()
+        snapshot = snapshot if snapshot is not None else goals.registry.snapshot()
         found = (
             cls(request=PullRequestHead(repo, row.number, row.head),
                 holders=pulls.working_on(goals, repo, row),
                 blocks=row.merge_blocks, moved=row.reviewable_at)
-            for repo in goals.registry.snapshot().team_project.repository_names()
+            for repo in snapshot.team_project.repository_names()
             for linked in (pulls.linked_among(orders, repo),)
             for row in pulls.open(repo) if row.number not in linked and not row.armed_times
         )
@@ -1513,7 +1543,7 @@ class ChurningPullRequest(IdlePullRequest):
             cls(request=PullRequestHead(repo, row.number, row.head),
                 holders=pulls.working_on(goals, repo, row),
                 blocks=row.merge_blocks, moved=row.reviewable_at, opened=row.opened_at)
-            for repo in goals.registry.snapshot().team_project.repository_names()
+            for repo in frame.snapshot.team_project.repository_names()
             for row in pulls.open(repo) if not row.armed_times
         )
         return tuple(rule for rule in found if rule.began() <= now)
@@ -1652,7 +1682,8 @@ class ServicePassFailing(FailingPass, IndependentStandingRule, DatedStandingRule
     failed_at: float = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         return cls.from_passes(ServicePassStore.at(comms.root).read())
 
     @classmethod
@@ -1679,12 +1710,16 @@ class BoardDisagrees(UndatedStandingRule):
     @classmethod
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        progress = frame.pulls.progress(frame.todos, comms.registry)
+        progress = frame.pulls.progress(
+            frame.todos, comms.registry, snapshot=frame.snapshot,
+        )
         return tuple(
             cls(problem=todo.id, order=todo.order.checked().id, merge=merged.sha)
             for todo in frame.todos
             for merged in progress[todo.id].missing_merges(
-                ProgressSource.of(todo, comms.registry, frame.pulls),
+                ProgressSource.of(
+                    todo, comms.registry, frame.pulls, snapshot=frame.snapshot,
+                ),
             )
         )
 
@@ -1707,7 +1742,8 @@ class HostMemoryHigh(IndependentStandingRule, UndatedStandingRule):
     fleet_resident: int = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         try:
             runtime = RootRuntimeStore.at(comms.root).read()
         except FileNotFoundError:
@@ -1721,8 +1757,9 @@ class HostMemoryHigh(IndependentStandingRule, UndatedStandingRule):
         except ProcessLookupError:
             return ()
         rule = comms.registry.storage_rule
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
         owners = sum(thread.process_identity == identity
-                     for thread in comms.registry.all_threads().values())
+                     for thread in snapshot.threads.values())
         fleet = sum(row.resident for row in ResidentMemory.tree(identity, rule.proc).values())
         exceeded = rule.host_memory_exceeded(memory) or fleet > rule.team_memory_budget(owners)
         return (cls(identity, memory, rule, owners, fleet),) if exceeded else ()
@@ -1744,7 +1781,8 @@ class MemoryLow(IndependentStandingRule, UndatedStandingRule):
     memory: MemoryUse = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         rule = comms.registry.storage_rule
         memory = rule.memory()
         return (cls(rule=rule, memory=memory),) if rule.memory_due(memory) else ()
@@ -1765,7 +1803,8 @@ class DiskLow(IndependentStandingRule, UndatedStandingRule, FamilyScan):
     free_gib: float = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[DiskLow, ...]:
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[DiskLow, ...]:
         rule = comms.registry.storage_rule
         free = rule.free_gib()
         member = DiskFloorLow if rule.below_floor(free) else cls

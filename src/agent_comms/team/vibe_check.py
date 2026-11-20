@@ -219,9 +219,10 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
     after: ClassVar[int] = 10 * 60
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         """One chokehold per teammate who ignored its own vibe check, for its oldest one."""
-        snapshot = comms.registry.snapshot()
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
         with comms.bus.bus.reading() as source:
             return tuple(
                 cls(teammate.incarnation, message)
@@ -298,13 +299,13 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         held = tuple(teammate.incarnation
-                     for teammate in TeamService.teammates(comms.registry.snapshot(), comms.goals)
-                     if cls.held(comms, teammate.name))
+                     for teammate in TeamService.teammates(frame.snapshot, comms.goals)
+                     if cls.held(comms, teammate.name, snapshot=frame.snapshot))
         blocking = cls.blocking_signs(comms, frame) if held else ()
         return tuple(
             rule
             for teammate in held
-            for answer in cls.newest(comms, teammate.name)
+            for answer in cls.newest(comms, teammate.name, snapshot=frame.snapshot)
             for member in cls.members_with(cls)
             for rule in member.judged(teammate, answer, blocking)
         )
@@ -315,8 +316,9 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
                blocking: tuple[Sign, ...]) -> tuple[Self, ...]: ...
 
     @staticmethod
-    def newest(comms: Comms, teammate: str) -> tuple[Message, ...]:
-        snapshot = comms.registry.snapshot()
+    def newest(comms: Comms, teammate: str, *,
+               snapshot: RegistrySnapshot | None = None) -> tuple[Message, ...]:
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
         with comms.bus.bus.reading() as source:
             if ChokeholdNotice.unanswered(source, snapshot, teammate, time.time()):
                 return ()
@@ -334,9 +336,11 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
         )
 
     @staticmethod
-    def held(comms: Comms, teammate: str) -> bool:
+    def held(comms: Comms, teammate: str, *,
+             snapshot: RegistrySnapshot | None = None) -> bool:
         """Only the teammate a chokehold paused is resumed by its own answer."""
-        return any(goal.state.lifts_on_compliance for goal in comms.registry.require(teammate).goal)
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
+        return any(goal.state.lifts_on_compliance for goal in snapshot.require(teammate).goal)
 
 
 @dataclass(frozen=True)

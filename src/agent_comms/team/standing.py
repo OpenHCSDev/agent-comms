@@ -142,23 +142,27 @@ class InstallDue(UndatedStandingRule, FamilyScan):
     @classmethod
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[InstallDue, ...]:
-        return cls.due(comms, frame.pulls)
+        return cls.due(comms, frame.pulls, snapshot=frame.snapshot)
 
     @staticmethod
-    def recorded(comms: Comms, installed: InstalledBuild) -> tuple[tuple[Repo, RepositoryCommit], ...]:
+    def recorded(comms: Comms, installed: InstalledBuild, *,
+                 snapshot: RegistrySnapshot | None = None) -> tuple[tuple[Repo, RepositoryCommit], ...]:
         """The configured repositories the installed build carries and that still have their
         checkout, each with its installed commit: a repository retired between installs
         (refactor-audit after the NRA migration) leaves the build at the next install and never
         needs a second list; a home with nothing installed carries none."""
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
         return installed.recorded_in(
-            repo for repo in comms.registry.snapshot().team_project.require().repos
+            repo for repo in snapshot.team_project.require().repos
             if repo.checked_out)
 
     @classmethod
     def prepare(cls, comms: Comms, holds: HeldOrders,
-                pulls: ProgressRead) -> None:
+                pulls: ProgressRead, *, snapshot: RegistrySnapshot | None = None) -> None:
         """Fetching changes Git state, so the heartbeat joins it before observation."""
-        for repo, _ in cls.recorded(comms, InstalledBuild.read()):
+        for repo, _ in cls.recorded(
+            comms, InstalledBuild.read(), snapshot=snapshot,
+        ):
             repo.git(repo.checkout, "fetch", "-q", repo.remote, "main")
 
     @classmethod
@@ -171,14 +175,17 @@ class InstallDue(UndatedStandingRule, FamilyScan):
                      for due in cls.due(comms, pulls))
 
     @classmethod
-    def due(cls, comms: Comms, pulls: PullRequests) -> tuple[InstallDue, ...]:
+    def due(cls, comms: Comms, pulls: PullRequests, *,
+            snapshot: RegistrySnapshot | None = None) -> tuple[InstallDue, ...]:
         DeclaredFamily.discover_package(team)  # The verbs that clear it, for its action.
-        repos = comms.registry.snapshot().team_project.require().repos
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
+        repos = snapshot.team_project.require().repos
         logs = InstallLogs(comms.root)
         due: list[InstallDue] = []
         core = {repo.github: repo for repo in repos}[CorePackage.repository]
         target = core.git(core.checkout, "rev-parse", f"{core.remote}/main").strip()
-        for repo, recorded in cls.recorded(comms, InstalledBuild.read()):
+        for repo, recorded in cls.recorded(
+                comms, InstalledBuild.read(), snapshot=snapshot):
             main = repo.git(repo.checkout, "rev-parse", f"{repo.remote}/main").strip()
             # Main is in the build exactly when git logs no first-parent commit past it.
             merges = UninstalledMerge.read(repo, recorded.commit, main)
@@ -275,11 +282,13 @@ class RequestStalled(UrgentStandingRule, OwnerFlaggedStandingRule, IndependentSt
         return (RequestSubject(self.request.id),)
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[RequestStalled, ...]:
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[RequestStalled, ...]:
         """Every live teammate's open requests, once each: every peer acts for every request, so
         asking per teammate listed each one once per teammate."""
         store = comms.goals.todos
-        teammates = TeamService.teammates(comms.registry.snapshot(), comms.goals)
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
+        teammates = TeamService.teammates(snapshot, comms.goals)
         return tuple(cls(request)
                      for request in store.open_requests_of(
                          tuple(teammate.acting_identity for teammate in teammates))
@@ -479,8 +488,9 @@ class GoalBlocked(UrgentStandingRule, IndependentStandingRule, UndatedStandingRu
     reason: str
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[Self, ...]:
-        snapshot = comms.registry.snapshot()
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
         return tuple(cls(thread.incarnation, goal.id, reason)
                      for thread in snapshot.visible_threads(DEFAULT_ROSTER)
                      for goal in thread.goal
@@ -502,8 +512,10 @@ class HolderGone(IndependentStandingRule, UndatedStandingRule):
     todo: Todo
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[Self, ...]:
-        return cls.in_scan(HeldOrders.read(comms))
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
+        return cls.in_scan(HeldOrders.of(comms.goals.todos, snapshot))
 
     @classmethod
     def scan_observed(cls, comms: Comms,
@@ -535,11 +547,14 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
         return cls.idle(comms, HeldOrders.read(comms))
 
     @classmethod
-    def idle(cls, comms: Comms, scan: HeldOrders) -> list[Thread]:
+    def idle(cls, comms: Comms, scan: HeldOrders, *,
+             snapshot: RegistrySnapshot | None = None) -> list[Thread]:
         """Available independent executors, regardless of who issued the request."""
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
         held = {todo.holder for todo in scan.todos}
         bound = TurnsSince(time.time() - cls.recent)
-        return sorted((candidate for thread in comms.registry.active_threads().values()
+        return sorted((candidate
+                       for thread in snapshot.active_threads(snapshot.active_candidates())
                        if thread.name not in held
                        for candidate in thread.order_candidates()
                        if TurnDigestRead(comms.root, candidate, bound).read().turns),
@@ -558,26 +573,39 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
         return hash((type(self), self.comparison_values()))
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[UnownedWheelSpin, ...]:
-        return cls.scan_orders(comms, HeldOrders.read(comms), PullRequests())
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[UnownedWheelSpin, ...]:
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
+        return cls.scan_orders(
+            comms,
+            HeldOrders.of(comms.goals.todos, snapshot),
+            PullRequests(),
+            snapshot=snapshot,
+        )
 
     @classmethod
     def scan_observed(cls, comms: Comms,
                       observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[UnownedWheelSpin, ...]:
-        return cls.scan_orders(comms, frame, frame.pulls)
+        return cls.scan_orders(
+            comms, frame, frame.pulls, snapshot=frame.snapshot,
+        )
 
     @classmethod
     def scan_orders(cls, comms: Comms,
-                    scan: HeldOrders, pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
-        return cls.paired(comms, comms.goals.todos.board(), scan, pulls)
+                    scan: HeldOrders, pulls: PullRequests, *,
+                    snapshot: RegistrySnapshot | None = None) -> tuple[UnownedWheelSpin, ...]:
+        return cls.paired(
+            comms, comms.goals.todos.board(), scan, pulls, snapshot=snapshot,
+        )
 
     @classmethod
     def paired(cls, comms: Comms, todos: Iterable[Todo], scan: HeldOrders,
-               pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
+               pulls: PullRequests, *,
+               snapshot: RegistrySnapshot | None = None) -> tuple[UnownedWheelSpin, ...]:
         """Restore recorded live holders before proposing any cross-unit dispatch."""
         rows = tuple(todo for todo in todos
                      if todo.pending and not todo.holder_state.current_assignments())
-        snapshot = comms.registry.snapshot()
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
         retained = tuple(RetainedHolderWheelSpin(todo, assignment)
                          for todo in rows
                          for assignment in todo.holder_state.retained_assignments(todo, pulls)
@@ -586,7 +614,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
         owners = {rule.previous.owner_identity for rule in retained}
         unowned = tuple(todo for todo in rows if todo.id not in protected)
         # Reading every candidate's recent turns is the expensive part; no unowned row, no read.
-        idle = [unit for unit in cls.idle(comms, scan)
+        idle = [unit for unit in cls.idle(comms, scan, snapshot=snapshot)
                 if unit.incarnation not in owners] if unowned else []
         found = []
         for todo in unowned:
@@ -677,13 +705,15 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, de
         return (PassSubject(self.teammate),)
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[HeartbeatSilent, ...]:
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[HeartbeatSilent, ...]:
         """Each live teammate owed service whose own pass is missing or stale."""
         passes = ServicePassStore.at(comms.root).read()
         now = time.time()
         found = []
         rule: HeartbeatSilent
-        for owner in TeamService.running(comms.registry.snapshot()):
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
+        for owner in TeamService.running(snapshot):
             incarnation = owner.incarnation.require_recorded()
             completed = passes.teammate_completed.get(incarnation)
             for request in TeamService.requested_by(owner, comms.goals):
@@ -731,13 +761,18 @@ class InboxUnavailable(IndependentStandingRule, DatedStandingRule, declared_name
 
     @classmethod
     @abstractmethod
-    def paused(cls, comms: Comms) -> tuple[Self, ...]:
+    def paused(cls, comms: Comms, *,
+               snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         """Each pause this member observes, dated when its window closes."""
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         now = time.time()
-        return tuple(rule for rule in cls.paused(comms) if rule.since < now)
+        return tuple(
+            rule for rule in cls.paused(comms, snapshot=snapshot)
+            if rule.since < now
+        )
 
     def began(self) -> float:
         return self.since
@@ -754,8 +789,9 @@ class TeamDeaf(InboxUnavailable, declared_name="team_deaf"):
     replaced under the same name is a new one. The pause time is not identity (compare=False)."""
 
     @classmethod
-    def paused(cls, comms: Comms) -> tuple[Self, ...]:
-        snapshot = comms.registry.snapshot()
+    def paused(cls, comms: Comms, *,
+               snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
         return tuple(
             cls(paused + cls.seconds, teammate.incarnation.require_recorded())
             for teammate in TeamService.running(snapshot)
@@ -781,9 +817,10 @@ class UnitDeaf(InboxUnavailable):
     """Whose drain is deaf, by birth, as TeamDeaf: a rename keeps the occurrence and its age."""
 
     @classmethod
-    def paused(cls, comms: Comms) -> tuple[Self, ...]:
-        snapshot = comms.registry.snapshot()
-        units = list(comms.registry.active_threads().values())
+    def paused(cls, comms: Comms, *,
+               snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
+        units = list(snapshot.active_threads(snapshot.active_candidates()))
         activity = comms.agents.all_activity(units, snapshot=snapshot)
         return tuple(cls(paused + cls.seconds,
                          snapshot.require(name).incarnation.require_recorded())
@@ -812,10 +849,11 @@ class ForkStalled(IndependentStandingRule, DatedStandingRule):
     seconds: ClassVar[int] = 300
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         """Each teammate session's registered, unarchived forks. Claude runs a fork inside its
         session's process, so only a session whose bridge process is alive has any."""
-        snapshot = comms.registry.snapshot()
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
         teammates = {thread.name: thread for thread in TeamService.running(snapshot)}
         now = time.time()
         return tuple(
@@ -855,7 +893,8 @@ class SlowInstallPhase(IndependentStandingRule, UndatedStandingRule):
     healthy: ClassVar[float] = 60
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         """The newest finished run whose target is the installed Core commit: a rehearsal of
         a newer tree writes phases this runtime may not declare, so only its own run is read."""
         installed = frozenset(record.commit for record in RecordedBuildIdentity.installed().commits)
@@ -884,7 +923,8 @@ class Scrutinize(IndependentStandingRule, UndatedStandingRule):
     count: int
 
     @classmethod
-    def violations(cls, comms: Comms) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms, *,
+                   snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         return tuple(cls(held, todo, count)
                      for todo in comms.goals.todos.held_orders()
                      for held in todo.current_holder.current_assignments()

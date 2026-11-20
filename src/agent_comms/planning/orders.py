@@ -1520,12 +1520,15 @@ class ProgressRead(PullRequests, CheckoutReads):
             directory = todo.order.checked().check.directory
             self._progress[todo.id] = UnreadProgress(f"Source read in {directory}: {error}")
 
-    def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
+    def progress(self, held: Sequence[Todo], registry: Registration, *,
+                 snapshot: RegistrySnapshot | None = None) -> dict[str, OrderProgress]:
         """Each held order's progress, read once per frame however many readers ask."""
         self.register(held)
         for todo in held:
             if todo.id not in self._progress:
-                self._progress[todo.id] = OrderProgress.read(todo, registry, self)
+                self._progress[todo.id] = OrderProgress.read(
+                    todo, registry, self, snapshot=snapshot,
+                )
         return {todo.id: self._progress[todo.id] for todo in held}
 
 
@@ -1557,8 +1560,13 @@ class ProgressSource(PullRequestSource):
     worktrees: tuple[PresentCheckout, ...] = ()
 
     @classmethod
-    def of(cls, todo: Todo, registry: Registration, pulls: ProgressRead) -> Self:
-        owner = registry.require(todo.held().owner)
+    def of(cls, todo: Todo, registry: Registration, pulls: ProgressRead, *,
+           snapshot: RegistrySnapshot | None = None) -> Self:
+        owner = (
+            snapshot.require(todo.held().owner)
+            if snapshot is not None
+            else registry.require(todo.held().owner)
+        )
         storage = registry.storage_rule
         owned = storage.checkout_paths(owner, pulls)
         candidates = (todo.order.checked().check.directory, *owned)
@@ -1633,9 +1641,12 @@ class OrderProgress(DisclosedRecord, DeclaredFamily, affix="Progress"):
     Never stored: the checkout and GitHub are its owners."""
 
     @classmethod
-    def read(cls, todo: Todo, registry: Registration, pulls: ProgressRead) -> OrderProgress:
+    def read(cls, todo: Todo, registry: Registration, pulls: ProgressRead, *,
+             snapshot: RegistrySnapshot | None = None) -> OrderProgress:
         """The first found member by its declared precedence; with none found, no commit yet."""
-        return cls.from_source(MeasuredProgressSource.of(todo, registry, pulls))
+        return cls.from_source(MeasuredProgressSource.of(
+            todo, registry, pulls, snapshot=snapshot,
+        ))
 
     @classmethod
     def from_source(cls, source: ProgressSource) -> OrderProgress:
