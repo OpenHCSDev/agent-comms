@@ -12,6 +12,7 @@ from agent_comms.projects.checkouts import (
     CommitsNaming,
     GitCommit,
     GitHistoryCache,
+    GitHistorySnapshot,
     RepositoryReads,
 )
 from agent_comms.projects.repo import Repo
@@ -19,6 +20,14 @@ from agent_comms.projects.repo import Repo
 
 def records(*texts):
     return tuple(GitCommit(str(index), (), float(index), text) for index, text in enumerate(texts))
+
+
+def test_cached_revision_prefix_resolves_exactly_one_sorted_commit():
+    commits = ("12340", "12345", "abcde")
+    assert GitHistorySnapshot.resolves_once(commits, "12340")
+    assert GitHistorySnapshot.resolves_once(commits, "abc")
+    assert not GitHistorySnapshot.resolves_once(commits, "1234")
+    assert not GitHistorySnapshot.resolves_once(commits, "missing")
 
 
 @pytest.mark.parametrize('after', [
