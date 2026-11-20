@@ -162,30 +162,31 @@ class PrivateSendClaim(FollowingPromptBoundary):
             try:
                 with self.measurements.operation("selected_registry_snapshot"):
                     registry = await Coordination.run_worker(snapshot_registry)
-                result = await TrackedTurn.execute(
-                    execution.native_package,
-                    input_id=self.input_id,
-                    prompt=self.prompt.text,
-                    context_contributions=self.prompt.contributions,
-                    worktree=self.selected.owner.thread.worktree.path.absolute(),
-                    session=self.session,
-                    model=model,
-                    thinking_level=self.selected.owner.thread.thinking_level,
-                    environment=ProjectRuntimeRequest.native_environment(
-                        self.selected.owner.thread,
-                        self.selected.bus.bus.path.parent, registry,
-                    ),
-                    ingress=MaintenanceBarrier(self.selected.bus._registry.store.path),
-                    startup=startup,
-                    selected_tool_mode=selected_tool_mode,
-                    observe_event=observe_event,
-                    request_observer=partial(
-                        record_request_progress, self.selected.bus.bus.path.parent, lease,
-                    ),
-                    prompt_send_boundary=self,
-                    execution=execution,
-                    following=following,
-                )
+                async with model.provider_type.turn(self.session.path):
+                    result = await TrackedTurn.execute(
+                        execution.native_package,
+                        input_id=self.input_id,
+                        prompt=self.prompt.text,
+                        context_contributions=self.prompt.contributions,
+                        worktree=self.selected.owner.thread.worktree.path.absolute(),
+                        session=self.session,
+                        model=model,
+                        thinking_level=self.selected.owner.thread.thinking_level,
+                        environment=ProjectRuntimeRequest.native_environment(
+                            self.selected.owner.thread,
+                            self.selected.bus.bus.path.parent, registry,
+                        ),
+                        ingress=MaintenanceBarrier(self.selected.bus._registry.store.path),
+                        startup=startup,
+                        selected_tool_mode=selected_tool_mode,
+                        observe_event=observe_event,
+                        request_observer=partial(
+                            record_request_progress, self.selected.bus.bus.path.parent, lease,
+                        ),
+                        prompt_send_boundary=self,
+                        execution=execution,
+                        following=following,
+                    )
             except NativePiTerminalFailure as error:
                 def settle(store: Coordination, terminal: NativePiTerminalFailure[NativeContextProof] = error) -> object:
                     self.verify(store, terminal.context, source_reads)

@@ -7,9 +7,10 @@ import os
 import re
 import shlex
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
-from functools import reduce
+from functools import partial, reduce
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -177,6 +178,19 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
     def undealt(cls, record: UndealtRecord) -> UndealtRecord:
         """The rule-gate settings a never-dealt thread on this provider starts from."""
         return record
+
+    @classmethod
+    @asynccontextmanager
+    async def turn(cls, session_file: str | Path | None) -> AsyncIterator[None]:
+        """Around one turn on this provider, whichever path runs it: its start before the
+        first request, its end however the turn finished."""
+        from agent_comms.coordination.coordinator import Coordination
+
+        await Coordination.run_worker(partial(cls.turn_starting, session_file))
+        try:
+            yield
+        finally:
+            await Coordination.run_worker(partial(cls.turn_ended, session_file))
 
     @classmethod
     def turn_starting(cls, session_file: str | Path | None) -> None:

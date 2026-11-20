@@ -198,3 +198,29 @@ def test_a_conversation_is_named_by_its_transcript_header(tmp_path):
     assert context_state.conversation(transcript) == "abc123"
     assert context_state.conversation(tmp_path / "missing.jsonl") is None
     assert context_state.conversation(None) is None
+
+
+def test_a_providers_turn_runs_its_start_then_its_end_even_when_the_turn_fails():
+    import asyncio
+
+    from agent_comms.execution.native_arguments import ModelProvider
+
+    seen: list[str] = []
+
+    class Recording(ModelProvider, declared_name="recording-test-provider"):
+        @classmethod
+        def turn_starting(cls, session_file):
+            seen.append(f"start {session_file}")
+
+        @classmethod
+        def turn_ended(cls, session_file):
+            seen.append(f"end {session_file}")
+
+    async def failing_turn():
+        async with Recording.turn("s.jsonl"):
+            seen.append("turn")
+            raise RuntimeError("the model failed")
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(failing_turn())
+    assert seen == ["start s.jsonl", "turn", "end s.jsonl"]
