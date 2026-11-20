@@ -242,6 +242,25 @@ def test_native_launch_arguments_and_identity_follow_delivery(tmp_path, native_r
         native_runtime_package, (), tmp_path, {}, session, configuration, runtime, tmp_path, supplied)
     assert launch_empty != launch_supplied
 
+    comms = wire(tmp_path)
+    thread = NativeThread("tracked", frozenset(), Checkout(tmp_path))
+    comms.registry.register(thread)
+    tracked = NativePiRpcLaunch.tracked(
+        native_runtime_package,
+        root=tmp_path,
+        worktree=tmp_path,
+        session=SelectedSession(tmp_path / "tracked"),
+        model=SelectedModel("provider", "model"),
+        selected_tool_mode=ToollessMode(
+            CodingChild(
+                comms=comms,
+                thread=thread,
+            )
+        ),
+        delivery=empty,
+    )
+    assert "--append-system-prompt" not in tracked.argv
+
 
 @pytest.mark.parametrize('provider,model', [('', 'model'),('provider',''),('--bad','model')])
 def test_missing_native_model_fails_before_any_session_side_effect(tmp_path, provider, model, *, native_runtime_package):
@@ -249,7 +268,8 @@ def test_missing_native_model_fails_before_any_session_side_effect(tmp_path, pro
         NativePiRpcLaunch.tracked(native_runtime_package, root=tmp_path, worktree=tmp_path,
             session=SelectedSession(tmp_path/'sessions'), model=SelectedModel(provider,model),
             selected_tool_mode=ToollessMode(CodingChild(
-                comms=wire(tmp_path), thread=NativeThread('modelless', frozenset(), Checkout(tmp_path)))))
+                comms=wire(tmp_path), thread=NativeThread('modelless', frozenset(), Checkout(tmp_path)))),
+            delivery=EmptyDealDelivery())
     assert not (tmp_path/'sessions').exists()
 
 
