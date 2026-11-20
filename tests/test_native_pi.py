@@ -14,6 +14,7 @@ from agent_comms.execution.provider_records import ReportedText
 from native_proof_cases import read_context_proof, read_proof_rows, write_proof_rows
 
 from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.execution.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.native_entries import (
     NativeEntry,
@@ -54,6 +55,7 @@ from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
+from agent_comms.team.rule_deal import EmptyDealDelivery, SystemPromptDelivery
 
 INPUT_ID = InputId('a' * 32)
 DIGEST = 'b' * 64
@@ -216,6 +218,29 @@ def test_proof_reader_rejects_session_id_duplicate_or_untrusted_ancestor(tmp_pat
     session.parent.chmod(0o777)
     with pytest.raises(NativePiUnavailable):
         read_context_proof(files, INPUT_ID, session_entry_start=record.start)
+
+
+def test_native_launch_arguments_and_identity_follow_delivery(tmp_path, native_runtime_package):
+    prompt = tmp_path / "SYSTEM_PROMPT.md"
+    prompt.write_text("small declared prompt")
+    configuration = RestartEnvironment.inherit({})
+    runtime = LaunchRuntime.running()
+    empty = EmptyDealDelivery()
+    supplied = SystemPromptDelivery(prompt)
+
+    argv_empty, _ = NativePiRpcLaunch.bootstrap(
+        native_runtime_package, ("--mode", "rpc"), tmp_path, {}, configuration, runtime, empty)
+    argv_supplied, _ = NativePiRpcLaunch.bootstrap(
+        native_runtime_package, ("--mode", "rpc"), tmp_path, {}, configuration, runtime, supplied)
+    assert "--append-system-prompt" not in argv_empty
+    assert argv_supplied[-2:] == ("--append-system-prompt", str(prompt.resolve()))
+
+    session = SelectedSession(tmp_path / "sessions")
+    launch_empty = NativePiRpcLaunch._build(
+        native_runtime_package, (), tmp_path, {}, session, configuration, runtime, tmp_path, empty)
+    launch_supplied = NativePiRpcLaunch._build(
+        native_runtime_package, (), tmp_path, {}, session, configuration, runtime, tmp_path, supplied)
+    assert launch_empty != launch_supplied
 
 
 @pytest.mark.parametrize('provider,model', [('', 'model'),('provider',''),('--bad','model')])
