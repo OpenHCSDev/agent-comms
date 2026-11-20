@@ -274,3 +274,33 @@ test("under the digest rule a stored output is not counted as raw text in the co
       assert.doesNotMatch(stored.result, /DIGEST FIRST/);
     });
 });
+
+test("an edit that drops the request being worked on has it restored; an older request may go", async () => {
+  await under({}, `t${process.pid}k`, async (h, file) => {
+    const first = user("FIRST TASK: sum 1..3000");
+    const older = { ...user("Timing probe: reply SWITCH-2"), inputId: "i1" };
+    const current = { ...user("Read the paper at paper.txt and summarise it"), inputId: "i2" };
+    const raw = [first, older, assistant([{ type: "text", text: "SWITCH-2" }], { stopReason: "stop" }),
+                 current, read("sed -n 1,80p paper.txt"), toolResult("paper text"), read(`python3 wipe.py ${file}`)];
+    const wiped = await step(h, raw, `python3 wipe.py ${file}`, "",
+      () => "[[CTX_TURN 1 role=user]]\nNOTES: nothing kept");
+
+    assert.match(wiped.result, /your edit removed the request you are working on; it was restored/);
+    raw.push(toolResult(wiped.result));
+    const { messages } = await h.hooks.context({ messages: raw }, h.ctx);
+    const texts = messages.map((message) => message.content.map((part) => part.text ?? "").join(""));
+    assert.ok(texts.some((text) => text.includes("Read the paper at paper.txt and summarise it")));
+    assert.ok(!texts.some((text) => text.includes("Timing probe: reply SWITCH-2")));
+    assert.ok(texts[0].includes("FIRST TASK"));
+  });
+});
+
+test("an edit that keeps the current request is applied as written", async () => {
+  await under({}, `t${process.pid}m`, async (h, file) => {
+    const current = { ...user("Read the paper"), inputId: "i2" };
+    const raw = [user("FIRST"), current, read("ls"), toolResult("a.txt"), read(`python3 note.py ${file}`)];
+    const kept = await step(h, raw, `python3 note.py ${file}`, "", (text) => text.replace("a.txt", "one file"));
+    assert.match(kept.result, /edit applied/);
+    assert.doesNotMatch(kept.result, /restored/);
+  });
+});
