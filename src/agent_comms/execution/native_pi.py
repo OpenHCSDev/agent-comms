@@ -353,6 +353,7 @@ class NativePiRpcLaunch:
             "rpc",
             "--no-approve",
             *tool_arguments,
+            *model.provider_type.extension_arguments(package.path),
             "--session-dir",
             str(session_dir),
             *model.argv,
