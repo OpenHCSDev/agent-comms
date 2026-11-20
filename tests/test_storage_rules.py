@@ -27,6 +27,7 @@ from agent_comms.planning.orders import (
 from agent_comms.planning.pull_requests import PullRequestLink
 from agent_comms.projects.checkouts import (
     Checkout,
+    CheckoutHistory,
     DetachedStart,
     RepositoryReads,
 )
@@ -39,7 +40,7 @@ from agent_comms.projects.shell_effects import (
     RemoveCheckoutStorageEffect,
     shell_storage_effects, ForbiddenStorageEffect, BuildStorageEffect, AllocateStorageEffect, ForbiddenRepositoryStorageEffect, WriteStorageEffect,
 )
-from agent_comms.projects.storage_projection import StorageProjection
+from agent_comms.projects.storage_projection import StorageProjection, StorageProjectionReadings
 from agent_comms.projects.storage_rules import (
     CheckoutAllocation,
     GoalCheckoutAllocation,
@@ -837,6 +838,27 @@ def test_a_thread_writes_its_own_linked_worktree_without_a_goal_or_order(
     projection.require_write(worktree / 'implementation.py')
     with pytest.raises(StorageDenied, match='not allocated editable work'):
         projection.require_write(main / 'implementation.py')
+
+
+def test_one_prompt_retains_unchanged_storage_sources(
+    checkout_comms: Comms, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    main = rule.checkout_base / 'worker'
+    worktree = rule.checkout_base / 'worker--P1'
+    Checkout.add(main, worktree, DetachedStart('HEAD'))
+    thread = comms.registry.declare(
+        NativeThread('retained-writer', frozenset(), Checkout(worktree)))
+    readings = StorageProjectionReadings()
+    readings.following(rule, thread, comms).require_write(worktree / 'first.py')
+
+    def reject_recapture(*_args, **_kwargs):
+        raise AssertionError("An unchanged prompt source must retain its repository cut")
+
+    monkeypatch.setattr(CheckoutHistory, 'capture', reject_recapture)
+    readings.following(rule, thread, comms).require_write(worktree / 'second.py')
+    readings.close()
 
 
 def test_the_read_path_is_a_declared_verb_not_a_clone():

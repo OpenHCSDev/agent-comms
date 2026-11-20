@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
 
@@ -25,14 +25,11 @@ class StorageProjection(StorageAdmission):
     rule: StorageRule
     thread: Thread
     comms: Comms
+    reads: RepositoryReads = field(default_factory=RepositoryReads)
 
     @cached_property
     def snapshot(self) -> RegistrySnapshot:
         return self.comms.registry.snapshot()
-
-    @cached_property
-    def reads(self) -> RepositoryReads:
-        return RepositoryReads()
 
     @cached_property
     def storage(self) -> UnitStorage:
@@ -126,3 +123,31 @@ class StorageProjection(StorageAdmission):
         """Preflight every effect of one call against this one snapshot."""
         for effect in effects:
             effect.check(self)
+
+
+class StorageProjectionReadings:
+    """One prompt's repository cuts, advanced from their native sources between calls."""
+
+    def __init__(self) -> None:
+        self.reads: RepositoryReads | None = None
+
+    def following(self, rule: StorageRule, thread: Thread, comms: Comms) -> StorageProjection:
+        """A fresh admission projection carrying only source-current repository answers."""
+        reads = (
+            RepositoryReads.retaining(self.reads)
+            if self.reads is not None
+            else RepositoryReads()
+        )
+        self.reads = reads
+        return StorageProjection(rule, thread, comms, reads)
+
+    def check_call(
+        self, rule: StorageRule, thread: Thread, comms: Comms, call: CodingCall,
+    ) -> tuple[StorageEffect, ...]:
+        """Advance one repository cut and check one call entirely on its worker thread."""
+        return self.following(rule, thread, comms).check_call(call)
+
+    def close(self) -> None:
+        if self.reads is not None:
+            self.reads.close()
+            self.reads = None

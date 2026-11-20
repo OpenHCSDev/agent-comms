@@ -2,6 +2,7 @@
 
 import secrets
 
+from agent_comms.projects.storage_projection import StorageProjectionReadings
 from agent_comms.registry.thread_identity import UnobservedTools
 
 
@@ -13,3 +14,4 @@ class OwnerDouble:
 
     def __init__(self) -> None:
         self.input_id = secrets.token_hex(16)
+        self.storage_readings = StorageProjectionReadings()

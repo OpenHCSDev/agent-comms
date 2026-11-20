@@ -36,7 +36,7 @@ from agent_comms.nominal.lifecycle_capability import Executing
 from agent_comms.pi_payloads import PiToolResult, StorageDenialToolDetails
 from agent_comms.planning.goal_waits import GoalWait
 from agent_comms.planning.goals import GoalDeclaration
-from agent_comms.projects.storage_projection import StorageProjection
+from agent_comms.projects.storage_projection import StorageProjectionReadings
 from agent_comms.registry.thread_identity import OfferedTools
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.storage_room import NoRoomNeeded, RoomReservation
@@ -118,6 +118,10 @@ class OrdinaryGoalInputRule(ReservationRule):
 class CodingToolOwner(CodingChild, ABC):
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
     check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
+    storage_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
+    storage_readings: StorageProjectionReadings = field(
+        default_factory=StorageProjectionReadings, repr=False, compare=False,
+    )
 
     @property
     def owner_name(self) -> str:
@@ -147,8 +151,14 @@ class CodingToolOwner(CodingChild, ABC):
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
         thread = self.thread
-        projection = StorageProjection(registry.storage_rule, thread, self.comms)
-        effects = await asyncio.to_thread(projection.check_call, call)
+        async with self.storage_lock:
+            effects = await asyncio.to_thread(
+                self.storage_readings.check_call,
+                registry.storage_rule,
+                thread,
+                self.comms,
+                call,
+            )
         work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
         if work:
             return await registry.storage_rule.wait_for_room(
@@ -315,10 +325,13 @@ class CodingToolSocket(GatedToolTransport[CodingCall]):
         self.completions.add(task)
 
     async def _drain_calls(self):
-        if self.completions:
-            await asyncio.gather(*tuple(self.completions))
-        for call in self.calls.values():
-            await asyncio.to_thread(call.progress.room.abandon)
+        try:
+            if self.completions:
+                await asyncio.gather(*tuple(self.completions))
+            for call in self.calls.values():
+                await asyncio.to_thread(call.progress.room.abandon)
+        finally:
+            self.owner.storage_readings.close()
 
     async def handle_request(self, raw: bytes) -> dict[str, object]:
         try:
