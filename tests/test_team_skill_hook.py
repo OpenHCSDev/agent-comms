@@ -56,6 +56,7 @@ from agent_comms.task_attachments.team_pings import (
     AlarmSection,
     NewAlarms,
     ParkedAlarms,
+    RetainedPingCuts,
     RulePing,
     TeamDecisions,
     TeamPings,
@@ -1188,8 +1189,10 @@ def test_reader_board_selects_its_rows_before_disposal_reads(notification_bus, m
         holder=reader, problem="P1", order=OrderId.mint(),
         repo=repo, pr=1, head=mine_request.head, due_at=since,
     )
-    prepared = TeamPings((), (*rules, mine_rule), (), now=since,
-                         history=TeamHistory.of_team(comms))
+    prepared = TeamPings(
+        (), (*rules, mine_rule), RetainedPingCuts.from_packets(()), now=since,
+        history=TeamHistory.of_team(comms),
+    )
     packet = prepared.delivery(reader, published=()).packet
     unrelated, mine = packet.handled[:-1], packet.handled[-1]
     reads = []

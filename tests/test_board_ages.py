@@ -8,7 +8,12 @@ from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.task_attachments.team_pings import RulePing, TeamPings, TeamUpdateNotice
+from agent_comms.task_attachments.team_pings import (
+    RetainedPingCuts,
+    RulePing,
+    TeamPings,
+    TeamUpdateNotice,
+)
 from agent_comms.team.standing import TeamDeaf
 
 
@@ -32,9 +37,11 @@ def test_a_teammate_with_no_packet_inherits_the_boards_earliest_start(tmp_path):
     prior = sys.getprofile()
     sys.setprofile(count_captures)
     try:
-        pings = TeamPings((), (rule,), retained, now=1000.0,
-                          history=TeamHistory.read(comms, frozenset()),
-                          not_applied=("An unapplied rule still needs a visible decision.",))
+        pings = TeamPings(
+            (), (rule,), RetainedPingCuts.from_packets((retained,)), now=1000.0,
+            history=TeamHistory.read(comms, frozenset()),
+            not_applied=("An unapplied rule still needs a visible decision.",),
+        )
         delivery = pings.delivery(newcomer, published=())
         announced = pings.delivery(colleague, published=(retained[0],))
     finally:
@@ -45,3 +52,23 @@ def test_a_teammate_with_no_packet_inherits_the_boards_earliest_start(tmp_path):
     assert announced.packet.new_pings() == ()
     handled, = delivery.packet.handled
     assert handled.since == RecordedEventTime(100.0)
+
+
+def test_retained_ping_cuts_share_exact_recipient_histories_without_erasing_an_empty_reader(tmp_path):
+    comms = wire(tmp_path)
+    comms.registry.declare(NativeThread("colleague", frozenset(), Checkout(tmp_path)))
+    colleague = comms.registry.require("colleague").incarnation
+    line = RulePing.capture(TeamDeaf(900.0, colleague.require_recorded()))
+    early = replace(line, since=RecordedEventTime(100.0))
+    late = replace(line, since=RecordedEventTime(500.0))
+    early_packet = TeamUpdateNotice(colleague, (early,))
+    late_packet = TeamUpdateNotice(colleague, (late,))
+
+    shared = RetainedPingCuts.from_packets(((early_packet,),) * 20 + ((late_packet,),))
+    assert len(shared.cuts) == 2
+    assert shared.common() == frozenset({line})
+    assert shared.began()[line] == RecordedEventTime(100.0)
+
+    with_empty_reader = RetainedPingCuts.from_packets(((early_packet,), ()))
+    assert len(with_empty_reader.cuts) == 2
+    assert with_empty_reader.common() == frozenset()

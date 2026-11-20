@@ -85,6 +85,7 @@ from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.team_pings import (
+    RetainedPingCuts,
     RulePing,
     TeamDecisions,
     TeamPings,
@@ -1487,7 +1488,10 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
     assert not HeadSubject(request).disposed(history, published)
 
     # Retained observations own age; actual publications own which lines were announced.
-    delivery = TeamPings((), (lost,), previous, now=time.time(), history=history).delivery(
+    delivery = TeamPings(
+        (), (lost,), RetainedPingCuts.from_packets((previous,)),
+        now=time.time(), history=history,
+    ).delivery(
         owner, published=TeamUpdate.published(comms, owner))
     assert delivery.packet.handled[0].since == ping.since
     assert (delivery.open_pings == ()) is cleared
