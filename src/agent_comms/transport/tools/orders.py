@@ -631,8 +631,11 @@ class CommsTurnsTool(ThreadReadTool):
     ] = ActivityTurnView
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
-        return replace(comms.transcripts.turns(caller.subject(self.thread), self.window),
-                       detail=self.detail)
+        answer = replace(
+            comms.transcripts.turns(caller.subject(self.thread), self.window),
+            detail=self.detail,
+        )
+        return answer.without_tool_results(type(self).declared_name)
 
 
 class ServedInputDeliveryRead(OwnedRead, InputDeliveryRead):

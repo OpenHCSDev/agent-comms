@@ -130,6 +130,10 @@ class TranscriptEvent(EventMerge, Dated, DeclaredFamily, affix="Transcript"):
     def record_call(self, calls: dict[ToolCallId, OrderCall], since: float) -> None:
         """Only tool events change a unit's calls."""
 
+    def without_tool_result(self, tool_name: str) -> TranscriptEvent:
+        """A readback projection changes only result events owned by the named tool."""
+        return self
+
     def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
         return ()
 
@@ -501,6 +505,14 @@ class ToolEndTranscript(ToolTranscript):
     def text_size(self) -> int:
         return len(self.text)
 
+    def without_tool_result(self, tool_name: str) -> TranscriptEvent:
+        """A tool never embeds a prior rendering of its own transcript read.
+
+        The call, arguments, result identity and success state remain in the turn.  Only the
+        recursively derived readback text is absent; it is not an independent source event.
+        """
+        return replace(self, text="") if self.tool_name == tool_name else self
+
     def record_call(self, calls: dict[ToolCallId, OrderCall], since: float) -> None:
         if self.tool_call_id in calls:
             calls[self.tool_call_id] = replace(
@@ -599,6 +611,13 @@ class TurnDigest:
         stored frame stays the evidence of what the model saw."""
         return replace(self, events=tuple(
             kept for event in self.events for kept in event.selected_input(selected)))
+
+    def without_tool_results(self, tool_name: str) -> TurnDigest:
+        """Retain a tool's historical round without recursively embedding its derived view."""
+        return replace(
+            self,
+            events=tuple(event.without_tool_result(tool_name) for event in self.events),
+        )
 
     def before(self, at: float) -> bool:
         """The turn's last recorded event precedes ``at``; an empty turn is never before."""

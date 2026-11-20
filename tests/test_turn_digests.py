@@ -158,6 +158,45 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
     assert source.read_bytes() == saved
 
 
+def test_turns_keep_their_own_round_but_not_the_recursive_readback(tmp_path):
+    comms = wire(tmp_path)
+    source = tmp_path / 'native.jsonl'
+    recursive = '{"turns":[' + 'x' * 200_000 + ']}'
+    rows = [
+        dict(type='session', id='source', version=3, timestamp='2026-10-16T12:00:00Z'),
+        dict(type='message', id='u1', timestamp='2026-10-16T12:00:00Z',
+             message=dict(role='user', content='inspect prior turns')),
+        dict(type='message', id='call', parentId='u1', timestamp='2026-10-16T12:00:01Z',
+             message=dict(role='assistant', content=[dict(
+                 type='toolCall', id='turns-1', name='comms_turns',
+                 arguments=dict(thread='native', detail='original'),
+             )], stopReason='toolUse')),
+        dict(type='message', id='result', parentId='call', timestamp='2026-10-16T12:00:02Z',
+             message=dict(role='toolResult', toolCallId='turns-1', toolName='comms_turns',
+                          isError=False, content=[dict(type='text', text=recursive)])),
+        dict(type='message', id='a1', parentId='result', timestamp='2026-10-16T12:00:03Z',
+             message=dict(role='assistant', content=[dict(type='text', text='inspected')],
+                          stopReason='stop')),
+    ]
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    source.chmod(0o600)
+    comms.registry.declare(NativeThread(
+        'native', frozenset(), Checkout(tmp_path),
+        session_file=RegistrySessionLocation.from_path(str(source), comms.root),
+    ))
+
+    answer = endpoint(comms, 'native', LastTurns(1), detail='original')
+    turn, = answer['turns']
+    start, end = turn['events'][1:3]
+    assert (start['kind'], start['tool_name'], start['raw_input']) == (
+        'tool_start', 'comms_turns', dict(thread='native', detail='original'),
+    )
+    assert (end['kind'], end['tool_name'], end['text'], end['ok']) == (
+        'tool_end', 'comms_turns', '', True,
+    )
+    assert recursive not in json.dumps(answer)
+
+
 @pytest.mark.parametrize('original_in_body', (False, True))
 def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_path, original_in_body):
     comms = wire(tmp_path)
