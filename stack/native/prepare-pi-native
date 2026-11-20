@@ -166,6 +166,8 @@ cp -- "$native_root/native-proof-schema.mjs" "$native_package/dist/core/native-p
 "$python" "$native_root/patch-native-output-commit.py" "$native_package"
 "$python" "$native_root/patch-native-file-artifact.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
+"$python" "$native_root/patch-native-tool-result-budget.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent"
 patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
     -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$native_root/native-request-progress-adapters.patch"
 context_budget=node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
@@ -201,8 +203,10 @@ node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$context_budget"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/dist/core/native-tool-result-budget.js"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
+node --test "$repo_root/tests/native-tool-result-budget.test.mjs"
 if [[ -e "$target" ]]; then
     verify "$target"
     accept
