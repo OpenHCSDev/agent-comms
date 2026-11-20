@@ -82,6 +82,12 @@ class ThreadTurns(ToolResult):
     def to_wire(self) -> JsonValue:
         return self.detail.project(self)
 
+    def without_tool_results(self, tool_name: str) -> ThreadTurns:
+        return replace(
+            self,
+            turns=tuple(turn.without_tool_results(tool_name) for turn in self.turns),
+        )
+
 
 @dataclass(frozen=True)
 class UnavailableOrderEdits(ToolResult):
