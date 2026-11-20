@@ -10,7 +10,7 @@ from abc import (
     ABC,
     abstractmethod,
 )
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from collections.abc import (
     Callable,
     Iterator,
@@ -1479,7 +1479,8 @@ class GitHistorySnapshot(DeclaredWireType):
         commits = {commit.sha for commit in self.commits}
         if len(commits) != len(self.commits):
             raise ValueError("Cached Git commits must have distinct identities")
-        if any(sum(commit.startswith(head) for commit in commits) != 1 for head in self.heads):
+        ordered = tuple(sorted(commits))
+        if any(not self.resolves_once(ordered, head) for head in self.heads):
             raise ValueError("Each cached Git revision must resolve to one cached commit")
         words: set[str] = set()
         for posting in self.postings:
@@ -1490,6 +1491,17 @@ class GitHistorySnapshot(DeclaredWireType):
                            for position in posting.positions)):
                 raise ValueError("Cached Git message postings must index cached commits")
             words.add(posting.word)
+
+    @staticmethod
+    def resolves_once(commits: tuple[str, ...], revision: str) -> bool:
+        """Whether one sorted captured commit has this exact Git revision prefix."""
+        position = bisect_left(commits, revision)
+        return (
+            position < len(commits)
+            and commits[position].startswith(revision)
+            and (position + 1 == len(commits)
+                 or not commits[position + 1].startswith(revision))
+        )
 
     def to_wire(self) -> JsonValue:
         return [
