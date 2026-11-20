@@ -224,3 +224,14 @@ def test_a_providers_turn_runs_its_start_then_its_end_even_when_the_turn_fails()
     with pytest.raises(RuntimeError):
         asyncio.run(failing_turn())
     assert seen == ["start s.jsonl", "turn", "end s.jsonl"]
+
+
+def test_a_provider_only_pi_configures_runs_as_the_base_provider():
+    from agent_comms.execution.native_arguments import (
+        ClmLocalProvider,
+        ConfiguredProvider,
+        SelectedModel,
+    )
+
+    assert SelectedModel("some-local-server", "m").provider_type is ConfiguredProvider
+    assert SelectedModel("clm-local", "m").provider_type is ClmLocalProvider
