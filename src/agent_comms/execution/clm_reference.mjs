@@ -18,6 +18,7 @@ const ENTRY = "clm-reference";
 const CTX_ROOT = "/tmp/.live_ctx";
 const CTX_NAME = "LIVE_CTX_MAIN.txt";
 const VIEW_NAME = "LIVE_VIEW.json";
+const OUTPUT_ROOT = "/tmp/.clm_outputs";
 const PROTECT = 1; // Pi sends the system prompt separately: the protected prefix is the task.
 const TRIVIAL_EDIT_TOKENS = 32;
 const ROLLBACK_ESCALATE_AFTER = 3;
@@ -522,9 +523,135 @@ function pendingAssistant(ctx) {
   return null;
 }
 
+/** When the model must compact its context, beyond what the budget presses for. The
+ * provider names the rule its models run under (CLM_EDIT_RULE); each member is one rule. */
+export class EditRule {
+  static members = new Map();
+
+  static declare(name, member) {
+    EditRule.members.set(name, member);
+    return member;
+  }
+
+  static named(name) {
+    const member = EditRule.members.get(name);
+    if (!member) throw new Error(`Unknown CLM edit rule: ${JSON.stringify(name)}`);
+    return new member();
+  }
+
+  /** Why `command` may not run now, or null when it may. */
+  refusal(_command, _ctxFile) { return null; }
+
+  /** A command's output of `tokens` entered the context. */
+  observed(_tokens) {}
+
+  /** An applied edit freed `tokens` of context. */
+  compacted(_tokens) {}
+
+  /** What the model is told after a command, or "". */
+  reminder(_ctxFile) { return ""; }
+}
+
+/** The reference harness: only the budget's reminders and rollbacks press. */
+export class BudgetPressure extends EditRule {}
+EditRule.declare("budget", BudgetPressure);
+
+/** Each sizeable output is digested before the next command runs: turned into notes and
+ * dropped. iter44 compacts only near its limit (CLM-tristan, 2026-11-20: two edits in sixteen
+ * turns, both after a budget reminder), which cannot read a document larger than its window;
+ * here each part's digestion is the precondition of fetching the next. */
+export class DigestEachOutput extends BudgetPressure {
+  /** An output smaller than this is not worth an edit of its own. */
+  threshold = 500;
+  /** Tokens of output brought in since the last compaction that removed them. */
+  pending = 0;
+
+  told(ctxFile) {
+    return `DIGEST FIRST: ~${this.pending} tokens of command output are still raw in your context. ` +
+      `Your next command must edit ${ctxFile}: write what you need from that output as short ` +
+      "notes and delete the raw output. No other command runs until the raw output is gone.";
+  }
+
+  refusal(command, ctxFile) {
+    return this.pending > 0 && !command.includes(CTX_NAME) ? this.told(ctxFile) : null;
+  }
+
+  observed(tokens) {
+    if (tokens >= this.threshold) this.pending += tokens;
+  }
+
+  /** Digested once an edit removed at least half of what the outputs brought in: a rewrite
+   * that keeps the raw text, or writes the same text back, frees nothing and does not count. */
+  compacted(tokens) {
+    if (tokens >= this.pending / 2) this.pending = 0;
+  }
+
+  reminder(ctxFile) {
+    return this.pending > 0 ? `\n[${this.told(ctxFile)}]` : "";
+  }
+}
+EditRule.declare("digest", DigestEachOutput);
+
+/** A command's output on its way into the context: shown when it fits the room left under
+ * the limit, stored to a file and described when it does not. */
+export class Observation {
+  /** An output this small is always shown: storing it would cost more than it holds. */
+  static small = 256;
+
+  static entering({ block, code }, full, room, limit, count, store) {
+    const tokens = count(block);
+    return tokens <= Math.max(room, Observation.small)
+      ? new ShownObservation(block, tokens)
+      : StoredObservation.saving(full, code, limit - room, limit, count, store);
+  }
+
+  /** `text` is what enters the context, `tokens` its size there. */
+  constructor(text, tokens) {
+    this.text = text;
+    this.tokens = tokens;
+  }
+}
+
+export class ShownObservation extends Observation {}
+
+/** An output that would have put the context over its limit. Ending the turn on an error
+ * loses the work that produced it; the model is told its size and where it is instead, and
+ * reads it in parts that fit. */
+export class StoredObservation extends Observation {
+  static saving(full, code, held, limit, count, store) {
+    const file = store.save(full);
+    const tokens = count(full);
+    const lines = full.split("\n").length;
+    const text = `[OUTPUT STORED, NOT SHOWN: this command's output is ~${tokens} tokens (${lines} lines); ` +
+      `with ~${held} of your ${limit} tokens already in use it would not fit. It is saved in ${file}. ` +
+      `Read it in parts that fit, for example: sed -n '1,60p' ${file} — and note what you need ` +
+      `from each part before reading the next.]\n\n(exit_code=${code})`;
+    return new StoredObservation(text, count(text));
+  }
+}
+
+/** Stored outputs of one conversation: numbered files outside the context mirror's directory,
+ * so reading one is never mistaken for an edit of the context. */
+export class OutputStore {
+  constructor(directory) {
+    this.directory = directory;
+    this.saved = 0;
+  }
+
+  save(text) {
+    mkdirSync(this.directory, { recursive: true, mode: 0o700 });
+    this.saved += 1;
+    const file = join(this.directory, `output-${String(this.saved).padStart(3, "0")}.txt`);
+    writeFileSync(file, text, { encoding: "utf8", mode: 0o600 });
+    return file;
+  }
+}
+
 export default function clmReference(pi) {
   const budgetTokens = Number(process.env.CLM_CONTEXT_BUDGET || 28672);
   const reserve = Number(process.env.CLM_CONTEXT_RESERVE || 2048);
+  const rule = EditRule.named(process.env.CLM_EDIT_RULE || "budget");
+  let outputs;
   const hint =
     `Compact ${CTX_ROOT}/<session>/${CTX_NAME} by locating stale regions with code (match a turn by its ` +
     "[[CTX_TURN i ...]] header or a block by short start/end anchors) and replacing " +
@@ -565,6 +692,7 @@ export default function clmReference(pi) {
     ctxDir = join(CTX_ROOT, session);
     ctxFile = join(ctxDir, CTX_NAME);
     mkdirSync(ctxDir, { recursive: true, mode: 0o700 });
+    outputs = new OutputStore(join(OUTPUT_ROOT, session));
     restore(ctx);
   });
 
@@ -670,6 +798,8 @@ export default function clmReference(pi) {
     turnCalls.add(event.toolCallId);
     if (event.toolName !== "bash") return undefined;
     const command = String(event.input.command ?? "");
+    const refusal = rule.refusal(command, ctxFile);
+    if (refusal) return { block: true, reason: refusal };
     const editable = sent.messages.slice(PROTECT + (view.ledger ? 1 : 0));
     const rendered = renderEditable([null, ...editable], 1);
     writeFileSync(ctxFile, rendered, { encoding: "utf8", mode: 0o600 });
@@ -703,6 +833,7 @@ export default function clmReference(pi) {
       } else {
         persist({ kind: "edit", covers, text: readBack });
         budget.noteCompaction();
+        rule.compacted(baseline - after);
         const count = normalizedTurns(readBack).length + PROTECT;
         if (after > baseline) {
           note = `\n[LIVE_CTX_MAIN.txt: edit applied but it GREW context ~${baseline}->${after} tokens (it fits, so it was kept). If you meant to condense, you likely duplicated content instead of replacing it.]`;
@@ -720,9 +851,16 @@ export default function clmReference(pi) {
     const template = [...sent.raw].reverse().find((message) => message.role === "assistant");
     const shown = view.build(sent.raw, template)[0];
     const pending = pendingAssistant(ctx);
-    const tokensNow = budget.count([system, toolsText, ...messageTexts(shown), ...(pending ? [renderedText(pending)] : []), block]);
+    const held = budget.count([system, toolsText, ...messageTexts(shown), ...(pending ? [renderedText(pending)] : [])]);
+    const observation = Observation.entering(
+      { block, code }, text, budget.strictTarget - held, budget.strictTarget, (part) => budget.count([part]), outputs);
+    if (!touched) rule.observed(observation.tokens);
+    const tokensNow = held + budget.count([observation.text]);
     const over = tokensNow <= budget.strictTarget ? "" : ` — OVER; compact ${ctxFile} now`;
     const readout = `\n[context: ~${tokensNow}/${budget.strictTarget} tokens${over}]`;
-    return { content: [{ type: "text", text: block + readout + note }], isError: false };
+    return {
+      content: [{ type: "text", text: observation.text + readout + note + rule.reminder(ctxFile) }],
+      isError: false,
+    };
   });
 }

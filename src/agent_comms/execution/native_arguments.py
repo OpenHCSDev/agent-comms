@@ -236,6 +236,12 @@ class ClmLocalProvider(ModelProvider, declared_name="clm-local"):
 
     budget_tokens: ClassVar[int] = 28_672
     reserve_tokens: ClassVar[int] = 2_048
+    # When the model must compact, by the rule's declared name in clm_reference.mjs (EditRule).
+    # "budget" is the reference harness: only budget reminders press. Under it iter44 edited
+    # twice in sixteen turns, both after a reminder (CLM-tristan, 2026-11-20), and cannot read a
+    # document larger than its window; "digest" makes each sizeable command output's notes and
+    # removal the precondition of the next command (Tristan, 2026-11-20: "can't we FORCE it").
+    edit_rule: ClassVar[str] = "digest"
 
     @classmethod
     def extension_arguments(cls, package: Path) -> tuple[str, ...]:
@@ -246,6 +252,7 @@ class ClmLocalProvider(ModelProvider, declared_name="clm-local"):
         return {
             "CLM_CONTEXT_BUDGET": str(cls.budget_tokens),
             "CLM_CONTEXT_RESERVE": str(cls.reserve_tokens),
+            "CLM_EDIT_RULE": cls.edit_rule,
         }
 
     @classmethod
