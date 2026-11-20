@@ -4,7 +4,8 @@
     {"source": "src/agent_comms/owner_tool_socket.mjs", "target": "dist/owner_tool_socket.mjs"},
     {"source": "src/agent_comms/execution/selected/selected_claimed_write.mjs", "target": "dist/selected_claimed_write.mjs"},
     {"source": "src/agent_comms/channel_coding_tools.mjs", "target": "dist/channel_coding_tools.mjs"},
-    {"source": "src/agent_comms/pi_login_control.mjs", "target": "dist/pi_login_control.mjs"}
+    {"source": "src/agent_comms/pi_login_control.mjs", "target": "dist/pi_login_control.mjs"},
+    {"source": "extensions/pi-clm/steering/house-brief.md", "target": "agent-comms-extensions/pi-clm/steering/house-brief.md"}
   ],
   "mcp_client": {
     "root": "extensions/pi-mcp-client",
@@ -12,5 +13,6 @@
     "files": ["index.mjs", "README.md"],
     "trees": ["src", "bin"]
   },
-  "compaction_instruction": "src/agent_comms/instructions/coordination.md"
+  "compaction_instruction": "src/agent_comms/instructions/coordination.md",
+  "package_trees": ["extensions/pi-clm"]
 }

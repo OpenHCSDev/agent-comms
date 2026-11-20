@@ -1,0 +1,3 @@
+[submodule "extensions/pi-clm"]
+	path = extensions/pi-clm
+	url = https://github.com/lolipopshock/pi-clm.git

@@ -25,7 +25,7 @@ e48d660f42e0fdc6c8b2d1b30c28a6cc85dea716b0a8efeb1419bf302ad2df00  dist/core/nati
 aee0d85af99dc5736fae2953c30b72bf5c613e7d9560815f48424253251f4374  dist/core/native-proof-schema.js
 aae7f609bfa65d29ed16e311456921a88221622e08cf6a1f5c7aab8e58bd69e6  node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
 cf039098a3da1c39870f919521ba8a511ed4e116568b3d7ccb39ff0362126b41  agent-comms-extensions/global-agent-comms/index.mjs
-1da67b3670bd4627720da89ef7117ec5dab1b09eb7f994e6fef644cfa9ecb33f  dist/agent-comms-imports.json
+063312317e9ab1e94d2f49f47bece741113724e2e9258cc7e52a06792ae516db  dist/agent-comms-imports.json
 74f980659f8bb5e015c1ee23744af6b4a360e24daaaeead635fb60da6b40ad71  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js
 9c35402030c74a4c5b884a7f9087c19c21b8c6981d64d7e541390d3ef450646d  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.d.ts
 e87b99fc294377e78a6bc6019a6b21816d9ba27012f109fb2626105e0c3f1ceb  node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.js
@@ -56,5 +56,5 @@ d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skil
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
 # agent-comms-native-stock-v1 @earendil-works/pi-coding-agent@0.85.1
-# agent-comms-native-tree-v1 cd242471336e050afbd52116a5d49c27511a488bef51e7f3950350e6777ee360
-# agent-comms-native-inputs-v1 7139d1db4b6f2e1b53b2dedae08e7772ad16524952b7b04e91152b4a61415155
+# agent-comms-native-tree-v1 2ee2480c00deda45864aee246414e10f4068649e7a7731487bbc7fc7117d13b6
+# agent-comms-native-inputs-v1 0dacc5534961bd7a9cfd8955d8761dbfcce5c6d07fee69068ab7e744ceb5de98

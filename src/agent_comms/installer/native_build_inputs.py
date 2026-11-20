@@ -456,6 +456,7 @@ class NativeRepositoryInputs:
     package_files: tuple[PackageFile, ...]
     mcp_client: McpClientSource
     compaction_instruction: str
+    package_trees: tuple[str, ...] = ()
 
     @classmethod
     def of(cls, root: Path) -> NativeRepositoryInputs:
@@ -467,6 +468,7 @@ class NativeRepositoryInputs:
         object.__setattr__(
             self, "mcp_client", McpClientSource.of(cast(Mapping[str, object], self.mcp_client))
         )
+        object.__setattr__(self, "package_trees", tuple(self.package_trees))
 
     def pathspecs(self) -> tuple[str, ...]:
         return (
@@ -480,6 +482,7 @@ class NativeRepositoryInputs:
                 )
             ),
             self.compaction_instruction,
+            *self.package_trees,
         )
 
 
@@ -494,6 +497,7 @@ class NativeBuildInputs(GitLaunch):
         tracked = self._run(
             self.root,
             "ls-files",
+            "--recurse-submodules",
             "-z",
             "--cached",
             "--",

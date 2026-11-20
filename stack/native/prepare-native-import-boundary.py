@@ -206,11 +206,14 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
     ):
         shutil.copyfile(stack / source, package / "dist" / target)
     for item in inputs.package_files:
-        shutil.copyfile(repo / item.source, package / item.target)
-    subprocess.run(
-        ["node", str(stack / "prepare-native-global-extensions.mjs"), str(package)],
-        env=environment, check=True, timeout=60,
-    )
+        target = package / item.target
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        shutil.copyfile(repo / item.source, target)
+    for builder in ("prepare-native-pi-clm.mjs", "prepare-native-global-extensions.mjs"):
+        subprocess.run(
+            ["node", str(stack / builder), str(package)],
+            env=environment, check=True, timeout=60,
+        )
 
 
 def prepare_mcp_dependencies(
