@@ -260,10 +260,8 @@ def test_native_launch_arguments_and_identity_follow_delivery(tmp_path, native_r
         delivery=empty,
     )
     assert "--append-system-prompt" not in tracked.argv
-    assert tracked.env["PI_CLM_NATIVE_COMPACTION"] == "off"
-    provider_extension = str(
-        native_runtime_package.path / "agent-comms-extensions/pi-clm/src/index.mjs"
-    )
+    assert (tracked.env["CLM_CONTEXT_BUDGET"], tracked.env["CLM_CONTEXT_RESERVE"]) == ("28672", "2048")
+    provider_extension = str(native_runtime_package.path / "dist/clm_reference.mjs")
     assert tracked.argv.count(provider_extension) == 1
 
 
@@ -404,3 +402,20 @@ def test_a_rejected_prompt_carries_the_providers_own_words():
 
     assert "The usage limit has been reached" in said
     assert "rejected the tracked prompt" in said
+
+
+def test_a_context_language_model_runs_with_bash_alone_whatever_the_input_grants(tmp_path):
+    """The CLM reference harness gives the model exactly one action, bash, through which it
+    edits its mirrored context; a clm-local model keeps that action space under every input
+    mode, and the input's own mode still opens the owner transport."""
+    from agent_comms.execution.context_language_model import ContextLanguageModelMode
+
+    comms = wire(tmp_path)
+    thread = NativeThread("clm", frozenset(), Checkout(tmp_path))
+    comms.registry.register(thread)
+    granted = ToollessMode(CodingChild(comms=comms, thread=thread))
+    mode = SelectedModel("clm-local", "model").provider_type.native_tool_mode(granted)
+    assert mode == ContextLanguageModelMode(granted)
+    assert mode.allowed_tools() == ("bash",)
+    assert mode.launch_arguments(tmp_path) == ("--no-builtin-tools", "--tools", "bash")
+    assert SelectedModel("openai-codex", "gpt-5.6-sol").provider_type.native_tool_mode(granted) is granted

@@ -331,12 +331,11 @@ class NoFleetCompactionPolicy(NullMember, FleetCompactionPolicy, declared_name=N
 
 
 class ClmLocalCompactionPolicy(FleetCompactionPolicy, declared_name="clm-local"):
-    """pi-clm owns a context-language model's context: it edits the next request through its
-    mirror and cancels Pi's own compaction (ClmLocalProvider runs it with
-    PI_CLM_NATIVE_COMPACTION=off). Pi must not decide to compact that context either: its
-    pre-response check measured the raw history, ran a compaction pi-clm cancelled, and
-    ended CLM's turn with 'no compaction could be prepared' at ~6.4k effective tokens
-    (2026-11-20)."""
+    """A context language model manages its own context: the reference harness it runs under
+    (clm_reference.mjs) owns the budget, its nudges and rollback, so Pi must not decide to
+    compact that context too. Pi's pre-response check measured the raw history, ran a
+    compaction the CLM harness cancelled, and ended CLM's turn with 'no compaction could be
+    prepared' at ~6.4k effective tokens (2026-11-20)."""
 
     @classmethod
     def settings(cls) -> PiCompactionSettings:
