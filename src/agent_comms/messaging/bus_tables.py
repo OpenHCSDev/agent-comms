@@ -136,6 +136,7 @@ class MessageIdentitySource(MessageReference, BusProjectionTables):
         Index(("seq",), unique=True),
         Index(("message_id",)),
         Index(("sender", "message_id")),
+        Index(("sender", "seq")),
     )
 
     @classmethod
@@ -350,9 +351,10 @@ class AnsweredSource(BusProjectionTables):
             + MessageInput.table._sql('message.{timestamp} BETWEEN ? AND ? ')
             + f'AND asked.seq < ? {kind_filter}AND ({eligible}) AND NOT EXISTS ('
             f'SELECT 1 FROM "{cls.declared_name}" AS answered '
-            f'JOIN "{MessageIdentitySource.declared_name}" AS author ON author.seq=answered.seq '
             + cls._sql('WHERE answered.{original}=asked.seq ')
-            + f'AND author.sender IN ({replying})) ORDER BY asked.seq DESC LIMIT ?'
+            + f'AND EXISTS (SELECT 1 FROM "{MessageIdentitySource.declared_name}" AS author '
+            f'WHERE author.seq=answered.seq AND author.sender IN ({replying}))) '
+            'ORDER BY asked.seq DESC LIMIT ?'
         )
         sequences = db.execute(query, (
             *requesters, since, before, upper, *(kind.declared_name for kind in kinds),
