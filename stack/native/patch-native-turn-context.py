@@ -119,7 +119,7 @@ def allow_tools(session, core):
         this._refreshToolRegistry();
     }
     getToolDefinition(name) {''')
-    before = '            // Flush any pending bash and custom messages before the new prompt\n'
+    before = '            // Emit input event for extension interception (before skill/template expansion)\n'
     replace_once(session, before, '            AllowedTools.capture(options?.tools).allow(this);\n' + before)
     types = core/'agent-session.d.ts'
     replace_once(types, '    private _allowedToolNames?;', '    private _allowedToolNames?;\n    private _launchToolNames?;')
