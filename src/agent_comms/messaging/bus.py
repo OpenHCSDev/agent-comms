@@ -102,6 +102,14 @@ class KeyedPrivateRecord(PrivateRecord, KeyedPublication):
     pass
 
 
+@dataclass(frozen=True, slots=True)
+class AddressedEventSource:
+    """One addressed event's ordered bus identity and its source-supplied time."""
+
+    seq: int
+    timestamp: float
+
+
 @dataclass(frozen=True)
 class AddressedRow(Addressed, BusRow, declared_name=None):
     """A read-only join of the declared address and sequence; never another table."""
@@ -132,6 +140,37 @@ class AddressedRow(Addressed, BusRow, declared_name=None):
             (*senders, *targets))
         headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
         return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
+
+    @classmethod
+    def latest_sources(
+        cls, db: sqlite3.Connection, senders: frozenset[str], targets: frozenset[str],
+    ) -> dict[str, AddressedEventSource]:
+        """The greatest bus position and its original time for every target in one cut."""
+        if not senders or not targets:
+            return {}
+        addresses = Addressed.table
+        inputs = MessageInput.table
+        target = addresses._sql("{target}")
+        sender = addresses._sql("{sender}")
+        sequence = addresses._sql("{seq}")
+        timestamp = inputs._sql("{timestamp}")
+        rows = db.execute(
+            f'SELECT selected.{target}, selected.{sequence}, message.{timestamp} '
+            f'FROM "{addresses.declared_name}" selected '
+            f'JOIN "{inputs.declared_name}" message USING({sequence}) '
+            f'JOIN (SELECT {target}, MAX({sequence}) AS {sequence} '
+            f'FROM "{addresses.declared_name}" '
+            f'WHERE {sender} IN ({", ".join("?" * len(senders))}) '
+            f'AND {target} IN ({", ".join("?" * len(targets))}) '
+            f'GROUP BY {target}) latest USING({target}, {sequence})',
+            (*senders, *targets),
+        )
+        return {
+            FieldCodec.decode(str, target): AddressedEventSource(
+                FieldCodec.decode(int, seq), FieldCodec.decode(float, at),
+            )
+            for target, seq, at in rows
+        }
 
 
 @dataclass(frozen=True)
@@ -421,6 +460,12 @@ class BusReader(
     ) -> tuple[Message, ...]:
         with self.observing() as db:
             return AddressedRow.latest(db, senders, targets)
+
+    def latest_addressed_sources(
+        self, senders: frozenset[str], targets: frozenset[str],
+    ) -> dict[str, AddressedEventSource]:
+        with self.observing() as db:
+            return AddressedRow.latest_sources(db, senders, targets)
 
     def messages_for_references(
         self, references: Iterable[MessageReference],

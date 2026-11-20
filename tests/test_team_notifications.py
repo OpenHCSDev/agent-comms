@@ -27,7 +27,7 @@ from agent_comms.errors import (
 )
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity
 from agent_comms.execution.launch_root import LaunchRoot
-from agent_comms.heartbeat_subjects import TeamHistory, TeammateSubject
+from agent_comms.heartbeat_subjects import PhaseSubject, TeamHistory, TeammateSubject
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.bus_read import UiRead
 from agent_comms.messaging.channel_targets import TeammatesTag, ThreadTarget
@@ -1118,6 +1118,71 @@ def test_subject_evidence_is_shared_without_losing_each_pings_start(notification
     publish(comms, "colleague", "worker", now)
     assert not new.acted(history)
     assert new.acted(TeamHistory.read(comms, frozenset({"colleague"})))
+
+
+def test_team_history_captures_all_teammate_subjects_in_one_bus_relation(
+        notification_bus, monkeypatch):
+    comms = notification_bus
+    outsider = comms.registry.require("outsider").incarnation
+    now = time.time()
+    publish(comms, "colleague", "worker", now - 1)
+    with comms.registry.store.editing() as edit:
+        edit.document.rename("worker", "renamed-worker")
+        edit.commit()
+    worker = comms.registry.require("renamed-worker").incarnation
+    # The later bus event deliberately carries an older source time. The bus
+    # sequence selects the action across this thread's retained names.
+    later = publish(comms, "colleague", "renamed-worker", now - 20)
+    publish(comms, "colleague", "outsider", now - 1)
+    calls = []
+    bus_type = type(comms.bus.bus)
+    original = bus_type.latest_addressed_sources
+
+    def counted(self, senders, targets):
+        calls.append((senders, targets))
+        return original(self, senders, targets)
+
+    monkeypatch.setattr(bus_type, "latest_addressed_sources", counted)
+    subjects = (TeammateSubject(worker), TeammateSubject(outsider))
+    expected = {
+        subject: subject.action_at(TeamHistory.read(comms, frozenset({"colleague"})))
+        for subject in subjects
+    }
+    assert expected[TeammateSubject(worker)] == RecordedEventTime(later.timestamp)
+    calls.clear()
+    todo = comms.goals.todos.get("P1")
+    rule = ReviewTimerUp(
+        problem=todo.id, holder=worker, order=todo.order.checked().id,
+        since=RecordedEventTime(now - 30),
+    )
+    base = RulePing.capture(rule)
+    pings = tuple(
+        replace(
+            base,
+            observation=TextDigest.of(subject.unit.name),
+            subjects=(subject,),
+            since=RecordedEventTime(now - 30),
+        )
+        for subject in subjects
+    )
+    packet = TeamDecisions(worker, pings, (), ())
+    history = TeamHistory.read(comms, frozenset({"colleague"}))
+    assert packet.open_pings(history) == ()
+    assert len(calls) == 1
+    assert {subject: history.action_at(subject) for subject in subjects} == expected
+
+
+def test_subject_singleton_and_batch_share_the_phase_source(notification_bus, monkeypatch):
+    at = RecordedEventTime(17)
+    subject = PhaseSubject(BusInterfacePhase)
+    monkeypatch.setattr(
+        TeamHistory, "phases_checked", property(lambda _history: {subject.phase: at}),
+    )
+    direct_first = TeamHistory.read(notification_bus, frozenset())
+    assert direct_first.action_at(subject) == at
+    assert direct_first.capturing((subject,)).action_at(subject) == at
+    batch_first = TeamHistory.read(notification_bus, frozenset()).capturing((subject,))
+    assert batch_first.action_at(subject) == at
 
 
 def test_retained_packet_without_display_witness_keeps_original_message_identity(notification_bus):

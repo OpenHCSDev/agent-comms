@@ -43,6 +43,21 @@ class TeamHistory:
             self._actions[subject] = subject.action_at(self)
         return self._actions[subject]
 
+    def capturing(self, subjects: tuple[HeartbeatSubject, ...]) -> Self:
+        """Capture each declared action-source family once for this immutable history cut."""
+        subjects = tuple(
+            subject for subject in dict.fromkeys(subjects)
+            if subject not in self._actions
+        )
+        owners = tuple(dict.fromkeys(type(subject).actions_at for subject in subjects))
+        for owner in owners:
+            members = tuple(
+                subject for subject in subjects
+                if type(subject).actions_at is owner
+            )
+            self._actions.update(owner(self, members))
+        return self
+
     @cached_property
     def passes(self) -> ServicePasses:
         return ServicePassStore.at(self.comms.root).read()
@@ -76,9 +91,16 @@ class TeamHistory:
 @dataclass(frozen=True)
 class HeartbeatSubject(DeclaredFamily, affix="Subject"):
 
+    @staticmethod
+    def actions_at(
+        history: TeamHistory, subjects: tuple[HeartbeatSubject, ...],
+    ) -> dict[HeartbeatSubject, EventTime]:
+        """Subjects with no recorded action source all derive the same absent answer."""
+        return {subject: UnrecordedEventTime() for subject in subjects}
+
     def action_at(self, history: TeamHistory) -> EventTime:
-        """Subjects without a disposing action never invent one."""
-        return UnrecordedEventTime()
+        """A singleton derives from the same family owner as a complete captured batch."""
+        return type(self).actions_at(history, (self,))[self]
 
     def disposed(self, history: TeamHistory, since: float) -> bool:
         """Original action evidence is shared, while each line retains its own start."""
@@ -96,11 +118,30 @@ class TeammateSubject(HeartbeatSubject, declared_name="unit"):
     def threads(self) -> tuple[ThreadIncarnation, ...]:
         return (self.unit,)
 
-    def action_at(self, history: TeamHistory) -> EventTime:
-        return max((RecordedEventTime(message.timestamp)
-                    for message in history.comms.bus.bus.latest_addressed(
-                        history.actors, history.snapshot.names_for(self.unit.name))),
-                   key=lambda at: at.latest_with(float('-inf')), default=UnrecordedEventTime())
+    @staticmethod
+    def actions_at(
+        history: TeamHistory, subjects: tuple[HeartbeatSubject, ...],
+    ) -> dict[HeartbeatSubject, EventTime]:
+        names = {
+            subject: history.snapshot.names_for(subject.unit.name)
+            for subject in subjects
+        }
+        latest = history.comms.bus.bus.latest_addressed_sources(
+            history.actors,
+            frozenset(name for aliases in names.values() for name in aliases),
+        )
+        return {
+            subject: (
+                RecordedEventTime(source.timestamp)
+                if (source := max(
+                    (latest[name] for name in aliases if name in latest),
+                    key=lambda item: item.seq,
+                    default=None,
+                )) is not None
+                else UnrecordedEventTime()
+            )
+            for subject, aliases in names.items()
+        }
 
 
 @dataclass(frozen=True)
@@ -110,10 +151,22 @@ class HeadSubject(HeartbeatSubject):
     def clears(self, verdict: HeadVerdict) -> bool:
         return verdict.decides()
 
-    def action_at(self, history: TeamHistory) -> EventTime:
-        return max((review.at for review in StoredHeadReview.head_reviews(
-                        history.comms.goals.todos, self.request) if self.clears(review.verdict)),
-                   key=lambda at: at.latest_with(float('-inf')), default=UnrecordedEventTime())
+    @staticmethod
+    def actions_at(
+        history: TeamHistory, subjects: tuple[HeartbeatSubject, ...],
+    ) -> dict[HeartbeatSubject, EventTime]:
+        requests = tuple(dict.fromkeys(subject.request for subject in subjects))
+        with history.comms.goals.todos.snapshot() as db:
+            reviews = StoredHeadReview.head_reviews_among(db, requests)
+        return {
+            subject: max(
+                (review.at for review in reviews[subject.request]
+                 if subject.clears(review.verdict)),
+                key=lambda at: at.latest_with(float('-inf')),
+                default=UnrecordedEventTime(),
+            )
+            for subject in subjects
+        }
 
 
 @dataclass(frozen=True)
@@ -133,8 +186,14 @@ class PassSubject(HeartbeatSubject):
 
     teammate: RecordedThreadIncarnation
 
-    def action_at(self, history: TeamHistory) -> EventTime:
-        return history.passes.heartbeat_completed_at(self.teammate)
+    @staticmethod
+    def actions_at(
+        history: TeamHistory, subjects: tuple[HeartbeatSubject, ...],
+    ) -> dict[HeartbeatSubject, EventTime]:
+        return {
+            subject: history.passes.heartbeat_completed_at(subject.teammate)
+            for subject in subjects
+        }
 
     def threads(self) -> tuple[ThreadIncarnation, ...]:
         return (self.teammate,)
@@ -161,5 +220,11 @@ class PhaseSubject(HeartbeatSubject):
 
     phase: type[PlanPhase]
 
-    def disposed(self, history: TeamHistory, since: float) -> bool:
-        return history.phases_checked.get(self.phase, UnrecordedEventTime()).since(since)
+    @staticmethod
+    def actions_at(
+        history: TeamHistory, subjects: tuple[HeartbeatSubject, ...],
+    ) -> dict[HeartbeatSubject, EventTime]:
+        return {
+            subject: history.phases_checked.get(subject.phase, UnrecordedEventTime())
+            for subject in subjects
+        }

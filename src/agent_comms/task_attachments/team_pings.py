@@ -317,6 +317,10 @@ class PingLines:
         return snapshot.stopped(name for ping in self.handled for name in ping.threads)
 
     def open_pings(self, history: TeamHistory) -> tuple[Ping, ...]:
+        """Project this complete handled set from its source-owned disposal history."""
+        history.capturing(tuple(dict.fromkeys(
+            subject for ping in self.handled for subject in ping.subjects
+        )))
         return tuple(ping for ping in self.handled if ping.on_board(history))
 
 
@@ -421,9 +425,10 @@ class TeamUpdate(OwnerNotice, TeamObservation, PingLines, declared_name=None):
         carries what is that session's own, and the whole board stays in comms_hud."""
         history = TeamHistory.of_team(comms)
         stopped = self.stopped(history.snapshot)
-        return tuple(ping.board_entry() for ping in self.handled
-                     if ping.addresses(reader) and not ping.parked(stopped)
-                     and ping.on_board(history))
+        return tuple(
+            ping.board_entry() for ping in self.open_pings(history)
+            if ping.addresses(reader) and not ping.parked(stopped)
+        )
 
     async def delivered_by(self, bridge: DeliversInput[Message], message: Message) -> type[Outcome]:
         return await self.wake(bridge, message)
