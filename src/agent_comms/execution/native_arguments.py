@@ -7,7 +7,7 @@ import re
 import shlex
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import reduce
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -20,6 +20,8 @@ from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldV
 
 if TYPE_CHECKING:
     from agent_comms.execution.owner_lifecycle import OwnerLifecycle
+    from agent_comms.execution.channel_coding_tools import CodingToolOwner
+    from agent_comms.team.rule_deal import UndealtRecord
     from agent_comms.transport.native_tool_transport import NativeToolMode
     from agent_comms.registry.thread_model import ThreadModel
 
@@ -163,9 +165,15 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
         return {}
 
     @classmethod
-    def native_tool_mode(cls, mode: NativeToolMode) -> NativeToolMode:
-        """The tools a model of this provider runs with for an input granted `mode`."""
+    def native_tool_mode(cls, mode: NativeToolMode, owner: CodingToolOwner) -> NativeToolMode:
+        """The tools a model of this provider runs with for an input granted `mode`, whose
+        coding calls `owner` authorizes."""
         return mode
+
+    @classmethod
+    def undealt(cls, record: UndealtRecord) -> UndealtRecord:
+        """The rule-gate settings a never-dealt thread on this provider starts from."""
+        return record
 
 
 class NoSelectedModel(ModelProvider, declared_name=None):
@@ -204,10 +212,18 @@ class ClmLocalProvider(ModelProvider, declared_name="clm-local"):
         }
 
     @classmethod
-    def native_tool_mode(cls, mode: NativeToolMode) -> NativeToolMode:
+    def native_tool_mode(cls, mode: NativeToolMode, owner: CodingToolOwner) -> NativeToolMode:
         from agent_comms.execution.context_language_model import ContextLanguageModelMode
 
-        return ContextLanguageModelMode(mode)
+        return ContextLanguageModelMode(owner)
+
+    @classmethod
+    def undealt(cls, record: UndealtRecord) -> UndealtRecord:
+        """No papers, rules or audit by default (Tristan, 2026-11-20): the deal is context the
+        checkpoint never saw and its window cannot hold, and its audit is not its protocol."""
+        from agent_comms.team.rule_deal import OffDealMode
+
+        return replace(record, mode=OffDealMode)
 
 
 @dataclass(frozen=True)

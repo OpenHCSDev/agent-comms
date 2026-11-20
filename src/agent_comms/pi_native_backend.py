@@ -250,8 +250,7 @@ class PiNativeBackend(
             session_directory=thread.native_session_directory(self.comms.root),
             deal_delivery=PiRuleGate.of(self.comms, thread).delivery(),
             ui_request=delivery.ui_request,
-            tool_mode=NativeArguments.parse(self.arguments(thread)).provider_type.native_tool_mode(
-                delivery.tool_mode),
+            tool_mode=delivery.tool_mode,
         ):
             yield event
 

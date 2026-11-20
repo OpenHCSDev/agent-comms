@@ -32,6 +32,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import CoordinationError, Refused
 from agent_comms.errors import GoalAttemptError
+from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.channel_coding_tools import CodingToolMode
 from agent_comms.execution.controller import NO_CONTROLLER
 from agent_comms.execution.cursor_publication import CursorDelivery
@@ -495,7 +496,8 @@ class OwnedTurn(ProgressTurn):
         )
 
         delivery = TurnDelivery(
-            tool_mode=CodingToolMode(sender),
+            tool_mode=self.thread.model.native(NativeArguments(())).provider_type.native_tool_mode(
+                CodingToolMode(sender), sender),
             worktree=str(self.thread.project_path),
             environment=self.env_extra,
             inbox=self.following.inbox,
