@@ -67,6 +67,10 @@ class Escalation(OwedAnswer, declared_name=None):
         return (f"Answer the {self.notice.title} burst by its protocol, naming it with "
                 f"--answers {self.message.message_id}.")
 
+    def source_valid_until(self) -> float:
+        """When this line leaves the notice owner's bounded source window."""
+        return self.message.timestamp + self.notice.horizon
+
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """An escalation arrives as a burst: an answer naming any line of it covers every line
         of that burst sent before the answer, which unanswered reads once the answer is sent.

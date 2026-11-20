@@ -48,15 +48,16 @@ from agent_comms.ui_model.teammate_state import TeammateState
 class OwedAnswerCut:
     """One retained answer-family result and every stored identity that supplied it.
 
-    Time never belongs to this cut: ``OwedAnswer.due`` and the remaining standing-rule
-    derivation run on every beat.  A source revision or the selected owners/holds changes
-    the cut; otherwise the four discovered answer providers keep their exact prior result.
+    ``OwedAnswer.due`` and the remaining standing-rule derivation run on every beat.  A source
+    revision, selected owner/hold change, or a member-owned source-validity boundary changes
+    the cut; otherwise the discovered answer providers keep their exact prior result.
     """
 
     revision: WireRevision
     owners: tuple[ThreadIncarnation, ...]
     holds: HeldOrders
     answers: tuple[OwedAnswer, ...]
+    valid_until: float
 
     def serves(self, owners: tuple[ThreadIncarnation, ...], inputs: TeamInputs) -> bool:
         return self.owners == owners and self.holds == HeldOrders(inputs.live, inputs.orphaned)
@@ -69,11 +70,15 @@ class OwedAnswerCut:
         owners: tuple[ThreadIncarnation, ...],
         revision: WireRevision,
         previous: OwedAnswerCut | None,
+        *,
+        now: float | None = None,
     ) -> OwedAnswerCut:
+        captured_at = time.time() if now is None else now
         holds = HeldOrders(inputs.live, inputs.orphaned)
         if (
             previous is not None
             and previous.serves(owners, inputs)
+            and captured_at < previous.valid_until
             and not revision.changed_since(OwedAnswerView(), previous.revision)
         ):
             return replace(previous, revision=revision)
@@ -81,7 +86,11 @@ class OwedAnswerCut:
             answer.observation_key(): answer
             for answer in OwedAnswer.read_scan(comms, owners, inputs)
         }.values())
-        return cls(revision, owners, holds, answers)
+        valid_until = min(
+            (answer.source_valid_until() for answer in answers),
+            default=float("inf"),
+        )
+        return cls(revision, owners, holds, answers, valid_until)
 
 
 @dataclass(frozen=True)
