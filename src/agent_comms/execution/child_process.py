@@ -835,6 +835,7 @@ class LinuxProcessRecord:
     identity: ProcessIdentity
     group: int
     parent: int
+    flags: int = 0
 
 
 class LinuxPlatform(PidfdHandles, Platform):
@@ -879,7 +880,8 @@ class LinuxPlatform(PidfdHandles, Platform):
         is reused after it dies, so no earlier read answers for a later one."""
         try:
             # comm can contain whitespace and ')'; fields after its final ')'
-            # start at field 3. Kernel starttime is field 22, pgrp is field 5.
+            # start at field 3. Kernel starttime is field 22, pgrp is field 5,
+            # flags field 9 (0-indexed within the post-comm split: 6).
             fields = Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()
         except FileNotFoundError:
             raise ProcessLookupError(pid) from None
@@ -887,7 +889,8 @@ class LinuxPlatform(PidfdHandles, Platform):
             raise ProcessLookupError(pid)
         group = int(fields[2])
         return LinuxProcessRecord(
-            ProcessIdentity.in_group(pid, int(fields[19]), group), group, int(fields[1]))
+            ProcessIdentity.in_group(pid, int(fields[19]), group), group, int(fields[1]),
+            flags=int(fields[6]))
 
     def identity(self, pid: int) -> ProcessIdentity:
         return self._stat(pid).identity
