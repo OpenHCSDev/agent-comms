@@ -19,8 +19,10 @@ from agent_comms.registry.thread_identity import OwnerIdentity
 from agent_comms.registry.threads import Thread
 from agent_comms.transport.owner_connection import OwnerConnection
 from agent_comms.transport.owner_requests import (
+    NativeChildProcessReply,
     OwnerRetiredReply,
     ReadHostResourcesRuntimeRequest,
+    ReadNativeChildProcessRuntimeRequest,
     ReadOwnerLaunchRuntimeRequest,
     RetainedOwnerLaunch,
     StartOwnerRuntimeRequest,
@@ -81,6 +83,16 @@ class ServedReadHostResourcesRuntimeRequest(
                 fleet_budget_bytes=comms.registry.storage_rule.team_memory_budget(owners),
             )
         return await Coordination.run_worker(capture)
+
+
+class ServedReadNativeChildProcessRuntimeRequest(
+    ServedAttachedResultRuntimeRequest,
+    ReadNativeChildProcessRuntimeRequest,
+):
+    async def result(self, ctx: AttachedRuntimeRequestContext) -> NativeChildProcessReply:
+        return NativeChildProcessReply(
+            ctx.server.agent.effects.turns.native_child_process(ctx.session)
+        )
 
 
 class ServedReadOwnerLaunchRuntimeRequest(

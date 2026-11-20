@@ -10,7 +10,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, Self
 
-from agent_comms.execution.child_process import AttachedChild, ChildOutcome, join_retirement
+from agent_comms.execution.child_process import (
+    AttachedChild,
+    ChildOutcome,
+    NoProcess,
+    ProcessState,
+    join_retirement,
+)
 from agent_comms.execution.launch_runtime import INHERITED_ENVIRONMENT
 from agent_comms.execution.native_attestation import NativeAttestation, PendingAttestation
 from agent_comms.execution.native_failures import NativePiUnavailable, NativeRequestFailure
@@ -326,6 +332,10 @@ class NativeChildState(ABC):
 
     retained = False
 
+    @property
+    def process_identity(self) -> ProcessState:
+        return NoProcess()
+
     def managed_launch(self, command: str, arguments: tuple[str, ...], *, package: VerifiedNativePackage, root: Path, owner: ParticipantIdentity, directory: Path, worktree: Path, delivery: DealDelivery, environment: dict[str, str] | None, session_file: str | None) -> NativePiRpcLaunch:
         return NativePiRpcLaunch.managed(
             command, arguments, package=package, root=root, owner=owner, directory=directory,
@@ -368,6 +378,10 @@ class EmptyNative(NativeChildState):
 class ChildNative(NativeChildState):
     child: PiSessionChild
     available = True
+
+    @property
+    def process_identity(self) -> ProcessState:
+        return self.child.proc.identity
 
     @abstractmethod
     def _shutdown_successor(self) -> NativeChildState: ...

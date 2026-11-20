@@ -42,6 +42,7 @@ from agent_comms.nominal.field_codec import (
     Catalog,
     FieldCodec,
     NullMember,
+    PresenceExclude,
     RegistrationPolicy,
     SingleFieldValue,
     SubclassUnion,
@@ -396,7 +397,9 @@ class Thread(
         type[HeartbeatDelivery], RegistrationPolicy(InheritPrevious), WireOmitDefault()
     ] = field(default=OffHeartbeatDelivery, kw_only=True)
     task: ThreadText = field(default_factory=NoThreadText)
-    process_identity: Annotated[ProcessState, RegistrationPolicy(InheritApplied)] = field(
+    process_identity: Annotated[
+        ProcessState, RegistrationPolicy(InheritApplied), PresenceExclude()
+    ] = field(
         default_factory=NoProcess
     )
     goal: Annotated[GoalDeclaration, RegistrationPolicy(GoalDeclaration)] = (

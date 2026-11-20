@@ -20,6 +20,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution import pi_events as pi
 from agent_comms.execution.context_reading import ContextUsage
+from agent_comms.execution.child_process import NoProcess, ProcessState
 from agent_comms.execution.controller import Controller
 from agent_comms.execution.goal_scheduler import GoalScheduler
 from agent_comms.execution.image_input import ImageInput
@@ -463,6 +464,11 @@ class TurnRunner(OwnedTurnRunner):
         async with lock:
             if not await Coordination.run_worker(partial(self.session_busy, session_id)):
                 await persistent.close_idle()
+
+    def native_child_process(self, session_id: AcpSessionId) -> ProcessState:
+        """Read this session's child; the worker process is deliberately not a fallback."""
+        backend = self.persistent_backends.get(session_id)
+        return NoProcess() if backend is None else backend.runtime_process
 
     async def run_selected(self, session_id: AcpSessionId, execution: SelectedExecution):
         """Selected work and fresh ACP input share this session's one turn lifetime.
