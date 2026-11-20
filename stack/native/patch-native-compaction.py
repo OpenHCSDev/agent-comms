@@ -358,6 +358,23 @@ SUMMARY_CURRENT_GOALS_STOCK = r"""[Preserve existing goals, add new ones if the 
 SUMMARY_CURRENT_GOALS_OWNED = r"""[Current goals only; omit completed unrelated goals]"""
 SPLIT_SUMMARY_REDUCTION_STOCK = r"""        if (messagesToSummarize.length > 0) {"""
 SPLIT_SUMMARY_REDUCTION_OWNED = r"""        if (messagesToSummarize.length > 0 || previousSummary) {"""
+OVERSIZED_TURN_CUT_STOCK = r"""            // Find the closest valid cut point at or after this entry
+            for (let c = 0; c < cutPoints.length; c++) {
+                if (cutPoints[c] >= i) {
+                    cutIndex = cutPoints[c];
+                    break;
+                }
+            }"""
+OVERSIZED_TURN_CUT_OWNED = r"""            // A turn-start message larger than the retained budget cannot be
+            // kept whole. Cut at its next valid member so prefix summarization
+            // owns the oversized part instead of reporting that no work exists.
+            const minimumCut = isTurnStartEntry(entry) && messageTokens >= keepRecentTokens ? i + 1 : i;
+            for (let c = 0; c < cutPoints.length; c++) {
+                if (cutPoints[c] >= minimumCut) {
+                    cutIndex = cutPoints[c];
+                    break;
+                }
+            }"""
 
 
 def replace_once(path: Path, old: str, new: str) -> None:
@@ -408,6 +425,7 @@ def main(package: Path) -> None:
     replace_once(compaction, SUMMARY_ACTIVE_WORK_STOCK, SUMMARY_ACTIVE_WORK_OWNED)
     replace_once(compaction, SUMMARY_CURRENT_GOALS_STOCK, SUMMARY_CURRENT_GOALS_OWNED)
     replace_once(compaction, SPLIT_SUMMARY_REDUCTION_STOCK, SPLIT_SUMMARY_REDUCTION_OWNED)
+    replace_once(compaction, OVERSIZED_TURN_CUT_STOCK, OVERSIZED_TURN_CUT_OWNED)
 
 
 
