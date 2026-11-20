@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from agent_comms.execution.native_arguments import SelectedModel
-from agent_comms.execution.native_session_files import NativeAgentSettings
+from agent_comms.execution.native_session_files import NativeAgentSettings, NativeModelConfiguration
 
 
 def test_gpt_56_sol_compaction_policy_merges_and_preserves_settings(tmp_path):
@@ -45,3 +45,32 @@ def test_other_models_keep_their_private_settings(tmp_path):
     )
 
     assert not (agent / "settings.json").exists()
+
+
+def test_model_context_override_preserves_other_route_configuration(tmp_path):
+    models = tmp_path / "models.json"
+    models.write_text(json.dumps({
+        "providers": {
+            "openai-codex": {
+                "baseUrl": "https://example.invalid",
+                "modelOverrides": {"gpt-5.6-sol": {"maxTokens": 128_000}},
+            },
+        },
+    }))
+
+    selected = SelectedModel("openai-codex", "gpt-5.6-sol")
+    assert NativeModelConfiguration.set_context_window(tmp_path, selected, 1_050_000)
+    assert json.loads(models.read_text()) == {
+        "providers": {
+            "openai-codex": {
+                "baseUrl": "https://example.invalid",
+                "modelOverrides": {
+                    "gpt-5.6-sol": {
+                        "contextWindow": 1_050_000,
+                        "maxTokens": 128_000,
+                    },
+                },
+            },
+        },
+    }
+    assert not NativeModelConfiguration.set_context_window(tmp_path, selected, 1_050_000)

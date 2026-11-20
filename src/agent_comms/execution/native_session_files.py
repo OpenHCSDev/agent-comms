@@ -345,6 +345,42 @@ class Gpt56SolCompactionPolicy(
         )
 
 
+class NativeModelConfiguration:
+    """The selected Pi route's user-owned model overrides."""
+
+    filename = "models.json"
+
+    @classmethod
+    def set_context_window(
+        cls, directory: Path, model: SelectedModel, context_window: int,
+    ) -> bool:
+        if context_window <= 0:
+            raise ValueError("Maximum context must be a positive token count")
+        path = directory / cls.filename
+        try:
+            current = json.loads(path.read_text()) if path.exists() else {}
+        except (OSError, json.JSONDecodeError) as error:
+            raise NativePiUnavailable("Native Pi model configuration is invalid") from error
+        if type(current) is not dict:
+            raise NativePiUnavailable("Native Pi model configuration must be a JSON object")
+        providers = dict(current.get("providers", {}))
+        provider = dict(providers.get(model.provider, {}))
+        overrides = dict(provider.get("modelOverrides", {}))
+        selected = dict(overrides.get(model.model, {}))
+        selected["contextWindow"] = context_window
+        overrides[model.model] = selected
+        provider["modelOverrides"] = overrides
+        providers[model.provider] = provider
+        updated = {**current, "providers": providers}
+        if updated == current:
+            return False
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        AtomicFile(path, PrivateFileRole.permissions).write_text(
+            json.dumps(updated, indent=2, sort_keys=True) + "\n"
+        )
+        return True
+
+
 class NativeAgentSettingsFileRole(PrivateFileRole):
     """Pi's owner-written settings file inside its private agent directory."""
 

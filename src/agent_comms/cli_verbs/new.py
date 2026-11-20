@@ -7,6 +7,7 @@ from typing import Annotated, ClassVar, Self
 
 from agent_comms.cli_verbs.cli_command import CreatesThread, TargetActionCommand
 from agent_comms.cli_verbs.cli_commands import NameArgument, ThreadCreatedResult, _tag_choice_text
+from agent_comms.cli_verbs.model_context import ModelContextArguments
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
 from agent_comms.nominal.field_codec import (
@@ -25,7 +26,8 @@ from agent_comms.registry.thread_settings import ThreadSettings
 
 @dataclass(frozen=True, kw_only=True)
 class NewThreadCliCommand(
-    ThreadSettings, CreatesThread, NameArgument, CatalogSelection, TargetActionCommand[ThreadCreatedResult],
+    ModelContextArguments, ThreadSettings, CreatesThread, NameArgument, CatalogSelection,
+    TargetActionCommand[ThreadCreatedResult],
     declared_name="new",
 ):
     help = "Create a new pi thread"
@@ -60,6 +62,8 @@ class NewThreadCliCommand(
             **{item.name: getattr(self, item.name) for item in fields(self.spec_type)},
             'project': LaunchCheckout.checked(self.project.path),
         })
-        asyncio.run(ConfigOptions.configured().validate(self))
+        options = ConfigOptions.configured()
+        asyncio.run(options.validate(self))
+        self.apply_model_context(options.launch.configuration, self.model)
         child = ctx.threads.create(spec)
         return ThreadCreatedResult(child.name, child.process_identity)
