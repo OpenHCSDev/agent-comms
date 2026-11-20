@@ -14,6 +14,7 @@ from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.launch_runtime import LaunchRoot
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.transcript_sources import ExternalTranscript
+from agent_comms.execution.turn_digests import OrderEditCountReadings
 from agent_comms.execution.turn_item import (
     NativeItemId,
     NativeTurnId,
@@ -373,7 +374,10 @@ def test_failed_object_preparation_is_canonical_unread_progress_not_a_normal_car
     Repo.git(directory, "config", f"branch.{branch}.merge", "refs/heads/main")
     plans = LIVE_PLAN_READINGS
     with LaunchRoot.from_path(held_bus.root).selected():
-        prepared = TeamInputs.prepare(held_bus, held_bus.registry.snapshot().team_project.require(), ProgressRead(), plans)
+        prepared = TeamInputs.prepare(
+            held_bus, held_bus.registry.snapshot().team_project.require(), ProgressRead(), plans,
+            OrderEditCountReadings(),
+        )
         progress = prepared.pulls.progress((todo,), held_bus.registry)[todo.id]
         assert isinstance(progress, UnreadProgress)
         assert str(directory) in progress.reason and str(missing) in progress.reason

@@ -16,6 +16,7 @@ from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
 )
+from agent_comms.execution.turn_digests import OrderEditCountReadings
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.messaging.revision_views import TeamBoardView
 from agent_comms.planning.orders import (
@@ -263,7 +264,9 @@ def test_owed_answer_family_reuses_its_unchanged_source_cut(held_bus, monkeypatc
     acquisition = TeamBoardAcquisition()
     snapshot = held_bus.registry.snapshot()
     project = snapshot.team_project.require()
-    inputs = TeamInputs.prepare(held_bus, project, ProgressRead(), acquisition)
+    inputs = TeamInputs.prepare(
+        held_bus, project, ProgressRead(), acquisition, OrderEditCountReadings(),
+    )
     owners = tuple(
         teammate.incarnation
         for teammate in acquisition.teammates(snapshot, held_bus.goals)
@@ -302,7 +305,9 @@ def test_owed_answer_cut_reopens_at_its_members_source_expiry(held_bus, monkeypa
     acquisition = TeamBoardAcquisition()
     snapshot = held_bus.registry.snapshot()
     project = snapshot.team_project.require()
-    inputs = TeamInputs.prepare(held_bus, project, ProgressRead(), acquisition)
+    inputs = TeamInputs.prepare(
+        held_bus, project, ProgressRead(), acquisition, OrderEditCountReadings(),
+    )
     owners = tuple(
         teammate.incarnation
         for teammate in acquisition.teammates(snapshot, held_bus.goals)

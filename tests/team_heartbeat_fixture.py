@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from agent_comms.comms import Comms
+from agent_comms.execution.turn_digests import OrderEditCountReadings
 from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.planning.nominal_census import NominalPlanReadings
 from agent_comms.planning.orders import ProgressRead
@@ -23,12 +24,16 @@ class RetainedNominalPlanReadings(RetainedPlanReadings, NominalPlanReadings):
 
 
 LIVE_PLAN_READINGS = RetainedNominalPlanReadings()
+LIVE_EDIT_COUNT_READINGS = OrderEditCountReadings()
 
 
 def capture_frame(comms: Comms, pulls: ProgressRead,
                   plans: PlanReadings = LIVE_PLAN_READINGS) -> HeartbeatFrame:
     """Direct consumers acquire inputs before entering the actual frame read."""
-    inputs = TeamInputs.prepare(comms, comms.registry.snapshot().team_project.require(), pulls, plans)
+    inputs = TeamInputs.prepare(
+        comms, comms.registry.snapshot().team_project.require(), pulls, plans,
+        LIVE_EDIT_COUNT_READINGS,
+    )
     frame = HeartbeatFrame.capture(comms, inputs, plans)
     plans.finish_pass()
     return frame
@@ -51,7 +56,10 @@ def current_hud(comms: Comms, reader: str, frame: HeartbeatFrame,
 
 def observe_team(comms: Comms, pulls: ProgressRead,
                  plans: PlanReadings = LIVE_PLAN_READINGS) -> TeamObservation:
-    inputs = TeamInputs.prepare(comms, comms.registry.snapshot().team_project.require(), pulls, plans)
+    inputs = TeamInputs.prepare(
+        comms, comms.registry.snapshot().team_project.require(), pulls, plans,
+        LIVE_EDIT_COUNT_READINGS,
+    )
     observation = TeamObservation.read(comms, inputs, plans=plans)
     plans.finish_pass()
     return observation

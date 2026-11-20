@@ -24,7 +24,11 @@ from agent_comms.errors import RejectedEnforcementError, RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.execution.root_runtime import RootRuntimeStore
 from agent_comms.execution.turn_bound import LastTurns
-from agent_comms.execution.turn_digests import OrderEditCountRead, TurnDigestRead
+from agent_comms.execution.turn_digests import (
+    OrderEditCountRead,
+    OrderEditCountReadings,
+    TurnDigestRead,
+)
 from agent_comms.heartbeat_subjects import (
     AnswerSubject,
     HeadSubject,
@@ -1032,10 +1036,12 @@ class TeamInputs(HeldOrders):
     plan: PlanReading
     open_orders: tuple[Todo, ...]
     snapshot: RegistrySnapshot = field(compare=False, repr=False)
+    edit_count_readings: OrderEditCountReadings = field(compare=False, repr=False)
 
     @classmethod
     def prepare(cls, comms: Comms, project: RegisteredTeamProject, pulls: ProgressRead,
-                plans: PlanReadings, *, snapshot: RegistrySnapshot | None = None) -> Self:
+                plans: PlanReadings, edit_count_readings: OrderEditCountReadings, *,
+                snapshot: RegistrySnapshot | None = None) -> Self:
         snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
         open_orders = comms.goals.todos.board()
         holds = HeldOrders.from_open_orders(open_orders, snapshot)
@@ -1050,7 +1056,10 @@ class TeamInputs(HeldOrders):
             history=pulls.checkout(repository.checkout).branches.history,
         )
         StandingRule.prepare_all(comms, holds, pulls, snapshot=snapshot)
-        return cls(holds.live, holds.orphaned, pulls, plan, open_orders, snapshot)
+        return cls(
+            holds.live, holds.orphaned, pulls, plan, open_orders, snapshot,
+            edit_count_readings,
+        )
 
 
 @dataclass(frozen=True)
@@ -1092,7 +1101,7 @@ class HeartbeatFrame(TeamInputs):
                     self.todos, comms.registry, snapshot=self.snapshot,
                 ),
                 self.workplaces))
-        self._edit_counts.update(OrderEditCountRead.read_all(
+        self._edit_counts.update(self.edit_count_readings.read_all(
             read for read in reads if read.todo.id not in self._edit_counts
         ))
         for todo in self.todos:
@@ -1125,6 +1134,7 @@ class HeartbeatFrame(TeamInputs):
             plan=plan,
             open_orders=inputs.open_orders,
             snapshot=snapshot,
+            edit_count_readings=inputs.edit_count_readings,
             answers=answers if answers is not None else tuple({
                 answer.observation_key(): answer
                 for answer in OwedAnswer.read_scan(comms, tuple(
