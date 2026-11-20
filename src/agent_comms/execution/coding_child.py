@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.comms import Comms
-from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.registry.threads import Thread
+from agent_comms.registry.thread_catalog import ThreadCatalog
 from agent_comms.transport.native_tool_transport import (
     NativeToolMode,
     ToolTransport,
@@ -35,9 +35,9 @@ class CodingChildMode(NativeToolMode):
     owner: CodingChild
 
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        arguments = NativeToolDeclaration.extension_arguments(package)
-        return self.owner.comms.threads.native_launch_arguments(
-            self.owner.thread, NativeArguments.parse(arguments), package,
+        return (
+            *NativeToolDeclaration.extension_arguments(package),
+            *ThreadCatalog.launch_flags(self.owner.thread, self.owner.comms.root),
         )
 
 

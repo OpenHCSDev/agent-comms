@@ -261,6 +261,7 @@ def test_native_launch_arguments_and_identity_follow_delivery(tmp_path, native_r
     )
     assert "--append-system-prompt" not in tracked.argv
     assert tracked.env["PI_CLM_NATIVE_COMPACTION"] == "off"
+    assert str(native_runtime_package.path / "agent-comms-extensions/pi-clm/src/index.mjs") in tracked.argv
 
 
 @pytest.mark.parametrize('provider,model', [('', 'model'),('provider',''),('--bad','model')])
