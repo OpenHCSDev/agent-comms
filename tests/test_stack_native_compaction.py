@@ -30,6 +30,7 @@ from agent_comms.nominal.lifecycle_capability import Unresolved
 from agent_comms.execution.persistent_pi_session import PersistentPiSession
 from agent_comms.registry.activity import ActivityState
 from agent_comms.transport.acp_update_sink import AcpUpdateSink
+from agent_comms.team.rule_deal import EmptyDealDelivery
 from bus_record_fixture import prepare_native_comms
 from conftest import answer_rules
 from native_backend_fixture import AnnouncedInputStart, NativeBackendFixture
@@ -230,6 +231,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(
                         env_extra=child_env, session_file=str(session),
                         input_start=AnnouncedInputStart(),
                         cursor_delivery=cursor_delivery,
+                        deal_delivery=EmptyDealDelivery(),
                         persistent_session=pi_session,
                         package=native_runtime_package,
                         tool_mode=NativeBackendFixture.toolless(project, project),
