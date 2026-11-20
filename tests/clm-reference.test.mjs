@@ -134,3 +134,19 @@ test("crossing the limit rolls the newest turns back and pins the ledger", async
   assert.ok(messages.length < raw.length + 1);
   assert.notEqual(messages[messages.length - 1].role, "assistant");
 });
+
+test("a rollback never removes an input: inputs are the task", async () => {
+  process.env.CLM_CONTEXT_BUDGET = "8192";
+  const h = harness(`t${process.pid}d`);
+  delete process.env.CLM_CONTEXT_BUDGET;
+  await h.hooks.session_start({}, h.ctx);
+  const raw = [user("TASK")];
+  for (let i = 0; i < 4; i++) {
+    raw.push(assistant([{ type: "toolCall", id: `c${i}`, name: "bash", arguments: { command: `dump ${i}` } }]));
+    raw.push(toolResult("z".repeat(8000)));
+  }
+  raw.push({ ...user("the next input"), inputId: "a".repeat(32) });
+  const { messages } = await h.hooks.context({ messages: raw }, h.ctx);
+  assert.match(messages[1].content[0].text, /CONTEXT LIMIT HIT/);
+  assert.equal(messages[messages.length - 1].inputId, "a".repeat(32));
+});

@@ -427,7 +427,10 @@ export class LiveView {
     }
   }
 
-  isDropped(index) {
+  /** A rolled-back raw turn. An input is never one: inputs are the task, which the reference
+   * protects, and Pi refuses a request that has lost an input it is delivering. */
+  isDropped(index, message) {
+    if (message?.role === "user" && message.inputId !== undefined) return false;
     return this.dropped.some((range) => index >= range.from && index < range.to);
   }
 
@@ -459,7 +462,7 @@ export class LiveView {
           origin.push(-1);
         }
       }
-      if (i < raw.length && !this.isDropped(i)) {
+      if (i < raw.length && !this.isDropped(i, raw[i])) {
         out.push(raw[i]);
         origin.push(i);
       }
