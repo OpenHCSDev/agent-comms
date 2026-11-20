@@ -1076,9 +1076,17 @@ class HeartbeatFrame(TeamInputs):
         return self._edit_counts
 
     @classmethod
-    def capture(cls, comms: Comms, inputs: TeamInputs, plans: PlanReadings) -> Self:
+    def capture(
+        cls,
+        comms: Comms,
+        inputs: TeamInputs,
+        plans: PlanReadings,
+        *,
+        answers: tuple[OwedAnswer, ...] | None = None,
+        snapshot: RegistrySnapshot | None = None,
+    ) -> Self:
         """One team board: every teammate's owed answers, never one lead's."""
-        snapshot = comms.registry.snapshot()
+        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
         project = snapshot.team_project.require()
         with comms.goals.todos.snapshot() as db:
             closed = StoredClosedHead.current(db, project.repository_names())
@@ -1091,10 +1099,13 @@ class HeartbeatFrame(TeamInputs):
             inputs.orphaned,
             inputs.pulls,
             plan,
-            tuple({answer.observation_key(): answer
-                   for answer in OwedAnswer.read_scan(comms, tuple(
-                       teammate.incarnation for teammate in TeamService.teammates(snapshot, comms.goals)), inputs)
-                   }.values()),
+            answers if answers is not None else tuple({
+                answer.observation_key(): answer
+                for answer in OwedAnswer.read_scan(comms, tuple(
+                    teammate.incarnation
+                    for teammate in TeamService.teammates(snapshot, comms.goals)
+                ), inputs)
+            }.values()),
             closed,
             reviews,
             EditWorkplaces.capture(comms.goals, snapshot, inputs.holders, inputs.pulls),
