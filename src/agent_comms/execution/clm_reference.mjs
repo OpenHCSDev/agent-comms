@@ -19,6 +19,27 @@ const CTX_ROOT = "/tmp/.live_ctx";
 const CTX_NAME = "LIVE_CTX_MAIN.txt";
 const VIEW_NAME = "LIVE_VIEW.json";
 const OUTPUT_ROOT = "/tmp/.clm_outputs";
+const DIGEST_NAME = "digest.py";
+/** The digest command, written beside each conversation's mirror: it replaces the largest raw
+ * command output in the mirror with the notes on its standard input. The model supplies only
+ * the notes. Writing the edit itself asked too much of iter44 on the second part of a paper
+ * (CLM-read, 2026-11-20: one good digest, then ten refused commands and no edit). */
+export const DIGEST_SCRIPT = String.raw`import os, re, sys
+mirror = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LIVE_CTX_MAIN.txt")
+notes = sys.stdin.read().strip()
+if not notes:
+    sys.exit("digest: write your notes between the NOTES lines")
+text = open(mirror, encoding="utf-8").read()
+headers = list(re.finditer(r"^\[\[CTX_TURN\s+\d+\s+role=([A-Za-z]+)\]\]\s*$", text, re.M))
+spans = [(headers[i].end(), headers[i + 1].start() if i + 1 < len(headers) else len(text))
+         for i in range(len(headers)) if headers[i].group(1).lower() == "tool"]
+if not spans:
+    sys.exit("digest: no command output is left in your context")
+start, end = max(spans, key=lambda span: span[1] - span[0])
+text = text[:start] + "\nNOTES (raw output digested and removed):\n" + notes + "\n\n" + text[end:]
+open(mirror, "w", encoding="utf-8").write(text)
+print("digested: the raw output was replaced by your notes")
+`;
 const PROTECT = 1; // Pi sends the system prompt separately: the protected prefix is the task.
 const TRIVIAL_EDIT_TOKENS = 32;
 const ROLLBACK_ESCALATE_AFTER = 3;
@@ -574,7 +595,7 @@ export class EditRule {
   }
 
   /** Why `command` may not run now, or null when it may. */
-  refusal(_command, _ctxFile) { return null; }
+  refusal(_command, _ctxDir) { return null; }
 
   /** A command's output of `tokens` entered the context. */
   observed(_tokens) {}
@@ -583,7 +604,7 @@ export class EditRule {
   compacted(_tokens) {}
 
   /** What the model is told after a command, or "". */
-  reminder(_ctxFile) { return ""; }
+  reminder(_ctxDir) { return ""; }
 }
 
 /** The reference harness: only the budget's reminders and rollbacks press. */
@@ -600,14 +621,17 @@ export class DigestEachOutput extends BudgetPressure {
   /** Tokens of output brought in since the last compaction that removed them. */
   pending = 0;
 
-  told(ctxFile) {
-    return `DIGEST FIRST: ~${this.pending} tokens of command output are still raw in your context. ` +
-      `Your next command must edit ${ctxFile}: write what you need from that output as short ` +
-      "notes and delete the raw output. No other command runs until the raw output is gone.";
+  /** What to run, in words a small model can follow to the letter. */
+  told(ctxDir) {
+    return `~${this.pending} tokens of command output are still raw in your context and must be ` +
+      "digested before anything else runs. Run exactly this, with your own notes between the NOTES lines:\n" +
+      `python3 ${join(ctxDir, DIGEST_NAME)} <<'NOTES'\n- the facts you need from that output, as short bullets\nNOTES`;
   }
 
-  refusal(command, ctxFile) {
-    return this.pending > 0 && !command.includes(CTX_NAME) ? this.told(ctxFile) : null;
+  refusal(command, ctxDir) {
+    return this.pending > 0 && !command.includes(ctxDir)
+      ? `COMMAND NOT RUN. Nothing is wrong with your command or the file: ${this.told(ctxDir)}\nThen run your command again.`
+      : null;
   }
 
   observed(tokens) {
@@ -620,8 +644,8 @@ export class DigestEachOutput extends BudgetPressure {
     if (tokens >= this.pending / 2) this.pending = 0;
   }
 
-  reminder(ctxFile) {
-    return this.pending > 0 ? `\n[${this.told(ctxFile)}]` : "";
+  reminder(ctxDir) {
+    return this.pending > 0 ? `\n[DIGEST FIRST: ${this.told(ctxDir)}]` : "";
   }
 }
 EditRule.declare("digest", DigestEachOutput);
@@ -726,6 +750,7 @@ export default function clmReference(pi) {
     ctxDir = join(CTX_ROOT, session);
     ctxFile = join(ctxDir, CTX_NAME);
     mkdirSync(ctxDir, { recursive: true, mode: 0o700 });
+    writeFileSync(join(ctxDir, DIGEST_NAME), DIGEST_SCRIPT, { encoding: "utf8", mode: 0o700 });
     outputs = new OutputStore(join(OUTPUT_ROOT, session));
     restore(ctx);
   });
@@ -832,7 +857,7 @@ export default function clmReference(pi) {
     turnCalls.add(event.toolCallId);
     if (event.toolName !== "bash") return undefined;
     const command = String(event.input.command ?? "");
-    const refusal = rule.refusal(command, ctxFile);
+    const refusal = rule.refusal(command, ctxDir);
     if (refusal) return { block: true, reason: refusal };
     const editable = sent.messages.slice(PROTECT + (view.ledger ? 1 : 0));
     const rendered = renderEditable([null, ...editable], 1);
@@ -899,7 +924,7 @@ export default function clmReference(pi) {
     const over = tokensNow <= budget.strictTarget ? "" : ` — OVER; compact ${ctxFile} now`;
     const readout = `\n[context: ~${tokensNow}/${budget.strictTarget} tokens${over}]`;
     return {
-      content: [{ type: "text", text: observation.text + readout + note + taskNote + rule.reminder(ctxFile) }],
+      content: [{ type: "text", text: observation.text + readout + note + taskNote + rule.reminder(ctxDir) }],
       isError: false,
     };
   });

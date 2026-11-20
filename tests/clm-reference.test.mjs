@@ -3,6 +3,7 @@
 // harness's own output on the same inputs: render_editable, parse_back and the budget
 // controller's messages, so any drift from what the checkpoint was trained on fails here.
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -215,15 +216,17 @@ test("under the digest rule a sizeable output must be noted and dropped before t
     const raw = [user("Read the paper"), read("sed -n 1,80p paper.txt")];
     const first = await step(h, raw, "sed -n 1,80p paper.txt", chunk);
     assert.match(first.result, /DIGEST FIRST: ~\d+ tokens of command output are still raw/);
+    assert.match(first.result, /python3 \/tmp\/\.live_ctx\/\S+\/digest\.py <<'NOTES'/);
 
     raw.push(toolResult(first.result), read("sed -n 81,160p paper.txt"));
     const next = await step(h, raw, "sed -n 81,160p paper.txt", chunk);
-    assert.match(next.refused, /Your next command must edit .*LIVE_CTX_MAIN\.txt/);
+    assert.match(next.refused, /^COMMAND NOT RUN\. Nothing is wrong with your command or the file/);
+    assert.match(next.refused, /digest\.py <<'NOTES'/);
 
     // Writing the same text back frees nothing: still refused afterwards.
     const same = await step(h, raw, `python3 rewrite.py ${file}`, "", (text) => text);
     assert.match(same.result, /DIGEST FIRST/);
-    assert.match((await step(h, raw, "sed -n 81,160p paper.txt", chunk)).refused, /DIGEST FIRST/);
+    assert.match((await step(h, raw, "sed -n 81,160p paper.txt", chunk)).refused, /COMMAND NOT RUN/);
 
     // Notes in place of the raw output digest it: the next read runs.
     const noted = await step(h, raw, `python3 note.py ${file}`, "",
@@ -302,5 +305,34 @@ test("an edit that keeps the current request is applied as written", async () =>
     const kept = await step(h, raw, `python3 note.py ${file}`, "", (text) => text.replace("a.txt", "one file"));
     assert.match(kept.result, /edit applied/);
     assert.doesNotMatch(kept.result, /restored/);
+  });
+});
+
+test("the digest command replaces the largest raw output with the notes it is given", async () => {
+  await under({ CLM_EDIT_RULE: "digest" }, `t${process.pid}n`, async (h, file) => {
+    const raw = [user("Read the paper"), read("sed -n 1,80p paper.txt")];
+    const first = await step(h, raw, "sed -n 1,80p paper.txt", "paper text ".repeat(300));
+    const script = first.result.match(/python3 (\S+digest\.py) <<'NOTES'/)[1];
+    const digest = `python3 ${script} <<'NOTES'\n- section 1 defines the mirror file\nNOTES`;
+    raw.push(toolResult(first.result), read(digest));
+
+    // The harness admits the digest command, the script edits the mirror, the edit applies.
+    await h.hooks.context({ messages: raw }, h.ctx);
+    await h.hooks.turn_start({}, h.ctx);
+    const admitted = await h.hooks.tool_call({ toolName: "bash", toolCallId: "c1", input: { command: digest } }, h.ctx);
+    assert.equal(admitted, undefined);
+    const ran = spawnSync("python3", [script], { input: "- section 1 defines the mirror file\n", encoding: "utf8" });
+    assert.equal(ran.status, 0, ran.stderr);
+    const mirror = readFileSync(file, "utf8");
+    assert.match(mirror, /NOTES \(raw output digested and removed\):\n- section 1 defines the mirror file/);
+    assert.doesNotMatch(mirror, /paper text paper text/);
+    const result = await h.hooks.tool_result(
+      { toolName: "bash", content: [{ type: "text", text: ran.stdout }], isError: false }, h.ctx);
+    assert.match(result.content[0].text, /edit applied/);
+    assert.doesNotMatch(result.content[0].text, /DIGEST FIRST/);
+
+    const empty = spawnSync("python3", [script], { input: "", encoding: "utf8" });
+    assert.notEqual(empty.status, 0);
+    assert.match(empty.stderr, /write your notes between the NOTES lines/);
   });
 });
