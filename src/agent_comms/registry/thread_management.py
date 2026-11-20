@@ -537,11 +537,9 @@ class ThreadManagement:
         """Publish the current catalog before launching an extension that consumes it."""
         selection = self.running_selection(thread.name)
         arguments = selection.model.native(arguments).with_thinking(selection.thinking_level)
-        provider_extensions = arguments.provider_type.extension_arguments(package)
         if not arguments.loads(NativeRequestTools.native_extension(package)):
-            return (*provider_extensions, *arguments.argv)
+            return arguments.argv
         return (
-            *provider_extensions,
             *arguments.argv,
             *ThreadCatalog.launch_flags(thread, self.root),
         )
