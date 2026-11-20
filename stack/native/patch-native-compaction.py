@@ -157,8 +157,9 @@ COMPACTION_FAILURE_OWNED = '''            throw error;
             this._autoCompactionAbortController = undefined;'''
 
 
-# Cancellation is not the no-work result: callers must not resume an unchanged
-# compulsory context after aborting summary generation.
+# An extension cancellation is a completed policy decision: the extension owns
+# the effective context and the prompt continues without raw-history compaction.
+# A user/provider abort below remains an error because no policy replaced it.
 EXTENSION_CANCEL_STOCK = '''                if (extensionResult?.cancel) {
                     this._emit({
                         type: "compaction_end",
@@ -177,7 +178,14 @@ EXTENSION_CANCEL_STOCK = '''                if (extensionResult?.cancel) {
                 }
 '''
 EXTENSION_CANCEL_OWNED = '''                if (extensionResult?.cancel) {
-                    throw new DOMException("Compaction cancelled", "AbortError");
+                    this._emit({
+                        type: "compaction_end",
+                        reason,
+                        result: undefined,
+                        aborted: true,
+                        willRetry: false,
+                    });
+                    return false;
                 }
 '''
 
