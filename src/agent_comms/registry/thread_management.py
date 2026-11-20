@@ -535,9 +535,15 @@ class ThreadManagement:
         self, thread: Thread, arguments: NativeArguments, package: Path,
     ) -> tuple[str, ...]:
         """Publish the current catalog before launching an extension that consumes it."""
+        arguments = thread.model.native(arguments).with_thinking(thread.thinking_level)
+        provider_extensions = arguments.provider.extension_arguments(package)
         if not arguments.loads(NativeRequestTools.native_extension(package)):
-            return arguments.argv
-        return (*arguments.argv, *ThreadCatalog.launch_flags(thread, self.root))
+            return (*provider_extensions, *arguments.argv)
+        return (
+            *provider_extensions,
+            *arguments.argv,
+            *ThreadCatalog.launch_flags(thread, self.root),
+        )
 
     def initialize_native_configuration(
         self, name: str, *, model: ThreadModel, thinking_level: type[ThinkingChoice],
