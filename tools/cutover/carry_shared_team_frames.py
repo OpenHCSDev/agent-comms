@@ -48,28 +48,31 @@ class SharedTeamFrames(Carry, declared_name="shared_team_frames"):
         destination = TeamBoardPublicationStore.at(self.root)
         plan = TeamPlan()
         retained: dict = {}
+        existing_huds: tuple[TeamHud, ...] = ()
         if destination.path.exists():
             raw = FieldCodec.parse(destination.path.read_bytes())
             if isinstance(raw, dict) and "frames" in raw:
                 publication = FieldCodec.decode(TeamBoardPublication, raw)
                 plan = publication.plan
-                retained.update(
-                    (hud.teammate.require_recorded().lookup, hud)
-                    for hud in destination.huds(publication=publication)
-                )
+                existing_huds = destination.huds(publication=publication)
             else:
                 frames = FieldCodec.decode(SharedJson, raw)
-                retained.update(
-                    (hud.teammate.require_recorded().lookup, hud)
-                    for hud in FieldCodec.decode_shared(
-                        tuple[TeamHud, ...], frames.expanded()
-                    )
+                existing_huds = FieldCodec.decode_shared(
+                    tuple[TeamHud, ...], frames.expanded()
                 )
+            retained.update(
+                (hud.teammate.require_recorded().lookup, hud)
+                for hud in existing_huds
+            )
         split_plan = SplitTeamPlanFile.path_in(self.root)
         if split_plan.exists():
             plan = FieldCodec.decode_document(
                 TeamPlan, FieldCodec.parse(split_plan.read_bytes())
             )
+        before = {
+            hud.teammate: hud.with_plan(plan)
+            for hud in existing_huds
+        }
         sources = tuple(sorted(FlatTeamFrameFile.matching_in(self.root)))
         for source in sources:
             raw = FieldCodec.parse(source.read_bytes())
@@ -87,7 +90,7 @@ class SharedTeamFrames(Carry, declared_name="shared_team_frames"):
             destination.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             destination._publish_unlocked(
                 destination.publication(
-                    plan, tuple(retained.values()), TeamBoardPublication()
+                    plan, tuple(retained.values()), before
                 )
             )
             for source in sources:

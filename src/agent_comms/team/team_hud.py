@@ -395,6 +395,17 @@ class TeamHud(TeamHudRecord):
 
 
 @dataclass(frozen=True)
+class RetainedTeamBoard:
+    """The decoded board and the exact publication that supplied it."""
+
+    publication: TeamBoardPublication
+    huds: tuple[TeamHud, ...]
+
+    def packet_map(self) -> dict[ThreadIncarnation, tuple[TeamUpdate, ...]]:
+        return {hud.teammate: hud.packets for hud in self.huds}
+
+
+@dataclass(frozen=True)
 class TeamBoardPublicationStore(
     TeamBoardFile,
     JsonDocument[TeamBoardPublication],
@@ -446,6 +457,20 @@ class TeamBoardPublicationStore(
             ],
         )
 
+    def retained(
+        self,
+        publication: TeamBoardPublication | None = None,
+    ) -> RetainedTeamBoard:
+        """Decode one publication once and retain the source that makes reuse valid."""
+        publication = self.read() if publication is None else publication
+        return RetainedTeamBoard(
+            publication,
+            tuple(
+                hud.with_plan(publication.plan)
+                for hud in self.huds(publication=publication)
+            ),
+        )
+
     def packet_map(
         self,
         publication: TeamBoardPublication | None = None,
@@ -469,6 +494,18 @@ class TeamBoardPublicationStore(
             tuple[TeamHudRecord, ...],
         )
 
+    @staticmethod
+    def retained_huds(
+        plan: TeamPlan,
+        huds: tuple[TeamHud, ...],
+    ) -> tuple[TeamHud, ...]:
+        """The semantic values actually retained by the recipient-keyed frame cut."""
+        recipients = {
+            hud.teammate.require_recorded().lookup: hud.with_plan(plan)
+            for hud in huds
+        }
+        return tuple(recipients.values())
+
     @classmethod
     def publication(
         cls,
@@ -476,8 +513,9 @@ class TeamBoardPublicationStore(
         huds: tuple[TeamHud, ...],
         before: dict[ThreadIncarnation, TeamHud],
     ) -> TeamBoardPublication:
-        frames = cls.captured_frames(huds)
-        after = {hud.teammate: hud.with_plan(plan) for hud in huds}
+        retained = cls.retained_huds(plan, huds)
+        frames = cls.captured_frames(retained)
+        after = {hud.teammate: hud for hud in retained}
         changed = tuple(sorted(
             (owner for owner in before.keys() | after.keys()
              if before.get(owner) != after.get(owner)),
@@ -491,29 +529,38 @@ class TeamBoardPublicationStore(
         root: Path,
         plan: TeamPlan,
         huds: tuple[TeamHud, ...],
-    ) -> None:
+        retained: RetainedTeamBoard | None = None,
+    ) -> RetainedTeamBoard:
         store = cls.at(root)
         store.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         try:
             previous = store.read()
         except RecordProblems:
-            store._publish_unlocked(cls.publication(plan, huds, {}))
-            return
-        before = {
-            hud.teammate: hud.with_plan(previous.plan)
-            for hud in store.huds(publication=previous)
+            successor = cls.publication(plan, huds, {})
+            store._publish_unlocked(successor)
+            return RetainedTeamBoard(
+                successor,
+                cls.retained_huds(plan, huds),
+            )
+        if retained is None or retained.publication != previous:
+            retained = store.retained(previous)
+        before = {hud.teammate: hud for hud in retained.huds}
+        after = {
+            hud.teammate: hud
+            for hud in cls.retained_huds(plan, huds)
         }
-        after = {hud.teammate: hud.with_plan(plan) for hud in huds}
         if previous.plan == plan and before == after:
             # SharedJson is a storage encoding, not the board's equality owner.  Re-encoding
             # equal HUDs may choose different reference positions; comparing those raw graphs
             # made every recipient look changed and woke every reader on every heartbeat.
             if previous.changed:
-                store._publish_unlocked(replace(previous, changed=()))
-            return
+                previous = replace(previous, changed=())
+                store._publish_unlocked(previous)
+            return RetainedTeamBoard(previous, tuple(after.values()))
         successor = cls.publication(plan, huds, before)
         if successor != previous:
             store._publish_unlocked(successor)
+        return RetainedTeamBoard(successor, tuple(after.values()))
 
     @classmethod
     def write_all(cls, root: Path, huds: tuple[TeamHud, ...]) -> frozenset[Path]:

@@ -38,7 +38,12 @@ from agent_comms.team.standing_rules import (
     StandingRule,
     TeamInputs,
 )
-from agent_comms.team.team_hud import TeamBoardPublicationStore, TeamHud, TeamPlan
+from agent_comms.team.team_hud import (
+    RetainedTeamBoard,
+    TeamBoardPublicationStore,
+    TeamHud,
+    TeamPlan,
+)
 from agent_comms.team.team_service import TeamService
 from agent_comms.ui_model.hud_groups import HudUnavailableGroup
 from agent_comms.ui_model.teammate_state import TeammateState
@@ -205,6 +210,8 @@ class TeamBoardAcquisition(
 class TeamHeartbeatEffects(TeamService):
     """Apply one acquired board as the heartbeat's retained/public effects."""
 
+    _retained_board: RetainedTeamBoard | None = None
+
     def prepare_effects(self, comms: Comms, inputs: tuple[TeamInputs, ...]) -> None:
         repositories = comms.registry.snapshot().team_project.repository_names()
         for board in inputs:
@@ -222,7 +229,13 @@ class TeamHeartbeatEffects(TeamService):
         now = time.time()
         duty = self.duty(comms.registry, comms.goals)
         retained_store = TeamBoardPublicationStore.at(comms.root)
-        retained_packets = retained_store.packet_map(retained_store.read())
+        publication = retained_store.read()
+        if (
+            self._retained_board is None
+            or self._retained_board.publication != publication
+        ):
+            self._retained_board = retained_store.retained(publication)
+        retained_packets = self._retained_board.packet_map()
         try:
             for observed in boards:
                 recipients = self.served(comms.registry, comms.goals)
@@ -322,10 +335,14 @@ class TeamHeartbeatEffects(TeamService):
                         )
                     completed.append(recipient)
                 comms.goals.todos.record_merges(observed.merges(comms))
-            TeamBoardPublicationStore.replace_all(
-                comms.root, plan, tuple(huds.values())
+            self._retained_board = TeamBoardPublicationStore.replace_all(
+                comms.root,
+                plan,
+                tuple(huds.values()),
+                self._retained_board,
             )
         except BaseException:
+            self._retained_board = None
             TeamBoardPublicationStore.write_all(comms.root, tuple(huds.values()))
             raise
         finally:
@@ -404,6 +421,7 @@ class TeamHeartbeat(
                         stopped=update.stopped(snapshot),
                     ))
                 publications.append((update, sections))
+            self._retained_board = None
             TeamBoardPublicationStore.write_all(comms.root, tuple(changed_huds))
             for update, sections in publications:
                 duty.publish(
