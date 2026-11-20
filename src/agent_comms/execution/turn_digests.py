@@ -12,6 +12,7 @@ from agent_comms.context_store import ContextStore
 from agent_comms.coordination.service_passes import ServiceReading
 from agent_comms.execution.historical_native_inputs import HistoricalNativeAnswers
 from agent_comms.execution.transcript_sources import (
+    CapturedTranscriptAppend,
     ExternalTranscript,
     StoreRead,
     TranscriptSource,
@@ -257,11 +258,15 @@ class OrderEditRead[Result](OrderRead[Result]):
             self.owned(source.unjudged(self.todo, self.bound.at))))
 
     def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
+        return self.owned(self.edit_calls_from_turns(turns))
+
+    def edit_calls_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
+        """Latest original call per identity, before this order projects ownership."""
         since = self.bound.at
         edits = {edit.id: edit for turn in reversed(turns)
                  for event in turn.events
                  for edit in event.edit_calls(self.thread.name, self.todo.id, since)}
-        return self.owned(reversed(edits.values()))
+        return tuple(reversed(edits.values()))
 
 
 class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):
@@ -287,10 +292,35 @@ class OrderEditCountCut:
 
     reads: tuple[OrderEditCountRead, ...]
     source: RecordsCut
-    counts: tuple[tuple[str, int], ...]
+    edits: tuple[tuple[str, tuple[EditCall, ...]], ...]
 
-    def serves(self, reads: tuple[OrderEditCountRead, ...], source: RecordsCut) -> bool:
-        return self.reads == reads and self.source == source
+    @property
+    def counts(self) -> tuple[tuple[str, int], ...]:
+        """Each order projects ownership from the source calls retained beside it."""
+        counts = []
+        for read, (problem, edits) in zip(self.reads, self.edits, strict=True):
+            if problem != read.todo.id:
+                raise ValueError("Retained edit projection belongs to another order")
+            counts.append((problem, len(read.owned(edits))))
+        return tuple(counts)
+
+    def following(
+        self, captured: CapturedTranscriptAppend, thread: str,
+    ) -> OrderEditCountCut:
+        """Advance every order projection from the one appended transcript answer."""
+        advanced = []
+        for read, (problem, retained) in zip(self.reads, self.edits, strict=True):
+            if problem != read.todo.id:
+                raise ValueError("Retained edit projection belongs to another order")
+            appended = (
+                edit
+                for event in captured.events
+                for edit in event.edit_calls(thread, problem, read.bound.at)
+            )
+            by_id = {edit.id: edit for edit in retained}
+            by_id.update((edit.id, edit) for edit in appended)
+            advanced.append((problem, tuple(by_id.values())))
+        return OrderEditCountCut(self.reads, captured.source, tuple(advanced))
 
 
 @dataclass(frozen=True)
@@ -300,32 +330,37 @@ class OrderEditCountBatch(ThreadRead[OrderEditCountCut]):
     reads: tuple[OrderEditCountRead, ...]
     previous: OrderEditCountCut | None
 
-    def retained(self, source: RecordsCut) -> OrderEditCountCut | None:
-        return self.previous if self.previous is not None and self.previous.serves(
-            self.reads, source,
-        ) else None
+    def following(self, source: TranscriptSource) -> OrderEditCountCut | None:
+        """The retained answer advanced under one current source snapshot."""
+        if self.previous is None or self.previous.reads != self.reads:
+            return None
+        appended = source.capture_append(self.previous.source)
+        if appended is None:
+            return None
+        return (
+            self.previous
+            if appended.source == self.previous.source
+            else self.previous.following(appended, self.thread.name)
+        )
 
     def native(self) -> OrderEditCountCut:
         source = self.thread.runtime.history_source(self.root, self.thread.incarnation)
-        retained = self.retained(source.record_cut())
-        if retained is not None:
-            return retained
+        if (following := self.following(source)) is not None:
+            return following
         captured = source.capture_turns(TurnsSince(min(read.bound.at for read in self.reads)))
         return OrderEditCountCut(self.reads, captured.source, tuple(
-            (read.todo.id, read.project_edits(read.edits_from_turns(captured.turns)))
+            (read.todo.id, read.edit_calls_from_turns(captured.turns))
             for read in self.reads
         ))
 
     def external(self) -> OrderEditCountCut:
-        with ExternalTranscript(self.root, self.thread.incarnation).reading() as source:
+        transcript = ExternalTranscript(self.root, self.thread.incarnation)
+        if (following := self.following(transcript)) is not None:
+            return following
+        with transcript.reading() as source:
             revision = source.cut()
-            retained = self.retained(revision)
-            if retained is not None:
-                return retained
             return OrderEditCountCut(self.reads, revision, tuple(
-                (read.todo.id, read.project_edits(read.owned(
-                    source.unjudged(read.todo, read.bound.at)
-                )))
+                (read.todo.id, tuple(source.unjudged(read.todo, read.bound.at)))
                 for read in self.reads
             ))
 

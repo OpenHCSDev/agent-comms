@@ -51,7 +51,12 @@ from agent_comms.projects.git_errors import GitCommandError, UnavailableCommitEr
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_environment import RepositoryEnvironment
 from agent_comms.storage.file_observation import DocumentBytes, FileObservation, FileRevision
-from agent_comms.storage.native_changes import ChangedSources, DirectorySource, FileSource
+from agent_comms.storage.native_changes import (
+    ChangedSources,
+    DirectorySource,
+    FileSource,
+    SourceChanges,
+)
 
 
 class CheckoutHoldsWorkError(ValueError):
@@ -570,8 +575,15 @@ class CheckoutStatus:
     checkout: Checkout
     head: GitHead
     paths: tuple[Path, ...]
-    edits: tuple[float, ...]
+    modified: tuple[tuple[Path, float], ...]
+    directories: tuple[Path, ...]
+    git_sources: tuple[Path, ...]
     changes: ChangedSources
+
+    @property
+    def edits(self) -> tuple[float, ...]:
+        newest = max((modified for _path, modified in self.modified), default=None)
+        return () if newest is None else (newest,)
 
     @staticmethod
     def _excluded_directories(checkout: Checkout) -> frozenset[Path]:
@@ -654,7 +666,12 @@ class CheckoutStatus:
         return tuple(dict.fromkeys(paths))
 
     @staticmethod
-    def _status(checkout: Checkout) -> tuple[tuple[Path, ...], tuple[float, ...]]:
+    def _status(
+        checkout: Checkout, paths: tuple[Path, ...] = (),
+    ) -> tuple[tuple[Path, ...], tuple[tuple[Path, float], ...]]:
+        pathspec = (() if not paths else (
+            "--", *(os.fspath(path.relative_to(checkout.path)) for path in paths),
+        ))
         fields = iter(
             Repo.git_bytes(
                 checkout.path,
@@ -664,6 +681,7 @@ class CheckoutStatus:
                 "-z",
                 "--untracked-files=all",
                 "--ignore-submodules=all",
+                *pathspec,
             ).split(b"\0")
         )
         names: list[str] = []
@@ -672,19 +690,23 @@ class CheckoutStatus:
                 names.append(os.fsdecode(entry[3:]))
                 if {b"R", b"C"} & {entry[:1], entry[1:2]}:
                     names.append(os.fsdecode(next(fields)))
-        paths = tuple(checkout.path / name for name in names)
-        newest: float | None = None
+        status_paths = tuple(sorted(
+            dict.fromkeys(checkout.path / name for name in names), key=os.fspath,
+        ))
+        modified: list[tuple[Path, float]] = []
         descriptor = os.open(checkout.path, os.O_RDONLY | os.O_DIRECTORY)
         try:
-            for name in names:
+            for path in status_paths:
                 try:
-                    modified = os.stat(name, dir_fd=descriptor).st_mtime
+                    timestamp = os.stat(
+                        path.relative_to(checkout.path), dir_fd=descriptor,
+                    ).st_mtime
                 except (FileNotFoundError, NotADirectoryError):
                     continue
-                newest = modified if newest is None else max(newest, modified)
+                modified.append((path, timestamp))
         finally:
             os.close(descriptor)
-        return paths, (() if newest is None else (newest,))
+        return status_paths, tuple(modified)
 
     @classmethod
     def capture(cls, checkout: Checkout, head: GitHead) -> Self:
@@ -697,21 +719,88 @@ class CheckoutStatus:
                 *(FileSource(path) for path in git_sources),
             )
             try:
-                paths, edits = cls._status(checkout)
+                paths, modified = cls._status(checkout)
                 if (
                     directories == cls._directories(checkout)
                     and git_sources == cls._git_sources(checkout)
                     and not changes.changed_paths()
                 ):
-                    return cls(checkout, head, paths, edits, changes)
+                    return cls(
+                        checkout, head, paths, modified, directories, git_sources, changes,
+                    )
             except BaseException:
                 changes.close()
                 raise
             changes.close()
         raise OSError("Worktree sources did not stabilize while reading status")
 
-    def current(self, head: GitHead) -> bool:
-        return self.head == head and not self.changes.changed_paths()
+    def following(self, head: GitHead) -> Self | None:
+        """Advance an exact worktree-status cut from complete native path events.
+
+        Git metadata, directory topology and lost events still reacquire the
+        complete answer. Ordinary file events ask Git only for those paths and
+        reuse this registration after proving no event raced the projection.
+        """
+        if self.head != head:
+            return None
+        events: set[Path] = set()
+        for _attempt in range(ChangedSources.reconcile_attempts):
+            changed = self.changes.changes()
+            if not changed.declared:
+                return self if not events else self._following_paths(tuple(events))
+            following = self.incremental_paths(changed)
+            if following is None:
+                return None
+            events.update(following)
+            projected = self._following_paths(tuple(events))
+            raced = self.changes.changes()
+            if not raced.declared:
+                return projected
+            following = self.incremental_paths(raced)
+            if following is None:
+                return None
+            events.update(following)
+        return None
+
+    def incremental_paths(self, changed: SourceChanges) -> frozenset[Path] | None:
+        """Exact ordinary-file events whose Git classification is path-local."""
+        if (
+            not changed.complete
+            or not changed.events
+            or changed.declared.intersection(self.git_sources)
+            or any(
+                event in self.directories
+                or event.is_dir()
+                or event.name == ".gitignore"
+                for event in changed.events
+            )
+        ):
+            return None
+        return changed.events
+
+    def _following_paths(self, events: tuple[Path, ...]) -> Self:
+        selected = tuple(sorted(
+            (event for event in events if event.is_relative_to(self.checkout.path)),
+            key=os.fspath,
+        ))
+        if len(selected) != len(events):
+            raise ValueError("Worktree event lies outside its checkout")
+        paths, modified = self._status(self.checkout, selected)
+        affected = set(selected).union(paths)
+        retained_paths = set(self.paths).difference(selected)
+        retained_modified = dict(self.modified)
+        for path in affected:
+            retained_modified.pop(path, None)
+        retained_modified.update(modified)
+        return type(self)(
+            self.checkout,
+            self.head,
+            tuple(sorted(retained_paths.union(paths), key=os.fspath)),
+            tuple(sorted(retained_modified.items(), key=lambda item: os.fspath(item[0]))),
+            self.directories,
+            self.git_sources,
+            self.changes,
+        )
 
     def close(self) -> None:
         self.changes.close()
@@ -897,9 +986,10 @@ class RepositoryReads:
         retained = self._statuses.pop(checkout.path, None)
         if retained is not None:
             try:
-                if retained.current(head):
-                    self._statuses[checkout.path] = retained
-                    return retained
+                following = retained.following(head)
+                if following is not None:
+                    self._statuses[checkout.path] = following
+                    return following
             except BaseException:
                 retained.close()
                 raise

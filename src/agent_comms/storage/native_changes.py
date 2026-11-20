@@ -184,6 +184,15 @@ class DirectorySource(ChangeSource):
         yield DirectoryWatch.observed(directory, mask)
 
 
+@dataclass(frozen=True)
+class SourceChanges:
+    """One drained native-event cut and the declarations those events invalidate."""
+
+    declared: frozenset[Path]
+    events: frozenset[Path]
+    complete: bool
+
+
 class ChangedSources(ExitStack):
     """One native registration and bounded dirty declared sources.
 
@@ -200,6 +209,8 @@ class ChangedSources(ExitStack):
         self._by_path: dict[Path, list[ChangeSource]] = defaultdict(list)
         self._below: dict[Path, set[Path]] = defaultdict(set)
         self._dirty: set[Path] = set()
+        self._events: set[Path] = set()
+        self._complete = True
         self._registrations: dict[int, KernelWatch] = {}
         for source in self.sources:
             self._by_path[source.path].append(source)
@@ -280,15 +291,19 @@ class ChangedSources(ExitStack):
 
     def invalidate(self) -> None:
         """Lost event coverage requires a fresh read of every declared source."""
+        self._complete = False
         self._record(source.path for source in self.sources)
 
     def _touch(self, path: Path) -> None:
-        self._record(
+        affected = tuple(
             source.path
             for key in (path, path.parent)
             for source in self._by_path.get(key, ())
             if source.includes(path)
         )
+        if affected:
+            self._events.add(path)
+            self._record(affected)
 
     def changed(self) -> None:
         """Synchronous readers consume changed_paths; the async capability wakes."""
@@ -327,9 +342,13 @@ class ChangedSources(ExitStack):
                     if affected:
                         self._refresh()
 
-    def _take_paths(self) -> frozenset[Path]:
-        changed = frozenset(self._dirty)
+    def _take_changes(self) -> SourceChanges:
+        changed = SourceChanges(
+            frozenset(self._dirty), frozenset(self._events), self._complete,
+        )
         self._dirty.clear()
+        self._events.clear()
+        self._complete = True
         return changed
 
     def block_until_change(self, seconds: float) -> None:
@@ -337,7 +356,8 @@ class ChangedSources(ExitStack):
         changed_paths then says which."""
         self._readiness.poll(max(0, round(seconds * 1000)))
 
-    def changed_paths(self) -> frozenset[Path]:
+    def changes(self) -> SourceChanges:
+        """Consume one complete native-event cut, retaining exact event paths when known."""
         self._drain()
         if any(registration.pending_retirement() for registration in self._registrations.values()):
             self._drain()
@@ -346,4 +366,7 @@ class ChangedSources(ExitStack):
             # batch while the kernel still holds events. Re-read registered sources
             # rather than keeping stale cached data or draining forever.
             self.invalidate()
-        return self._take_paths()
+        return self._take_changes()
+
+    def changed_paths(self) -> frozenset[Path]:
+        return self.changes().declared

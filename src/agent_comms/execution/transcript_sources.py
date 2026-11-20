@@ -429,6 +429,14 @@ class CapturedTurns:
     turns: tuple[TurnDigest, ...]
 
 
+@dataclass(frozen=True)
+class CapturedTranscriptAppend:
+    """Records appended after one retained cut, with the cut that now owns them."""
+
+    source: RecordsCut
+    events: tuple[TranscriptEvent, ...]
+
+
 class TranscriptSource(ReadsPublishedMessages, ResolvesSentReports):
     """Recorded items alone carry no assigned-wire or publication authority.
 
@@ -480,6 +488,26 @@ class TranscriptSource(ReadsPublishedMessages, ResolvesSentReports):
         """The current original record coordinate, independent of its concrete store."""
         with self.reading() as reader:
             return reader.cut()
+
+    def capture_append(self, previous: RecordsCut) -> CapturedTranscriptAppend | None:
+        """Read only the records appended to ``previous`` under one source cut.
+
+        A replacement or rewrite cannot supply a following answer: callers must
+        reacquire their complete projection.  Native files and external item
+        stores both own this relation through ``RecordsCut.holds`` and ``forward``.
+        """
+        with self.reading() as reader:
+            current = reader.cut()
+            if not previous.appended_by(current):
+                return None
+            events = tuple(
+                event
+                for record in reader.forward(previous.offset, current.offset)
+                for event in record.events
+            )
+            if not current.holds(reader.cut(), current.offset):
+                raise StaleRevision('Transcript source changed during its append read')
+        return CapturedTranscriptAppend(current, events)
 
     def capture_turns(self, bound: TurnBound) -> CapturedTurns:
         """Retain the source that actually supplied this bounded answer."""

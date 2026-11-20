@@ -22,12 +22,14 @@ from source_revision_fixture import SourceRepository
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.cli_protocol import EarlierItems
 from agent_comms.cli_bridges.hook_forks import SessionSubagents
 from agent_comms.cli_bridges.hook_requests import (
     ReadGateRequest,
     SubagentStartRequest,
     SubagentStopRequest,
 )
+from agent_comms.cli_bridges.runtime_updates import FinishedItem
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.errors import CoordinationReadUnavailable
@@ -104,6 +106,7 @@ from agent_comms.storage.typed_table import HeldBusFile
 from agent_comms.team.order import MessageNotification, OrderFile, Team, TeamContext
 from agent_comms.team.standing import Unjudged
 from agent_comms.team.team_heartbeat import TeamObservation
+from agent_comms.transcript.external_transcript_rows import EarlierPage, NoEarlierPage
 from agent_comms.transcript.transcript_events import ToolStartTranscript, TurnDigest
 from agent_comms.transport.tool_caller import ForkCaller, SubagentCaller
 from agent_comms.transport.tool_declaration import ToolDeclaration
@@ -317,29 +320,33 @@ def incoming_for(todo):
     return IncomingWork(frozenset({todo.id}), frozenset({todo.order.checked().id}))
 
 
+def edit_events(source, count, *, start=0):
+    return tuple(
+        ToolStartTranscript(
+            position=position,
+            tool_call_id=ToolCallId(f"parent-edit-{position}"),
+            tool_name="edit",
+            timestamp=time.time(),
+            tool=ToolDeclaration.record(
+                "edit",
+                {
+                    "path": str(source.checkout / "owner.py"),
+                    "edits": [{"oldText": "", "newText": f"class ReviewedOwner{position}: pass"}],
+                },
+                call_id=ToolCallId(f"parent-edit-{position}"),
+            ),
+        )
+        for position in range(start, start + count)
+    )
+
+
 def record_edits(comms, source, count, *, turn="parent-work", start=0):
     """One retained-holder transcript turn with ``count`` original edit calls."""
     actor = comms.registry.require("retained").incarnation
     ExternalTranscript(comms.root, actor).finish(
         turn_id=NativeTurnId(turn),
         item_id=NativeItemId(f"{turn}-edit"),
-        events=tuple(
-            ToolStartTranscript(
-                position=position,
-                tool_call_id=ToolCallId(f"parent-edit-{position}"),
-                tool_name="edit",
-                timestamp=time.time(),
-                tool=ToolDeclaration.record(
-                    "edit",
-                    {
-                        "path": str(source.checkout / "owner.py"),
-                        "edits": [{"oldText": "", "newText": f"class ReviewedOwner{position}: pass"}],
-                    },
-                    call_id=ToolCallId(f"parent-edit-{position}"),
-                ),
-            )
-            for position in range(start, start + count)
-        ),
+        events=edit_events(source, count, start=start),
     )
 
 
@@ -368,7 +375,9 @@ def test_unjudged_reminder_names_each_order_with_edits(fork_bus, monkeypatch: py
         f"retained P40 {Unjudged.limit + 1}")
 
 
-def test_edits_under_a_merged_order_are_nobodys_review(fork_bus):
+def test_edits_under_a_merged_order_are_nobodys_review(
+    fork_bus, monkeypatch: pytest.MonkeyPatch,
+):
     """Overload, the HUD and the judge read one judgeable owner: a merged head gates nothing."""
 
     comms, source, _ = fork_bus
@@ -392,12 +401,39 @@ def test_edits_under_a_merged_order_are_nobodys_review(fork_bus):
     retained.finish_pass()
     second, = retained.cuts.values()
     assert second is first
+
+    full_query = StoreRead.unjudged
+
+    def reject_full_query(*_args, **_kwargs):
+        raise AssertionError("An appended transcript must advance its retained source cut")
+
+    monkeypatch.setattr(StoreRead, "unjudged", reject_full_query)
     record_edits(comms, source, 1, turn="following-work", start=3)
     retained.begin_pass()
     assert retained.read_all(reads) == {"P40": 4}
     retained.finish_pass()
     refreshed, = retained.cuts.values()
     assert refreshed is not first
+
+    monkeypatch.setattr(StoreRead, "unjudged", full_query)
+    transcript = ExternalTranscript(comms.root, comms.registry.require("retained").incarnation)
+    transcript.publish_page((
+        FinishedItem(NativeTurnId("parent-work"), NativeItemId("parent-work-edit"), ()),
+    ), EarlierPage("older"))
+    with transcript.reading() as source_read:
+        assert source_read.request_earlier(0)
+    request, = transcript.requested_frames()
+    transcript.prepend(
+        EarlierItems.from_row(request),
+        (FinishedItem(
+            NativeTurnId("earlier-work"), NativeItemId("earlier-work-edit"),
+            edit_events(source, 1, start=4),
+        ),),
+        NoEarlierPage(),
+    )
+    retained.begin_pass()
+    assert retained.read_all(reads) == {"P40": 5}
+    retained.finish_pass()
     assert tuple(OrderEditCountRead.judgeable(comms.root, holds, merged, workplaces)) == ()
 
 

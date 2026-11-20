@@ -111,32 +111,32 @@ def test_unchanged_worktree_status_is_retained_until_its_native_source_changes(
 ):
     """A heartbeat retains one exact status cut; a real nested edit invalidates it once."""
     worktree = holder_checkout(tmp_path / 'worker--P1')
-    status_calls = 0
+    status_calls = []
     git_bytes = Repo.git_bytes.__func__
 
     def counted(cls, checkout, *arguments, **options):
-        nonlocal status_calls
         if 'status' in arguments:
-            status_calls += 1
+            status_calls.append(arguments)
         return git_bytes(cls, checkout, *arguments, **options)
 
     monkeypatch.setattr(Repo, 'git_bytes', classmethod(counted))
+    nested = worktree / 'evidence' / 'result.txt'
+    nested.parent.mkdir()
     first = RepositoryReads()
     assert WorkBranches(worktree, reads=first).uncommitted() == ()
-    assert status_calls == 1
+    assert len(status_calls) == 1
 
     retained = RepositoryReads.retaining(first)
     assert WorkBranches(worktree, reads=retained).uncommitted() == ()
-    assert status_calls == 1
+    assert len(status_calls) == 1
 
-    nested = worktree / 'evidence' / 'result.txt'
-    nested.parent.mkdir()
     edited(nested.parent, nested.name, 700.0)
     changed = RepositoryReads.retaining(retained)
     branches = WorkBranches(worktree, reads=changed)
     assert branches.uncommitted() == (nested,)
     assert branches.uncommitted_edits() == (700.0,)
-    assert status_calls == 2
+    assert len(status_calls) == 2
+    assert status_calls[-1][-2:] == ('--', 'evidence/result.txt')
     changed.close()
 
 
@@ -155,7 +155,9 @@ def test_failed_status_replacement_does_not_poison_the_retained_reader(
         close(status)
 
     monkeypatch.setattr(CheckoutStatus, 'close', tracked_close)
-    edited(worktree, 'owner.py', 700.0)
+    nested = worktree / 'new-directory'
+    nested.mkdir()
+    edited(nested, 'owner.py', 700.0)
     capture = CheckoutStatus.capture.__func__
     attempts = 0
 
@@ -172,7 +174,7 @@ def test_failed_status_replacement_does_not_poison_the_retained_reader(
     assert closed == [retained]
     assert reads._statuses == {}
 
-    assert WorkBranches(worktree, reads=reads).uncommitted() == (worktree / 'owner.py',)
+    assert WorkBranches(worktree, reads=reads).uncommitted() == (nested / 'owner.py',)
     live = reads._statuses[worktree.resolve()]
     reads.close()
     assert closed == [retained, live]
