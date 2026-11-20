@@ -35,8 +35,7 @@ class CodingChildMode(NativeToolMode):
     owner: CodingChild
 
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        arguments = ("--tools", ",".join(NativeToolDeclaration.names()),
-                     *NativeToolDeclaration.extension_arguments(package))
+        arguments = NativeToolDeclaration.extension_arguments(package)
         return self.owner.comms.threads.native_launch_arguments(
             self.owner.thread, NativeArguments.parse(arguments), package,
         )

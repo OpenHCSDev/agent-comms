@@ -98,6 +98,7 @@ export default function (pi: ExtensionAPI) {
 	const resetTools = () => pi.setActiveTools(
 		pi.getActiveTools().filter((name) => !deferredTools.has(name)),
 	);
+	pi.on("input", resetTools);
 	pi.on("before_agent_start", resetTools);
 	pi.on("session_compact", resetTools);
 	const forkThread = process.env.PI_PARENT_ID ? currentThread : undefined;
