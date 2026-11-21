@@ -544,8 +544,13 @@ class PromptRequest(CommsRequest):
     @abstractmethod
     def enqueue_control(self, inbox: TurnInbox, input_id: InputId) -> None: ...
 
-    async def publish_acceptance(self, inputs: QueuePublication, session_id: AcpSessionId) -> None:
-        await inputs.emit_queue_state(session_id)
+    async def publish_acceptance(
+        self, inputs: QueuePublication, session_id: AcpSessionId, *,
+        presentation_session_id: AcpSessionId,
+    ) -> None:
+        await inputs.emit_queue_state(
+            session_id, presentation_session_id=presentation_session_id,
+        )
 
 
 class QueuePromptRequest(PromptRequest):

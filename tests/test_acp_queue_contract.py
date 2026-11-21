@@ -55,6 +55,7 @@ from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs
 
 BETA = AcpSessionId("beta")
+ATTACHMENT = AcpSessionId("attachment")
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, RecordedThreadIncarnation, int]:
     comms = prepare_native_comms(wire(tmp_path / "wire"))
@@ -62,20 +63,49 @@ def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, RecordedThreadIncarnation
     comms.registry.declare(thread)
     agent = CommsAgent(comms, auto_wake=False)
     agent.sessions.publish(AcpSessionId("beta"), thread)
+    entry = comms.registry.entry("beta").entry
+    agent.inputs.acquire_owner(BETA, agent.inputs.configuration, entry.owner_identity)
     owner, claimed_generation = comms.registry.live_owner_with_claim("beta")
     return comms, agent, owner.incarnation.require_recorded(), claimed_generation
 
 
 async def test_idle_prompt_reaches_initial_path_without_a_following_inbox(tmp_path):
     """An idle owner's method object must not masquerade as a running turn."""
-    _comms, agent, _owner_identity, _generation = _owner(tmp_path)
+    comms, agent, _owner_identity, _generation = _owner(tmp_path)
     try:
-        assert not (await agent.turns.active_backend_turn(BETA)).is_open()
+        agent.sessions.publish(ATTACHMENT, comms.registry.require("beta"))
+        source = await agent.turns.active_backend_turn(ATTACHMENT)
+        assert source.session_id == BETA
+        assert not source.turn.is_open()
         # Empty input exercises the real initial-prompt path without asking a provider.
-        reply = await agent.prompt('beta', [TextContentBlock(type='text', text='')])
+        reply = await agent.prompt(ATTACHMENT, [TextContentBlock(type='text', text='')])
         assert reply.stop_reason == 'end_turn'
         assert not agent.inputs.state(BETA).turn_open()
+        assert not agent.inputs.state(ATTACHMENT).turn_open()
         assert not stored_inputs(agent.inputs.dispositions.root).rows
+    finally:
+        await agent.shutdown()
+
+
+async def test_attachment_session_routes_prompt_to_active_owner_queue(tmp_path):
+    comms, agent, _owner_identity, _generation = _owner(tmp_path)
+    try:
+        entry = comms.registry.entry("beta").entry
+        owner = agent.inputs.state(BETA).owned()
+        comms.agents.begin_turn("beta", TurnId.mint(), "Held owner turn")
+        inbox = owner.open_inbox()
+        agent.sessions.publish(ATTACHMENT, entry.thread)
+
+        response = await agent.prompt(
+            ATTACHMENT, [TextContentBlock(type="text", text="queue this exact message")]
+        )
+
+        queued = inbox.get_nowait()
+        assert queued.content.text == "User follow-up:\nqueue this exact message"
+        assert queued.input_id in owner.queued
+        assert not agent.inputs.state(ATTACHMENT).queued
+        assert comms.registry.require("beta").turn_record.read().phase.busy
+        assert response.stop_reason == "end_turn"
     finally:
         await agent.shutdown()
 

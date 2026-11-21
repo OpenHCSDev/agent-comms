@@ -544,7 +544,7 @@ class DeliveredInput(QueuedInput):
         regardless of its audience. Only a turn without following capacity leaves
         the original pending for the ordinary wake after it ends.
         """
-        turn = await inputs.effects.turns.active_backend_turn(session_id)
+        turn = (await inputs.effects.turns.active_backend_turn(session_id)).turn
         # Only the started member owns both the inbox and its original input.
         if not turn.has_source():
             return

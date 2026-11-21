@@ -158,12 +158,12 @@ class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
         """A running turn switches at its next model call, whichever process stored the change."""
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         settings = self.stored_settings(thread)
-        if self.settings_in_use.get(session_id, settings) == settings:
+        source = await self.effects.turns.active_backend_turn(session_id)
+        if self.settings_in_use.get(source.session_id, settings) == settings:
             return
-        turn = await self.effects.turns.active_backend_turn(session_id)
-        if turn.is_open():
-            self.settings_in_use[session_id] = settings
-            turn.send(settings)
+        if source.turn.is_open():
+            self.settings_in_use[source.session_id] = settings
+            source.turn.send(settings)
 
     async def apply_stored_settings(self, session_id: AcpSessionId) -> None:
         """Apply execution state without discovering presentation catalogs."""
