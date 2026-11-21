@@ -80,7 +80,7 @@ from agent_comms.nominal.field_codec import (
     WireName,
     projected,
 )
-from agent_comms.notification_assignment import NotificationSelection
+from agent_comms.notification_assignment import NotificationAssignmentRead, NotificationSelection
 from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
@@ -414,18 +414,37 @@ class TranscriptSourceWindow:
     sources: tuple[Delivered, ...]
     sent_sources: tuple[Delivered, ...]
 
+    @property
+    def notification_sources(self) -> tuple[Delivered, ...]:
+        """The exact delivered sources this captured window projects, once each."""
+        return tuple({source.message.reference: source
+                      for source in (*self.sources, *self.sent_sources)}.values())
+
+    def notification_selection(self) -> NotificationSelection:
+        """The assignment selection derived from this captured thread source window."""
+        viewer = OwnerOutcomes.of(self.read.identity.thread.incarnation)
+        return NotificationSelection.of(viewer, self.notification_sources)
+
     def presentation(
         self, ordinary: ThreadPresentation, assignments: NotificationSource,
         *, snapshot: RegistrySnapshot | None = None,
     ) -> AcquiredThreadPresentation:
         """Project incoming and sent outcomes from this one acquired source window."""
+        return self.project_presentation(
+            ordinary, assignments, assignments.read_assignments(self.notification_selection()),
+            snapshot=snapshot,
+        )
+
+    def project_presentation(
+        self, ordinary: ThreadPresentation, assignments: NotificationSource,
+        assignment_read: NotificationAssignmentRead,
+        *, snapshot: RegistrySnapshot | None = None,
+    ) -> AcquiredThreadPresentation:
+        """Project this window through its exact already-acquired assignment read."""
         transcripts = self.read.owner
-        sources = tuple({source.message.reference: source
-                         for source in (*self.sources, *self.sent_sources)}.values())
-        viewer = OwnerOutcomes.of(self.read.identity.thread.incarnation)
-        notification_read = assignments.read_assignments(NotificationSelection.of(viewer, sources))
+        sources = self.notification_sources
         projected = MessageNotification.delivery_window(
-            assignments, transcripts.registry, notification_read, snapshot=snapshot)
+            assignments, transcripts.registry, assignment_read, snapshot=snapshot)
         incoming = tuple(
             replace(notification, message=source.envelope)
             for source in self.sources

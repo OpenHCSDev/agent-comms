@@ -61,7 +61,7 @@ from agent_comms.messaging.revision_views import ActivityView
 from agent_comms.messaging.sent_message import AssignedSourceIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, PresenceExclude, WireForm
-from agent_comms.notification_assignment import NotificationAssignment
+from agent_comms.notification_assignment import NotificationAssignment, NotificationSelection
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.history_read_source import HistoryReadSource
 from agent_comms.registry.notification_selection_read import ThreadSourceReader
@@ -79,7 +79,7 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
 from agent_comms.registry.view_unread import transcript_read_state
 from agent_comms.storage.file_observation import FileRevision
-from agent_comms.transcript.transcripts import Transcripts
+from agent_comms.transcript.transcripts import TranscriptSourceWindow, Transcripts
 from agent_comms.transport.tool_result import ToolResult
 
 from agent_comms.registry.registry_names import DeletedThread
@@ -212,7 +212,51 @@ class ThreadPresentations(NotificationSource, ThreadSourceReader[ThreadPresentat
                 **{declared.name: getattr(self, declared.name) for declared in fields(self)},
                 scope=scope,
             )
-            yield {name: partial(batch.read, name) for name in names}
+            yield batch.prepared_readings(names)
+
+    def prepared_readings(
+        self, names: Iterable[str],
+    ) -> Mapping[str, Callable[[], ThreadPresentation]]:
+        """Capture every new thread window, then prepare their exact selections once."""
+        reads: dict[str, Callable[[], ThreadPresentation]] = {}
+        prepared: dict[
+            str, tuple[ThreadPresentation, TranscriptSourceWindow, NotificationSelection]
+        ] = {}
+        for name in names:
+            canonical = self.snapshot.canonical_name(name)
+            ordinary = self.view(name)
+            if canonical not in self.views:
+                reads[name] = partial(self.read, name)
+                continue
+            try:
+                captured = self.transcripts.capture_page_window(
+                    canonical, source_limit=5, sent_source_limit=self.sent_source_limit,
+                )
+                if not captured.read.identity.thread.incarnation.current(self.snapshot):
+                    raise StaleRevision("Thread source incarnation changed during presentation")
+                prepared[name] = ordinary, captured, captured.notification_selection()
+            except Exception as error:
+                reads[name] = partial(self.failed_read, error)
+        if not prepared:
+            return reads
+        try:
+            held = self.prepare(selection
+                                for _ordinary, _captured, selection in prepared.values())
+        except Exception as error:
+            reads.update((name, partial(self.failed_read, error)) for name in prepared)
+        else:
+            reads.update((
+                name,
+                partial(
+                    captured.project_presentation, ordinary, self, held.reads[selection],
+                    snapshot=self.snapshot,
+                ),
+            ) for name, (ordinary, captured, selection) in prepared.items())
+        return reads
+
+    @staticmethod
+    def failed_read(error: Exception) -> ThreadPresentation:
+        raise error
 
     def view(self, name: str) -> ThreadPresentation:
         canonical = self.snapshot.canonical_name(name)
