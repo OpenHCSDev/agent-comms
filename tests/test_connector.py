@@ -72,6 +72,7 @@ from agent_comms.transport.connector import (
     LongLivedRoute,
     RevokeVerb,
     RunningRequest,
+    RegisteredClientCredential,
     ServeVerb,
 )
 from agent_comms.transport.connector_caller import (
@@ -94,7 +95,6 @@ from agent_comms.transport.connector_profile import (
     UiGrantSummary,
 )
 from agent_comms.transport.connector_store import (
-    CALLBACK,
     CODE_SECONDS,
     AuthorizationQuery,
     ConnectorCredentialsFile,
@@ -103,6 +103,8 @@ from agent_comms.transport.connector_store import (
     ExpiredProfile,
     HeldUiProfiles,
     IssuedCode,
+    OAuthClientId,
+    OAuthRedirectUri,
     OpenableProfile,
     ReadServiceAccess,
     TrustedBrowser,
@@ -112,6 +114,8 @@ from agent_comms.transport.connector_store import (
     UnreadableProfile,
     digest,
 )
+
+CALLBACK = OAuthRedirectUri(URL("https://claude.ai/api/mcp/auth_callback"))
 from agent_comms.transport.mcp import (
     PROTOCOL_VERSION,
     SESSION_HEADER,
@@ -267,12 +271,15 @@ class ClientLogin:
     @classmethod
     async def register(cls, client: TestClient):
         registered = await (await client.post(
-            "/register", json={"redirect_uris": [CALLBACK], "client_name": "claude.ai"}
+            "/register", json={
+                "redirect_uris": [str(CALLBACK.url)], "client_name": "claude.ai"
+            }
         )).json()
         verifier = secrets.token_urlsafe(48)
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
         return cls(AuthorizationQuery(
-            "code", registered["client_id"], CALLBACK, challenge.decode().rstrip("="), "S256", "s"
+            "code", OAuthClientId(registered["client_id"]), CALLBACK,
+            challenge.decode().rstrip("="), "S256", "s"
         ), verifier)
 
     async def redeem(self, client: TestClient, code: str) -> str:
@@ -638,11 +645,111 @@ async def test_watch_pass_logs_real_failures_with_tracebacks(connector, caplog):
     assert ServicePassFailing.violations(wire(connector.root)) == ()
 
 
-async def test_registration_accepts_only_the_claude_callback(client):
+async def test_registration_rejects_a_non_loopback_http_callback(client):
     refused = await client.post(
-        "/register", json={"redirect_uris": ["https://elsewhere.example/cb"]}
+        "/register", json={"redirect_uris": ["http://elsewhere.example/cb"]}
     )
     assert refused.status == 400
+
+
+def test_loopback_port_variance_preserves_raw_path_identity() -> None:
+    registered = OAuthRedirectUri(URL("http://localhost/oauth/cb%2Fadmin"))
+    same = OAuthRedirectUri(URL("http://localhost:43123/oauth/cb%2Fadmin"))
+    decoded_separator = OAuthRedirectUri(URL("http://localhost:43123/oauth/cb/admin"))
+
+    assert same.matches_registration(registered)
+    assert not decoded_separator.matches_registration(registered)
+
+
+async def test_loopback_client_uses_its_registered_path_random_port_and_issuer(
+    client, connector, comms,
+):
+    """A native client registers one loopback path and chooses its listening port per run."""
+
+    await approved_token(client, comms)  # establish the owner's trusted browser
+    metadata = await (await client.get("/.well-known/oauth-authorization-server")).json()
+    assert metadata["authorization_response_iss_parameter_supported"] is True
+    assert metadata["token_endpoint_auth_methods_supported"] == [
+        "none", "client_secret_post",
+    ]
+    registered_uri = OAuthRedirectUri(URL("http://127.0.0.1/oauth/callback"))
+    callback = OAuthRedirectUri(URL("http://127.0.0.1:43123/oauth/callback"))
+    registered = await (await client.post("/register", json={
+        "redirect_uris": [str(registered_uri.url)], "client_name": "Gemini CLI",
+    })).json()
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+    query = AuthorizationQuery(
+        "code", OAuthClientId(registered["client_id"]), callback,
+        challenge.decode().rstrip("="), "S256",
+        "gemini-state",
+    )
+    response = await client.get(
+        "/authorize", params=FieldCodec.encode(query), allow_redirects=False,
+    )
+    assert response.status == 302
+    redirected = URL(response.headers["Location"])
+    assert redirected.origin() == callback.url.origin()
+    assert redirected.path == callback.url.path
+    assert redirected.query["state"] == query.state
+    assert redirected.query["iss"] == connector.issuer
+    code = redirected.query["code"]
+
+    wrong = await client.post("/token", data=FieldCodec.encode(AuthorizationCodeGrant(
+        code=code,
+        code_verifier=verifier,
+        client_id=query.client_id,
+        redirect_uri=OAuthRedirectUri(URL("http://127.0.0.1:43123/wrong")),
+    )))
+    assert wrong.status == 400 and (await wrong.json())["error"] == "invalid_grant"
+    token = await ClientLogin(query, verifier).redeem(client, code)
+    listed = await client.post(
+        "/mcp", json=LIST, headers={"Authorization": f"Bearer {token}"},
+    )
+    assert listed.status == 200
+
+
+async def test_static_confidential_client_returns_its_secret_once_and_requires_it(
+    client, store, comms, capsys: pytest.CaptureFixture[str],
+):
+    await approved_token(client, comms)  # establish the owner's trusted browser
+    callback = OAuthRedirectUri(URL("https://gemini.example/oauth/callback"))
+    command = ConnectorVerb.parse([
+        "register-client", "--name", "Gemini Connected App",
+        "--redirect-uri", str(callback.url), "--confidential",
+    ])
+    assert command.apply(store) == 0
+    credential = FieldCodec.decode(
+        RegisteredClientCredential, FieldCodec.parse(capsys.readouterr().out)
+    )
+    registered = store.read().clients[credential.client_id]
+    assert registered.name == "Gemini Connected App"
+    assert registered.redirect_uris == (callback,)
+    assert registered.accepts_secret(credential.client_secret)
+    assert credential.client_secret not in store.path.read_text()
+
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+    query = AuthorizationQuery(
+        "code", credential.client_id, callback, challenge.decode().rstrip("="), "S256",
+        "static-state",
+    )
+    authorized = await client.get(
+        "/authorize", params=FieldCodec.encode(query), allow_redirects=False,
+    )
+    code = URL(authorized.headers["Location"]).query["code"]
+    grant = AuthorizationCodeGrant(
+        code=code,
+        code_verifier=verifier,
+        client_id=credential.client_id,
+        redirect_uri=callback,
+    )
+    refused = await client.post("/token", data=FieldCodec.encode(grant))
+    assert refused.status == 400 and (await refused.json())["error"] == "invalid_client"
+    issued = await client.post("/token", data=FieldCodec.encode(replace(
+        grant, client_secret=credential.client_secret,
+    )))
+    assert issued.status == 200 and (await issued.json())["access_token"]
 
 
 async def test_connector_lists_every_tool(client, store, comms):
@@ -875,7 +982,10 @@ async def test_approval_previews_do_not_grant_browser_trust(client, store, comms
         page = await preview.text()
         assert page.count("<button ") == 1 and '<form method="post">' in page
         policy = preview.headers["Content-Security-Policy"]
-        assert "frame-ancestors 'none'" in policy and login.query.redirect_uri in policy
+        assert (
+            "frame-ancestors 'none'" in policy
+            and str(login.query.redirect_uri.url) in policy
+        )
         assert store.path.read_bytes() == before
         assert not store.read().trusted_browsers and not store.read().codes
     approved = await client.post(link.path, allow_redirects=False)
@@ -944,11 +1054,14 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
     assert grants.caller_for(token) == CALLER
 
     registered = await (await client.post(
-        "/register", json={"redirect_uris": [CALLBACK], "client_name": "claude.ai"}
+        "/register", json={
+            "redirect_uris": [str(CALLBACK.url)], "client_name": "claude.ai"
+        }
     )).json()
     challenge = base64.urlsafe_b64encode(hashlib.sha256(secrets.token_bytes(48)).digest())
     query = AuthorizationQuery(
-        "code", registered["client_id"], CALLBACK, challenge.decode().rstrip("="), "S256", "account-two"
+        "code", OAuthClientId(registered["client_id"]), CALLBACK,
+        challenge.decode().rstrip("="), "S256", "account-two"
     )
     assert query.client_id != next(iter(grants.clients))
     redirected = await client.get(
@@ -977,7 +1090,8 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
     store.update(lambda grants: DocumentChange.to(replace(
         grants, requests={query.request_id: expired},
         codes=grants.codes | {"expired-code": IssuedCode(
-            query.client_id, query.code_challenge, expires_at=expired.expires_at
+            query.client_id, query.code_challenge, query.redirect_uri,
+            expires_at=expired.expires_at,
         )},
     )))
     assert (await client.get(link.path, allow_redirects=False)).status == 400

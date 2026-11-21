@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import re
 import secrets
 import time
@@ -11,11 +12,20 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import ClassVar, Literal, Self, get_args
-from urllib.parse import urlencode
+from typing import Annotated, ClassVar, Literal, Self
+
+from yarl import URL
 
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import FieldCodec, NominalSpelling, NominalText, RootId
+from agent_comms.nominal.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    NominalSpelling,
+    NominalText,
+    RootId,
+    SingleFieldValue,
+    boundary_decoder,
+)
 from agent_comms.storage.locked_store import DocumentChange, ExternalFile, FilesRequest
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.store_files import DependentStateTier, DrainedWriters, SingleFileStore
@@ -38,6 +48,7 @@ from agent_comms.transport.connector_profile import (
     UiCredential,
     UiGrantId,
     UiGrantSummary,
+    UrlText,
 )
 
 ACCESS_SECONDS = 3600
@@ -51,14 +62,111 @@ may outlive an OAuth access token. UiGrantAccess declares its own default lifeti
 CODE_SECONDS = 300
 
 
-ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
+class OAuthRedirectAuthority(DeclaredFamily, affix="RedirectAuthority"):
+    """The protocol authority that validates and compares one callback URL."""
+
+    refusal: ClassVar[str] = (
+        "An OAuth redirect URI requires HTTPS or an HTTP loopback host, with no "
+        "userinfo, query, or fragment."
+    )
+
+    @classmethod
+    @boundary_decoder
+    def of(cls, url: URL) -> OAuthRedirectAuthority:
+        """Decode external URL shape once; concrete members own protocol-specific identity."""
+
+        if not url.is_absolute():
+            raise MalformedRecord(cls.refusal)
+        if url.raw_user is not None or url.raw_password is not None:
+            raise MalformedRecord(cls.refusal)
+        if url.query or url.fragment:
+            raise MalformedRecord(cls.refusal)
+        match url.scheme:
+            case "https":
+                return HttpsRedirectAuthority()
+            case "http":
+                return LoopbackRedirectAuthority.for_url(url)
+        raise MalformedRecord(cls.refusal)
+
+    @abstractmethod
+    def matches(self, requested: URL, registered: URL) -> bool:
+        """Whether the requested callback is the registered callback under this protocol."""
 
 
-CALLBACK: ClaudeCallback = get_args(ClaudeCallback)[0]
+@dataclass(frozen=True)
+class HttpsRedirectAuthority(OAuthRedirectAuthority):
+    def matches(self, requested: URL, registered: URL) -> bool:
+        return requested == registered
+
+
+@dataclass(frozen=True)
+class LoopbackRedirectAuthority(OAuthRedirectAuthority):
+    @classmethod
+    @boundary_decoder
+    def for_url(cls, url: URL) -> LoopbackRedirectAuthority:
+        host = url.host
+        if host is None:
+            raise MalformedRecord(cls.refusal)
+        if host == "localhost":
+            return cls()
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError as error:
+            raise MalformedRecord(cls.refusal) from error
+        if not address.is_loopback:
+            raise MalformedRecord(cls.refusal)
+        return cls()
+
+    def matches(self, requested: URL, registered: URL) -> bool:
+        """A native client may choose its port; the raw remaining URL stays exact."""
+
+        return requested.with_port(None) == registered.with_port(None)
+
+
+@dataclass(frozen=True)
+class OAuthRedirectUri(SingleFieldValue):
+    """A registered OAuth callback: HTTPS, or HTTP on a native loopback listener."""
+
+    url: Annotated[URL, UrlText]
+
+    def __post_init__(self) -> None:
+        OAuthRedirectAuthority.of(self.url)
+
+    def matches_registration(self, registered: OAuthRedirectUri) -> bool:
+        return OAuthRedirectAuthority.of(registered.url).matches(self.url, registered.url)
 
 
 def digest(secret: str) -> str:
     return hashlib.sha256(secret.encode()).hexdigest()
+
+
+class OAuthClientId(NominalText):
+    """The opaque identifier of one registered OAuth client."""
+
+
+class OAuthClientIdText(NominalSpelling[OAuthClientId]):
+    spelling = re.compile(r"[\w-]+")
+
+
+class OAuthClientAuthentication(DeclaredFamily, affix="OAuthClient"):
+    """The registered token-endpoint authentication contract."""
+
+    @abstractmethod
+    def accepts(self, secret: str) -> bool: ...
+
+
+@dataclass(frozen=True)
+class PublicOAuthClient(OAuthClientAuthentication):
+    def accepts(self, secret: str) -> bool:
+        return not secret
+
+
+@dataclass(frozen=True)
+class ConfidentialOAuthClient(OAuthClientAuthentication):
+    secret_digest: str
+
+    def accepts(self, secret: str) -> bool:
+        return secrets.compare_digest(self.secret_digest, digest(secret))
 
 
 class ApprovalRefused(ValueError):
@@ -75,6 +183,14 @@ class ApprovalQueueFull(ValueError):
 @dataclass(frozen=True)
 class RegisteredClient:
     name: str
+    redirect_uris: tuple[OAuthRedirectUri, ...]
+    authentication: OAuthClientAuthentication
+
+    def accepts_redirect(self, redirect_uri: OAuthRedirectUri) -> bool:
+        return any(redirect_uri.matches_registration(registered) for registered in self.redirect_uris)
+
+    def accepts_secret(self, secret: str) -> bool:
+        return self.authentication.accepts(secret)
 
 
 class GrantLifetime:
@@ -106,8 +222,8 @@ class ExpiringGrant(ExpiresAt, GrantLifetime):
 @dataclass(frozen=True)
 class AuthorizationQuery:
     response_type: Literal["code"]
-    client_id: str
-    redirect_uri: ClaudeCallback
+    client_id: OAuthClientId
+    redirect_uri: OAuthRedirectUri
     code_challenge: str
     code_challenge_method: Literal["S256"]
     state: str = ""
@@ -117,8 +233,10 @@ class AuthorizationQuery:
         """A repeated query reuses its wait, never another client's PKCE challenge."""
         return FieldCodec.digest(self)
 
-    def redirect(self, code: str) -> str:
-        return f"{self.redirect_uri}?{urlencode({'code': code, 'state': self.state})}"
+    def redirect(self, code: str, issuer: str) -> str:
+        return str(self.redirect_uri.url.with_query({
+            "code": code, "state": self.state, "iss": issuer,
+        }))
 
 
 @dataclass(frozen=True)
@@ -140,8 +258,18 @@ class TrustedBrowser:
 
 @dataclass(frozen=True)
 class IssuedCode(ExpiringGrant):
-    client_id: str
+    client_id: OAuthClientId
     code_challenge: str
+    redirect_uri: OAuthRedirectUri
+
+    def redeemed_by(
+        self, client_id: OAuthClientId, challenge: str, redirect_uri: OAuthRedirectUri, now: float,
+    ) -> bool:
+        return (
+            self.live(now)
+            and (self.client_id, self.code_challenge) == (client_id, challenge)
+            and self.redirect_uri == redirect_uri
+        )
 
 
 class ConnectorAccess(GrantLifetime, DeclaredFamily, affix=""):
@@ -211,7 +339,7 @@ class ExistingDirectorAccess(ExpiringDirectorAccess):
 class IssuedAccess(ExpiringDirectorAccess):
     """An access token issued from the registered OAuth client's code or refresh."""
 
-    client_id: str
+    client_id: OAuthClientId
 
 
 @dataclass(frozen=True)
@@ -363,12 +491,13 @@ class ConnectorGrants:
             requests={key: held for key, held in self.requests.items() if key != query.request_id},
             codes=self.codes | {
                 digest(code): IssuedCode(
-                    query.client_id, query.code_challenge, expires_at=now + CODE_SECONDS
+                    query.client_id, query.code_challenge, query.redirect_uri,
+                    expires_at=now + CODE_SECONDS,
                 )
             },
         )
 
-    def issued(self, client_id: str) -> DocumentChange[ConnectorGrants, IssuedTokens]:
+    def issued(self, client_id: OAuthClientId) -> DocumentChange[ConnectorGrants, IssuedTokens]:
         """A new access and refresh token pair, dropping every expired grant and wait."""
         now = time.time()
         access, refresh = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
@@ -377,7 +506,7 @@ class ConnectorGrants:
             current,
             access=current.access
             | {digest(access): IssuedAccess(client_id, expires_at=now + ACCESS_SECONDS)},
-            refresh=current.refresh | {digest(refresh): client_id},
+            refresh=current.refresh | {digest(refresh): str(client_id)},
         )
         return DocumentChange(grants, IssuedTokens(access, refresh))
 
