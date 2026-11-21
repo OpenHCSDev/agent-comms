@@ -19,6 +19,7 @@ from agent_comms.execution.child_process import AsyncWork, ReadWork
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, ToolCallId
 from agent_comms.nominal.served_declaration import ServesDeclaration
 from agent_comms.registry.threads import ThreadCommandAvailability
+from agent_comms.messaging.messages import NoticeRole
 from agent_comms.transport.native_tools import CoordinationCall, NativeToolDeclaration
 from agent_comms.transport.progress import WireExportObserver
 from agent_comms.transport.request import (
@@ -139,7 +140,8 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
                 rendered = f"{type(error).__name__}: {error}"
                 outcome = "failed"
             comms.messaging.send(caller.name, caller.name,
-                f"Background {self.declared_name} {outcome}:\n{rendered[:_BACKGROUND_TAIL]}")
+                f"Background {self.declared_name} {outcome}:\n{rendered[:_BACKGROUND_TAIL]}",
+                role=NoticeRole())
 
         threading.Thread(target=deferred, daemon=True,
                          name=f"background-{run_id}").start()
