@@ -433,8 +433,8 @@ class CheckedDelivery(RevalidatedCheckSource, EvidenceRequirements, OrderDeliver
     def installation_build(self) -> BuildIdentity:
         return self.proof_build
 
-    def merged_commits(self) -> tuple[str, ...]:
-        """The commits this delivery merged, which its completion must prove on origin."""
+    def claim_commits(self) -> tuple[str, ...]:
+        """Commits this delivery must prove on origin before its problem may complete."""
         return ()
 
     def evidence_claims(self) -> tuple[ProgressClaim, ...]:
@@ -548,7 +548,7 @@ class CommitDelivery(CommitSourceDelivery, declared_name="delivered_commit"):
     def delivered(self) -> str:
         return self.delivered_commit
 
-    def merged_commits(self) -> tuple[str, ...]:
+    def claim_commits(self) -> tuple[str, ...]:
         return (self.commit,)
 
     async def verified(
@@ -2068,7 +2068,7 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
         so the scope is built here, from the problem this order already names."""
         return (*claims, *delivery.evidence_claims(),
                 *(MergedClaim(commit, ProblemScope(problem))
-                  for commit in delivery.merged_commits()))
+                  for commit in delivery.claim_commits()))
 
     @abstractmethod
     def completion_problems(self, run: OrderRun, request: SourceCompletion) -> dict[str, str]: ...
