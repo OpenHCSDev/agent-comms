@@ -533,19 +533,20 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             raise RequestError.invalid_params(
                 {"reason": "Send images to an agent thread, not as a coordination relay."}
             )
-        if (
-            (await self.turns.active_backend_turn(session_id)).is_open()
-            and not text.lstrip().startswith((*NamedTarget.sigils(), RELAY_PREFIX))
-        ):
+        turn_source = await self.turns.active_backend_turn(session_id)
+        if (turn_source.turn.is_open()
+                and not text.lstrip().startswith((*NamedTarget.sigils(), RELAY_PREFIX))):
             return await self.inputs.accept_followup(
-                session_id,
+                turn_source.session_id,
+                presentation_session_id=session_id,
                 text=text,
                 display_text=display_text,
                 request=command,
                 images=images,
             )
-        self.inputs.ensure_live_drain(session_id)
-        async with self.inputs.state(session_id).turn_lock:
+        execution_session_id = turn_source.session_id
+        self.inputs.ensure_live_drain(execution_session_id)
+        async with self.inputs.state(execution_session_id).turn_lock:
             # A direct ACP prompt owns this one controller. Owner-socket prompts
             # already carry a private subscriber binding (NoController when absent);
             # only the unbound default yields to the attached ACP client.
@@ -553,7 +554,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 self._runtime.controller.get().attached(self.sessions.client))
             try:
                 return await self.turns.prompt_owned(
-                    session_id,
+                    execution_session_id,
                     text=text,
                     images=images,
                     display_text=display_text,

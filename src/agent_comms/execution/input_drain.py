@@ -1430,10 +1430,15 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
         ))
 
     async def emit_queue_state(
-        self, session_id: AcpSessionId, *, client: SessionUpdateSink | None = None,
+        self, session_id: AcpSessionId, *,
+        presentation_session_id: AcpSessionId | None = None,
+        client: SessionUpdateSink | None = None,
     ) -> None:
+        if presentation_session_id is None:
+            presentation_session_id = session_id
         await (client or self.runtime).publish_facts(
-            await self.queue_state(session_id), session_id=session_id,
+            (await self.queue_state(session_id)).for_session(presentation_session_id),
+            session_id=presentation_session_id,
         )
 
     async def emit_input_delivery_changed(
@@ -1510,6 +1515,7 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
         self,
         session_id: AcpSessionId,
         *,
+        presentation_session_id: AcpSessionId,
         text: str,
         display_text: str,
         request: PromptRequest,
@@ -1534,7 +1540,9 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
             ))
             request.enqueue_control(inbox, item.input_id)
             reservation.release()
-        await request.publish_acceptance(self, session_id)
+        await request.publish_acceptance(
+            self, session_id, presentation_session_id=presentation_session_id,
+        )
         return PromptResponse(
             stop_reason="end_turn",
             field_meta=encode_updates(InputDeliveryChangedUpdate()),

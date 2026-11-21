@@ -14,5 +14,7 @@ class QueuePublication(ABC):
 
     @abstractmethod
     async def emit_queue_state(
-        self, session_id: AcpSessionId, *, client: SessionUpdateSink | None = None,
+        self, session_id: AcpSessionId, *,
+        presentation_session_id: AcpSessionId | None = None,
+        client: SessionUpdateSink | None = None,
     ) -> None: ...

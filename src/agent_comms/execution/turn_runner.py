@@ -77,6 +77,14 @@ AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
 
 
+@dataclass(frozen=True)
+class BackendTurnSource:
+    """The retained owner session that supplies a thread's current native turn."""
+
+    session_id: AcpSessionId
+    turn: DrainTurn
+
+
 @dataclass(frozen=True, kw_only=True)
 class OwnerTurnScheduleCheck(SessionScheduleCheck):
     turns: TurnRunner
@@ -443,10 +451,13 @@ class TurnRunner(OwnedTurnRunner):
         )
         await consumer.dispatch(update)
 
-    async def active_backend_turn(self, session_id: AcpSessionId) -> DrainTurn:
+    async def active_backend_turn(self, session_id: AcpSessionId) -> BackendTurnSource:
         name = self.sessions.require(session_id)
-        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-        return self.inputs.state(session_id).turn.for_owner(thread)
+        entry = (await Coordination.run_worker(partial(self.comms.registry.entry, name))).entry
+        source_session = self.sessions.require_owned_session(entry)
+        return BackendTurnSource(
+            source_session, self.inputs.state(source_session).turn.for_owner(entry.thread),
+        )
 
     async def close_idle_backend(self, session_id: AcpSessionId) -> None:
         """Retire only the backend already held by this idle session.
