@@ -10,8 +10,9 @@ import { join } from "node:path";
 import test from "node:test";
 
 import clmReference, {
-  BudgetController, BudgetPressure, ContextEditPolicy, DigestEachOutput, EditRule,
-  normalizedTurns, renderEditable,
+  BudgetController, BudgetPressure, ContextEditPolicy, DigestEachOutput, EditRule, Seen,
+  acceptanceProblems, addedRepeats, citedEvidenceMissing, literals, normalizedTurns,
+  renderEditable, repeatedTurnIndices,
 } from "../src/agent_comms/execution/clm_reference.mjs";
 
 const GOLDEN = {"rendered": "[[CTX_TURN 1 role=assistant]]\nthink a\nTHOUGHT: look\nbash {\"command\": \"ls\"}\n\n[[CTX_TURN 2 role=tool]]\na.txt\n\n(exit_code=0)\n\n[[CTX_TURN 3 role=assistant]]\ndone", "edits": ["[[CTX_TURN 1 role=assistant]]\nthink a\nTHOUGHT: look\nbash {\"command\": \"ls\"}\n\n[[CTX_TURN 2 role=tool]]\na.txt\n\n(exit_code=0)\n\n[[CTX_TURN 3 role=assistant]]\ndone", "lead note\n\n[[CTX_TURN 1 role=assistant]]\nkept\n\n[[CTX_TURN 2 role=tool]]\n\n[[CTX_TURN 3 role=notes]]\nmy notes\n\n[[CTX_TURN 4 role=user]]\nmore", "no headers at all\njust text", "[[CTX_TURN 1 role=assistant]]\na\n[[CTX_TURN 2 role=assistant]]\nb\n[[CTX_TURN 3 role=tool]]\nt\n[[CTX_TURN 4 role=system]]\ns", ""], "parsed": [[{"role": "assistant", "content": "think a\nTHOUGHT: look\nbash {\"command\": \"ls\"}"}, {"role": "user", "content": "a.txt\n\n(exit_code=0)"}, {"role": "assistant", "content": "done"}], [{"role": "user", "content": "lead note"}, {"role": "assistant", "content": "kept"}, {"role": "user", "content": "my notes\n\nmore"}], [{"role": "user", "content": "no headers at all\njust text"}], [{"role": "assistant", "content": "a\n\nb"}, {"role": "user", "content": "t\n\ns"}], []], "nudges": {"0.25": "CONTEXT BUDGET NUDGE: context is at ~25% of your 28672-token budget (12345 tokens). No action needed. Before your next few searches, make sure your notes record which queries and documents you already tried.", "0.5": "CONTEXT BUDGET NUDGE: context is at ~50% of your 28672-token budget (12345 tokens). Finish the unit of work in flight, then tidy ONCE. When you write a replacement note, COPY facts forward from the text you are replacing (quote them): every RULED OUT candidate with its reason and the words 'do not retry'; the exact queries/commands already tried; exact values marked VERIFIED or UNVERIFIED; and a NEXT line. HINT", "0.75": "CONTEXT BUDGET NUDGE: context is at ~75% of your 28672-token budget (12345 tokens) \u2014 close to the limit. Compact settled spans now \u2014 but do NOT wipe: edits keeping under 25% of the region they touch are usually followed by re-doing the deleted work. When you write a replacement note, COPY facts forward from the text you are replacing (quote them): every RULED OUT candidate with its reason and the words 'do not retry'; the exact queries/commands already tried; exact values marked VERIFIED or UNVERIFIED; and a NEXT line. if you cross the limit you get one final turn and then the session ends. HINT"}, "rollback": "[SYSTEM NOTICE \u2014 CONTEXT LIMIT HIT (retry 2/50)] Your context crossed the 28672-token limit, so your 3 most recent turn(s) were ROLLED BACK and are gone \u2014 that work is no longer in your context and cannot be recovered (7 turn(s) lost so far). You are now at ~20000/26624 tokens, which leaves room for exactly one thing: CONDENSE YOUR CONTEXT THIS TURN and do nothing else. Replace stale regions with short summaries. HINT\nThese commands already ran and their output is what blew your budget, so their turns were discarded. Re-running them will just lose the context again \u2014 if you need one, make it print far less (head/grep/count instead of dumping):\n  - ls -R /\n  - cat big.log", "final": "[SYSTEM NOTICE] You have reached your context budget (30000/28672 tokens). This is your FINAL turn: make sure your solution is complete and in place \u2014 write any required output/answer to the location the task specifies (or run your submit command) \u2014 because after this turn the session ends and your work is evaluated as-is.", "urgent": "CONTEXT BUDGET NUDGE (URGENT): You are at 25000/26624 tokens \u2014 over 90% of your hard context limit and about to be cut off. Compact your context THIS TURN (do nothing else): remove stale regions now. If you cross the limit you get exactly one final turn and then the session ends with your work graded as-is. HINT", "strict_target": 26624};
@@ -385,4 +386,107 @@ test("short outputs gather until together they are due; the model's own printed 
     const spoken = await step(h, raw, said, answer);
     assert.doesNotMatch(spoken.result, /DIGEST FIRST/);
   });
+});
+
+// ------------------------------------------- what an edit must prove before it is applied
+
+test("literals are the strings an answer commits to, never a word of letters alone", () => {
+  assert.deepEqual(literals("The port is 8080 in services/billing/settings.conf:3"),
+    ["8080", "services/billing/settings.conf", "3"]);
+  assert.deepEqual(literals("`BULK_FROM` reads e.g. orders.py, so 30s isn't 30"),
+    ["BULK_FROM", "orders.py", "30s", "30"]);
+  assert.deepEqual(literals("and/or hello world e.g."), []);
+});
+
+test("a literal is held whole, and a JSON screen is read as its rows", () => {
+  const shown = Seen.of(['{"screen": "row one\\nrow two at 49152", "title": "BULK_FROM"}',
+                         "plain text with orders.py"]);
+  assert.ok(shown.holds("49152"));
+  assert.ok(!shown.holds("4821"));
+  assert.ok(shown.holds("row two"));
+  assert.ok(!shown.holds("rowtwo"));
+  assert.ok(shown.holds("BULK_FROM"));
+  assert.ok(!Seen.of(["E4821"]).holds("E48"));
+});
+
+test("an answer may not cite a literal its own compaction removed", () => {
+  const active = Seen.of(["SYSTEM", "the task"]);
+  const evidence = new Set(literals("settings.conf says port 49152 and host E4821"));
+  assert.deepEqual(citedEvidenceMissing("The port is 49152 on E4821", active, evidence),
+    ["49152", "E4821"]);
+  assert.deepEqual(citedEvidenceMissing("The task says E4821", Seen.of(["SYSTEM", "the task E4821"]), evidence), []);
+  assert.deepEqual(citedEvidenceMissing("the value is 777", active, evidence), []);
+});
+
+test("the acceptance checks name each proof an edit broke, and nothing else", () => {
+  const long = "one long instruction line ".repeat(4);
+  const before = `parser.py:142 drops quoted commas\n${long}\n[[CTX_TURN 1 role=assistant]]\na`;
+  assert.deepEqual(acceptanceProblems(before, before), []);
+  assert.deepEqual(addedRepeats(before, `${before}\n${long}`), [{ line: long.trim(), count: 2 }]);
+  assert.deepEqual(repeatedTurnIndices(before), []);
+  assert.deepEqual(repeatedTurnIndices(`${before}\n[[CTX_TURN 1 role=tool]]\nb`), [1]);
+  const broken = acceptanceProblems(before,
+    `grep done\n${long}\n${long}\n[[CTX_TURN 1 role=assistant]]\na\n[[CTX_TURN 1 role=tool]]\nb`);
+  assert.equal(broken.length, 2);
+  assert.match(broken[0], /repeated 1 long line\(s\) instead of replacing them/);
+  assert.match(broken[1], /wrote turn 1 twice/);
+});
+
+test("a final answer citing a literal the compaction dropped is refused, and passes once restored", async () => {
+  const session = `t${process.pid}f`;
+  const h = harness(session);
+  await h.hooks.session_start({}, h.ctx);
+  const file = `/tmp/.live_ctx/${session}/LIVE_CTX_MAIN.txt`;
+  const output = "settings.conf says port 49152 and host E4821";
+  const raw = [user("Find the port"),
+    assistant([{ type: "toolCall", id: "c0", name: "bash", arguments: { command: "cat settings.conf" } }]),
+    toolResult(output)];
+  // Pi persists every message; the check reads what a tool result ever showed.
+  h.branch.push({ type: "message", message: raw[2] });
+  await h.hooks.context({ messages: raw }, h.ctx);
+  await h.hooks.turn_start({}, h.ctx);
+  await h.hooks.tool_call({ toolName: "bash", toolCallId: "c1", input: { command: `sed -i x ${file}` } }, h.ctx);
+  writeFileSync(file, readFileSync(file, "utf8").replace(output, "[port checked]"));
+  const after = await h.hooks.tool_result(
+    { toolName: "bash", content: [{ type: "text", text: "" }], isError: false }, h.ctx);
+  assert.match(after.content[0].text, /edit applied/);
+  // The next request is the one the answer comes from: it holds the edit, not the output.
+  await h.hooks.context({ messages: raw }, h.ctx);
+
+  const answer = assistant([{ type: "text", text: "The port is 49152 on E4821" }], { stopReason: "stop" });
+  const refused = await h.hooks.message_end({ message: answer }, h.ctx);
+  assert.equal(refused.message.stopReason, "error");
+  assert.match(refused.message.errorMessage, /cites removed-only literal\(s\): "49152", "E4821"/);
+
+  const restored = (await h.hooks.context({ messages: [...raw,
+    toolResult("re-read: host E4821, port 49152")] }, h.ctx)).messages;
+  assert.ok(restored.some((message) => JSON.stringify(message.content).includes("49152")));
+  const passed = await h.hooks.message_end({ message: answer }, h.ctx);
+  assert.equal(passed, undefined);
+});
+
+test("a compaction that copies a long line instead of replacing it is refused", async () => {
+  const session = `t${process.pid}g`;
+  const h = harness(session);
+  await h.hooks.session_start({}, h.ctx);
+  const file = `/tmp/.live_ctx/${session}/LIVE_CTX_MAIN.txt`;
+  const frame = "Your conversation is mirrored to the live context file, which you edit to free budget. ".repeat(2);
+  const raw = [user("TASK"), assistant([{ type: "text", text: frame }, { type: "toolCall", id: "c0", name: "bash", arguments: { command: "cat big" } }]),
+               toolResult("x".repeat(3000))];
+  const { result } = await turn(h, raw, `sed -i x ${file}`, (text) => `${text}\n${frame.trim()}`);
+  assert.match(result, /edit REJECTED — it broke a compaction rule: it repeated 1 long line\(s\)/);
+  assert.ok(!h.branch.some((entry) => entry.data?.kind === "edit"));
+});
+
+test("an edit that writes one turn index twice is refused", async () => {
+  const session = `t${process.pid}h`;
+  const h = harness(session);
+  await h.hooks.session_start({}, h.ctx);
+  const file = `/tmp/.live_ctx/${session}/LIVE_CTX_MAIN.txt`;
+  const raw = [user("TASK"), assistant([{ type: "text", text: "a" }, { type: "toolCall", id: "c0", name: "bash", arguments: { command: "cat big" } }]),
+               toolResult("x".repeat(3000))];
+  const { result } = await turn(h, raw, `sed -i x ${file}`,
+    () => "[[CTX_TURN 1 role=assistant]]\na\n\n[[CTX_TURN 1 role=tool]]\nb");
+  assert.match(result, /edit REJECTED — it broke a compaction rule: it wrote turn 1 twice/);
+  assert.ok(!h.branch.some((entry) => entry.data?.kind === "edit"));
 });
