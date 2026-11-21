@@ -870,6 +870,40 @@ def test_a_thread_writes_its_own_linked_worktree_without_a_goal_or_order(
         projection.require_write(main / 'implementation.py')
 
 
+def test_a_held_problem_opens_the_threads_own_main_checkout(
+        checkout_comms: Comms) -> None:
+    """The source-write refusal promises that an open problem for the repository opens
+    the launch checkout; the promise is real. Without the held problem it stays denied."""
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    main = rule.checkout_base / 'worker'
+    thread = comms.registry.require('worker')
+    assert (main / '.git').is_dir(), 'the launch checkout is a shared main checkout'
+    projection = StorageProjection(rule, thread, comms)
+    with pytest.raises(StorageDenied, match='not allocated editable work'):
+        projection.require_write(main / 'implementation.py')
+    repository = RepositoryName('OpenHCSDev', 'agent-comms')
+    requester = comms.registry.declare(
+        NativeThread('requester', frozenset(), Checkout(comms.root)))
+    request = comms.goals.todos.add_request(
+        requester.incarnation, 'Sync the launch checkout to its main').id
+    now = RecordedEventTime(time.time())
+    scope = SourceRepository.scope()
+    order = PendingProblemOrder(
+        owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
+        check=OrderCheck(main, 'true'),
+        edits=('Fast-forward the launch checkout with ff-only and sync its venv.',),
+        banned=('No reset, rebase or force-move; ff-only only.',),
+        report='Report the checkout HEAD and the venv versions.', at=now)
+    comms.goals.todos.create(
+        'P1', repository, 'Sync the launch checkout to its main',
+        creator=requester, owner=thread,
+        assigner=requester.incarnation, generation=GoalId.mint(), review_at=now,
+        order=order, request=request)
+    projection = StorageProjection(rule, comms.registry.require('worker'), comms)
+    projection.require_write(main / 'implementation.py')
+
+
 def test_one_prompt_retains_unchanged_storage_sources(
     checkout_comms: Comms, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

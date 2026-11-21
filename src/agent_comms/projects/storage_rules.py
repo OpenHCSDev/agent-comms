@@ -164,9 +164,11 @@ class HomeCheckoutAllocation(CheckoutAllocation):
 
     A linked worktree (its `.git` is a file) is a checkout created for this thread, so
     writing in it needs no goal and no held order: the worktree declaration already says
-    whose work it is. The shared main checkout (its `.git` is a directory) stays a
-    read/launch source, because it is the live installation and no one thread's work.
-    A cleared goal therefore cannot lock a teammate out of its own checkout.
+    whose work it is. The shared main checkout (its `.git` is a directory) is the live
+    installation and no one thread's work, so it stays a read/launch source except while
+    its holder keeps an open problem for the repository it hosts — the deliberate act the
+    source-write refusal names. A cleared goal therefore cannot lock a teammate out of its
+    own checkout.
     """
 
     @classmethod
@@ -181,10 +183,18 @@ class HomeCheckoutAllocation(CheckoutAllocation):
 
     def edit_boundary(self, rule: StorageRule, owner: Thread, path: Path,
                       store: TodoStore, reads: RepositoryReads) -> frozenset[Path]:
-        """The declared linked worktree is editable; a shared main checkout is not."""
-        if not (path / '.git').is_file():
+        """The declared linked worktree is editable. A shared main checkout opens only
+        while its holder keeps an open problem for the repository it hosts."""
+        if (path / '.git').is_file():
+            return frozenset({path})
+        try:
+            repository = reads.repository(path).github
+        except (GitCommandError, TodoError):
             return frozenset()
-        return frozenset({path})
+        if any(repository in (current.repo, *current.order.source_repositories())
+               for current in store.held_by(owner.incarnation)):
+            return frozenset({path})
+        return frozenset()
 
 
 class EditableCheckoutAllocation(CheckoutAllocation):
