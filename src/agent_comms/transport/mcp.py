@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import secrets
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -61,9 +60,6 @@ class McpServer(ABC):
 
     observed: dict[JsonRpcId, CancellableWireExport]
     """The running calls a cancel can name, by request id."""
-    session: McpSession
-    """The session this endpoint serves."""
-
     @abstractmethod
     def announces(self) -> str:
         """Which bus is behind this endpoint, in the words its own identity gives.
@@ -224,49 +220,6 @@ class ToolsListResult(McpResult):
     tools: tuple[ToolDescription, ...]
 
 
-SESSION_HEADER = "Mcp-Session-Id"
-
-
-@dataclass(frozen=True)
-class McpSession:
-    """This connector process's MCP session. A client that initialized against an earlier
-    process holds an id this one never issued, so it is answered 404 and initializes again,
-    which makes it list the tools this process serves: the tools an install added reach a
-    session that was open across it."""
-
-    id: str = field(default_factory=lambda: secrets.token_hex(16))
-
-    def claimed(self, request: web.Request) -> SessionClaim:
-        """The header is foreign until it is compared with the id issued here."""
-        match request.headers.get(SESSION_HEADER):
-            case None:
-                return SessionClaim()
-            case self.id:
-                return SessionClaim()
-            case _:
-                return PastSession()
-
-
-class SessionClaim:
-    """What a request's session header says about the process answering it."""
-
-    async def answer(
-        self, message: McpMessage, connector: McpServer, caller: ConnectorCaller,
-        http: web.Request,
-    ) -> web.StreamResponse:
-        return await message.answer(connector, caller, http)
-
-
-class PastSession(SessionClaim):
-    """An id from an earlier process: its tool list may be missing what this one serves."""
-
-    async def answer(
-        self, message: McpMessage, connector: McpServer, caller: ConnectorCaller,
-        http: web.Request,
-    ) -> web.StreamResponse:
-        return await message.past_session(connector, caller, http)
-
-
 @dataclass(frozen=True, kw_only=True)
 class McpMessage(DeclaredFamily, affix="Message"):
     """A JSON-RPC message from the client; each method answers for itself."""
@@ -289,12 +242,6 @@ class McpMessage(DeclaredFamily, affix="Message"):
     async def answer(
         self, connector: McpServer, caller: ConnectorCaller, http: web.Request,
     ) -> web.StreamResponse: ...
-
-    async def past_session(
-        self, connector: McpServer, caller: ConnectorCaller, http: web.Request,
-    ) -> web.StreamResponse:
-        """The session this message names ended with the process that issued it."""
-        return web.Response(status=404)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -348,19 +295,6 @@ class McpRequest(McpMessage):
 @dataclass(frozen=True, kw_only=True)
 class InitializeMessage(McpRequest, declared_name="initialize"):
     params: dict[str, object]
-
-    async def answer(
-        self, connector: McpServer, caller: ConnectorCaller, http: web.Request,
-    ) -> web.StreamResponse:
-        response = await super().answer(connector, caller, http)
-        response.headers[SESSION_HEADER] = connector.session.id
-        return response
-
-    async def past_session(
-        self, connector: McpServer, caller: ConnectorCaller, http: web.Request,
-    ) -> web.StreamResponse:
-        """Initializing is how a past session's client starts this process's session."""
-        return await self.answer(connector, caller, http)
 
     async def result(self, connector: McpServer, caller: ConnectorCaller) -> InitializeResult:
         return InitializeResult.announcing(connector.announces())

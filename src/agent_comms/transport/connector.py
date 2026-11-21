@@ -134,7 +134,6 @@ from agent_comms.transport.mcp import (
     McpErrorReply,
     McpMessage,
     McpServer,
-    McpSession,
     MethodNotFoundError,
     ParseError,
     declared,
@@ -650,10 +649,6 @@ class Connector(ConnectorService, McpServer):
     )
     """Every long-lived socket this process is serving, so the stop can end all of them."""
 
-    session: McpSession = field(
-        default_factory=McpSession, init=False, repr=False, compare=False,
-    )
-
     def announces(self) -> str:
         """Read at each handshake rather than held: the identity is minted when serving
         starts, and a root prepared under this process should not keep answering that it
@@ -1103,7 +1098,7 @@ class Connector(ConnectorService, McpServer):
         except MalformedRecord as error:
             return self.refused(data, InvalidRequestError(str(error)))
         started = time.monotonic()
-        response = await self.session.claimed(request).answer(message, self, caller, request)
+        response = await message.answer(self, caller, request)
         logging.info("MCP %s answered in %.3fs", message.log_name, time.monotonic() - started)
         return response
 
