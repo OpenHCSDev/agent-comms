@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from yarl import URL
 from cutover.carry_connector_access import (
+    AccessCarriedConnectorGrants,
     ConnectorAccessCarry,
     PreviousConnectorGrants,
     PreviousIssuedCode,
@@ -15,12 +16,15 @@ from cutover.carry_connector_access import (
     PreviousRegisteredClient,
     PreviousThreadGrant,
 )
+from cutover.carry_connector_oauth_clients import ConnectorOAuthClients
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.backup import StoreBackup
+from agent_comms.installer.carry import CarryChain, FinishedCarries, FinishedCarryStore
 from agent_comms.installer.practice import PracticeCopy
+from agent_comms.installer.probes.carry import Carry
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
-from agent_comms.storage.locked_store import LiveFilesRequest, RetainedCopyRequest
+from agent_comms.storage.locked_store import DocumentChange, LiveFilesRequest, RetainedCopyRequest
 from agent_comms.storage.private_path import PrivateDirectoryRole
 from agent_comms.storage.store_files import AtomicFile, ExclusiveLock, store_lock_path
 from agent_comms.transport.connector_caller import CALLER, ForkingCaller, GrantRefusedError
@@ -35,6 +39,7 @@ from agent_comms.transport.connector_store import (
     ExistingDirectorAccess,
     OAuthClientId,
     OAuthRedirectUri,
+    PublicOAuthClient,
     TrustedBrowser,
     digest,
 )
@@ -92,8 +97,19 @@ def test_selected_credential_carry_preserves_live_authority_and_pending_state(
     applied = selected_carry.carry(apply=True)
     resource, = ConnectorCredentialsFile.resources(selected_carry.files)
     assert applied.changed == 1 and applied.rewritten == (resource.path,)
+    intermediate = FieldCodec.decode(
+        AccessCarriedConnectorGrants, FieldCodec.parse(path.read_text(encoding="utf-8")),
+    )
+    assert intermediate.clients == previous_grants.clients
+    assert intermediate.codes == previous_grants.codes
+    assert selected_carry.carry(apply=False).changed == 0
+    successor = ConnectorOAuthClients(selected_carry.files, selected_carry.spill_dir)
+    assert successor.carry(apply=False).changed == 1
+    assert successor.carry(apply=True).changed == 1
     current = ConnectorStore(path).read()
-    assert current.clients["client"] == previous_grants.clients["client"].carried()
+    assert current.clients["client"].name == previous_grants.clients["client"].name
+    assert current.clients["client"].redirect_uris == (CALLBACK,)
+    assert current.clients["client"].authentication == PublicOAuthClient()
     assert current.requests == previous_grants.requests
     # Pre-binding codes expire within five minutes and cannot prove a callback; cutover drops
     # them instead of retaining an unusable legacy member in the live product model.
@@ -108,10 +124,24 @@ def test_selected_credential_carry_preserves_live_authority_and_pending_state(
     with pytest.raises(GrantRefusedError):
         current.caller_for("expired")
     assert current.thread_held("reader")
-    successor = path.read_bytes()
-    assert selected_carry.carry(apply=False).changed == 0
-    assert selected_carry.carry(apply=True).changed == 0
-    assert path.read_bytes() == successor
+    current_bytes = path.read_bytes()
+    assert successor.carry(apply=False).changed == 0
+    assert successor.carry(apply=True).changed == 0
+    assert path.read_bytes() == current_bytes
+
+
+def test_finished_access_carry_leaves_new_oauth_carry_pending(tmp_path: Path) -> None:
+    root = tmp_path / "bus"
+    root.mkdir()
+    FinishedCarryStore.at(root).update(lambda _current: DocumentChange.to(
+        FinishedCarries((ConnectorAccessCarry.declared_name,)),
+    ))
+    pending = CarryChain(
+        (ConnectorAccessCarry, ConnectorOAuthClients),
+    ).unfinished_at(root).steps
+
+    assert pending == (ConnectorOAuthClients,)
+    assert Carry.writer_declarations(pending) == (ConnectorCredentialsFile,)
 
 
 @pytest.mark.parametrize("apply", (False, True))
@@ -190,9 +220,11 @@ def test_live_selected_credentials_copy_carry_and_rollback(
     copy = PracticeCopy(root, tmp_path / "practice")
     copy.include(step.input_files())
     copied_step = ConnectorAccessCarry(copy.request, tmp_path / "practice-spill")
+    copied_oauth = ConnectorOAuthClients(copy.request, tmp_path / "practice-oauth-spill")
     resource, = ConnectorCredentialsFile.resources(copy.request)
     assert copy.request.location(resource).read_bytes() == original
     assert copied_step.carry(apply=True).changed == 1
+    assert copied_oauth.carry(apply=True).changed == 1
     assert path.read_bytes() == original
     with ExitStack() as lifetime:
         ConnectorCredentialsFile.borrowed_locks(lifetime, step.files)
@@ -200,7 +232,11 @@ def test_live_selected_credentials_copy_carry_and_rollback(
         assert resource.path in backup.selected_files()
         assert backup.original()
         assert step.carry(apply=True).changed == 1
-        assert ConnectorStore(path).read().clients == previous_grants.clients
+        oauth = ConnectorOAuthClients(step.files, tmp_path / "oauth-spill")
+        assert oauth.carry(apply=True).changed == 1
+        current_client = ConnectorStore(path).read().clients["client"]
+        assert (current_client.name, current_client.redirect_uris, current_client.authentication) \
+            == (previous_grants.clients["client"].name, (CALLBACK,), PublicOAuthClient())
         assert not backup.stores_original()
         backup.restore(lambda: FieldCodec.decode(PreviousConnectorGrants, FieldCodec.parse(path.read_text())))
         assert backup.original()
