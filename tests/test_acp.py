@@ -17,7 +17,7 @@ from acp.schema import TextContentBlock
 
 import agent_comms.agent_events as ae
 import agent_comms.execution.backend as backend
-from agent_comms.config_options import ServiceTierConfigOption
+from agent_comms.config_options import ContextEditConfigOption, ServiceTierConfigOption
 from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
@@ -46,6 +46,7 @@ from agent_comms.pi_counts import PiCount
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.activity import Activity, ActivityState, ActivityStore
 from agent_comms.registry.thread_model import DeclaredModel
+from agent_comms.registry.thread_settings import ContextEditPolicy
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.acp_update_sink import AcpUpdateSink
 from agent_comms.ui_model.observation import ReadTranscript, SubscribeTranscript
@@ -193,6 +194,25 @@ class TestHandlers:
                 assert json.loads(current.catalog_path(agent._comms.root).read_text())[
                     "service_tier"
                 ] == selected.value
+            context_edits, = (
+                option for option in menu.config_options
+                if option.id == FieldCodec.encode(ContextEditConfigOption)
+            )
+            assert context_edits.current_value == ContextEditPolicy.OPTIONAL.value
+            assert {choice.value for choice in context_edits.options} == {
+                member.value for member in ContextEditPolicy
+            }
+            changed = await agent.set_config_option(
+                session_id=response.session_id, config_id=context_edits.id,
+                value=ContextEditPolicy.REQUIRED_EACH_TURN.value,
+            )
+            readback = next(
+                option for option in changed.config_options if option.id == context_edits.id
+            )
+            assert readback.current_value == ContextEditPolicy.REQUIRED_EACH_TURN.value
+            assert agent._comms.registry.require(
+                response.session_id
+            ).context_edit_policy is ContextEditPolicy.REQUIRED_EACH_TURN
         finally:
             await agent.shutdown()
 

@@ -1,5 +1,6 @@
 """The actual stored session fields and their configuration roles."""
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Annotated, ClassVar
 
 from python_introspect import FieldLabel
@@ -27,6 +28,20 @@ class ServiceTierSetting:
     category: ClassVar[str] = "model_config"
 
 
+class ContextEditSetting:
+    category: ClassVar[str] = "context_edit_policy"
+
+
+class ContextEditPolicy(StrEnum):
+    """Whether an agent run may finish without updating its live context."""
+
+    OPTIONAL = "optional"
+    REQUIRED_EACH_TURN = "required_each_turn"
+
+    def environment(self) -> dict[str, str]:
+        return {"CLM_CONTEXT_EDIT_POLICY": self.value}
+
+
 @dataclass(frozen=True)
 class ThreadSettings(ConfigurationRecord):
     model: Annotated[
@@ -44,3 +59,10 @@ class ThreadSettings(ConfigurationRecord):
         Description("Provider request service tier, applied from this thread's next turn"),
         RegistrationPolicy(InheritPrevious),
     ] = field(default_factory=ServiceTier.default, kw_only=True)
+    context_edit_policy: Annotated[
+        ContextEditPolicy,
+        ConfigurationSlot(ContextEditSetting),
+        FieldLabel("Context edits"),
+        Description("Whether every agent turn must apply an accepted live-context edit"),
+        RegistrationPolicy(InheritPrevious),
+    ] = field(default=ContextEditPolicy.OPTIONAL, kw_only=True)

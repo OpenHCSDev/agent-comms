@@ -102,6 +102,8 @@ from agent_comms.registry.thread_presentation import (
 )
 from agent_comms.registry.thread_reads import ThreadCheckoutSource, ThreadOwnerSource
 from agent_comms.registry.thread_settings import (
+    ContextEditPolicy,
+    ContextEditSetting,
     ModelSetting,
     ServiceTierSetting,
     ThinkingSetting,
@@ -258,9 +260,26 @@ class KeptServiceTier(NullMember, KeptSetting, ServiceTierChoice):
     pass
 
 
+class ContextEditChoice(NextTurnSetting, SubclassUnion, affix="ContextEdit"):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ChosenContextEdit(SingleFieldValue, ContextEditChoice):
+    policy: ContextEditPolicy
+
+    def configured(self, thread: Thread) -> Thread:
+        return replace(thread, context_edit_policy=self.policy)
+
+
+@dataclass(frozen=True, slots=True)
+class KeptContextEdit(NullMember, KeptSetting, ContextEditChoice):
+    pass
+
+
 @dataclass(frozen=True, kw_only=True)
 class NextTurnConfiguration:
-    """The model, thinking level and service tier one request sets or keeps for the next turn."""
+    """The stored settings one request sets or keeps for the next turn."""
 
     model: Annotated[
         ModelChoice, Catalog(ModelSetting), Argument(flags=("--model",))
@@ -273,10 +292,15 @@ class NextTurnConfiguration:
         ServiceTierChoice, Catalog(ServiceTierSetting),
         Argument(flags=("--service-tier",)),
     ] = KeptServiceTier()
+    context_edit_policy: Annotated[
+        ContextEditChoice, Catalog(ContextEditSetting),
+        Argument(flags=("--context-edit-policy",)),
+    ] = KeptContextEdit()
 
     def configured(self, thread: Thread) -> Thread:
         thought = replace(thread, thinking_level=self.thinking_level.applied(thread.thinking_level))
-        return self.service_tier.configured(self.model.configured(thought))
+        configured = self.service_tier.configured(self.model.configured(thought))
+        return self.context_edit_policy.configured(configured)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -721,7 +745,8 @@ class Thread(
         """
         def launch(thread: Thread):
             return (thread.incarnation, thread.process_identity, thread.role, thread.runtime,
-                    thread.worktree, type(thread), thread.model, thread.thinking_level)
+                    thread.worktree, type(thread), thread.model, thread.thinking_level,
+                    thread.context_edit_policy)
         return launch(self) == launch(other)
 
     def same_turn(self, other: Thread) -> bool:

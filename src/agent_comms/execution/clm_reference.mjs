@@ -658,6 +658,60 @@ export class DigestEachOutput extends BudgetPressure {
 }
 EditRule.declare("digest", DigestEachOutput);
 
+/** Whether a model run may finish without applying an edit to the live context. This is
+ * independent of EditRule: one governs when raw tool output must be digested, the other
+ * governs what constitutes a completed user turn. */
+export class ContextEditPolicy {
+  static members = new Map();
+
+  static declare(name, member) {
+    ContextEditPolicy.members.set(name, member);
+    return member;
+  }
+
+  static named(name) {
+    const member = ContextEditPolicy.members.get(name);
+    if (!member) throw new Error(`Unknown CLM context-edit policy: ${JSON.stringify(name)}`);
+    return new member();
+  }
+
+  instruction(_ctxFile) { return ""; }
+  started(_acceptedEdits) {}
+  refusedTerminal(_message, _acceptedEdits) { return null; }
+}
+
+export class OptionalContextEdit extends ContextEditPolicy {}
+ContextEditPolicy.declare("optional", OptionalContextEdit);
+
+/** The run begins with one edit revision and may emit its final answer only after a later
+ * accepted edit. A no-op, malformed or rejected mirror write never advances that revision. */
+export class RequiredContextEdit extends ContextEditPolicy {
+  baseline = 0;
+
+  instruction(ctxFile) {
+    return `\n\nBefore your final answer, you MUST apply one accepted edit to ${ctxFile} during this ` +
+      "agent run. Replace settled detail with concise durable notes while preserving the current " +
+      "request and every unresolved fact. A no-op or rejected edit does not count; the run will " +
+      "fail instead of pretending its context was maintained.";
+  }
+
+  started(acceptedEdits) {
+    this.baseline = acceptedEdits;
+  }
+
+  refusedTerminal(message, acceptedEdits) {
+    if (message?.role !== "assistant" || message.stopReason !== "stop" || acceptedEdits > this.baseline) {
+      return null;
+    }
+    return {
+      ...message,
+      stopReason: "error",
+      errorMessage: "Context edit required: this turn ended without an accepted LIVE_CTX_MAIN.txt edit.",
+    };
+  }
+}
+ContextEditPolicy.declare("required_each_turn", RequiredContextEdit);
+
 /** A command's output on its way into the context: shown when it fits the room left under
  * the limit, stored to a file and described when it does not. */
 export class Observation {
@@ -717,6 +771,7 @@ export default function clmReference(pi) {
   const budgetTokens = Number(process.env.CLM_CONTEXT_BUDGET || 28672);
   const reserve = Number(process.env.CLM_CONTEXT_RESERVE || 2048);
   const rule = EditRule.named(process.env.CLM_EDIT_RULE || "budget");
+  const contextEdit = ContextEditPolicy.named(process.env.CLM_CONTEXT_EDIT_POLICY || "optional");
   let outputs;
   const hint =
     `Compact ${CTX_ROOT}/<session>/${CTX_NAME} by locating stale regions with code (match a turn by its ` +
@@ -737,10 +792,12 @@ export default function clmReference(pi) {
   // calibration cannot absorb it (CLM-ref, 2026-11-20: ratio drifted 2.6 -> 1.2).
   let toolsText = "";
   const turnCalls = new Set();
+  let acceptedEdits = 0;
 
   function persist(data) {
     pi.appendEntry(ENTRY, data);
     view.apply(data);
+    if (data.kind === "edit") acceptedEdits += 1;
   }
 
   function restore(ctx) {
@@ -748,8 +805,12 @@ export default function clmReference(pi) {
       budget: budgetTokens, reserve, compactionHint: hint.replace(`${CTX_ROOT}/<session>/${CTX_NAME}`, ctxFile),
     });
     view = new LiveView();
+    acceptedEdits = 0;
     for (const entry of ctx.sessionManager.getBranch()) {
-      if (entry.type === "custom" && entry.customType === ENTRY && entry.data) view.apply(entry.data);
+      if (entry.type === "custom" && entry.customType === ENTRY && entry.data) {
+        view.apply(entry.data);
+        if (entry.data.kind === "edit") acceptedEdits += 1;
+      }
     }
   }
 
@@ -769,8 +830,15 @@ export default function clmReference(pi) {
   // dealt rules included (123,111 tokens for a 49,152-token window on 2026-11-20), is
   // context the checkpoint never saw and cannot hold.
   pi.on("before_agent_start", async () => ({
-    systemPrompt: systemPrompt(`${budget.strictTarget} tokens`, ctxFile),
+    systemPrompt: systemPrompt(`${budget.strictTarget} tokens`, ctxFile) + contextEdit.instruction(ctxFile),
   }));
+
+  pi.on("agent_start", () => contextEdit.started(acceptedEdits));
+
+  pi.on("message_end", (event) => {
+    const replacement = contextEdit.refusedTerminal(event.message, acceptedEdits);
+    return replacement ? { message: replacement } : undefined;
+  });
 
   pi.on("context", async (event, ctx) => {
     const raw = event.messages;

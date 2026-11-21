@@ -61,6 +61,7 @@ from agent_comms.projects.shell_effects import (
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.thread_model import ThreadModel
+from agent_comms.registry.thread_settings import ContextEditPolicy
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.typed_table import SQLiteSchemaDifference, StoreRewrite
 
@@ -188,6 +189,7 @@ class ThreadConfiguredResult(RecordMember, TargetEditResult):
     model: ThreadModel
     thinking_level: ThinkingLevelField
     service_tier: ServiceTier
+    context_edit_policy: ContextEditPolicy
 
 
 @dataclass(frozen=True)

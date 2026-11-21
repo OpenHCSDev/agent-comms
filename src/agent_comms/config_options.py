@@ -34,12 +34,19 @@ from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_model import CatalogSelection, ThreadModel
 from agent_comms.registry.thread_settings import (
     ConfigurationSlot,
+    ContextEditPolicy,
+    ContextEditSetting,
     ModelSetting,
     ServiceTierSetting,
     ThinkingSetting,
     ThreadSettings,
 )
-from agent_comms.registry.threads import ChosenServiceTier, NextTurnConfiguration, Thread
+from agent_comms.registry.threads import (
+    ChosenContextEdit,
+    ChosenServiceTier,
+    NextTurnConfiguration,
+    Thread,
+)
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.project_request import ProjectRuntimeRequest
 
@@ -61,6 +68,10 @@ class RunningSelection(CatalogSelection):
     @property
     def service_tier(self) -> ServiceTier:
         return self.thread.service_tier
+
+    @property
+    def context_edit_policy(self) -> ContextEditPolicy:
+        return self.thread.context_edit_policy
 
     @property
     def project_path(self) -> Path:
@@ -280,6 +291,25 @@ class ServiceTierConfigOption(ServiceTierSetting, CatalogConfigOption):
         await owner.store_configuration(
             thread, NextTurnConfiguration(
                 service_tier=ChosenServiceTier(FieldCodec.decode(ServiceTier, value)),
+            ),
+        )
+
+
+class ContextEditConfigOption(ContextEditSetting, CatalogConfigOption):
+    async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
+        return [
+            CatalogChoice(name=policy.value.replace("_", " ").title(), value=policy.value)
+            for policy in ContextEditPolicy
+        ]
+
+    async def apply(
+        self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
+    ) -> None:
+        await owner.store_configuration(
+            thread, NextTurnConfiguration(
+                context_edit_policy=ChosenContextEdit(
+                    FieldCodec.decode(ContextEditPolicy, value)
+                ),
             ),
         )
 
