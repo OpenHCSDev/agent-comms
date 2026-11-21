@@ -123,3 +123,16 @@ def test_a_merged_claim_resolves_in_the_problems_checkout_not_the_claimants_work
     elsewhere = MergedClaim(commit, ThreadScope())
     with pytest.raises(FailedGitCommand, match='not a git repository'):
         ProgressClaim.require_all((elsewhere,), comms, claimant)
+
+
+def test_a_delivery_answers_integration_and_completion_as_two_separate_facts(
+        source_repository, interpreter_build):
+    """`merged_commits(repo)` is the integration question, asked about a repository;
+    `claim_commits()` is the completion question, which needs none. One no-argument override
+    under the integration name shadowed the Repo-taking one through the MRO, so the ordinary
+    CommitDelivery path raised instead of answering."""
+    commit = source_repository.main_commit
+    delivery = CommitDelivery(commit=commit, delivered_commit=commit,
+                              proof_build=RecordedBuildIdentity(commits=(), interpreter=interpreter_build))
+    assert delivery.claim_commits() == (commit,)
+    assert delivery.merged_commits(source_repository) == (commit,)
