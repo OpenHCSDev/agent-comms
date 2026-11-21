@@ -1109,6 +1109,10 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         current, stale = [], []
         notifications = NotificationPass(comms, revision)
+        notifications.prepare(
+            (batch.state.notification_window, batch.state.revision)
+            for batch in self.batches
+        )
         for batch in self.batches:
             changed = batch.request.operation.changed_since(comms, batch.state, notifications)
             (stale if changed else current).append(batch)
@@ -1718,6 +1722,9 @@ class ThreadsObserved(Observed):
                            if not self.results[name].same_status(status_batch.view(name)))
         remaining = {name: view for name, view in readable.items() if name not in changed}
         notifications = NotificationPass(comms, revision)
+        notifications.prepare(
+            (view.notification_window, earlier) for view in remaining.values()
+        )
         changed.update(name for name, view in remaining.items()
                        if view.notification_window.activity_names() & activity_changed
                        or notifications.changed(view.notification_window, earlier))

@@ -130,6 +130,20 @@ class NotificationPass:
     def evidence(self) -> CapturedNotificationEvidence:
         return self.comms.notification_evidence()
 
+    def prepare(
+        self,
+        windows: Iterable[tuple[NotificationWindow, RevisionChanges]],
+    ) -> None:
+        """Acquire every window whose assignment evidence may have moved in one batch."""
+        selections = tuple(
+            read.selection
+            for window, earlier in windows
+            if self.revision.changed_since(AssignmentEvidenceView(), earlier)
+            for read in window.reads
+        )
+        if selections:
+            self.assignments.prepare(selections)
+
     def changed(self, window: NotificationWindow, earlier: RevisionChanges) -> bool:
         return window.changed(self, earlier)
 
