@@ -1515,6 +1515,7 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
         self,
         session_id: AcpSessionId,
         *,
+        owner: OwnerIdentity,
         presentation_session_id: AcpSessionId,
         text: str,
         display_text: str,
@@ -1528,7 +1529,7 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
             self, session_id, self.sessions.require(session_id), text=display_text,
             prompt=TurnContext.render_segments((followup,), images=images).text,
             echo=request.defer_display, images=images, controller=controller,
-            input_id=request.input_id, origin=request.origin,
+            input_id=request.input_id, origin=request.origin, expected_owner=owner,
         ) as reservation:
             item = reservation.item
             followup = replace(followup, provenance=(
@@ -1537,7 +1538,7 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
             rendered = TurnContext.render_segments((followup,), images=images)
             item.place(self, session_id, inbox, InputContent(
                 text=item.prompt, images=tuple(images), contributions=rendered.contributions,
-            ))
+            ), expected_owner=owner)
             request.enqueue_control(inbox, item.input_id)
             reservation.release()
         await request.publish_acceptance(

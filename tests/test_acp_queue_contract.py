@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -56,6 +57,7 @@ from stored_inputs import stored_inputs
 
 BETA = AcpSessionId("beta")
 ATTACHMENT = AcpSessionId("attachment")
+REPLACEMENT = AcpSessionId("replacement")
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, RecordedThreadIncarnation, int]:
     comms = prepare_native_comms(wire(tmp_path / "wire"))
@@ -107,6 +109,53 @@ async def test_attachment_session_routes_prompt_to_active_owner_queue(tmp_path):
         assert comms.registry.require("beta").turn_record.read().phase.busy
         assert response.stop_reason == "end_turn"
     finally:
+        await agent.shutdown()
+
+
+async def test_attachment_rehome_between_selection_and_reservation_changes_neither_inbox(
+    tmp_path, monkeypatch,
+):
+    comms, agent, _owner_identity, _generation = _owner(tmp_path)
+    try:
+        original = agent.inputs.state(BETA).owned()
+        comms.agents.begin_turn("beta", TurnId.mint(), "Original owner turn")
+        original_inbox = original.open_inbox()
+        agent.sessions.publish(ATTACHMENT, comms.registry.require("beta"))
+        active_backend_turn = agent.turns.active_backend_turn
+        replacement_inbox = None
+
+        async def rehome_after_selection(session_id):
+            nonlocal replacement_inbox
+            selected = await active_backend_turn(session_id)
+            current = comms.registry.require("beta")
+            stale_process = replace(
+                current.process_identity,
+                start_time=current.process_identity.start_time + 1,
+            )
+            comms.registry.register(replace(current, process_identity=stale_process))
+            entry = comms.registry.entry("beta").entry
+            agent.sessions.publish(REPLACEMENT, entry.thread)
+            replacement_owner = agent.inputs.acquire_owner(
+                REPLACEMENT, agent.inputs.configuration, entry.owner_identity,
+            )
+            replacement_inbox = replacement_owner.open_inbox()
+            return selected
+
+        monkeypatch.setattr(agent.turns, "active_backend_turn", rehome_after_selection)
+        with pytest.raises(RelationViolationError, match="Owner lease changed"):
+            await agent.prompt(
+                ATTACHMENT, [TextContentBlock(type="text", text="belongs to no stale owner")]
+            )
+
+        assert original_inbox.empty()
+        assert replacement_inbox is not None and replacement_inbox.empty()
+        assert not original.queued
+        assert not agent.inputs.state(REPLACEMENT).queued
+    finally:
+        # The test deliberately supersedes both retained allocations; neither may
+        # attempt an ordinary current-owner release during fixture shutdown.
+        agent.inputs.end_session(BETA)
+        agent.inputs.end_session(REPLACEMENT)
         await agent.shutdown()
 
 

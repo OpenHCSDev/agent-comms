@@ -538,6 +538,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 and not text.lstrip().startswith((*NamedTarget.sigils(), RELAY_PREFIX))):
             return await self.inputs.accept_followup(
                 turn_source.session_id,
+                owner=turn_source.owner,
                 presentation_session_id=session_id,
                 text=text,
                 display_text=display_text,
