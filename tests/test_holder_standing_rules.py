@@ -131,7 +131,8 @@ from agent_comms.team.vibe_check import ChokeholdUnanswered, VibeCheck, VibeChec
 from agent_comms.transport.connector import ConnectorSendTool
 from agent_comms.transport.connector_caller import DirectorCaller
 from agent_comms.transport.tool_caller import ForkCaller, NoThreadCaller, PeerCaller, ThreadCaller
-from agent_comms.transport.tools.orders import CommsTeamStoryTool, CommsTodoListTool, TodoList
+from agent_comms.transport.tools.order_commands import CommsTodoListTool, TodoList
+from agent_comms.transport.tools.orders import CommsTeamStoryTool
 from agent_comms.ui_model.teammate_state import AwaitingTeam, Blocked, Detached, TeammateState
 from cli_command import team
 from conftest import declare_test_bus, team_as

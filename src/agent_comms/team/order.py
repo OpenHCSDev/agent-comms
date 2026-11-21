@@ -31,7 +31,6 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
-from agent_comms.comms import Comms, wire
 from agent_comms.coordination.errors import DeferredRead
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.launch_runtime import LaunchRuntime
@@ -117,9 +116,10 @@ from agent_comms.storage.typed_table import RowNotFoundError
 from agent_comms.team.board_actions import BoardActionApplied, BoardActionOffer
 from agent_comms.team.standing import DeliveryAwaitingJudgement, InstallDue, UnownedWheelSpin
 from agent_comms.team.standing_rules import ClearingVerb, HuntDue, OwedAnswer
+from agent_comms.team.team_comms import TeamComms, team_wire
 from agent_comms.team.team_hud import TeamBoardPublicationStore
 from agent_comms.transport.tool_caller import ForkCaller, NoThreadCaller, PeerCaller
-from agent_comms.transport.tools.orders import (
+from agent_comms.transport.tools.order_commands import (
     CommsChangeProblemTool,
     CommsFireTool,
     CommsOrderCheckTool,
@@ -670,10 +670,10 @@ class TeamContext(BaseModel):
     actor: Annotated[
         InstanceOf[ForkCaller] | InstanceOf[PeerCaller] | InstanceOf[NoThreadCaller], Field(exclude=True)
     ] = NoThreadCaller()
-    _comms: Comms = PrivateAttr()
+    _comms: TeamComms = PrivateAttr()
 
     def model_post_init(self, context: object) -> None:
-        self._comms = wire(self.root)
+        self._comms = team_wire(self.root)
 
     @classmethod
     def read_root(cls, root: Path | str) -> Self:
@@ -718,7 +718,7 @@ class TeamContext(BaseModel):
             _fields_set=self.model_fields_set.union(changes), **values)
 
     @property
-    def comms(self) -> Comms:
+    def comms(self) -> TeamComms:
         return self._comms
 
     @property

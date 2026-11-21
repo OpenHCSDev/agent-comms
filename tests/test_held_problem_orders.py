@@ -45,10 +45,8 @@ from agent_comms.team.order import OrderFile, main
 from agent_comms.team.request import RequestAddVerb
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.channels import CommsChannelsTool
-from agent_comms.transport.tools.orders import (
-    CommsOrderDeliverTool,
-    CommsTodoCreateTool,
-)
+from agent_comms.transport.tools.order_commands import CommsTodoCreateTool
+from agent_comms.transport.tools.orders import CommsOrderDeliverTool
 from test_todos import order, thread
 
 pytest_plugins = ("test_todos",)

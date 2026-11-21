@@ -41,15 +41,8 @@ from agent_comms.registry.registry_document import RegisteredTeamProject
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.recorded_time import EventTime, RecordedEventTime
 from agent_comms.transport.tool_caller import NoThreadCaller, PeerCaller, ThreadCaller
-from agent_comms.transport.tools.orders import (
-    CommsChangeProblemTool,
-    CommsOrderStoryTool,
-    CommsOrderTool,
-    CommsTeamStoryTool,
-    CommsTodoCreateTool,
-    CommsVerdictsTool,
-    CommsVerdictTool,
-)
+from agent_comms.transport.tools.order_commands import CommsChangeProblemTool, CommsOrderTool, CommsTodoCreateTool
+from agent_comms.transport.tools.orders import CommsOrderStoryTool, CommsTeamStoryTool, CommsVerdictsTool, CommsVerdictTool
 from source_revision_fixture import SourceRepository
 from test_todos import order
 

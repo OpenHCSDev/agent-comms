@@ -93,7 +93,7 @@ from agent_comms.team.standing_rules import (
 )
 from agent_comms.transport.mcp import AnsweredCall
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tools.orders import CommsTodoListTool
+from agent_comms.transport.tools.order_commands import CommsTodoListTool
 from agent_comms.transport.tools.send import CommsSendTool
 from agent_comms.ui_model.teammate_state import AwaitingTeam
 from agent_comms_hooks.board import (
