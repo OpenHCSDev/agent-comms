@@ -20,8 +20,9 @@ from agent_comms.coordination.database import (
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import CurrentExecutions
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
-from agent_comms.coordination.tables.publications import PublicationEvidence
 from agent_comms.coordination.tables.notification_evidence import NotificationEvidenceRevision
+from agent_comms.coordination.tables.publications import PublicationEvidence
+from agent_comms.execution.input_key import InputKey
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
@@ -47,8 +48,8 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup, boundary_decoder
 from agent_comms.registry.notification_selection_read import NotificationSelectionRead
 from agent_comms.registry.recipient_activity import RecipientActivity
-from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.registry_document import RegistrySnapshot
+from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.file_observation import FileObservation, FileRevision
@@ -484,7 +485,8 @@ class NotificationAssignment(NotificationSource):
         cls, source: AssignmentSource, read: NotificationAssignmentRead,
     ) -> NotificationAssignmentRead:
         """Every bus-side evidence read that follows the coordinator snapshot."""
-        return cls.capture_inputs(source, cls.capture_responses(source.root, read))
+        result, = NotificationAssignmentBatch((read,)).detached(source).reads
+        return result
 
     # One decoded claim set per (root, selection), reused across the cut changes a ping brings
     # while the raw join rows are byte-identical. Decoding the rows (FieldCodec, ~a third of the
@@ -640,6 +642,125 @@ class NotificationAssignment(NotificationSource):
         )
 
 
+@dataclass(frozen=True)
+class NotificationAssignmentBatch:
+    """Every exact selection one notification pass reads from one source cut.
+
+    Selections remain distinct because their viewer and recipient ranges are part of
+    ``NotificationSelection``.  The batch shares only physical acquisition: coordinator
+    rows, replies and stored inputs are read once, then projected back to each selection.
+    """
+
+    reads: tuple[NotificationAssignmentRead, ...]
+
+    @classmethod
+    def capture(
+        cls,
+        connection: sqlite3.Connection,
+        selections: tuple[NotificationSelection, ...],
+        privacy: RegistryPrivacy,
+        root: Path,
+    ) -> NotificationAssignmentBatch:
+        keys = tuple(dict.fromkeys(key for selection in selections for key in selection.keys))
+        rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...] = ()
+        attempts: tuple[HarnessDelivery, ...] = ()
+        if keys:
+            raw, description = NotificationAssignment._claim_scan(connection, keys, privacy)
+            rows = tuple(WakeAssignment.joined(
+                _DecodedRows(raw, description), AssignmentActivityEvidence))
+            attempts = tuple(HarnessDelivery.for_recipients(connection, keys))
+
+        captured = []
+        for selection in selections:
+            selected = frozenset(selection.keys)
+            selected_rows = tuple(sorted(
+                (row for row in rows
+                 if (row[0].recipient_lookup, row[0].source) in selected),
+                key=lambda row: (-row[0].wire_seq, row[0].recipient),
+            ))
+            consumption: dict[
+                tuple[ThreadLookup, MessageReference], tuple[ConsumptionEvidence, ...]
+            ] = {}
+            for attempt in attempts:
+                key = (attempt.recipient_lookup, attempt.reference)
+                if key in selected:
+                    consumption[key] = (*consumption.get(key, ()), attempt.monitor)
+            captured.append(NotificationAssignmentRead(
+                selection, selected_rows, MappingProxyType(consumption)))
+        return cls(tuple(captured))
+
+    @classmethod
+    def missing_store(
+        cls,
+        _store: MissingStore,
+        selections: tuple[NotificationSelection, ...],
+        privacy: RegistryPrivacy,
+        _root: Path,
+    ) -> NotificationAssignmentBatch:
+        return cls(tuple(privacy.missing_notification_assignments(selection)
+                         for selection in selections))
+
+    @classmethod
+    def invalid_store(
+        cls,
+        store: InvalidStore,
+        _selections: tuple[NotificationSelection, ...],
+        _privacy: RegistryPrivacy,
+        _root: Path,
+    ) -> NoReturn:
+        raise ValueError(f"Channel notification status unavailable: {store.failure_reason}")
+
+    def detached(self, source: AssignmentSource) -> NotificationAssignmentBatch:
+        """Add every non-coordinator evidence family through one exact union read."""
+        selected_keys = tuple(dict.fromkeys(
+            key for read in self.reads for key in read.selection.keys))
+        responses = {
+            (reply.lookup, reply.original_reference): UnansweredResponse().recorded(reply)
+            for reply in Bus(Bus.path_in(source.root)).recipient_replies(selected_keys)
+        }
+
+        registry = source.registry
+        input_keys: list[
+            dict[InputKey, tuple[tuple[ThreadLookup, MessageReference], ...]]
+        ] = []
+        all_inputs: dict[InputKey, None] = {}
+        for read in self.reads:
+            grouped: dict[
+                InputKey, list[tuple[ThreadLookup, MessageReference]]
+            ] = {}
+            for page in read.selection.pages:
+                for key, recipient in page.entries:
+                    for thread in registry.recipient(
+                            recipient, page.source).input_owners():
+                        grouped.setdefault(page.source.message.bus_key(thread), []).append(key)
+            keys = {
+                input_key: tuple(dict.fromkeys(selected))
+                for input_key, selected in grouped.items()
+            }
+            input_keys.append(keys)
+            all_inputs.update(dict.fromkeys(keys))
+        inputs = source.input_dispositions.read(tuple(all_inputs)).rows
+
+        result = []
+        for read, keys in zip(self.reads, input_keys, strict=True):
+            selection_keys = frozenset(read.selection.keys)
+            consumption = dict(read.consumption)
+            for input_key, supplied_keys in keys.items():
+                if input_key in inputs:
+                    for key in supplied_keys:
+                        consumption[key] = (*consumption.get(key, ()), inputs[input_key])
+            result.append(replace(
+                read,
+                consumption=MappingProxyType(consumption),
+                responses=MappingProxyType({
+                    key: response
+                    for key, response in responses.items()
+                    if key in selection_keys
+                }),
+            ))
+        return type(self)(tuple(result))
+
+
 class NotificationEvidenceRevisionRead:
     """Read the one notification-evidence revision through the store's classified view."""
 
@@ -693,13 +814,22 @@ class AssignmentSource:
         """This selection's evidence at the sources' current commit. A window's change check
         reads its selection and the read that follows a change asked for the same rows again;
         both now share one read until the coordinator, bus, stored inputs or registry move."""
+        return self.prepare((selection,)).reads[selection]
+
+    def prepare(
+        self, selections: Iterable[NotificationSelection]
+    ) -> HeldAssignmentReads:
+        """Acquire every missing exact selection through one notification source cut."""
         held = self._current_held()
-        if selection not in held.reads:
+        missing = tuple(dict.fromkeys(
+            selection for selection in selections if selection not in held.reads))
+        if missing:
             with self.coordinator.observing(
-                    NotificationAssignment, selection, self.privacy, self.root) as result:
-                captured = result
-            held.reads[selection] = NotificationAssignment.capture_detached(self, captured)
-        return held.reads[selection]
+                    NotificationAssignmentBatch, missing, self.privacy, self.root) as captured:
+                batch = captured
+            for read in batch.detached(self).reads:
+                held.reads[read.selection] = read
+        return held
 
     def _current_held(self) -> HeldAssignmentReads:
         cut = (

@@ -13,6 +13,8 @@ from agent_comms.cli_bridges.harness_delivery_states import PersistedOutcome
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.human_read_cut import HumanReadCut
 from agent_comms.messaging.message_notification import MessageNotification
@@ -28,6 +30,7 @@ from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.notification_assignment import (
     AssignmentSource,
     NotificationAssignment,
+    NotificationAssignmentBatch,
     NotificationSelection,
 )
 from agent_comms.projects.checkouts import Checkout
@@ -100,6 +103,73 @@ def test_retained_cut_ignores_other_recipient_change_but_observes_its_own_proof(
     assert NotificationAssignment.changed((before,), AssignmentSource(comms.root)) == (before,)
     changed = NotificationAssignment.read(comms.root, selection)
     assert tuple(changed.consumption) == ((source.recipients[0].recipient_lookup, source.reference),)
+
+
+def test_one_source_batch_preserves_two_exact_recipient_cuts(
+    frozen_window: tuple[Comms, Delivered], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    comms, source = frozen_window
+    first = NotificationSelection.of(AllOutcomes(), (source,), limit=RecipientLimit(3))
+    second = NotificationSelection.of(
+        AllOutcomes(), (source,),
+        after=AfterRecipient(first.pages[0].recipients[-1]), limit=RecipientLimit(3),
+    )
+    sender_view = NotificationSelection.of(
+        OwnerOutcomes(source.sender_lookup), (source,), limit=RecipientLimit(3),
+    )
+    first_recipient = first.pages[0].recipients[0]
+    second_recipient = second.pages[0].recipients[0]
+    comms.messaging.send(
+        first_recipient.canonical_thread,
+        source.message.sender,
+        "first cut answer",
+        answers=(source.message.reference,),
+    )
+    comms.messaging.send(
+        second_recipient.canonical_thread,
+        source.message.sender,
+        "second cut answer",
+        answers=(source.message.reference,),
+    )
+    selections = (first, second, sender_view)
+    expected = tuple(NotificationAssignment.read(comms.root, selection)
+                     for selection in selections)
+    AssignmentSource._held.pop(comms.root, None)
+    calls = {"batch": 0, "replies": 0, "inputs": 0}
+    input_batches = []
+
+    batch_capture = NotificationAssignmentBatch.capture.__func__
+    reply_read = Bus.recipient_replies
+    input_read = InputDispositions.read
+
+    def capture(cls, *args, **kwargs):
+        calls["batch"] += 1
+        return batch_capture(cls, *args, **kwargs)
+
+    def replies(self, *args, **kwargs):
+        calls["replies"] += 1
+        return reply_read(self, *args, **kwargs)
+
+    def inputs(self, *args, **kwargs):
+        calls["inputs"] += 1
+        input_batches.append(args[0])
+        return input_read(self, *args, **kwargs)
+
+    monkeypatch.setattr(NotificationAssignmentBatch, "capture", classmethod(capture))
+    monkeypatch.setattr(Bus, "recipient_replies", replies)
+    monkeypatch.setattr(InputDispositions, "read", inputs)
+    held = AssignmentSource(comms.root).prepare(selections)
+
+    assert tuple(held.reads[selection] for selection in selections) == expected
+    assert len(input_batches[0]) == 6 < sum(len(selection.keys) for selection in selections)
+    assert tuple(held.reads[first].responses) == (
+        (first_recipient.recipient_lookup, source.message.reference),
+    )
+    assert held.reads[sender_view].responses == held.reads[first].responses
+    assert tuple(held.reads[second].responses) == (
+        (second_recipient.recipient_lookup, source.message.reference),
+    )
+    assert calls == {"batch": 1, "replies": 1, "inputs": 1}
 
 
 def test_cursor_and_owner_scope_are_applied_by_actual_read_request_before_acquisition(
