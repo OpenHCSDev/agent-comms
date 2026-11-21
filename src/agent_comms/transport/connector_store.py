@@ -434,7 +434,7 @@ class IssuedTokens:
 
     access_token: str
     refresh_token: str
-    token_type: Literal["Bearer"] = "Bearer"
+    token_type: Literal["bearer"] = "bearer"
     expires_in: int = ACCESS_SECONDS
 
 
