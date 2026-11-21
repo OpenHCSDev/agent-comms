@@ -136,3 +136,27 @@ def test_a_delivery_answers_integration_and_completion_as_two_separate_facts(
                               proof_build=RecordedBuildIdentity(commits=(), interpreter=interpreter_build))
     assert delivery.claim_commits() == (commit,)
     assert delivery.merged_commits(source_repository) == (commit,)
+
+
+
+def test_an_ordinary_fix_order_needs_no_claim_beyond_the_deliverys_own(
+        comms, source_repository, github_cli: GitHubFixture, interpreter_build):
+    """The normal order-done path supplies no claims of its own; the delivery is the claim.
+    FixScope required one from the caller's tuple before OrderScope added the delivery's merged
+    commit, so every ordinary fix completion called itself an unverifiable report and nothing
+    could complete. This is the tool's own line (transport/tools/orders.py:548)."""
+    from agent_comms.planning.progress_claims import ProgressClaim
+
+    caller, current = assigned(comms, source_repository.scope(), source_repository)
+    commit = source_repository.main_commit
+    github_cli.configure(current.repo)
+    github_cli.put(current.repo, MergedListedPullRequest(
+        1, 'fix/created', commit, updated='2026-10-25T12:00:00Z', base=WorkBranches.main,
+        reviewable_times=('2026-10-25T12:00:00Z',), merge=PullRequestCommit(commit),
+        merged='2026-10-25T12:00:00Z'))
+    delivery = CommitDelivery(commit=commit, delivered_commit=commit,
+                              proof_build=RecordedBuildIdentity(commits=(), interpreter=interpreter_build))
+    required = current.order.checked().scope.required_claims(delivery, (), current.id)
+    assert MergedClaim(commit, ProblemScope(current.id)) in required
+    verified = ProgressClaim.require_all(required, comms, comms.registry.require('worker'))
+    assert WorkBranches.main in verified[MergedClaim(commit, ProblemScope(current.id))]
