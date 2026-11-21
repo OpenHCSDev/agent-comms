@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import threading
+import uuid
 from abc import ABC, abstractmethod
 from annotationlib import Format, ForwardRef, get_annotations
 from collections.abc import Mapping
@@ -29,6 +32,16 @@ from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller, Tool
 from agent_comms.transport.tool_declaration import NativeRequestTools
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
+
+_BACKGROUND_TAIL = 2000
+
+
+@dataclass(frozen=True)
+class BackgroundCallStarted(ToolResult):
+    """The receipt of a deferred tool call: its result arrives as a message to the thread."""
+
+    run_id: str
+    tool: str
 
 
 class ToolArgumentsRefusedError(MalformedRecord, ToolRefusedError):
@@ -103,8 +116,34 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
     def replied(self, comms: Comms, caller: ToolCaller) -> dict[str, JsonValue]:
         # A request decoded from the wire meets whichever caller arrived; the caller's own
         # invoke checks at runtime that it may apply this request (thread-only refusals).
+        if self.background:
+            return self.reply(FieldCodec.encode(
+                self.started_in_background(comms, caller).to_wire()), caller)
         applied = caller.invoke(cast(ServedRequest, self), comms)
         return self.reply(FieldCodec.encode(applied.to_wire()), caller)
+
+    def started_in_background(self, comms: Comms, caller: ToolCaller) -> BackgroundCallStarted:
+        """Detach the apply: the caller hears back through its own thread the moment the
+        apply lands. The capability is the base's; a leaf adds nothing to be backgroundable."""
+        if not isinstance(caller, ThreadCaller):
+            raise ToolRefusedError(
+                f"{self.declared_name}: background runs need a thread caller to notify.")
+        run_id = f"{caller.name}-{self.declared_name}-{uuid.uuid4().hex[:8]}"
+
+        def deferred() -> None:
+            try:
+                applied = caller.invoke(cast(ServedRequest, self), comms)
+                rendered = json.dumps(FieldCodec.encode(applied.to_wire()), default=str)
+                outcome = "finished"
+            except Exception as error:  # noqa: BLE001 - the caller hears every failure
+                rendered = f"{type(error).__name__}: {error}"
+                outcome = "failed"
+            comms.messaging.send(caller.name, caller.name,
+                f"Background {self.declared_name} {outcome}:\n{rendered[:_BACKGROUND_TAIL]}")
+
+        threading.Thread(target=deferred, daemon=True,
+                         name=f"background-{run_id}").start()
+        return BackgroundCallStarted(run_id=run_id, tool=self.declared_name)
 
     def board(self, comms: Comms, caller: ToolCaller) -> tuple[str, ...]:
         """The new board rows naming the caller of this verb, carried beside its reply: the

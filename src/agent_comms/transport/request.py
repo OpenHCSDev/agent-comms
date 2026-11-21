@@ -87,6 +87,7 @@ class ToolCall:
     meta: Annotated[dict[str, object], WireName("_meta")] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
 class ToolRequest[Result: ToolResult = ToolResult](
     FreshIngress, ArgumentTool, ToolDeclaration, declared_name=None
 ):
@@ -94,6 +95,10 @@ class ToolRequest[Result: ToolResult = ToolResult](
     (decoding a call, running apply under a caller) is ServedRequest's, in agent_comms.transport.tool_request."""
 
     description: ClassVar[str]
+    background: Annotated[bool, *tool_field(
+        "Run detached: the tool answers immediately with a run handle, and its result "
+        "arrives as a message to this thread"
+    )] = field(default=False, kw_only=True)
     @classmethod
     def is_read_only(cls) -> bool:
         return False
