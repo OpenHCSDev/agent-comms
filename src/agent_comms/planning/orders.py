@@ -2145,8 +2145,12 @@ class FixScope(OrderScope[CheckedDelivery]):
     def required_claims(
         self, delivery: CheckedDelivery, claims: tuple[ProgressClaim, ...], problem: str,
     ) -> tuple[ProgressClaim, ...]:
-        ProgressClaim.require_claimed(claims, "delivered")
-        return super().required_claims(delivery, claims, problem)
+        """The delivery is the claim: its merged commit and artifact are assembled first, and
+        only then must the completed set stand on one. Checking the caller's tuple instead made
+        every ordinary fix completion call itself an unverifiable report."""
+        required = super().required_claims(delivery, claims, problem)
+        ProgressClaim.require_claimed(required, "delivered")
+        return required
 
     def completed(self, todo: Todo, delivery: CheckedDelivery) -> Todo:
         return replace(todo, order=todo.order.delivered(delivery), revision=todo.revision + 1)
