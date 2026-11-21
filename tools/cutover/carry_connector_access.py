@@ -8,10 +8,11 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from pydantic import JsonValue
+from yarl import URL
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.probes.carry import Carried, Carry
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.storage.locked_store import RootFile
 from agent_comms.storage.store_files import AtomicFile
 from agent_comms.transport.connector_store import (
@@ -22,11 +23,15 @@ from agent_comms.transport.connector_store import (
     ConnectorGrants,
     ExistingDirectorAccess,
     ExpiringGrant,
-    IssuedCode,
+    OAuthRedirectUri,
+    PublicOAuthClient,
     RegisteredClient,
     ThreadGrant,
     TrustedBrowser,
 )
+
+
+PREVIOUS_CLAUDE_CALLBACK = OAuthRedirectUri(URL("https://claude.ai/api/mcp/auth_callback"))
 
 
 @dataclass(frozen=True)
@@ -40,6 +45,16 @@ class PreviousIssuedAccess(ExpiringGrant):
 
 
 @dataclass(frozen=True)
+class PreviousRegisteredClient:
+    """The retired connector registered only Claude and retained only its display name."""
+
+    name: str
+
+    def carried(self) -> RegisteredClient:
+        return RegisteredClient(self.name, (PREVIOUS_CLAUDE_CALLBACK,), PublicOAuthClient())
+
+
+@dataclass(frozen=True)
 class PreviousThreadGrant:
     thread: str
 
@@ -47,13 +62,21 @@ class PreviousThreadGrant:
         return ThreadGrant(self.thread)
 
 
+@dataclass(frozen=True, kw_only=True)
+class PreviousIssuedCode(ExpiringGrant):
+    """A pre-redirect-binding code; its five-minute authority is dropped during cutover."""
+
+    client_id: str
+    code_challenge: str
+
+
 @dataclass(frozen=True)
 class PreviousConnectorGrants:
     """The actual retired input; its clients, waits, codes and trust stay unchanged."""
 
-    clients: dict[str, RegisteredClient] = field(default_factory=dict)
+    clients: dict[str, PreviousRegisteredClient] = field(default_factory=dict)
     requests: dict[str, AuthorizationRequest] = field(default_factory=dict)
-    codes: dict[str, IssuedCode] = field(default_factory=dict)
+    codes: dict[str, PreviousIssuedCode] = field(default_factory=dict)
     access: dict[str, PreviousIssuedAccess] = field(default_factory=dict)
     threads: dict[str, PreviousThreadGrant] = field(default_factory=dict)
     refresh: dict[str, str] = field(default_factory=dict)
@@ -61,13 +84,20 @@ class PreviousConnectorGrants:
 
     @classmethod
     def needed(cls, document: dict[str, JsonValue]) -> bool:
+        try:
+            FieldCodec.decode(ConnectorGrants, document)
+        except MalformedRecord:
+            pass
+        else:
+            return False
         if FieldCodec.record_key(cls, "threads") in document:
             return True
         records = FieldCodec.decode(
             dict[str, dict[str, JsonValue]],
             document.get(FieldCodec.record_key(cls, "access"), {}),
         )
-        return any(ConnectorAccess.family_discriminator not in record for record in records.values())
+        return any(ConnectorAccess.family_discriminator not in record for record in records.values()) \
+            or bool(document.get(FieldCodec.record_key(cls, "codes"), {}))
 
     def carried(self) -> ConnectorGrants:
         # The old resolver preferred a live access record, then the thread record.
@@ -81,9 +111,9 @@ class PreviousConnectorGrants:
         }
         access.update({key: grant.carried() for key, grant in self.threads.items()})
         return ConnectorGrants(
-            clients=self.clients,
+            clients={client: registered.carried() for client, registered in self.clients.items()},
             requests=self.requests,
-            codes=self.codes,
+            codes={},
             access=access,
             refresh=self.refresh,
             trusted_browsers=self.trusted_browsers,

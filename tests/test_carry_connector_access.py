@@ -6,10 +6,13 @@ from contextlib import ExitStack
 from pathlib import Path
 
 import pytest
+from yarl import URL
 from cutover.carry_connector_access import (
     ConnectorAccessCarry,
     PreviousConnectorGrants,
+    PreviousIssuedCode,
     PreviousIssuedAccess,
+    PreviousRegisteredClient,
     PreviousThreadGrant,
 )
 
@@ -22,7 +25,6 @@ from agent_comms.storage.private_path import PrivateDirectoryRole
 from agent_comms.storage.store_files import AtomicFile, ExclusiveLock, store_lock_path
 from agent_comms.transport.connector_caller import CALLER, ForkingCaller, GrantRefusedError
 from agent_comms.transport.connector_store import (
-    CALLBACK,
     AccessLabel,
     AuthorizationQuery,
     AuthorizationRequest,
@@ -31,22 +33,27 @@ from agent_comms.transport.connector_store import (
     ConnectorGrants,
     ConnectorStore,
     ExistingDirectorAccess,
-    IssuedCode,
-    RegisteredClient,
+    OAuthClientId,
+    OAuthRedirectUri,
     TrustedBrowser,
     digest,
 )
+
+CALLBACK = OAuthRedirectUri(URL("https://claude.ai/api/mcp/auth_callback"))
 
 
 @pytest.fixture
 def previous_grants() -> PreviousConnectorGrants:
     expiry = time.time() + 3600
-    query = AuthorizationQuery("code", "client", CALLBACK, "challenge", "S256", "owner-state")
+    client = OAuthClientId("client")
+    query = AuthorizationQuery("code", client, CALLBACK, "challenge", "S256", "owner-state")
     return PreviousConnectorGrants(
-        clients={"client": RegisteredClient("Claude")},
+        clients={"client": PreviousRegisteredClient("Claude")},
         requests={query.request_id: AuthorizationRequest(
             query, digest("approval"), expires_at=expiry)},
-        codes={digest("code"): IssuedCode("client", "challenge", expires_at=expiry)},
+        codes={digest("code"): PreviousIssuedCode(
+            client_id=str(client), code_challenge="challenge", expires_at=expiry,
+        )},
         access={
             digest("oauth"): PreviousIssuedAccess(AccessLabel("client"), expires_at=expiry),
             digest("service"): PreviousIssuedAccess(AccessLabel("local-proof"), expires_at=expiry),
@@ -86,9 +93,11 @@ def test_selected_credential_carry_preserves_live_authority_and_pending_state(
     resource, = ConnectorCredentialsFile.resources(selected_carry.files)
     assert applied.changed == 1 and applied.rewritten == (resource.path,)
     current = ConnectorStore(path).read()
-    assert current.clients == previous_grants.clients
+    assert current.clients["client"] == previous_grants.clients["client"].carried()
     assert current.requests == previous_grants.requests
-    assert current.codes == previous_grants.codes
+    # Pre-binding codes expire within five minutes and cannot prove a callback; cutover drops
+    # them instead of retaining an unusable legacy member in the live product model.
+    assert current.codes == {}
     assert current.refresh == previous_grants.refresh
     assert current.trusted_browsers == previous_grants.trusted_browsers
     for key, old in previous_grants.access.items():

@@ -6,6 +6,7 @@ from __future__ import annotations
 import time
 
 import pytest
+from yarl import URL
 
 from agent_comms.registry.service_sender import ServiceSender
 from agent_comms.transport.connector import (
@@ -17,8 +18,9 @@ from agent_comms.transport.connector import (
 from agent_comms.transport.connector_caller import CALLER
 from agent_comms.transport.connector_store import (
     AuthorizationQuery,
-    ClaudeCallback,
     ConnectorGrants,
+    OAuthClientId,
+    OAuthRedirectUri,
     digest,
 )
 
@@ -35,8 +37,8 @@ class Arrived:
 def query() -> AuthorizationQuery:
     return AuthorizationQuery(
         response_type="code",
-        client_id="client",
-        redirect_uri="https://claude.ai/api/mcp/auth_callback",
+        client_id=OAuthClientId("client"),
+        redirect_uri=OAuthRedirectUri(URL("https://claude.ai/api/mcp/auth_callback")),
         code_challenge="challenge",
         code_challenge_method="S256",
     )

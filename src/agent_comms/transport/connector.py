@@ -112,11 +112,14 @@ from agent_comms.transport.connector_store import (
     ApprovalRefused,
     AuthorizationQuery,
     AuthorizationRequest,
-    ClaudeCallback,
     ConnectorGrants,
     ConnectorStore,
+    ConfidentialOAuthClient,
     HeldUiProfiles,
     IssuedTokens,
+    OAuthClientId,
+    OAuthRedirectUri,
+    PublicOAuthClient,
     RegisteredClient,
     TrustedBrowser,
     UiGrantAccess,
@@ -294,7 +297,7 @@ class OAuthError(Exception):
         super().__init__(self.error_description)
 
     def response(self) -> web.Response:
-        return web.json_response(FieldCodec.encode(self), status=400)
+        return web.json_response(FieldCodec.encode_record(self), status=400)
 
 
 @dataclass(frozen=True)
@@ -354,16 +357,21 @@ class PublicAudience(ApprovalAudience):
 
 @dataclass(frozen=True)
 class ClientRegistration:
-    """Dynamic client registration accepts exactly claude.ai's redirect."""
+    """A public OAuth client declares every callback the authorization server may use."""
 
-    redirect_uris: tuple[ClaudeCallback]
+    redirect_uris: tuple[OAuthRedirectUri, ...]
     client_name: str = "unnamed client"
+
+    def __post_init__(self) -> None:
+        if not self.redirect_uris or len(set(self.redirect_uris)) != len(self.redirect_uris):
+            raise MalformedRecord("OAuth client registration requires distinct redirect URIs.")
 
 
 @dataclass(frozen=True, kw_only=True)
 class TokenGrant(DeclaredFamily, affix="Grant"):
     family_discriminator: ClassVar[str] = "grant_type"
-    client_id: str
+    client_id: OAuthClientId
+    client_secret: str = ""
     resource: str = ""
 
     @classmethod
@@ -375,6 +383,12 @@ class TokenGrant(DeclaredFamily, affix="Grant"):
         """The grants with this credential spent; refuses a credential it does not hold."""
 
     def exchange(self, grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, IssuedTokens]:
+        try:
+            client = grants.clients[self.client_id]
+        except KeyError as error:
+            raise OAuthError("invalid_client", "The OAuth client credentials are invalid.") from error
+        if not client.accepts_secret(self.client_secret):
+            raise OAuthError("invalid_client", "The OAuth client credentials are invalid.")
         return self.redeemed(grants).issued(self.client_id)
 
 
@@ -382,20 +396,21 @@ class TokenGrant(DeclaredFamily, affix="Grant"):
 class AuthorizationCodeGrant(TokenGrant):
     code: str
     code_verifier: str
-    redirect_uri: ClaudeCallback
+    redirect_uri: OAuthRedirectUri
 
     def redeemed(self, grants: ConnectorGrants) -> ConnectorGrants:
-        issued = grants.codes.get(digest(self.code))
         challenge = (
             base64.urlsafe_b64encode(hashlib.sha256(self.code_verifier.encode()).digest())
             .rstrip(b"=")
             .decode()
         )
-        if (
-            issued is None
-            or not issued.live(time.time())
-            or (issued.client_id, issued.code_challenge) != (self.client_id, challenge)
-        ):
+        try:
+            issued = grants.codes[digest(self.code)]
+        except KeyError as error:
+            raise OAuthError(
+                "invalid_grant", "The code is unknown, expired or not this client's."
+            ) from error
+        if not issued.redeemed_by(self.client_id, challenge, self.redirect_uri, time.time()):
             raise OAuthError("invalid_grant", "The code is unknown, expired or not this client's.")
         return replace(grants, codes={k: v for k, v in grants.codes.items() if v is not issued})
 
@@ -429,16 +444,25 @@ class ServerMetadata:
     response_types_supported: tuple[str, ...] = ("code",)
     grant_types_supported: tuple[str, ...] = field(default_factory=TokenGrant.names)
     code_challenge_methods_supported: tuple[str, ...] = ("S256",)
-    token_endpoint_auth_methods_supported: tuple[str, ...] = ("none",)
+    token_endpoint_auth_methods_supported: tuple[str, ...] = ("none", "client_secret_post")
+    authorization_response_iss_parameter_supported: bool = True
 
 
 @dataclass(frozen=True, kw_only=True)
 class ClientRegistrationReply(ClientRegistration):
-    client_id: str
+    client_id: OAuthClientId
     client_id_issued_at: int
     grant_types: tuple[str, ...] = field(default_factory=TokenGrant.names)
     response_types: tuple[str, ...] = ("code",)
     token_endpoint_auth_method: str = "none"
+
+
+@dataclass(frozen=True)
+class RegisteredClientCredential:
+    """The static client credential returned once; storage retains only its digest."""
+
+    client_id: OAuthClientId
+    client_secret: str = field(repr=False)
 
 
 class RouteBound(ABC):
@@ -861,12 +885,14 @@ class Connector(ConnectorService, McpServer):
             )
         except (MalformedRecord, json.JSONDecodeError) as error:
             return OAuthError("invalid_redirect_uri", str(error)).response()
-        client_id = secrets.token_urlsafe(16)
+        client_id = OAuthClientId(secrets.token_urlsafe(16))
         await asyncio.to_thread(
             self.store.update,
             lambda grants: DocumentChange.to(replace(
                 grants,
-                clients=grants.clients | {client_id: RegisteredClient(registration.client_name)},
+                clients=grants.clients | {str(client_id): RegisteredClient(
+                    registration.client_name, registration.redirect_uris, PublicOAuthClient()
+                )},
             )),
         )
         return web.json_response(FieldCodec.encode(ClientRegistrationReply(
@@ -888,8 +914,12 @@ class Connector(ConnectorService, McpServer):
         def decided(grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, ConnectorGrants]:
             now = time.time()
             grants = grants.unexpired(now)
-            if query.client_id not in grants.clients:
-                raise web.HTTPBadRequest(text="Unknown client.")
+            try:
+                client = grants.clients[query.client_id]
+            except KeyError as error:
+                raise web.HTTPBadRequest(text="Unknown client.") from error
+            if not client.accepts_redirect(query.redirect_uri):
+                raise web.HTTPBadRequest(text="The redirect URI is not registered for this client.")
             if grants.trusts(browser):
                 return DocumentChange.to(grants.code_issued(query, code, now))
             return DocumentChange.to(grants.waiting(query, digest(approval), now))
@@ -901,7 +931,9 @@ class Connector(ConnectorService, McpServer):
                 text=str(refusal), headers={"Retry-After": str(CODE_SECONDS)}
             ) from refusal
         if grants.trusts(browser):
-            raise web.HTTPFound(query.redirect(code), headers={"Cache-Control": "no-store"})
+            raise web.HTTPFound(
+                query.redirect(code, self.issuer), headers={"Cache-Control": "no-store"}
+            )
         path = request.app.router[self.approve.__name__].url_for(
             **FieldCodec.encode(ApprovalLink(query.request_id, approval))
         )
@@ -943,7 +975,7 @@ class Connector(ConnectorService, McpServer):
             headers={
                 "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
                 "Content-Security-Policy": (
-                    f"default-src 'none'; form-action 'self' {held.query.redirect_uri}; "
+                    f"default-src 'none'; form-action 'self' {held.query.redirect_uri.url}; "
                     "frame-ancestors 'none'; base-uri 'none'"
                 ),
             },
@@ -969,7 +1001,7 @@ class Connector(ConnectorService, McpServer):
         except ApprovalRefused as refusal:
             raise web.HTTPBadRequest(text=str(refusal)) from refusal
         response = web.HTTPFound(
-            approved.redirect(code),
+            approved.redirect(code, self.issuer),
             headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
         )
         response.set_cookie(
@@ -1164,6 +1196,47 @@ class ServeVerb(ConnectorOptions):
             connector.log_pending()
         finally:
             await runner.cleanup()
+
+
+@dataclass(frozen=True, kw_only=True)
+class RegisterClientVerb(ConnectorVerb, declared_name="register-client"):
+    """Register a client whose host cannot use the advertised dynamic endpoint."""
+
+    help = "register a static OAuth client and print its one-time credential"
+    client_name: Annotated[
+        str, Argument(flags=("--name",), options={"help": "OAuth client display name"}),
+    ]
+    redirect_uris: Annotated[
+        tuple[OAuthRedirectUri, ...],
+        Argument(flags=("--redirect-uri",), options={
+            "nargs": "+", "help": "HTTPS or native loopback callback URI",
+        }),
+    ]
+    confidential: Annotated[
+        bool, Argument(flags=("--confidential",), options={
+            "action": "store_true", "help": "issue a client secret",
+        }),
+    ] = False
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        registration = ClientRegistration(self.redirect_uris, self.client_name)
+        client_id = OAuthClientId(secrets.token_urlsafe(16))
+        client_secret = secrets.token_urlsafe(32) if self.confidential else ""
+        authentication = (
+            ConfidentialOAuthClient(digest(client_secret))
+            if self.confidential else PublicOAuthClient()
+        )
+        client = RegisteredClient(
+            registration.client_name,
+            registration.redirect_uris,
+            authentication,
+        )
+        credential = RegisteredClientCredential(client_id, client_secret)
+        ctx.update(lambda grants: DocumentChange(
+            replace(grants, clients=grants.clients | {str(client_id): client}), credential
+        ))
+        print(FieldCodec.compact(FieldCodec.encode(credential), allow_nan=False))
+        return 0
 
 
 @dataclass(frozen=True, kw_only=True)
