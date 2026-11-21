@@ -21,7 +21,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
 from agent_comms.registry.threads import ExternalThread
 from agent_comms.storage.recorded_time import RecordedEventTime
-from agent_comms.transport.tools.orders import CommsChangeProblemTool, CommsOrderDoneTool
+from agent_comms.transport.tools.order_commands import CommsChangeProblemTool, CommsOrderDoneTool
 from test_todos import order, order_pr
 
 pytest_plugins = ("test_todos",)

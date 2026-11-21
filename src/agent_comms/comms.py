@@ -32,37 +32,31 @@ from agent_comms.messaging.message_page import InboxPage
 from agent_comms.messaging.message_reference import InboxStart
 from agent_comms.messaging.messages import Message
 from agent_comms.messaging.publisher import OwnerPublisher
-from agent_comms.messaging.sending import Messaging
 from agent_comms.messaging.watched import FileSource
-from agent_comms.planning.goal_management import Goals
-from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.collaboration_ledger import CollaborationLedger
 from agent_comms.registry.relationships import ThreadRelationships
-from agent_comms.registry.route_client import ActivityClient
 from agent_comms.registry.thread_configuration import ThreadConfiguration
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_management import ThreadManagement
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
+from agent_comms.team.team_comms import CoreComms
 from agent_comms.transcript.transcripts import Transcripts
 
 
 class Comms(
     ConfigurationCatalogs,
-    ActivityClient,
+    CoreComms,
     ContextAssembly,
     InputIngressContext[Thread],
     InputTextContext[InputAttempt],
     NotificationEvidenceSource[CapturedNotificationEvidence],
 ):
     input_dispositions: ClassVar[Callable[[Path], InputLookup[InputAttempt]]] = InputDispositions
-    messaging: Messaging
 
     def __init__(self, root: CommsRoute) -> None:
         super().__init__(root)
-        self.goals = Goals(self.root, self.registry, self.bus, self.agents)
-        self.messaging = Messaging(self.root, self.registry, self.bus, self.goals)
         self.ledger = CollaborationLedger.at(self.root, self.registry)
         self.contexts = ContextStore(self.root)
         self.owners = OwnerLifecycle(self.root, self.registry, self.bus, self.goals, self.messaging)

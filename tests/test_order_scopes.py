@@ -34,11 +34,8 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.order import OrderFile
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tools.orders import (
-    CommsOrderDoneTool,
-    CommsProblemNumberTool,
-    CommsTodoCreateTool,
-)
+from agent_comms.transport.tools.order_commands import CommsOrderDoneTool, CommsTodoCreateTool
+from agent_comms.transport.tools.orders import CommsProblemNumberTool
 from cli_command import core
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository

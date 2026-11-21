@@ -51,3 +51,16 @@ class PublishedBus[Writes](BusResources):
     def channel_declarations(self):
         with self.opened_activity() as activity:
             return self._channels.read().views(activity)
+
+
+class LivePublishedBus[Writes](PublishedBus[Writes]):
+    """Live publication resources without historical presentation machinery."""
+
+    def __init__(
+        self, root: Path, registry: Registration, publisher: type[Writes],
+    ) -> None:
+        self.bus = Bus(Bus.path_in(root))
+        self.reads = ReadLedger.at(root)
+        self._registry = registry
+        self._channels = ChannelCatalog.at(root)
+        self.publisher = publisher(self.bus, registry, self._channels, self.opened_activity)

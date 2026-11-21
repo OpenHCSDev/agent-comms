@@ -48,11 +48,7 @@ from agent_comms.registry.thread_status import (
 from agent_comms.registry.threads import ParkedThreadWorkState
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.transport.tool_caller import ForkCaller, PeerCaller, ThreadCaller
-from agent_comms.transport.tools.orders import (
-    CommsChangeProblemTool,
-    CommsOrderTool,
-    CommsTodoCreateTool,
-)
+from agent_comms.transport.tools.order_commands import CommsChangeProblemTool, CommsOrderTool, CommsTodoCreateTool
 from test_forks import fork_bus  # noqa: F401
 
 RELEASE = StrikeReason("The current holder explicitly releases its exact recorded work assignment.")

@@ -29,7 +29,7 @@ from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.order import Team, TeamContext
 from agent_comms.transport.tool_caller import PeerCaller
-from agent_comms.transport.tools.orders import CommsTodoCreateTool
+from agent_comms.transport.tools.order_commands import CommsTodoCreateTool
 from fixture_git import ENVIRONMENT
 from github_fixture import GitHubFixture
 from source_revision_fixture import SourceRepository

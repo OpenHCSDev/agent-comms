@@ -40,7 +40,7 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.team_hud import TeamBoardPublicationStore
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tools.orders import CommsTodoCreateTool
+from agent_comms.transport.tools.order_commands import CommsTodoCreateTool
 from agent_comms.ui_model.teammate_state import Unreadable
 from source_revision_fixture import SourceRepository
 from team_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_team

@@ -110,11 +110,8 @@ from agent_comms.transcript.external_transcript_rows import EarlierPage, NoEarli
 from agent_comms.transcript.transcript_events import ToolStartTranscript, TurnDigest
 from agent_comms.transport.tool_caller import ForkCaller, SubagentCaller
 from agent_comms.transport.tool_declaration import ToolDeclaration
-from agent_comms.transport.tools.orders import (
-    CommsHudTool,
-    CommsTeamLoadTool,
-    CommsTodoListTool,
-)
+from agent_comms.transport.tools.order_commands import CommsTodoListTool
+from agent_comms.transport.tools.orders import CommsHudTool, CommsTeamLoadTool
 from agent_comms.ui_model.teammate_state import TeammateState
 from agent_comms_hooks import forks
 from agent_comms_hooks.watch import WatchRecord
