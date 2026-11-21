@@ -591,6 +591,18 @@ def test_adoption_keeps_retired_tree_and_live_recipient_in_place(checkout_comman
     assert (path / 'untracked.bin').read_bytes() == b'\x00retained\xff'
 
 
+def test_adopt_without_a_source_names_the_missing_input(checkout_command_bus, repository):
+    """Adopting with no --source fails naming the missing input, never an unpack failure."""
+    comms = checkout_command_bus
+    arguments = ('--root', str(comms.root), 'checkout', '--from', 'worker',
+                 'adopt', 'P1')
+    refused = core_process(*arguments)
+    assert refused.returncode != 0
+    combined = refused.stdout + refused.stderr
+    assert 'exactly one --source' in combined
+    assert 'unpack' not in combined
+
+
 def test_public_transfer_keeps_dirty_index_branch_modules_and_current_thread(retained_transfer, repository):
     comms, source, destination = retained_transfer
     original = comms.registry.require('worker')
