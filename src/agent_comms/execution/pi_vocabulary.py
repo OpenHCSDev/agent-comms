@@ -193,7 +193,7 @@ class UnreportedStopReason(DefaultExternalName, UnfinishedPiStop, PiStopReason):
 
 
 class CompactionReason(ExternalName, affix="CompactionReason"):
-    """Why Pi's own engine compacted: Pi's reason names, decoded once at ingress."""
+    """Why a context was replaced, decoded once at ingress when an external engine names it."""
 
 
 class ManualCompactionReason(CompactionReason):
@@ -206,6 +206,12 @@ class OverflowCompactionReason(CompactionReason):
 
 class ThresholdCompactionReason(CompactionReason):
     pass
+
+
+class LiveEditCompactionReason(CompactionReason):
+    """A model that holds its own context replaced part of it with its own notes; the
+    reference harness applies the edit inside the turn and never asks another engine to
+    compact for it."""
 
 
 class UnknownCompactionReason(DefaultExternalName, CompactionReason):

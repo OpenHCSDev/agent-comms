@@ -18,6 +18,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms import agent_events as events
 from agent_comms.agent_backend import (
     CompactionOutcome,
     FailedCompaction,
@@ -230,6 +231,12 @@ class PiNativeBackend(
         async with provider.turn(session_file):
             async for event in self._turn_events(thread, content, delivery, images, package):
                 yield event
+        # The turn recorded its context when it ended, so what the record says is the whole
+        # observation: the model that holds its own context compacted it, and that is the
+        # protocol's own compaction whatever engine asked for one.
+        recorded = await Coordination.run_worker(partial(provider.context_sizes, session_file))
+        for event in events.ContextChange.recorded(recorded).compaction_events():
+            yield event
 
     def _turn_events(self, thread, content, delivery, images, package):
         from agent_comms.execution import backend

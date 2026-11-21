@@ -875,7 +875,11 @@ export default function clmReference(pi) {
       version: 1,
       system,
       turns: messages.map((message) => ({ role: referenceRole(message), text: renderedText(message) })),
+      // The size of the context this view sends, in the budget's own estimate: the owner is
+      // the one that knows how big the context it holds is, and the protocol compares that
+      // size between turns instead of deriving an estimate of its own.
       budget: { strict_target: budget.strictTarget, token_ratio: budget.tokRatio,
+                tokens: budget.count(messageTexts(messages)),
                 retries: budget.nRetry, turns_rolled_back: budget.nTurnsRolledBack },
     };
     const file = join(ctxDir, VIEW_NAME);

@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.context_sizes import ContextSizes
 from agent_comms.execution.launch_runtime import RestartEnvironment
 from agent_comms.execution.native_arguments import ClmLocalProvider, TurnHost
 
@@ -124,8 +125,29 @@ class ContextHistory:
         branch.checkpoint(f"context: {len(turns)} turns")
         return branch.tree_id(CONTEXT_DIRECTORY) if turns else None
 
+    def sizes(self) -> ContextSizes:
+        """The size the context had at the record before this turn and the size this turn
+        recorded: its last two records are the whole comparison, so nothing is carried from
+        the turn's end to the caller that reports it, and a turn that recorded nothing
+        compares a commit with itself."""
+        branch = self.branch()
+        recorded = branch.history(limit=2)
+        if len(recorded) < 2:
+            return ContextSizes.unrecorded()
+        after, before = (recorded_tokens(branch, ref=commit.id) for commit in recorded)
+        return ContextSizes(before, after)
+
     def context_id(self, branch: GitBackend) -> str | None:
         return branch.tree_id(CONTEXT_DIRECTORY) if branch.exists(CONTEXT_DIRECTORY) else None
+
+
+def recorded_tokens(branch: GitBackend, ref: str | None = None) -> int | None:
+    """The context size the harness stated when one view was recorded. A view that predates
+    the field, and a conversation that published none, state no size."""
+    try:
+        return json.loads(branch.load_text("harness.json", ref=ref)).get("tokens")
+    except (FileNotFoundError, ValueError):
+        return None
 
 
 class SlotHandoff:
@@ -280,17 +302,32 @@ class LlamaSlotHost(TurnHost):
             # A thread that has saved nothing yet has no conversation to name its state by.
             yield
             return
-        store = ContextStateStore(
-            provider.state_directory.expanduser(),
-            SlotServer.configured(RestartEnvironment.default_agent_directory, provider.declared_name),
-            provider.slot_directory.expanduser(),
-        )
+        store = store_for(provider)
         outcome = await Coordination.run_worker(partial(recoverable, store.enter, session))
         logger.info("CLM slot for %s: %s", session, outcome)
         try:
             yield
         finally:
             await Coordination.run_worker(partial(recoverable, store.history(session).record))
+
+    def context_sizes(
+        self, provider: type[ClmLocalProvider], session_file: str | Path | None,
+    ) -> ContextSizes:
+        """The context sizes this turn recorded for this conversation."""
+        session = conversation(session_file)
+        if session is None:
+            return ContextSizes.unrecorded()
+        return store_for(provider).history(session).sizes()
+
+
+def store_for(provider: type[ClmLocalProvider]) -> ContextStateStore:
+    """This machine's store for ``provider``'s conversations, in the provider's own
+    directories: it hands the one slot between them and keeps their contexts in git."""
+    return ContextStateStore(
+        provider.state_directory.expanduser(),
+        SlotServer.configured(RestartEnvironment.default_agent_directory, provider.declared_name),
+        provider.slot_directory.expanduser(),
+    )
 
 
 def conversation(session_file: str | Path | None) -> str | None:
