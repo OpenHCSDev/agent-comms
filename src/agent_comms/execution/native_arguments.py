@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination.errors import IdentityConflict
+from agent_comms.execution.context_sizes import ContextSizes
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevel
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -172,6 +173,14 @@ class TurnHost(ABC):
     ) -> AbstractAsyncContextManager[None]:
         """Hold the provider's model-server slot for one turn of this conversation."""
 
+    def context_sizes(
+        self, provider: type[ClmLocalProvider], session_file: str | Path | None,
+    ) -> ContextSizes:
+        """The context sizes this turn recorded for this conversation. A host that records no
+        context states none."""
+        del provider, session_file
+        return ContextSizes.unrecorded()
+
 
 class ClientHost(TurnHost):
     """A process that runs no model turns of its own: there is no slot here to hold."""
@@ -225,6 +234,13 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
         nothing."""
         del session_file
         yield
+
+    @classmethod
+    def context_sizes(cls, session_file: str | Path | None) -> ContextSizes:
+        """The context sizes the turn that just ended recorded, on a provider whose turns
+        record one."""
+        del session_file
+        return ContextSizes.unrecorded()
 
 
 class NoSelectedModel(ModelProvider, declared_name=None):
@@ -299,6 +315,12 @@ class ClmLocalProvider(ModelProvider, declared_name="clm-local"):
         """A turn holds the one llama-server slot: the host saves the previous holder's state,
         restores this conversation's, and records its context when the turn ends."""
         return TurnHost.here.slot_turn(cls, session_file)
+
+    @classmethod
+    def context_sizes(cls, session_file: str | Path | None) -> ContextSizes:
+        """The model is its own compactor, so the host states the size this turn recorded
+        beside the size the conversation recorded before it."""
+        return TurnHost.here.context_sizes(cls, session_file)
 
 
 @dataclass(frozen=True)

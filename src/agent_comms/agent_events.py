@@ -26,8 +26,10 @@ from agent_comms.execution.failure_source import (
 )
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_output import NativeOutputLocation, NativeRecordLocation
+from agent_comms.execution.context_sizes import ContextSizes
 from agent_comms.execution.pi_vocabulary import (
     CompactionReason,
+    LiveEditCompactionReason,
     UnknownCompactionReason,
 )
 from agent_comms.execution.pi_wire import (
@@ -47,7 +49,7 @@ from agent_comms.input_attempt import InputAttempt
 from agent_comms.execution.input_event_source import InputEventSource
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, ToolCallId, TurnId
-from agent_comms.pi_counts import PiCount, UnreportedCount
+from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
 from agent_comms.team.rule_deal import CompactedDeal, Redeals
 from agent_comms.transcript.transcript_events import SentTranscript
 from agent_comms.transport.tool_declaration import OtherAction, ToolAction, ToolDeclaration
@@ -223,6 +225,45 @@ class CompactionEnd(CompactionFinish):
 
     async def transcript_changed(self, publish: Callable[[], Awaitable[None]]) -> None:
         await publish()
+
+
+class ContextChange:
+    """What one recorded turn did to its conversation's context.
+
+    A context language model compacts by editing the mirror of its own context inside the
+    turn, and its thread's history records the result at the turn's end. The two recorded
+    sizes are therefore the whole comparison: a shrunken context is the protocol's own
+    compaction, produced by the model that is its own compactor, and every reaction the
+    compaction events already own runs unchanged."""
+
+    @classmethod
+    def recorded(cls, sizes: ContextSizes) -> ContextChange:
+        """The protocol's reading of the sizes one turn recorded."""
+        return ContextCompacted(sizes.before, sizes.after) if sizes.shrank else ContextKept()
+
+    def compaction_events(self) -> tuple[AgentEvent, ...]:
+        """The protocol's observation of this change; a kept context observes nothing."""
+        return ()
+
+
+@dataclass(frozen=True)
+class ContextKept(ContextChange):
+    """The turn left its conversation's context the size it found it."""
+
+
+@dataclass(frozen=True)
+class ContextCompacted(ContextChange):
+    """The model replaced part of its context with its own notes."""
+
+    tokens_before: int
+    tokens_after: int
+
+    def compaction_events(self) -> tuple[AgentEvent, ...]:
+        reason = LiveEditCompactionReason
+        return (
+            CompactionStart(reason=reason),
+            CompactionEnd(reason=reason, context_used=ReportedCount(self.tokens_after)),
+        )
 
 
 @dataclass(frozen=True)

@@ -76,21 +76,24 @@ def store(tmp_path, llama, monkeypatch):
     return ContextStateStore(tmp_path / "state", SlotServer(llama.url), llama.slots)
 
 
-def publish(tmp_path, session: str, *turns: tuple[str, str]) -> None:
+def publish(tmp_path, session: str, *turns: tuple[str, str], tokens: int = 100) -> None:
+    """The view a harness publishes for the context it sent: its turns and the budget's state,
+    the estimate of the context's own size included."""
     directory = tmp_path / "live" / session
     directory.mkdir(parents=True, exist_ok=True)
     (directory / context_state.VIEW_NAME).write_text(json.dumps({
         "version": 1, "system": "SYSTEM",
         "turns": [{"role": role, "text": text} for role, text in turns],
-        "budget": {"strict_target": 26624},
+        "budget": {"strict_target": 26624, "tokens": tokens},
     }))
 
 
-def turn(store, tmp_path, llama, session: str, *turns: tuple[str, str], tokens: int):
+def turn(store, tmp_path, llama, session: str, *turns: tuple[str, str], tokens: int = 100,
+         context: int | None = None):
     """One turn of ``session``: take the slot, the model fills it, the context is recorded."""
     outcome = store.enter(session)
     llama.slot = tokens
-    publish(tmp_path, session, *turns)
+    publish(tmp_path, session, *turns, tokens=tokens if context is None else context)
     store.history(session).record()
     return outcome
 
@@ -264,3 +267,70 @@ def test_importing_every_module_leaves_a_process_a_client():
 
     RootFile.load_declarations()
     assert isinstance(TurnHost.here, ClientHost)
+
+
+def test_a_turn_that_shrank_the_context_is_the_protocols_own_compaction(
+        store, tmp_path, llama):
+    """The model is its own compactor: the sizes its last two records state are the event."""
+    from agent_comms import agent_events as events
+    from agent_comms.execution.context_sizes import ContextSizes
+    from agent_comms.execution.pi_vocabulary import LiveEditCompactionReason
+
+    assert store.history("a").sizes() == ContextSizes.unrecorded()  # nothing recorded yet
+    turn(store, tmp_path, llama, "a", ("user", "TASK"), ("tool", "a large output"), context=400)
+    assert store.history("a").sizes() == ContextSizes.unrecorded()  # one record has no before
+    turn(store, tmp_path, llama, "a", ("user", "TASK"), ("user", "notes"), context=120)
+
+    assert store.history("a").sizes() == ContextSizes(400, 120)
+    change = events.ContextChange.recorded(store.history("a").sizes())
+    assert change == events.ContextCompacted(400, 120)
+    start, end = change.compaction_events()
+    assert isinstance(start, events.CompactionStart)
+    assert isinstance(end, events.CompactionEnd)
+    assert start.reason is end.reason is LiveEditCompactionReason
+    assert end.context_used.count == 120
+
+
+def test_a_turn_that_grew_or_kept_the_context_observes_no_compaction(store, tmp_path, llama):
+    from agent_comms import agent_events as events
+
+    turn(store, tmp_path, llama, "a", ("user", "TASK"), context=100)
+    turn(store, tmp_path, llama, "a", ("user", "TASK"), ("tool", "more"), context=250)
+    grew = events.ContextChange.recorded(store.history("a").sizes())
+    turn(store, tmp_path, llama, "a", ("user", "TASK"), ("tool", "more"), context=250)
+    kept = events.ContextChange.recorded(store.history("a").sizes())
+
+    assert grew == kept == events.ContextKept()
+    assert grew.compaction_events() == ()
+
+
+def test_a_view_that_states_no_size_observes_no_compaction(store, tmp_path, llama):
+    from agent_comms import agent_events as events
+
+    turn(store, tmp_path, llama, "a", ("user", "TASK"), context=400)
+    directory = tmp_path / "live" / "a"
+    view = json.loads((directory / context_state.VIEW_NAME).read_text())
+    del view["budget"]["tokens"]
+    (directory / context_state.VIEW_NAME).write_text(json.dumps(view))
+    store.history("a").record()
+    turn(store, tmp_path, llama, "a", ("user", "notes"), context=20)
+
+    assert store.history("a").sizes() == context_state.ContextSizes(None, 20)
+    assert events.ContextChange.recorded(store.history("a").sizes()) == events.ContextKept()
+
+
+def test_a_host_that_records_no_context_reports_no_compaction(tmp_path):
+    from agent_comms import agent_events as events
+    from agent_comms.execution.native_arguments import (
+        ClientHost,
+        ClmLocalProvider,
+        ConfiguredProvider,
+        TurnHost,
+    )
+
+    assert TurnHost.here.context_sizes(ClmLocalProvider, tmp_path / "n.jsonl") == (
+        context_state.ContextSizes.unrecorded())
+    assert ConfiguredProvider.context_sizes(tmp_path / "n.jsonl") == (
+        context_state.ContextSizes.unrecorded())
+    assert events.ContextChange.recorded(
+        ClientHost().context_sizes(ClmLocalProvider, None)) == events.ContextKept()
