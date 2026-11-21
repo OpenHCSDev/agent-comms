@@ -50,7 +50,8 @@ from agent_comms.registry.notification_selection_read import NotificationSelecti
 from agent_comms.registry.recipient_activity import RecipientActivity
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_privacy import RegistryPrivacy
-from agent_comms.registry.registry_store import RegistryStore
+from agent_comms.registry.registry_store import RegistryCut, RegistryStore
+from agent_comms.registry.registry_tables import RegistryRowRevision
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.file_observation import FileObservation, FileRevision
 from agent_comms.storage.typed_table import BooleanStorage, TypedRow
@@ -797,12 +798,21 @@ class AssignmentSource:
         return RegistryStore.at(self.root)
 
     @cached_property
+    def registry_cut(self) -> RegistryCut:
+        """The declarations that determine recipients and their input keys.
+
+        Presence is a separate registry history.  A heartbeat may produce a new
+        presentation snapshot, but it does not change this cut's row revision.
+        """
+        return self._registry_store.snapshot_with_authority()
+
+    @cached_property
     def privacy(self) -> RegistryPrivacy:
-        return self._registry_store.privacy()
+        return self.registry_cut.privacy
 
     @cached_property
     def registry(self) -> RegistrySnapshot:
-        return self._registry_store.snapshot()
+        return self.registry_cut.snapshot
 
     @cached_property
     def input_dispositions(self) -> InputDispositions:
@@ -832,21 +842,31 @@ class AssignmentSource:
         return held
 
     def _current_held(self) -> HeldAssignmentReads:
-        cut = (
+        cut = AssignmentSourceCut(
             NotificationAssignment.evidence_revision(self.root),
-            *(FileRevision.capture(path)
-              for path in NotificationAssignment.source_paths(self.root)),
+            tuple(FileRevision.capture(path)
+                  for path in NotificationAssignment.source_paths(self.root)),
+            self.registry_cut.revision,
         )
         held = AssignmentSource._held.get(self.root)
-        if held is None or held.cut != cut or held.registry is not self.registry:
+        if held is None or held.cut != cut:
             held = AssignmentSource._held[self.root] = HeldAssignmentReads(cut, self.registry)
         return held
+
+
+@dataclass(frozen=True)
+class AssignmentSourceCut:
+    """Every history whose exact rows determine assignment display."""
+
+    notification_evidence: int
+    detached_evidence: tuple[FileObservation, ...]
+    registry: RegistryRowRevision
 
 
 @dataclass
 class HeldAssignmentReads:
     """The reads taken at one commit of every assignment source, under one registry cut."""
 
-    cut: tuple[int | FileObservation, ...]
+    cut: AssignmentSourceCut
     registry: RegistrySnapshot
     reads: dict[NotificationSelection, NotificationAssignmentRead] = field(default_factory=dict)
