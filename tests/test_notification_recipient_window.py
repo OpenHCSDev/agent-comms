@@ -172,6 +172,36 @@ def test_one_source_batch_preserves_two_exact_recipient_cuts(
     assert calls == {"batch": 1, "replies": 1, "inputs": 1}
 
 
+def test_presence_heartbeat_keeps_assignment_cut_but_declaration_edit_invalidates(
+    frozen_window: tuple[Comms, Delivered], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    comms, source = frozen_window
+    selection = NotificationSelection.of(AllOutcomes(), (source,), limit=RecipientLimit(3))
+    AssignmentSource._held.pop(comms.root, None)
+    calls = 0
+    batch_capture = NotificationAssignmentBatch.capture.__func__
+
+    def capture(cls, *args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return batch_capture(cls, *args, **kwargs)
+
+    monkeypatch.setattr(NotificationAssignmentBatch, "capture", classmethod(capture))
+    first = AssignmentSource(comms.root).read_assignments(selection)
+    held = AssignmentSource._held[comms.root]
+
+    comms.registry.heartbeat(source.recipients[0].canonical_thread)
+    assert AssignmentSource(comms.root).read_assignments(selection) is first
+    assert AssignmentSource._held[comms.root] is held
+    assert calls == 1
+
+    comms.registry.register(NativeThread(
+        "declared-later", frozenset(), Checkout(comms.root)))
+    assert AssignmentSource(comms.root).read_assignments(selection) == first
+    assert AssignmentSource._held[comms.root] is not held
+    assert calls == 2
+
+
 def test_cursor_and_owner_scope_are_applied_by_actual_read_request_before_acquisition(
     frozen_window: tuple[Comms, Delivered],
 ) -> None:
