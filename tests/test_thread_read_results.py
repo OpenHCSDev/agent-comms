@@ -13,7 +13,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.messaging.message_notification import NotificationPass
 from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.messaging.read_ledger import ReadLedger
-from agent_comms.notification_assignment import AssignmentSource
+from agent_comms.notification_assignment import AssignmentSource, NotificationAssignmentBatch
 from agent_comms.input_disposition import ScopedInputDispositions
 from agent_comms.notification_read import NotificationsRead
 from agent_comms.planning.goal_actions import PausedGoalAction, SetGoalAction
@@ -87,6 +87,29 @@ def test_changed_interest_retains_one_results_mapping_and_starts_empty():
     assert next_read.initial == {'two'}
 
 
+def test_thread_presentation_batch_preserves_each_capture_failure(
+    private_directory, monkeypatch,
+):
+    _root_path, _root_id, comms, _initial, _people = _root(private_directory, direct=True)
+    original = comms.views.transcripts.capture_page_window
+
+    def capture(name, **kwargs):
+        if name == 'beta':
+            raise ValueError('beta transcript unavailable')
+        return original(name, **kwargs)
+
+    monkeypatch.setattr(comms.views.transcripts, 'capture_page_window', capture)
+    names = frozenset(('alpha', 'beta'))
+    results = {}
+    batch = comms.views.thread_presentations(names)
+
+    tuple(ThreadReading.presented(batch.readings(names), results))
+
+    assert type(results['alpha']) is ThreadPresented
+    assert type(results['beta']) is ThreadUnavailable
+    assert 'beta transcript unavailable' in str(results['beta'].error)
+
+
 @pytest.mark.parametrize('changed_name, expected', [
     ('beta', {'beta'}), ('outside', set()), ('read', {'beta'}), ('unrelated_read', set()),
     ('expiry', set()),
@@ -112,7 +135,9 @@ def test_assignment_row_changes_attribute_only_their_view(
             notification_source = read_source
     names = frozenset(('alpha', 'beta', 'gamma'))
     getters = (AssignmentSource.coordinator.func.__code__, AssignmentSource.privacy.func.__code__,
-               AssignmentSource.registry.func.__code__)
+               AssignmentSource.registry.func.__code__,
+               AssignmentSource.prepare.__code__,
+               NotificationAssignmentBatch.capture.__func__.__code__)
     input_snapshot = ScopedInputDispositions.connection.func.__code__
     input_opens: list[ScopedInputDispositions] = []
     ledger_reads: list[ReadLedger] = []
@@ -135,7 +160,7 @@ def test_assignment_row_changes_attribute_only_their_view(
         tuple(ThreadReading.presented(batch.readings(names), results))
     finally:
         sys.setprofile(prior)
-    assert tuple(calls.values()) == (1, 1, 0)
+    assert tuple(calls.values()) == (1, 1, 0, 1, 1)
     assert len(input_opens) == 1
     assert len(ledger_reads) == 1
     with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
