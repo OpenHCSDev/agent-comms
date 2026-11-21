@@ -10,8 +10,8 @@ from agent_comms.nominal.field_codec import FieldCodec
 @dataclass(frozen=True, kw_only=True)
 class AwarenessSegment(InstructionSegment):
     """The sources a reader may consult. Each is rendered as its canonical
-    `MessageReference.name`, the one spelling a reader hands back to a tool; `sources`
-    keeps the references themselves."""
+    `MessageReference.name`, the compact spelling a reader parses into
+    `MessageReference(seq, message_id)`; `sources` keeps the references themselves."""
 
     bus: str
     sources: tuple[MessageReference, ...]
