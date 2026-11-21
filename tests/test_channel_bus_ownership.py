@@ -10,6 +10,7 @@ from agent_comms.execution.acp import CommsAgent
 from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.messaging.channel_targets import CommandTarget
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_evidence import AllOutcomes
 from agent_comms.messaging.notification_progress import SentProgress
 from agent_comms.nominal.field_codec import AcpSessionId
@@ -62,7 +63,9 @@ def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     (awareness,) = segments
     pointers = awareness.sources
     assert set(pointers) == {initial.message.reference, *(message.reference for message in sent)}
-    assert json.loads(frame.splitlines()[-1])["seqs"] == [pointer.seq for pointer in pointers]
+    names = json.loads(frame.splitlines()[-1])["sources"]
+    assert names == [pointer.name for pointer in pointers]
+    assert tuple(MessageReference.named(name) for name in names) == pointers
     pointed = comms.bus.bus.messages_for_references(pointers)
     assert all(record.target == "#team" for record in pointed)
     assert comms.bus.reads.path.read_bytes() == ledger
@@ -92,8 +95,8 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
                 (awareness,) = [segment for segment in turn.context.segments
                                 if isinstance(segment, AwarenessSegment)]
                 assert initial.message.reference in awareness.sources
-                assert json.loads(rendered.splitlines()[-1])["seqs"] == [
-                    source.seq for source in awareness.sources]
+                rendered_names = json.loads(rendered.splitlines()[-1])["sources"]
+                assert tuple(MessageReference.named(name) for name in rendered_names) == awareness.sources
                 assert set(agent.turns.persistent_backends) == {"alpha"}
                 assert not agent.turns.persistent_backends["alpha"].available
     finally:

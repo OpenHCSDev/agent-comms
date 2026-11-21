@@ -9,8 +9,9 @@ from agent_comms.nominal.field_codec import FieldCodec
 
 @dataclass(frozen=True, kw_only=True)
 class AwarenessSegment(InstructionSegment):
-    """The sequences a reader may consult; the exact reference stays in `sources`
-    and in each provenance entry, so the delivered text never restates it."""
+    """The sources a reader may consult. Each is rendered as its canonical
+    `MessageReference.name`, the one spelling a reader hands back to a tool; `sources`
+    keeps the references themselves."""
 
     bus: str
     sources: tuple[MessageReference, ...]
@@ -23,6 +24,6 @@ class AwarenessSegment(InstructionSegment):
 
     def values(self):
         return {"pointers": FieldCodec.compact({
-            "bus": self.bus, "seqs": [source.seq for source in self.sources],
+            "bus": self.bus, "sources": [source.name for source in self.sources],
         }, ensure_ascii=True)}
 
