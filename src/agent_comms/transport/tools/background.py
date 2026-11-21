@@ -12,11 +12,12 @@ import subprocess
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
 
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.storage.locked_store import (
     DocumentChange,
     LockedStore,
@@ -24,7 +25,7 @@ from agent_comms.storage.locked_store import (
 )
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 from agent_comms.execution.child_process import Platform
-from agent_comms.messaging.messages import NoticeRole
+from agent_comms.messaging.messages import MessageKind, Message
 from agent_comms.transport.request import tool_field
 from agent_comms.transport.tool_request import ThreadToolRequest
 from agent_comms.transport.tool_result import ToolResult
@@ -118,10 +119,28 @@ def _notify(run: BackgroundRunRecord, send: Callable[..., object], outcome: str)
     body = (f"Background run {run.run_id} {outcome}.\n"
             f"command: {run.command}\nlast {TAIL_BYTES} bytes of output:\n{tail}")
     try:
-        send(run.thread, body, role=NoticeRole())
+        send(run.thread, body, type=BackgroundRunNoticeKind)
     except Exception as error:  # noqa: BLE001 - a dead delivery never kills the watcher
         with open(Path(run.log), "a", encoding="utf-8") as log:
             log.write(f"\n[background-run] notify failed: {type(error).__name__}: {error}\n")
+
+
+@dataclass(frozen=True)
+class BackgroundRunNoticeKind(MessageKind, declared_name="background-run-notice"):
+    """A run's completion record in its own thread: it directs nothing and wakes nobody
+    by itself — the launching agent polls it or declares it a goal dependency."""
+
+    @classmethod
+    def is_conversation_message(cls) -> bool:
+        return False
+
+    @classmethod
+    def decode_message(cls, data: Mapping[str, object]) -> Message:
+        return FieldCodec.decode(Message, data)
+
+    @classmethod
+    def route_rows(cls, message):
+        return ()
 
 
 def _watch(run: BackgroundRunRecord, send: Callable[..., object], store: BackgroundRunStore) -> None:

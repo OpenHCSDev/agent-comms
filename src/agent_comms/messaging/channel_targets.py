@@ -505,7 +505,7 @@ class ThreadTarget(NamedTarget):
         target = self.selected_name(snapshot)
         recipient = snapshot.require(target)
         snapshot.status(target).require_visible()
-        if target == sender:
+        if target == sender and message.type.is_conversation_message():
             raise RelationViolationError("A thread cannot message itself.")
         message, names = recipient.role.initial_delivery(message, target)
         return ThreadTarget(target), message, names
