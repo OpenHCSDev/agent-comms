@@ -49,7 +49,7 @@ from agent_comms.messaging.routing import ScheduledTurn
 from agent_comms.nominal.field_codec import AcpSessionId, GoalId, InputId, RootId
 from agent_comms.planning.goals import GoalDeclaration, NoGoal
 from agent_comms.registry.registry_document import RegistryEntry, RegistrySnapshot
-from agent_comms.registry.thread_identity import ClaimedIdentity, ClaimScoped
+from agent_comms.registry.thread_identity import ClaimedIdentity, ClaimScoped, OwnerIdentity
 from agent_comms.registry.threads import Thread
 from agent_comms.transport.runtime_server import RuntimeServer
 
@@ -189,6 +189,21 @@ class QueuedInput:
             goal_permission=TurnGoalPermission(AcceptedGoalPermission(self.context.active_goal_id)),
         )
 
+    @staticmethod
+    def owner_in(
+        snapshot: RegistrySnapshot, name: str, expected: OwnerIdentity | None,
+    ) -> tuple[str, Thread]:
+        """Resolve one owner and prove the allocation selected by the input destination."""
+        canonical = snapshot.canonical_name(name)
+        owner = snapshot.threads[canonical]
+        if expected is not None:
+            expected.require_current(
+                owner,
+                snapshot.owner_identity(canonical).generation,
+                ProcessIdentity.capture(os.getpid()),
+            )
+        return canonical, owner
+
     @classmethod
     def capture(
         cls,
@@ -204,10 +219,10 @@ class QueuedInput:
         ownership: ExitStack,
         input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
+        expected_owner: OwnerIdentity | None = None,
     ) -> tuple[Self, InputAttempt]:
         """The current registry selection permits this durable input reservation."""
-        canonical = snapshot.canonical_name(name)
-        owner = snapshot.threads[canonical]
+        canonical, owner = cls.owner_in(snapshot, name, expected_owner)
         context = QueuedInputContext.capture(
             owner,
             snapshot.claimed_identity(canonical),
@@ -250,6 +265,7 @@ class QueuedInput:
         echo: bool, images: tuple[ImageInput, ...], controller: Controller,
         input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
+        expected_owner: OwnerIdentity | None = None,
     ) -> AsyncIterator[InputReservation[Self]]:
         """Serialize local queue placement; reserve durable input in a worker."""
         async with AsyncExitStack() as rollback:
@@ -264,7 +280,7 @@ class QueuedInput:
                         return cls.capture(
                             inputs, name, snapshot=cut.snapshot, text=text, prompt=prompt, echo=echo,
                             images=images, controller=controller, input_id=input_id,
-                            origin=origin, ownership=ownership,
+                            origin=origin, ownership=ownership, expected_owner=expected_owner,
                         )
 
                 item, row = await Coordination.run_worker(capture)
@@ -272,16 +288,23 @@ class QueuedInput:
 
     def place(
         self, inputs: InputDrain, session_id: AcpSessionId,
-        inbox: TurnInbox, content: InputContent,
+        inbox: TurnInbox, content: InputContent, *, expected_owner: OwnerIdentity | None = None,
     ) -> None:
         """The accepted input owns transfer into this turn's existing native queue."""
-        inputs.require_inbox(session_id, inbox)
-        source = self.source()
-        inputs.state(session_id).following[self.input_id] = source
-        inputs.state(session_id).queued[self.input_id] = self
-        inbox.put_nowait(InputRequest(
-            input_id=self.input_id, content=content, when_busy=source.when_busy,
-        ))
+        with inputs.comms.registry.store.current_snapshot() as cut:
+            if expected_owner is not None:
+                self.owner_in(
+                    cut.snapshot,
+                    self.context.claimed_identity.incarnation.name,
+                    expected_owner,
+                )
+            inputs.require_inbox(session_id, inbox)
+            source = self.source()
+            inputs.state(session_id).following[self.input_id] = source
+            inputs.state(session_id).queued[self.input_id] = self
+            inbox.put_nowait(InputRequest(
+                input_id=self.input_id, content=content, when_busy=source.when_busy,
+            ))
 
     async def dispatch(self, turns: TurnRunner, session_id: AcpSessionId, name: str) -> None:
         """Transfer this live acceptance under current authority; never recover disk work."""

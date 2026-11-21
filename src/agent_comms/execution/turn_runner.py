@@ -66,6 +66,7 @@ from agent_comms.nominal.field_codec import AcpSessionId, GoalId, InputId, TurnI
 from agent_comms.pi_payloads import NativeContextData, StateData
 from agent_comms.planning.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction
 from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.registry.thread_identity import OwnerIdentity
 from agent_comms.registry.threads import Thread
 from agent_comms.team.pi_rule_gate import PiRedeal
 from agent_comms.transcript.transcript_updates import TurnTranscriptUpdate
@@ -82,6 +83,7 @@ class BackendTurnSource:
     """The retained owner session that supplies a thread's current native turn."""
 
     session_id: AcpSessionId
+    owner: OwnerIdentity
     turn: DrainTurn
 
 
@@ -456,7 +458,9 @@ class TurnRunner(OwnedTurnRunner):
         entry = (await Coordination.run_worker(partial(self.comms.registry.entry, name))).entry
         source_session = self.sessions.require_owned_session(entry)
         return BackendTurnSource(
-            source_session, self.inputs.state(source_session).turn.for_owner(entry.thread),
+            source_session,
+            entry.owner_identity,
+            self.inputs.state(source_session).turn.for_owner(entry.thread),
         )
 
     async def close_idle_backend(self, session_id: AcpSessionId) -> None:
