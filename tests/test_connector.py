@@ -790,7 +790,10 @@ async def test_dynamic_registration_honors_confidential_authentication(
     issued = await client.post("/token", data=FieldCodec.encode(replace(
         grant, client_secret=credential.client_secret,
     )))
+    tokens = await issued.json()
     assert issued.status == 200
+    assert tokens["token_type"] == "bearer"
+    assert tokens["access_token"] and tokens["refresh_token"] and tokens["expires_in"] > 0
 
 
 async def test_connector_lists_every_tool(client, store, comms):
