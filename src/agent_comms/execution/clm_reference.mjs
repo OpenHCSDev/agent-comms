@@ -95,6 +95,15 @@ header, a block by a short unique first/last line, or slice on the headers:
 system/task prefix is protected for you. Each result says whether the file changed or
 matched nothing.
 
+**What a compaction must keep.** An edit is refused and not applied when it drops a fact or
+copies text instead of replacing it:
+- Mark a line you may not lose with \`KEEP:\` at its start. Every marked line must survive the
+  edit; the request you are working on is kept for you.
+- Never repeat a long line to preserve it — that is a copy, not a summary, and the edit is
+  refused. Write the fact once in your own words.
+- Give every turn one index. Writing the same \`[[CTX_TURN i]]\` twice makes the turn you just
+  wrote unfindable by the address you will use.
+
 **Compact cheaply** — an edit forces everything *after* it to be re-read, so cost grows
 with how much text FOLLOWS the edit:
 - **Batch**: one large compaction beats many small edits.
@@ -219,6 +228,88 @@ export function normalizedTurns(edited) {
     else merged.push({ role: kind, text: body });
   }
   return merged;
+}
+
+// ------------------------------------------------- what an edit must prove (acceptance)
+
+/** A line the model may not lose starts with this. The prompt tells the model to mark a fact
+ * this way instead of hoping some later compaction keeps it; the gate enforces the mark. A
+ * compaction that only meant to shrink is refused when it drops one, so the model's own notes
+ * survive it. */
+export const KEEP_PREFIX = "KEEP:";
+
+/** A line at this length repeated in the compacted text is a copy, not content. The frames and
+ * instructions a transcript repeats were 25 copies of one 1,152-character block, 30.3% of the
+ * context (CLM-tristan audit, 2026-11-20): the size-only gate kept every copy and the model
+ * lost its own single-authored map. An edit may not raise any line's count. */
+export const REPEAT_MIN_CHARS = 100;
+
+function lineCounts(text) {
+  const counts = new Map();
+  for (const line of text.split("\n")) {
+    const key = line.trim();
+    if (key.length >= REPEAT_MIN_CHARS) counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** The marked lines `before` holds and `edited` dropped. */
+export function droppedKeeps(before, edited) {
+  const kept = new Set(edited.split("\n").map((line) => line.trim()));
+  return before.split("\n").map((line) => line.trim())
+    .filter((line) => line.startsWith(KEEP_PREFIX) && !kept.has(line));
+}
+
+/** Long lines the edit copied: each one's count rose above what the mirror already held, so
+ * the edit repeated text where a summary belongs. */
+export function addedRepeats(before, edited) {
+  const was = lineCounts(before);
+  const copied = [];
+  for (const [line, count] of lineCounts(edited)) {
+    if (count > Math.max(was.get(line) ?? 0, 1)) copied.push({ line, count });
+  }
+  return copied;
+}
+
+/** Turn indices the edit wrote twice: the model targets a turn by its index, so a repeated
+ * index makes the replacement it just wrote unfindable by the address it will use. */
+export function repeatedTurnIndices(edited) {
+  const seen = new Set();
+  const repeated = [];
+  for (const match of edited.matchAll(HEADER_RE)) {
+    const index = Number(match[1]);
+    if (seen.has(index) && !repeated.includes(index)) repeated.push(index);
+    seen.add(index);
+  }
+  return repeated;
+}
+
+/** Every proof the edit owes and did not pay, in the order a reader needs them. */
+export function acceptanceProblems(before, edited) {
+  const problems = [];
+  const dropped = droppedKeeps(before, edited);
+  if (dropped.length) {
+    const named = dropped.slice(0, 3).map((line) => JSON.stringify(line.slice(0, 60))).join(", ");
+    problems.push(`it dropped ${dropped.length} line(s) you marked ${KEEP_PREFIX} (${named})`);
+  }
+  const copied = addedRepeats(before, edited);
+  if (copied.length) {
+    const named = copied.slice(0, 2)
+      .map(({ line, count }) => `${JSON.stringify(line.slice(0, 40))} ×${count}`).join(", ");
+    problems.push(`it repeated ${copied.length} long line(s) instead of replacing them (${named})`);
+  }
+  const repeated = repeatedTurnIndices(edited);
+  if (repeated.length) problems.push(`it wrote turn ${repeated.map(String).join(", ")} twice`);
+  return problems;
+}
+
+export function acceptanceNote(problems, before) {
+  return (
+    `\n[LIVE_CTX_MAIN.txt: edit REJECTED — it did not keep what a compaction must keep: ` +
+    `${problems.join("; ")}, so it was NOT applied (still ~${before}). ` +
+    `Keep every ${KEEP_PREFIX} line, replace text instead of repeating it, and give each turn ` +
+    `one index.]`
+  );
 }
 
 // ------------------------------------------------------------------- tokens and budget
@@ -973,7 +1064,10 @@ export default function clmReference(pi) {
       const baseline = budget.count([system, toolsText, ...messageTexts(sent.messages.slice(0, PROTECT)), ...turns(rendered)]);
       const after = budget.count([system, toolsText, ...messageTexts(sent.messages.slice(0, PROTECT)), ...turns(readBack)]);
       const limit = budget.strictTarget;
-      if (after > baseline && !(limit && after <= limit)) {
+      const unkept = acceptanceProblems(rendered, readBack);
+      if (unkept.length) {
+        note = acceptanceNote(unkept, before);
+      } else if (after > baseline && !(limit && after <= limit)) {
         note = rejectedNote(baseline, after, before, `An edit must FIT the ${limit}-token limit`);
       } else {
         persist({ kind: "edit", covers, text: readBack });
