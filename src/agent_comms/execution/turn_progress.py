@@ -187,11 +187,17 @@ class TurnProgress(AgentEventConsumer[Comms]):
                 text=("An identified follow-up input was not started; inspect local diagnostics."),
             )
         if event.ok and not (event.text.strip() or self.goals.has_productive_tool):
-            event = replace(
-                event,
-                ok=False,
-                text="Backend reported success without assistant output or tool activity.",
-            )
+            # The declared fact decides, not the output's absence: a turn answering
+            # delivered inputs owes the model's reply, so silence is the backend
+            # broken. An autonomous scheduled turn (a goal-continue wake) owes no
+            # reply — it had no ingress, and its empty completion is the agent
+            # declaring nothing was due.
+            if self.original.origins:
+                event = replace(
+                    event,
+                    ok=False,
+                    text="Backend reported success without assistant output or tool activity.",
+                )
         event = self.turn.terminal.reported(event)
         event = event.resolve(self.terminal_error, partial(
             FailedNativeTurnOutcome.resolve, document=document, original=self.original,
