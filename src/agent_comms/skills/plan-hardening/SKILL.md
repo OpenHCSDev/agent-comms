@@ -35,7 +35,7 @@ allowed once; skipping it twice means the plan still carries a guess where a fac
 
 ## Failures each step exists to catch
 
-(1) building a hope, (2) rebuilding existing work, (3)
+(1) building a hope (a thread nobody de-aspirated), (2) rebuilding existing work, (3)
 carrying what the search killed, (4) planning against a codebase you summarized instead of read,
 (5) concepts with no owner, (6) file-less lines, (7) blockers discovered mid-build, (8) executing
 a plan that still has guesses in it.
