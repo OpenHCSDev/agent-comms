@@ -26,7 +26,7 @@ from agent_comms.registry.thread_model import DeclaredModel
 from agent_comms.registry.threads import ExternalThread
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tool_denial import StorageDenied
-from agent_comms.transport.tools.orders import CommsTodoCreateTool
+from agent_comms.transport.tools.order_commands import CommsTodoCreateTool
 
 pytest_plugins = ('test_forks',)
 

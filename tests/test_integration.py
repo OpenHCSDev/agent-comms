@@ -56,7 +56,7 @@ from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.order import Team
 from agent_comms.transport.tool_caller import PeerCaller
 from agent_comms.transport.tool_denial import StorageDenied
-from agent_comms.transport.tools.orders import CommsTodoCreateTool
+from agent_comms.transport.tools.order_commands import CommsTodoCreateTool
 from agent_comms_hooks import ToolRefusedError
 from fixture_git import ENVIRONMENT, SETTINGS
 from github_fixture import GitHubFixture

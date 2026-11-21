@@ -80,11 +80,8 @@ from agent_comms.team.order import OrderFile, SayVerb, TeamContext, main
 from agent_comms.team.standing import DeliveryAwaitingJudgement, Scrutinize
 from agent_comms.team.standing_rules import OwedAnswer
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tools.orders import (
-    CommsOrderDeliverTool,
-    CommsVerdictTool,
-    TodoChanged,
-)
+from agent_comms.transport.tools.order_commands import TodoChanged
+from agent_comms.transport.tools.orders import CommsOrderDeliverTool, CommsVerdictTool
 from agent_comms.transport.tools.served import CommsHistoryTool
 from agent_comms_hooks import ToolRefusedError
 from test_held_problem_orders import merge_two_commit_fix

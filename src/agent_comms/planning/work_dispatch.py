@@ -12,7 +12,6 @@ import time
 from dataclasses import dataclass, replace
 from typing import Self
 
-from agent_comms.comms import Comms
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.planning.goal_actions import (
     CreateProblemGoalAction,
@@ -38,6 +37,8 @@ from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.team.team_comms import CoreComms
+
 
 @dataclass(frozen=True)
 class WorkDispatch:
@@ -50,12 +51,12 @@ class WorkDispatch:
     def name(self) -> str:
         return f"unit-{self.action.problem.lower()}-r{self.revision}"
 
-    def publish(self, comms: Comms, child: Thread) -> Thread:
+    def publish(self, comms: CoreComms, child: Thread) -> Thread:
         """Assign the native order before its unit can begin work."""
         comms.goals.update_goal(child.name, self.action)
         return comms.registry.require(child.name)
 
-    def start(self, comms: Comms) -> Thread:
+    def start(self, comms: CoreComms) -> Thread:
         defaults = NativeThreadDefaults()
         # A concurrent rotation contends on one checkout. Never adopt a partial attempt.
         name = self.name
@@ -110,7 +111,7 @@ class ReusedWorkDispatch(WorkDispatch):
     def name(self) -> str:
         return self.unit.name
 
-    def start(self, comms: Comms) -> Thread:
+    def start(self, comms: CoreComms) -> Thread:
         return self.publish(comms, comms.registry.require(self.name))
 
 
@@ -126,7 +127,7 @@ class CheckedPhaseTask(FiledProblem, ProblemOrder, PhaseTask):
             raise ValueError("A phase task needs a finite positive review interval.")
 
     def start(
-        self, comms: Comms, assigner: Thread, phase: type[PlanPhase], reading: PlanReading
+        self, comms: CoreComms, assigner: Thread, phase: type[PlanPhase], reading: PlanReading
     ) -> None:
         if not phase.ready(reading) or phase.ordered(reading):
             return

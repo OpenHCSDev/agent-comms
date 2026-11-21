@@ -66,11 +66,7 @@ from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.order import Team
 from agent_comms.team.standing import InstallDue
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tools.orders import (
-    CommsOrderDoneTool,
-    CommsProblemCloseTool,
-    CommsTodoCreateTool,
-)
+from agent_comms.transport.tools.order_commands import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
 from conftest import record_installed_runtime
 from github_fixture import GitHubFixture
 from order_scope_fixture import FIX_SCOPE
