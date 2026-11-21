@@ -132,3 +132,20 @@ def test_the_installer_replaces_a_uv_its_checkout_does_not_declare(tmp_path, tes
         assert declared.accepts(commands.run(uv, "--version"))
         assert not uv.is_symlink() and not uv.read_bytes().startswith(b"#!")
         assert [path.name for path in uv.parent.iterdir()] == ["uv"]
+
+
+def test_a_dev_extra_without_the_pin_names_what_it_found(tmp_path):
+    """A dev extra missing the uv pin fails naming the file, the extra's contents and the fix."""
+    pyproject = tmp_path / "personal-model" / "pyproject.toml"
+    pyproject.parent.mkdir()
+    pyproject.write_text(
+        '[project]\nname = "personal-model"\n'
+        '[project.optional-dependencies]\ndev = ["pytest", "pytest-asyncio"]\n'
+    )
+    with pytest.raises(ValueError) as raised:
+        DeclaredUv.of(pyproject, DeclaredUv.installed)
+    message = str(raised.value)
+    assert str(pyproject) in message
+    assert "'pytest'" in message and "'pytest-asyncio'" in message
+    assert "uv==<version>" in message
+    assert "unpack" not in message

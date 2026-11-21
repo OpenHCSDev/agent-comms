@@ -27,13 +27,22 @@ class DeclaredUv:
         """The dev extra's requirement for the distribution named like ``executable``."""
         match tomllib.loads(pyproject.read_text()):
             case {"project": {"optional-dependencies": {"dev": list(dev)}}}:
-                (requirement,) = (
-                    parsed
-                    for parsed in map(Requirement, dev)
-                    if canonicalize_name(parsed.name) == canonicalize_name(executable.name)
-                )
-                return cls(requirement)
-        raise ValueError(f"{pyproject} declares no dev extra to pin uv")
+                pass
+            case _:
+                raise ValueError(f"{pyproject} declares no dev extra to pin uv")
+        candidates = [
+            parsed
+            for parsed in map(Requirement, dev)
+            if canonicalize_name(parsed.name) == canonicalize_name(executable.name)
+        ]
+        if len(candidates) != 1:
+            declared = sorted({canonicalize_name(Requirement(entry).name) for entry in dev})
+            raise ValueError(
+                f"{pyproject} declares {len(candidates)} {executable.name} requirements in its "
+                f"dev extra, expected exactly 1; the dev extra declares {declared}. Pin "
+                f"{executable.name}==<version> in [project.optional-dependencies].dev."
+            )
+        return cls(candidates[0])
 
     def accepts(self, reported: str) -> bool:
         """``reported`` is what ``uv --version`` prints: ``uv X.Y.Z (target)``."""
