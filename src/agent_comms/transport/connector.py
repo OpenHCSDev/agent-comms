@@ -37,7 +37,7 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Literal, Self
 
 from aiohttp import web
 from aiohttp.typedefs import Handler
@@ -357,14 +357,40 @@ class PublicAudience(ApprovalAudience):
 
 @dataclass(frozen=True)
 class ClientRegistration:
-    """A public OAuth client declares every callback the authorization server may use."""
+    """An OAuth client declares its callbacks and token-endpoint authentication method."""
 
     redirect_uris: tuple[OAuthRedirectUri, ...]
     client_name: str = "unnamed client"
+    token_endpoint_auth_method: Literal["none", "client_secret_post"] = "none"
 
     def __post_init__(self) -> None:
         if not self.redirect_uris or len(set(self.redirect_uris)) != len(self.redirect_uris):
             raise MalformedRecord("OAuth client registration requires distinct redirect URIs.")
+
+    def issued(
+        self, client_id: OAuthClientId, issued_at: int,
+    ) -> tuple[RegisteredClient, ClientRegistrationReply]:
+        """Issue the registered client and the response member required by its method."""
+
+        common = dict(
+            client_id=client_id, client_id_issued_at=issued_at,
+            client_name=self.client_name, redirect_uris=self.redirect_uris,
+            token_endpoint_auth_method=self.token_endpoint_auth_method,
+        )
+        if self.token_endpoint_auth_method == "none":
+            return (
+                RegisteredClient(self.client_name, self.redirect_uris, PublicOAuthClient()),
+                ClientRegistrationReply(**common),
+            )
+        secret = secrets.token_urlsafe(32)
+        return (
+            RegisteredClient(
+                self.client_name, self.redirect_uris, ConfidentialOAuthClient(digest(secret)),
+            ),
+            ConfidentialClientRegistrationReply(
+                **common, client_secret=secret, client_secret_expires_at=0,
+            ),
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -454,7 +480,12 @@ class ClientRegistrationReply(ClientRegistration):
     client_id_issued_at: int
     grant_types: tuple[str, ...] = field(default_factory=TokenGrant.names)
     response_types: tuple[str, ...] = ("code",)
-    token_endpoint_auth_method: str = "none"
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConfidentialClientRegistrationReply(ClientRegistrationReply):
+    client_secret: str = field(repr=False)
+    client_secret_expires_at: Literal[0] = 0
 
 
 @dataclass(frozen=True)
@@ -886,19 +917,15 @@ class Connector(ConnectorService, McpServer):
         except (MalformedRecord, json.JSONDecodeError) as error:
             return OAuthError("invalid_redirect_uri", str(error)).response()
         client_id = OAuthClientId(secrets.token_urlsafe(16))
+        registered, reply = registration.issued(client_id, int(time.time()))
         await asyncio.to_thread(
             self.store.update,
             lambda grants: DocumentChange.to(replace(
                 grants,
-                clients=grants.clients | {str(client_id): RegisteredClient(
-                    registration.client_name, registration.redirect_uris, PublicOAuthClient()
-                )},
+                clients=grants.clients | {str(client_id): registered},
             )),
         )
-        return web.json_response(FieldCodec.encode(ClientRegistrationReply(
-            client_id=client_id, client_id_issued_at=int(time.time()),
-            client_name=registration.client_name, redirect_uris=registration.redirect_uris,
-        )), status=201)
+        return web.json_response(FieldCodec.encode(reply), status=201)
 
     async def authorize(self, request: web.Request) -> web.Response:
         """A trusted browser proceeds; an unknown one needs its owner's one-use link."""

@@ -677,6 +677,8 @@ async def test_loopback_client_uses_its_registered_path_random_port_and_issuer(
     registered = await (await client.post("/register", json={
         "redirect_uris": [str(registered_uri.url)], "client_name": "Gemini CLI",
     })).json()
+    assert "client_secret" not in registered
+    assert "client_secret_expires_at" not in registered
     verifier = secrets.token_urlsafe(48)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
     query = AuthorizationQuery(
@@ -750,6 +752,46 @@ async def test_static_confidential_client_returns_its_secret_once_and_requires_i
         grant, client_secret=credential.client_secret,
     )))
     assert issued.status == 200 and (await issued.json())["access_token"]
+
+
+async def test_dynamic_registration_honors_confidential_authentication(
+    client, store, comms,
+):
+    await approved_token(client, comms)
+    callback = OAuthRedirectUri(URL("https://oauth-redirect.googleusercontent.com/r/service"))
+    registered = await (await client.post("/register", json={
+        "client_name": "Connected App",
+        "redirect_uris": [str(callback.url)],
+        "token_endpoint_auth_method": "client_secret_post",
+    })).json()
+    assert registered["client_secret_expires_at"] == 0
+    credential = RegisteredClientCredential(
+        OAuthClientId(registered["client_id"]), registered["client_secret"],
+    )
+    stored = store.read().clients[credential.client_id]
+    assert stored.accepts_secret(credential.client_secret)
+    assert credential.client_secret not in store.path.read_text()
+
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+    query = AuthorizationQuery(
+        "code", credential.client_id, callback, challenge.decode().rstrip("="), "S256",
+        "dynamic-confidential",
+    )
+    authorized = await client.get(
+        "/authorize", params=FieldCodec.encode(query), allow_redirects=False,
+    )
+    code = URL(authorized.headers["Location"]).query["code"]
+    grant = AuthorizationCodeGrant(
+        code=code, code_verifier=verifier, client_id=credential.client_id,
+        redirect_uri=callback,
+    )
+    refused = await client.post("/token", data=FieldCodec.encode(grant))
+    assert refused.status == 400 and (await refused.json())["error"] == "invalid_client"
+    issued = await client.post("/token", data=FieldCodec.encode(replace(
+        grant, client_secret=credential.client_secret,
+    )))
+    assert issued.status == 200
 
 
 async def test_connector_lists_every_tool(client, store, comms):
