@@ -583,8 +583,9 @@ class ProblemGoalOrder(GoalOrder):
         raise GoalRefused("A problem Goal's text is derived from its assigned problems.")
 
     def progress(self, goal: Goal, todos: Sequence[GoalAssignment]) -> str:
-        """Each problem's order state and latest verdict, as Core records them on its Todo."""
-        return "\n".join(todo.progress_line() for todo in todos)
+        """The owner's current report, followed by each problem's recorded order state."""
+        order_progress = "\n".join(todo.progress_line() for todo in todos)
+        return "\n\n".join(part for part in (goal.progress, order_progress) if part)
 
     def require_model_block(self) -> None:
         raise GoalRefused("A problem goal is not blocked by text: ask the teammate to block the "
