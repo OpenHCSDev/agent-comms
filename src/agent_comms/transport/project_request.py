@@ -44,4 +44,5 @@ class ProjectRuntimeRequest(AttachedResultRuntimeRequest):
         return {
             **replace(thread.launch(), managed=True).encode(),
             **project.environment(root),
+            **thread.context_edit_policy.environment(),
         }

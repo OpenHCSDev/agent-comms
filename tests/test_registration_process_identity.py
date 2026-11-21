@@ -23,6 +23,7 @@ from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_document import RegistryDocument
+from agent_comms.registry.thread_settings import ContextEditPolicy
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import ExternalThread, ForkThread, NativeThread
 from agent_comms.storage.maintenance_barrier import (
@@ -198,6 +199,7 @@ def test_configured_native_launch_preserves_original_project_binding(tmp_path: P
     snapshot = comms.registry.snapshot()
     configuration = ConfigOptions(RetainedOwnerLaunch.configured(), comms.route)
     environment = configuration.native_environment(owner, snapshot)
+    assert environment["CLM_CONTEXT_EDIT_POLICY"] == "optional"
     launch = ThreadLaunch.current(environment)
     assert launch.name == owner.name and launch.managed
     assert launch.worktree == owner.worktree
@@ -206,6 +208,12 @@ def test_configured_native_launch_preserves_original_project_binding(tmp_path: P
     )
     assert request == ProjectRuntimeRequest.for_native(snapshot, owner)
     assert served(request).require_original(comms.registry.entry(owner.name).entry) == owner
+    required = replace(owner, context_edit_policy=ContextEditPolicy.REQUIRED_EACH_TURN)
+    comms.registry.register(required)
+    required = comms.registry.require(owner.name)
+    assert configuration.native_environment(
+        required, comms.registry.snapshot()
+    )["CLM_CONTEXT_EDIT_POLICY"] == "required_each_turn"
     stale = replace(owner, process_identity=replace(process, start_time=process.start_time + 1))
     with pytest.raises(RelationViolationError):
         configuration.native_environment(stale, snapshot)

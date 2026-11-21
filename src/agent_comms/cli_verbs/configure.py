@@ -42,5 +42,10 @@ class ConfigureCliCommand(
         asyncio.run(options.validate(candidate))
         self.apply_model_context(options.launch.configuration, candidate.model)
         updated = ctx.threads.set_thread_configuration(thread, self)
-        return ThreadConfiguredResult(configured=updated.name, model=updated.model, thinking_level=updated.thinking_level,
-                                      service_tier=updated.service_tier)
+        return ThreadConfiguredResult(
+            configured=updated.name,
+            model=updated.model,
+            thinking_level=updated.thinking_level,
+            service_tier=updated.service_tier,
+            context_edit_policy=updated.context_edit_policy,
+        )

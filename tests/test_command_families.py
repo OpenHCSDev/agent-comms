@@ -25,7 +25,8 @@ from agent_comms.messaging.messages import InfoKind
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
-from agent_comms.registry.threads import NativeThread
+from agent_comms.registry.thread_settings import ContextEditPolicy
+from agent_comms.registry.threads import ChosenContextEdit, NativeThread
 from agent_comms.transport.runtime_request import RuntimeRequest
 from agent_comms.transport.runtime_requests import PromptRuntimeRequest
 
@@ -61,6 +62,11 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
         parser.parse_args(["configure", "--name", "a", "--service-tier", "fast"])
     assert "fast" in str(refused.value)
     assert all(tier.value in str(refused.value) for tier in ServiceTier)
+    for policy in ContextEditPolicy:
+        configured = parse([
+            "configure", "--name", "a", "--context-edit-policy", policy.value,
+        ])
+        assert configured.context_edit_policy == ChosenContextEdit(policy)
     restart = parse(["restart", "--all"])
     assert restart.all_ is True
     assert restart.agent_bin == ConfiguredBinary()

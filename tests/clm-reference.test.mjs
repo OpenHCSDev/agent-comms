@@ -10,7 +10,8 @@ import { join } from "node:path";
 import test from "node:test";
 
 import clmReference, {
-  BudgetController, BudgetPressure, DigestEachOutput, EditRule, normalizedTurns, renderEditable,
+  BudgetController, BudgetPressure, ContextEditPolicy, DigestEachOutput, EditRule,
+  normalizedTurns, renderEditable,
 } from "../src/agent_comms/execution/clm_reference.mjs";
 
 const GOLDEN = {"rendered": "[[CTX_TURN 1 role=assistant]]\nthink a\nTHOUGHT: look\nbash {\"command\": \"ls\"}\n\n[[CTX_TURN 2 role=tool]]\na.txt\n\n(exit_code=0)\n\n[[CTX_TURN 3 role=assistant]]\ndone", "edits": ["[[CTX_TURN 1 role=assistant]]\nthink a\nTHOUGHT: look\nbash {\"command\": \"ls\"}\n\n[[CTX_TURN 2 role=tool]]\na.txt\n\n(exit_code=0)\n\n[[CTX_TURN 3 role=assistant]]\ndone", "lead note\n\n[[CTX_TURN 1 role=assistant]]\nkept\n\n[[CTX_TURN 2 role=tool]]\n\n[[CTX_TURN 3 role=notes]]\nmy notes\n\n[[CTX_TURN 4 role=user]]\nmore", "no headers at all\njust text", "[[CTX_TURN 1 role=assistant]]\na\n[[CTX_TURN 2 role=assistant]]\nb\n[[CTX_TURN 3 role=tool]]\nt\n[[CTX_TURN 4 role=system]]\ns", ""], "parsed": [[{"role": "assistant", "content": "think a\nTHOUGHT: look\nbash {\"command\": \"ls\"}"}, {"role": "user", "content": "a.txt\n\n(exit_code=0)"}, {"role": "assistant", "content": "done"}], [{"role": "user", "content": "lead note"}, {"role": "assistant", "content": "kept"}, {"role": "user", "content": "my notes\n\nmore"}], [{"role": "user", "content": "no headers at all\njust text"}], [{"role": "assistant", "content": "a\n\nb"}, {"role": "user", "content": "t\n\ns"}], []], "nudges": {"0.25": "CONTEXT BUDGET NUDGE: context is at ~25% of your 28672-token budget (12345 tokens). No action needed. Before your next few searches, make sure your notes record which queries and documents you already tried.", "0.5": "CONTEXT BUDGET NUDGE: context is at ~50% of your 28672-token budget (12345 tokens). Finish the unit of work in flight, then tidy ONCE. When you write a replacement note, COPY facts forward from the text you are replacing (quote them): every RULED OUT candidate with its reason and the words 'do not retry'; the exact queries/commands already tried; exact values marked VERIFIED or UNVERIFIED; and a NEXT line. HINT", "0.75": "CONTEXT BUDGET NUDGE: context is at ~75% of your 28672-token budget (12345 tokens) \u2014 close to the limit. Compact settled spans now \u2014 but do NOT wipe: edits keeping under 25% of the region they touch are usually followed by re-doing the deleted work. When you write a replacement note, COPY facts forward from the text you are replacing (quote them): every RULED OUT candidate with its reason and the words 'do not retry'; the exact queries/commands already tried; exact values marked VERIFIED or UNVERIFIED; and a NEXT line. if you cross the limit you get one final turn and then the session ends. HINT"}, "rollback": "[SYSTEM NOTICE \u2014 CONTEXT LIMIT HIT (retry 2/50)] Your context crossed the 28672-token limit, so your 3 most recent turn(s) were ROLLED BACK and are gone \u2014 that work is no longer in your context and cannot be recovered (7 turn(s) lost so far). You are now at ~20000/26624 tokens, which leaves room for exactly one thing: CONDENSE YOUR CONTEXT THIS TURN and do nothing else. Replace stale regions with short summaries. HINT\nThese commands already ran and their output is what blew your budget, so their turns were discarded. Re-running them will just lose the context again \u2014 if you need one, make it print far less (head/grep/count instead of dumping):\n  - ls -R /\n  - cat big.log", "final": "[SYSTEM NOTICE] You have reached your context budget (30000/28672 tokens). This is your FINAL turn: make sure your solution is complete and in place \u2014 write any required output/answer to the location the task specifies (or run your submit command) \u2014 because after this turn the session ends and your work is evaluated as-is.", "urgent": "CONTEXT BUDGET NUDGE (URGENT): You are at 25000/26624 tokens \u2014 over 90% of your hard context limit and about to be cut off. Compact your context THIS TURN (do nothing else): remove stale regions now. If you cross the limit you get exactly one final turn and then the session ends with your work graded as-is. HINT", "strict_target": 26624};
@@ -208,6 +209,31 @@ test("an edit rule is named by its declaration, and the reference rule never ref
   reference.observed(5000);
   assert.equal(reference.refusal("cat more", "F"), null);
   assert.equal(reference.reminder("F"), "");
+});
+
+test("a required context edit is a turn-completion policy, not another output-digest rule", async () => {
+  assert.equal(ContextEditPolicy.named("optional").instruction("F"), "");
+  assert.throws(
+    () => ContextEditPolicy.named("nonsense"), /Unknown CLM context-edit policy/,
+  );
+
+  await under({ CLM_CONTEXT_EDIT_POLICY: "required_each_turn" }, `t${process.pid}policy`, async (h, file) => {
+    const prompt = await h.hooks.before_agent_start({}, h.ctx);
+    assert.match(prompt.systemPrompt, /Before your final answer, you MUST apply one accepted edit/);
+    assert.match(prompt.systemPrompt, new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+    await h.hooks.agent_start({}, h.ctx);
+    const final = assistant([{ type: "text", text: "done" }], { stopReason: "stop" });
+    const refused = await h.hooks.message_end({ message: final }, h.ctx);
+    assert.equal(refused.message.stopReason, "error");
+    assert.match(refused.message.errorMessage, /ended without an accepted LIVE_CTX_MAIN\.txt edit/);
+
+    const raw = [user("TASK"), assistant([{ type: "text", text: "settled detail" }])];
+    const edited = await turn(h, raw, `python3 edit ${file}`,
+      (text) => text.replace("settled detail", "durable note"));
+    assert.match(edited.result, /edit applied/);
+    assert.equal(await h.hooks.message_end({ message: final }, h.ctx), undefined);
+  });
 });
 
 test("under the digest rule a sizeable output must be noted and dropped before the next command runs", async () => {
