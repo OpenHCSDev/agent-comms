@@ -16,9 +16,11 @@ from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.notification_assignment import AssignmentSource
 from agent_comms.input_disposition import ScopedInputDispositions
 from agent_comms.notification_read import NotificationsRead
+from agent_comms.planning.goal_actions import PausedGoalAction, SetGoalAction
 from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_presentation import NoThreadPresentation
+from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transcript.transcripts import (
     AcquiredThreadPresentation,
@@ -164,7 +166,8 @@ def test_assignment_row_changes_attribute_only_their_view(
     snapshot = comms.registry.snapshot()
     assert previous.changed_threads(
         later, comms, activity, snapshot, earlier_registry.changed_names_to(snapshot),
-    ) == expected
+        earlier_registry.transcript_sources_changed_to(snapshot, previous.results),
+    ).names == expected
     assert notification_read.live_changed(comms, NotificationPass(comms, later)) == bool(expected)
 
 
@@ -210,11 +213,14 @@ ACQUIRED_EVIDENCE = {
 }
 
 
-def test_thread_reading_keeps_acquired_evidence_and_publishes_its_projection(private_directory):
+def test_thread_reading_keeps_acquired_evidence_and_publishes_its_projection(
+    private_directory, monkeypatch,
+):
     import pickle
 
 
     _path, _root_id, comms, initial, _people = _root(private_directory, direct=True)
+    comms.goals.update_goal('beta', SetGoalAction(text='Initial painted goal'))
     reading = ObserveThreads(frozenset({'beta'})).observation()
     status = OpenThreadStatus(lambda flush: None)
     status.open('beta')
@@ -245,10 +251,35 @@ def test_thread_reading_keeps_acquired_evidence_and_publishes_its_projection(pri
     assert (ThreadStatusModel.known('beta', outgoing).lines
             == ThreadStatusModel.known('beta', retained).lines)
 
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            comms.views.transcripts,
+            "capture_page_window",
+            lambda *_args, **_kwargs: pytest.fail(
+                "status-only change reopened transcript and notification sources"),
+        )
+        comms.registry.register(replace(
+            comms.registry.require('beta'), title=GivenThreadText('Painted title'),
+        ))
+        title_painted = observe()
+        title_retained = reading.observed.results['beta'].presentation
+        assert title_retained.notification_window is retained.notification_window
+        assert title_retained.read_identity is retained.read_identity
+        assert title_retained.notifications == retained.notifications
+        assert title_painted.results['beta'].presentation.title == 'Painted title'
+        comms.goals.update_goal('beta', PausedGoalAction(progress='Paint this changed progress'))
+        painted = observe()
+    painted_retained = reading.observed.results['beta'].presentation
+    assert painted_retained.notification_window is title_retained.notification_window
+    assert painted_retained.read_identity is title_retained.read_identity
+    assert painted_retained.notifications == title_retained.notifications
+    assert (painted.results['beta'].presentation.status_display()
+            != title_painted.results['beta'].presentation.status_display())
+
     publish_initial(comms, 'sender', 'beta', 'A later message for beta')
     second = observe()
     assert second.results['beta'].presentation != outgoing
-    assert reading.observed.results['beta'].presentation is not retained
+    assert reading.observed.results['beta'].presentation is not painted_retained
     # The UI's current and last-published rows hold projections only; the old acquired
     # value is reachable from neither.
     assert status.rows._published == status.rows.rows

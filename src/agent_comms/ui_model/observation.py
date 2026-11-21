@@ -1174,6 +1174,7 @@ class LocatedThreads:
     activity: Mapping[str, ObservedActivity | DeletedThread]
     names: frozenset[str]
     reads: AbstractContextManager[Mapping[str, Callable[[], ThreadPresentation]]]
+    painted: Mapping[str, ThreadReadResult] = field(default_factory=dict)
 
 
 class ThreadReading(ReadingObservation[ObserveThreads]):
@@ -1207,7 +1208,8 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
             lambda error: self.failed(located.names, ThreadBusy(), results),
             lambda error: self.failed(located.names, ThreadUnavailable(error), results),
             lambda error: self.failed(located.names, ThreadBusy(), results))
-        results.update((name, value) for name, value in previous.results.items()
+        retained = {**previous.results, **located.painted}
+        results.update((name, value) for name, value in retained.items()
                        if name in self.request.threads and name not in located.names)
         observed = ThreadsObserved(revision, results, frozenset(), located.activity)
         self.observed = observed
@@ -1232,12 +1234,16 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         self.located_threads = replace(self.located_threads, activity=activity)
         snapshot = comms.registry.snapshot()
         registry_changed = self.registry_read.changed_names_to(snapshot)
+        transcript_sources_changed = self.registry_read.transcript_sources_changed_to(
+            snapshot, names,
+        )
         goals_changed = self.goals_changed(comms, revision, snapshot)
         changed = previous.changed_threads(revision, comms, activity, snapshot, registry_changed,
-                                           goals_changed)
+                                           transcript_sources_changed, goals_changed)
         self.registry_read = snapshot
-        names = (changed | names - previous.results.keys()) & names
-        self.located_threads = replace(self.located_threads, names=names)
+        names = (changed.reread | names - previous.results.keys()) & names
+        self.located_threads = replace(
+            self.located_threads, names=names, painted=changed.painted)
         if names:
             batch = comms.views.thread_presentations(names)
             self.located_threads = replace(
@@ -1634,6 +1640,10 @@ class ThreadReadResult(PublishState, TaggedUnion, affix=""):
     def same_status(self, presentation: ThreadPresentation) -> bool:
         return False
 
+    def with_paint(self, presentation: ThreadPresentation) -> ThreadReadResult:
+        """A result with no acquired presentation has no source-preserving paint update."""
+        return self
+
 
 @dataclass(frozen=True)
 class ThreadPresented(TaggedRecordMember, ThreadReadResult):
@@ -1659,6 +1669,10 @@ class ThreadPresented(TaggedRecordMember, ThreadReadResult):
     def same_status(self, presentation: ThreadPresentation) -> bool:
         return presentation.same_status(self.presentation)
 
+    def with_paint(self, presentation: ThreadPresentation) -> ThreadPresented:
+        painted = self.presentation.with_paint(presentation)
+        return type(self)(replace(painted, binding=presentation.binding))
+
 
 @dataclass(frozen=True)
 class ThreadUnavailable(TaggedRecordMember, ThreadReadResult):
@@ -1679,6 +1693,18 @@ class ThreadBusy(TaggedRecordMember, ThreadReadResult):
 
 
 @dataclass(frozen=True)
+class ThreadChanges:
+    """Thread changes split by whether their acquired source evidence remains current."""
+
+    reread: frozenset[str]
+    painted: Mapping[str, ThreadReadResult] = field(default_factory=dict)
+
+    @property
+    def names(self) -> frozenset[str]:
+        return self.reread | frozenset(self.painted)
+
+
+@dataclass(frozen=True)
 class ThreadsObserved(Observed):
     """One mutually exclusive read answer per observed thread."""
 
@@ -1689,8 +1715,9 @@ class ThreadsObserved(Observed):
     def changed_threads(self, revision: WireRevision, comms: Comms,
                         activity: Mapping[str, ObservedActivity | DeletedThread],
                         snapshot: RegistrySnapshot, registry_changed: frozenset[str],
+                        transcript_sources_changed: frozenset[str] = frozenset(),
                         goals_changed: frozenset[str] = frozenset(),
-                        ) -> frozenset[str]:
+                        ) -> ThreadChanges:
         """Attribute changes using the retained observation and existing route rows. A
         registry revision reaches only the threads whose own rows it changed (or their forks):
         every turn start rewrites the registry, and it re-presented every open thread."""
@@ -1698,8 +1725,8 @@ class ThreadsObserved(Observed):
         names = self.results.keys()
         readable, changed = self.revision_inputs()
         if revision.changed_since(BusSourceView(), earlier) or not readable:
-            return frozenset(names)
-        changed.update(name for name in names if snapshot.affected_by(name, registry_changed))
+            return ThreadChanges(frozenset(names))
+        changed.update(transcript_sources_changed)
         if revision.bus_seq != earlier.bus_seq:
             source = comms.bus.bus
             if source.revision() != revision.bus_seq:
@@ -1714,12 +1741,20 @@ class ThreadsObserved(Observed):
             changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
         activity_changed = {name for name in activity
                             if activity[name] != self.activity.get(name)}
+        registry_affected = frozenset(
+            name for name in names if snapshot.affected_by(name, registry_changed)
+        )
         status_names = names if (revision.expiry_period, revision.work_room) != (
-            earlier.expiry_period, earlier.work_room) else names & (activity_changed | goals_changed)
+            earlier.expiry_period, earlier.work_room) else names & (
+                activity_changed | goals_changed | registry_affected
+            )
+        status_views = {}
         if status_names:
             status_batch = comms.views.thread_presentations(status_names)
-            changed.update(name for name in status_names
-                           if not self.results[name].same_status(status_batch.view(name)))
+            status_views = {
+                name: status_batch.view(name) for name in status_names
+                if not self.results[name].same_status(status_batch.view(name))
+            }
         remaining = {name: view for name, view in readable.items() if name not in changed}
         notifications = NotificationPass(comms, revision)
         notifications.prepare(
@@ -1728,7 +1763,13 @@ class ThreadsObserved(Observed):
         changed.update(name for name, view in remaining.items()
                        if view.notification_window.activity_names() & activity_changed
                        or notifications.changed(view.notification_window, earlier))
-        return frozenset(changed & names)
+        painted = {
+            name: self.results[name].with_paint(presentation)
+            for name, presentation in status_views.items()
+            if name in readable and name not in changed
+        }
+        changed.update(status_views.keys() - painted.keys())
+        return ThreadChanges(frozenset(changed & names), painted)
 
     def revision_inputs(self) -> tuple[dict[str, AcquiredThreadPresentation], set[str]]:
         readable: dict[str, AcquiredThreadPresentation] = {}

@@ -749,6 +749,20 @@ class Thread(
                     thread.context_edit_policy)
         return launch(self) == launch(other)
 
+    def same_transcript_source(self, other: Thread) -> bool:
+        """Whether two declarations select the same thread-owned transcript source.
+
+        Parent ancestry is a registry relation and is compared by ``RegistrySnapshot``;
+        this member owns the typed declaration that selects each relation's runtime.
+        Goal, turn, process and presence changes repaint a presentation but do not select
+        another transcript.
+        """
+        return (
+            type(self), self.incarnation, self.runtime
+        ) == (
+            type(other), other.incarnation, other.runtime
+        )
+
     def same_turn(self, other: Thread) -> bool:
         """Compare captured references and epochs, including captures made while idle.
 
