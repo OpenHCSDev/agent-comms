@@ -71,6 +71,21 @@ def test_order_revision_keeps_the_granted_authority():
     OrdinaryGoalRule.require(permission, NoGoal())
 
 
+def test_problem_goal_progress_retains_the_owner_report():
+    class DeliveredOrder:
+        def progress_line(self) -> str:
+            return "P379: Delivered"
+
+    policy = ProblemGoalOrder()
+    goal = Goal(
+        ProblemGoalOrder.text, GoalId.mint(), published_seq=0,
+        progress="Continue the paid training pod.", order=policy,
+    )
+    assert policy.progress(goal, (DeliveredOrder(),)) == (
+        "Continue the paid training pod.\n\nP379: Delivered"
+    )
+
+
 def test_a_dead_permission_names_both_authorities_it_compared():
     """Replacing a goal still refuses tools captured under a different goal."""
     completed = Goal('the completed goal', GoalId.mint(), published_seq=0, state=CompletedGoal())
