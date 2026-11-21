@@ -24,6 +24,7 @@ from agent_comms.storage.locked_store import (
 )
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 from agent_comms.execution.child_process import Platform
+from agent_comms.messaging.messages import NoticeRole
 from agent_comms.transport.request import tool_field
 from agent_comms.transport.tool_request import ThreadToolRequest
 from agent_comms.transport.tool_result import ToolResult
@@ -117,7 +118,7 @@ def _notify(run: BackgroundRunRecord, send: Callable[..., object], outcome: str)
     body = (f"Background run {run.run_id} {outcome}.\n"
             f"command: {run.command}\nlast {TAIL_BYTES} bytes of output:\n{tail}")
     try:
-        send(run.thread, body)
+        send(run.thread, body, role=NoticeRole())
     except Exception as error:  # noqa: BLE001 - a dead delivery never kills the watcher
         with open(Path(run.log), "a", encoding="utf-8") as log:
             log.write(f"\n[background-run] notify failed: {type(error).__name__}: {error}\n")
@@ -172,8 +173,8 @@ class CommsRunBackgroundTool(ThreadToolRequest, declared_name="run_background"):
             pid=process.pid, seconds=self.seconds)
         store.add(run)
 
-        def send(target: str, body: str) -> object:
-            return comms.messaging.send(self.thread, target, body)
+        def send(target: str, body: str, **kwargs: object) -> object:
+            return comms.messaging.send(self.thread, target, body, **kwargs)
 
         _watch(run, send, store)
         return BackgroundRunHandle(run_id=run_id, pid=process.pid, log=str(log))
