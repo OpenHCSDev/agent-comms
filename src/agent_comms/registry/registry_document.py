@@ -1347,6 +1347,30 @@ class RegistrySnapshot(
         """What a reader that last read this cut must re-read at ``later``."""
         return later.changed_names(self)
 
+    def transcript_sources_changed_to(
+        self, later: RegistrySnapshot, names: Collection[str],
+    ) -> frozenset[str]:
+        """Observed names whose registry-owned transcript derivation changed.
+
+        A presentation reads its requested/canonical row and every ancestor.  Preserve that
+        complete relation: changing its membership, execution, incarnation or runtime changes
+        the source.  Other registry changes are status paint and retain acquired evidence.
+        """
+        changed: set[str] = set()
+        for name in names:
+            before = self.read_by(name)
+            after = later.read_by(name)
+            if before != after:
+                changed.add(name)
+                continue
+            for dependency in before:
+                previous = self.threads.get(dependency)
+                current = later.threads.get(dependency)
+                if previous is None or current is None or not previous.same_transcript_source(current):
+                    changed.add(name)
+                    break
+        return frozenset(changed)
+
     def read_by(self, name: str) -> frozenset[str]:
         """The names whose rows ``name``'s presentation reads: its own, the alias it was asked
         by, and every parent whose history a fork reads. The walk goes up only, because a
@@ -1562,3 +1586,8 @@ class UnreadRegistry:
 
     def changed_names_to(self, later: RegistrySnapshot) -> frozenset[str]:
         return frozenset((*later.threads, *later.aliases))
+
+    def transcript_sources_changed_to(
+        self, later: RegistrySnapshot, names: Collection[str],
+    ) -> frozenset[str]:
+        return frozenset(names)
