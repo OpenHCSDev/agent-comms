@@ -553,6 +553,11 @@ class AdoptCheckoutOperation(CheckoutOperation):
 
     @classmethod
     def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult:
+        if len(command.source_checkout) != 1:
+            raise ValueError(
+                f'adopt needs exactly one --source checkout to take over, got '
+                f'{len(command.source_checkout)}; pass the archived tree\'s path'
+            )
         source, = command.source_checkout
         source = source.expanduser().absolute()
         grant = command.grant(ctx, thread)
@@ -573,6 +578,11 @@ class TransferCheckoutOperation(CheckoutOperation):
     @classmethod
     def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult:
         destination = command.declared_destination(ctx.registry.storage_rule, thread)
+        if len(command.source_checkout) != 1:
+            raise ValueError(
+                f'transfer needs exactly one --source checkout to move, got '
+                f'{len(command.source_checkout)}; pass the retained tree\'s path'
+            )
         source, = command.source_checkout
         source = source.expanduser().absolute()
         grant = command.grant(ctx, thread)
