@@ -545,9 +545,10 @@ class CommsOrderDoneTool(CommsTodoTool):
         if problems:
             raise TodoProblems(problems)
         delivery = self.delivery.resolved_delivery(todo)
-        required = order.scope.required_claims(
-            delivery, self.delivery.completion_claims(delivery, order, self.claims))
-        verified = ProgressClaim.require_all(required, comms, order.check.directory)
+        required = order.scope.required_claims(delivery, self.claims, todo.id)
+        # A problem claim is verified in that problem's own checkout, whatever worktree the
+        # claimant's thread happens to hold: the scope is the claim's, not the caller's.
+        verified = ProgressClaim.require_all(required, comms, comms.registry.require(actor.name))
         return DeliverTodo(todo.revision, actor, delivery, self.order_id, verified_claims=verified)
 
 

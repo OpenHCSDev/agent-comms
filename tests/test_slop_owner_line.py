@@ -12,7 +12,7 @@ from agent_comms.planning.orders import (
     CommitDelivery,
     MergedListedPullRequest,
 )
-from agent_comms.planning.progress_claims import MergedClaim
+from agent_comms.planning.progress_claims import MergedClaim, ProblemScope
 from agent_comms.planning.pull_requests import (
     PullRequestCommit,
     PullRequestLink,
@@ -81,7 +81,7 @@ def test_done_is_refused_until_the_delivered_tree_declares_the_created_line(
             merged='2026-10-25T12:00:00Z'))
         delivery = CommitDelivery(commit=commit, delivered_commit=commit,
                                   proof_build=RecordedBuildIdentity(commits=(), interpreter=interpreter_build))
-        claims = {MergedClaim(commit): (WorkBranches.main,)}
+        claims = {MergedClaim(commit, ProblemScope(todo.id)): (WorkBranches.main,)}
         return asyncio.run(delivery.verified(todo, comms.registry, claims))
 
     with pytest.raises(TodoError, match='branch.py:2'):
@@ -94,3 +94,32 @@ def test_a_fork_is_never_a_teammate_that_could_take_an_order(tmp_path):
     fork = NativeThread('shape-next', frozenset(), Checkout(tmp_path)).as_member(ForkThread)
     assert teammate.order_candidates() == (teammate,)
     assert fork.order_candidates() == ()
+
+
+def test_a_merged_claim_resolves_in_the_problems_checkout_not_the_claimants_worktree(
+        comms, source_repository, github_cli: GitHubFixture):
+    """A goal report used to verify this claim in the claimant's own worktree, which holds no
+    other repository's history, so the same claim could never resolve from a goal."""
+    from agent_comms.planning.progress_claims import ProgressClaim, ThreadScope
+
+    _, current = assigned(comms, source_repository.scope(), source_repository)
+    commit = source_repository.main_commit
+    github_cli.configure(source_repository.github)
+    github_cli.put(source_repository.github, MergedListedPullRequest(
+        1, 'fix/created', commit, updated='2026-10-25T12:00:00Z', base=WorkBranches.main,
+        reviewable_times=('2026-10-25T12:00:00Z',), merge=PullRequestCommit(commit),
+        merged='2026-10-25T12:00:00Z'))
+    claimant = comms.registry.require('worker')
+    assert claimant.worktree.path != current.order.check.directory  # the bug's whole shape
+
+    claim = MergedClaim(commit, ProblemScope(current.id))
+    assert WorkBranches.main in ProgressClaim.require_all((claim,), comms, claimant)[claim]
+
+    # A thread-scoped claim is looked for in the claimant's own worktree, which holds none of
+    # that repository's history; the lookup fails there loudly instead of finding the commit
+    # in someone else's checkout.
+    from agent_comms.projects.git_errors import FailedGitCommand
+
+    elsewhere = MergedClaim(commit, ThreadScope())
+    with pytest.raises(FailedGitCommand, match='not a git repository'):
+        ProgressClaim.require_all((elsewhere,), comms, claimant)

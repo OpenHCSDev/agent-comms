@@ -188,7 +188,7 @@ class CommsGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalProgress:
         name = caller.name
         self.status.require_claims(self.claims)
-        ProgressClaim.require_all(self.claims, comms, comms.registry.require(name).worktree.path)
+        ProgressClaim.require_all(self.claims, comms, caller.authority(comms))
         command = replace(
             self.status(progress=self.progress),
             expect=self.status.model_precondition(self.goal_id),

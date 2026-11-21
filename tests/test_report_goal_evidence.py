@@ -96,7 +96,7 @@ def test_report_completion_authenticates_content_before_transition(comms, tmp_pa
     source = provenance(path)
     claim = FieldCodec.decode(ProgressClaim, claimed(source)[0])
     assert claim == ReportClaim(source)
-    assert ProgressClaim.require_all((claim,), comms, tmp_path) == {claim: (source.public_description(),)}
+    assert ProgressClaim.require_all((claim,), comms, comms.registry.require("editor")) == {claim: (source.public_description(),)}
     complete(comms, report_goal, claimed(source))
     completed = comms.registry.require("editor").goal.require()
     assert completed.id == report_goal.id
@@ -121,7 +121,7 @@ def test_artifact_completion_streams_digest_without_decoding(comms, tmp_path, re
         patched.setattr(
             type(path), "read_bytes", lambda self: pytest.fail("artifact was buffered")
         )
-        assert ProgressClaim.require_all((claim,), comms, tmp_path) == {
+        assert ProgressClaim.require_all((claim,), comms, comms.registry.require("editor")) == {
             claim: (source.public_description(),)
         }
 
@@ -130,7 +130,7 @@ def test_report_is_not_implementation_order_completion(comms, tmp_path, report_g
     path = tmp_path / "report.md"
     path.write_text("Delivered analysis, not an implemented fix")
     claim = ReportClaim(FileProvenance(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
-    ProgressClaim.require_all((claim,), comms, tmp_path)
+    ProgressClaim.require_all((claim,), comms, comms.registry.require("editor"))
     policy = ProblemGoalOrder()
     for operation in (
         partial(policy.require_completion, report_goal, comms.goals, comms.registry.require("editor").incarnation),

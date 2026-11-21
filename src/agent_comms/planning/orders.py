@@ -113,7 +113,7 @@ from agent_comms.planning.problem_findings import (
     UnlocatedProblemFinding,
 )
 from agent_comms.planning.problem_number import ProblemNumber
-from agent_comms.planning.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
+from agent_comms.planning.progress_claims import MergedClaim, ProblemScope, ProgressClaim, WorkingClaim
 from agent_comms.planning.progress_readings import (
     DistanceReading,
     DistanceReadings,
@@ -272,10 +272,6 @@ class OrderCompletion(DeclaredFamily, affix="Delivery"):
     @abstractmethod
     def resolved_delivery(self, todo: Todo) -> OrderDelivery: ...
 
-    def completion_claims(self, delivery: OrderDelivery, order: CheckedProblemOrder,
-                          supplied: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
-        return supplied
-
 
 class OrderCheckChange(ABC):
     """A prepared criterion change owns whether its source evidence can survive."""
@@ -372,9 +368,6 @@ class OrderDelivery(CheckCorrectionSource, OrderCompletion, StoryEvent, declared
     def check_base(self, repo: Path) -> str:
         raise TodoError("This delivery has no source commit to establish a check base.")
 
-    def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
-        return ()
-
     @property
     def installation_commits(self) -> tuple[str, ...]:
         return ()
@@ -440,8 +433,13 @@ class CheckedDelivery(RevalidatedCheckSource, EvidenceRequirements, OrderDeliver
     def installation_build(self) -> BuildIdentity:
         return self.proof_build
 
-    def required_claims(self, claims: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
-        return claims
+    def merged_commits(self) -> tuple[str, ...]:
+        """The commits this delivery merged, which its completion must prove on origin."""
+        return ()
+
+    def evidence_claims(self) -> tuple[ProgressClaim, ...]:
+        """Artifacts this delivery produced that prove it, beyond what the teammate supplied."""
+        return ()
 
     async def verified(
         self, todo: Todo, registry: Registration,
@@ -484,9 +482,6 @@ class CommitSourceDelivery(CommittedCheckSource, BranchPointCheck, CheckedDelive
     @property
     def work_commit(self) -> str:
         return self.delivered
-
-    def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
-        return (MergedClaim(self.commit),)
 
     @property
     @abstractmethod
@@ -553,14 +548,14 @@ class CommitDelivery(CommitSourceDelivery, declared_name="delivered_commit"):
     def delivered(self) -> str:
         return self.delivered_commit
 
-    def required_claims(self, claims: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
-        return (*claims, MergedClaim(self.commit))
+    def merged_commits(self) -> tuple[str, ...]:
+        return (self.commit,)
 
     async def verified(
         self, todo: Todo, registry: Registration,
         verified_claims: dict[ProgressClaim, tuple[str, ...]],
     ) -> OrderDelivery:
-        branches = verified_claims[MergedClaim(self.commit)]
+        branches = verified_claims[MergedClaim(self.commit, ProblemScope(todo.id))]
         merge = await self.merge_state(todo, registry, branches)
         verified = await super().verified(todo, registry, verified_claims)
         return CheckedCommitDelivery(commit=self.commit, delivered_commit=self.delivered,
@@ -610,7 +605,7 @@ class CheckedCommitDelivery(CommitDelivery):
 
 @dataclass(frozen=True, kw_only=True)
 class OperationDelivery(WorkingEvidence, FreshMainCheck, CheckedDelivery):
-    def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
+    def evidence_claims(self) -> tuple[ProgressClaim, ...]:
         return (WorkingClaim(self.evidence.artifact()),)
 
     @property
@@ -2033,10 +2028,6 @@ class SourceCompletion(OrderCompletion, declared_name=None):
         delivery: OrderDelivery = order.scope.delivery(todo, order.check.directory, self)
         return delivery
 
-    def completion_claims(self, delivery: OrderDelivery, order: CheckedProblemOrder,
-                          supplied: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
-        return delivery.done_claims(order)
-
 
 @dataclass(frozen=True)
 class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
@@ -2069,10 +2060,15 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
     @abstractmethod
     def instructions(self, problem: str) -> tuple[str, ...]: ...
 
-    @abstractmethod
     def required_claims(
-        self, delivery: Delivery, claims: tuple[ProgressClaim, ...],
-    ) -> tuple[ProgressClaim, ...]: ...
+        self, delivery: Delivery, claims: tuple[ProgressClaim, ...], problem: str,
+    ) -> tuple[ProgressClaim, ...]:
+        """What proves this delivery: what the teammate supplied, the artifact it produced, and
+        the commit it merged. A merged commit's claim is scoped to the problem that merged it,
+        so the scope is built here, from the problem this order already names."""
+        return (*claims, *delivery.evidence_claims(),
+                *(MergedClaim(commit, ProblemScope(problem))
+                  for commit in delivery.merged_commits()))
 
     @abstractmethod
     def completion_problems(self, run: OrderRun, request: SourceCompletion) -> dict[str, str]: ...
@@ -2102,8 +2098,9 @@ class TriageScope(OrderScope[ReportDelivery]):
                 "Return the report to your teammate; do not open an implementation PR.")
 
     def required_claims(
-        self, delivery: ReportDelivery, claims: tuple[ProgressClaim, ...],
+        self, delivery: ReportDelivery, claims: tuple[ProgressClaim, ...], problem: str,
     ) -> tuple[ProgressClaim, ...]:
+        del delivery, problem
         if claims:
             raise TodoError(
                 "scope triage returns its report directly, not progress claims")
@@ -2146,10 +2143,10 @@ class FixScope(OrderScope[CheckedDelivery]):
                 "verdict; a chat report does not change the order.")
 
     def required_claims(
-        self, delivery: CheckedDelivery, claims: tuple[ProgressClaim, ...],
+        self, delivery: CheckedDelivery, claims: tuple[ProgressClaim, ...], problem: str,
     ) -> tuple[ProgressClaim, ...]:
         ProgressClaim.require_claimed(claims, "delivered")
-        return delivery.required_claims(claims)
+        return super().required_claims(delivery, claims, problem)
 
     def completed(self, todo: Todo, delivery: CheckedDelivery) -> Todo:
         return replace(todo, order=todo.order.delivered(delivery), revision=todo.revision + 1)
