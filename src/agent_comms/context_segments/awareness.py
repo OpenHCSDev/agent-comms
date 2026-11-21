@@ -9,6 +9,10 @@ from agent_comms.nominal.field_codec import FieldCodec
 
 @dataclass(frozen=True, kw_only=True)
 class AwarenessSegment(InstructionSegment):
+    """The sources a reader may consult. Each is rendered as its canonical
+    `MessageReference.name`, the compact spelling a reader parses into
+    `MessageReference(seq, message_id)`; `sources` keeps the references themselves."""
+
     bus: str
     sources: tuple[MessageReference, ...]
 
@@ -20,6 +24,6 @@ class AwarenessSegment(InstructionSegment):
 
     def values(self):
         return {"pointers": FieldCodec.compact({
-            "bus": self.bus, "sources": [FieldCodec.encode(source) for source in self.sources],
+            "bus": self.bus, "sources": [source.name for source in self.sources],
         }, ensure_ascii=True)}
 
