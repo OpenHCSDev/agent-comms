@@ -95,10 +95,10 @@ header, a block by a short unique first/last line, or slice on the headers:
 system/task prefix is protected for you. Each result says whether the file changed or
 matched nothing.
 
-**What a compaction must keep.** An edit is refused and not applied when it drops a fact or
-copies text instead of replacing it:
-- Mark a line you may not lose with \`KEEP:\` at its start. Every marked line must survive the
-  edit; the request you are working on is kept for you.
+**What a compaction must keep.** An edit is refused and not applied when it copies text instead
+of replacing it, or addresses one turn twice. Your final answer is refused when it cites a value
+that a command's output showed and your context no longer holds — keep the values you will answer
+with, or look them up again.
 - Never repeat a long line to preserve it — that is a copy, not a summary, and the edit is
   refused. Write the fact once in your own words.
 - Give every turn one index. Writing the same \`[[CTX_TURN i]]\` twice makes the turn you just
@@ -230,13 +230,96 @@ export function normalizedTurns(edited) {
   return merged;
 }
 
-// ------------------------------------------------- what an edit must prove (acceptance)
+// ------------------------------------ the reference's context check (personal-model checks.py)
 
-/** A line the model may not lose starts with this. The prompt tells the model to mark a fact
- * this way instead of hoping some later compaction keeps it; the gate enforces the mark. A
- * compaction that only meant to shrink is refused when it drops one, so the model's own notes
- * survive it. */
-export const KEEP_PREFIX = "KEEP:";
+/** What the answer quotes or fences, and the layout that is not content: a list item's number
+ * and a code fence's language. `Supported.not_prose`, with Python's `\w` spelled as its
+ * Unicode class (Python matches letters in every script; JS's `\w` is ASCII only). */
+const NOT_PROSE = /```[^\n`]*\n([\s\S]*?)```|(?<!`)`+([^`\n]+)`+|"([^"\n]+)"|“([^”\n]+)”|^[ \t]*\p{Nd}{1,2}[.)][ \t]+/gmu;
+/** A word: letters, digits and underscores joined by dots and slashes, and the slashes before
+ * it. `Supported.word`. */
+const WORD = /(?<!\/)\/*[\p{L}\p{N}_]+(?:[./]+[\p{L}\p{N}_]+)*/gu;
+/** A word that is not letters alone: a digit, an underscore between characters, a dot with
+ * more than one character on a side, or a slash at its start. `Supported.not_letters_alone`. */
+const NOT_LETTERS_ALONE = /\p{Nd}|[\p{L}\p{N}]_+[\p{L}\p{N}]|[\p{L}\p{N}_][\p{L}\p{N}_]\.[\p{L}\p{N}_]|[\p{L}\p{N}_]\.[\p{L}\p{N}_][\p{L}\p{N}_]|^\//u;
+const WORD_CHAR = String.raw`\p{L}\p{N}_`;
+const WORD_EDGE = `(?:(?<![${WORD_CHAR}])|(?![${WORD_CHAR}]))`;
+
+/** Python's `str.splitlines`: no trailing empty element from a trailing break, interior empty
+ * lines kept. A list item's number captures no body, so it contributes nothing. */
+function splitLines(text) {
+  if (text === "") return [];
+  const parts = text.split(/\r\n|\r|\n/);
+  if (/[\r\n]$/.test(text)) parts.pop();
+  return parts;
+}
+
+/** Spacing is never part of a literal: every stretch of it is one space. */
+function collapseSpacing(text) {
+  return text.split(/\s+/).filter((part) => part !== "").join(" ");
+}
+
+/** Every literal an answer gives: the exact strings it commits to. A word of letters alone is
+ * ordinary and never one; a quoted or fenced line always is. `Supported.literals`. */
+export function literals(answer) {
+  const quoted = [];
+  for (const found of answer.matchAll(NOT_PROSE)) {
+    const body = found.slice(1).filter((part) => part !== undefined).join("");
+    quoted.push(...splitLines(body));
+  }
+  const prose = answer.replace(NOT_PROSE, " ");
+  return [...quoted, ...(prose.match(WORD) ?? []).filter((word) => NOT_LETTERS_ALONE.test(word))];
+}
+
+/** Text a model was shown, laid out so a literal can be looked for in it. JSON is read as the
+ * keys and values it holds, and every text is laid out both ways — each line ended, and the
+ * lines run together — so a row at a screen's right edge is found whichever reading is true.
+ * `Seen`. */
+export class Seen {
+  constructor(text) { this.text = text; }
+
+  static of(shown) {
+    const parts = [];
+    for (const text of shown) parts.push(...Seen.parts(text));
+    const ended = parts.map(collapseSpacing);
+    const runTogether = parts.map((part) => collapseSpacing(part.replace(/\n/g, "")));
+    return new Seen([...ended, ...runTogether].join("\n"));
+  }
+
+  static parts(text) {
+    let held;
+    try { held = JSON.parse(text); } catch { return [text]; }
+    return [...Seen.leaves(held)];
+  }
+
+  static* leaves(held) {
+    if (Array.isArray(held)) { for (const inner of held) yield* Seen.leaves(inner); return; }
+    if (held !== null && typeof held === "object") {
+      for (const [key, inner] of Object.entries(held)) { yield key; yield* Seen.leaves(inner); }
+      return;
+    }
+    yield typeof held === "string" ? held : pythonJson(held);
+  }
+
+  /** The literal appears whole: as written but for spacing, and without cutting a word at
+   * either end, so `80` is not shown by `8080`, nor `E48` by `E4821`. `Seen.holds`. */
+  holds(literal) {
+    const written = collapseSpacing(literal).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`${WORD_EDGE}${written}${WORD_EDGE}`, "u").test(this.text);
+  }
+}
+
+/** The literals an answer cites that a tool result showed and the context no longer holds.
+ * `ContextDocument.inspect`, in the stateless form its bookkeeping reduces to: a retired
+ * literal is one an accepted edit stopped holding, and `inspect` only fails when the answer
+ * cites it and the active text still does not hold it. So: evidence ever shown, minus what
+ * the context holds now. */
+export function citedEvidenceMissing(answer, active, evidence) {
+  return [...new Set(literals(answer))]
+    .filter((literal) => evidence.has(literal) && !active.holds(literal));
+}
+
+// ------------------------------------------------- what an edit must prove (acceptance)
 
 /** A line at this length repeated in the compacted text is a copy, not content. The frames and
  * instructions a transcript repeats were 25 copies of one 1,152-character block, 30.3% of the
@@ -251,13 +334,6 @@ function lineCounts(text) {
     if (key.length >= REPEAT_MIN_CHARS) counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return counts;
-}
-
-/** The marked lines `before` holds and `edited` dropped. */
-export function droppedKeeps(before, edited) {
-  const kept = new Set(edited.split("\n").map((line) => line.trim()));
-  return before.split("\n").map((line) => line.trim())
-    .filter((line) => line.startsWith(KEEP_PREFIX) && !kept.has(line));
 }
 
 /** Long lines the edit copied: each one's count rose above what the mirror already held, so
@@ -287,11 +363,6 @@ export function repeatedTurnIndices(edited) {
 /** Every proof the edit owes and did not pay, in the order a reader needs them. */
 export function acceptanceProblems(before, edited) {
   const problems = [];
-  const dropped = droppedKeeps(before, edited);
-  if (dropped.length) {
-    const named = dropped.slice(0, 3).map((line) => JSON.stringify(line.slice(0, 60))).join(", ");
-    problems.push(`it dropped ${dropped.length} line(s) you marked ${KEEP_PREFIX} (${named})`);
-  }
   const copied = addedRepeats(before, edited);
   if (copied.length) {
     const named = copied.slice(0, 2)
@@ -305,10 +376,9 @@ export function acceptanceProblems(before, edited) {
 
 export function acceptanceNote(problems, before) {
   return (
-    `\n[LIVE_CTX_MAIN.txt: edit REJECTED — it did not keep what a compaction must keep: ` +
+    `\n[LIVE_CTX_MAIN.txt: edit REJECTED — it broke a compaction rule: ` +
     `${problems.join("; ")}, so it was NOT applied (still ~${before}). ` +
-    `Keep every ${KEEP_PREFIX} line, replace text instead of repeating it, and give each turn ` +
-    `one index.]`
+    `Replace text instead of repeating it, and give each turn one index.]`
   );
 }
 
@@ -926,8 +996,37 @@ export default function clmReference(pi) {
 
   pi.on("agent_start", () => contextEdit.started(acceptedEdits));
 
-  pi.on("message_end", (event) => {
-    const replacement = contextEdit.refusedTerminal(event.message, acceptedEdits);
+  /** The reference's answer check, in the stateless form its bookkeeping reduces to: an answer
+   * may not cite a literal some command output showed and the context it now holds does not.
+   * `evidence` is every literal a tool result ever put in this session; `active` is the request
+   * the answer was produced from. A removed-only literal means the model compacted away what it
+   * is answering from, so the answer is refused the way a missing required edit is. */
+  function refusesRemovedOnly(message, ctx) {
+    if (message?.role !== "assistant" || message.stopReason !== "stop") return null;
+    const answer = contentText(message.content);
+    if (!answer) return null;
+    const evidence = new Set();
+    for (const entry of ctx.sessionManager.getBranch()) {
+      if (entry.type !== "message" || entry.message?.role !== "toolResult") continue;
+      for (const literal of literals(contentText(entry.message.content) ?? "")) evidence.add(literal);
+    }
+    if (evidence.size === 0) return null;
+    const active = Seen.of([ctx.getSystemPrompt?.() ?? "", ...messageTexts(sent.messages)]);
+    const missing = citedEvidenceMissing(answer, active, evidence);
+    if (missing.length === 0) return null;
+    const named = missing.slice(0, 3).map((literal) => JSON.stringify(literal)).join(", ");
+    return {
+      ...message,
+      stopReason: "error",
+      errorMessage: `Context answer cites removed-only literal(s): ${named}` +
+        `${missing.length > 3 ? ` and ${missing.length - 3} more` : ""}. Your context no ` +
+        "longer holds them: put the text that showed them back in, or drop the claim.",
+    };
+  }
+
+  pi.on("message_end", (event, ctx) => {
+    const replacement = contextEdit.refusedTerminal(event.message, acceptedEdits)
+      ?? refusesRemovedOnly(event.message, ctx);
     return replacement ? { message: replacement } : undefined;
   });
 
