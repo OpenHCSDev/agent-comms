@@ -1,16 +1,16 @@
-"""Remote reads execute in child interpreters, not under the UI's GIL."""
+"""Remote reads execute in worker processes, not under the UI's GIL."""
 
 import os
 from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future
 from dataclasses import replace
 from functools import cached_property
 from threading import BoundedSemaphore, Lock
-from typing import ClassVar, cast
+from typing import ClassVar, Self, cast
 
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
-from agent_comms.execution.child_process import HelperStart, ProcessName, SpawnedHelper
+from agent_comms.execution.child_process import Platform, ProcessName, WorkerStart
 from agent_comms.execution.launch_runtime import ThreadLaunch
 from agent_comms.transport.remote_core import RemoteCoreAccess
 from agent_comms.transport.request import ReadRequest, ToolRequest
@@ -35,23 +35,31 @@ def _read_remote[R: ToolResult](request: ReadRequest[R]) -> R:
     return RemoteCoreAccess.call(_remote, request)
 
 
-class RemoteReadProcess(ProcessPoolExecutor):
-    """One connection's bounded child interpreters and accepted read lifetime.
+class RemoteReadProcess:
+    """One connection's bounded worker processes and accepted read lifetime.
 
     Thread callers wait for their typed result. Network and FieldCodec work
-    execute in the children; abandoning a waiter never replays the operation.
+    execute in the workers; abandoning a waiter never replays the operation.
     Closing joins accepted reads before releasing their workers.
     """
 
-    def __init__(self, access: RemoteCoreAccess, start: HelperStart,
+    def __init__(self, access: RemoteCoreAccess, start: WorkerStart,
                  max_workers: int = 4) -> None:
         if max_workers < 2:
             raise ValueError("Remote reads need a separate observation decoding slot")
-        super().__init__(max_workers=max_workers, mp_context=start.context(),
-                         initializer=_initialize_remote, initargs=(access,))
+        self.workers = start.workers(max_workers, _initialize_remote, (access,))
         # A slow network cannot occupy every interpreter and strand an
         # already-arrived observation packet behind its own remote reads.
         self._read_slots = BoundedSemaphore(max_workers - 1)
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
+
+    def submit[T, **P](self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> Future[T]:
+        return self.workers.submit(fn, *args, **kwargs)
 
     def read[R: ToolResult](self, request: ReadRequest[R]) -> R:
         with self._read_slots:
@@ -61,7 +69,7 @@ class RemoteReadProcess(ProcessPoolExecutor):
         return self.submit(decode, packet).result()
 
     def close(self) -> None:
-        self.shutdown(wait=True)
+        self.workers.shutdown(wait=True)
 
 
 class ProcessViewerEnd(ViewerEnd):
@@ -83,7 +91,7 @@ class ProcessRemoteCoreAccess(RemoteCoreAccess, MroDispatch):
     The connection must close this resource after its acquired reads retire.
     """
 
-    helper_start: ClassVar[HelperStart] = SpawnedHelper()
+    helper_start: ClassVar[WorkerStart] = Platform.current().worker_start()
     _creation_lock: ClassVar[Lock] = Lock()
 
     @property

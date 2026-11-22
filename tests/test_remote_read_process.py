@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from yarl import URL
 
+from agent_comms.execution.child_process import ForkedStart
 from agent_comms.execution.remote_core_process import ProcessRemoteCoreAccess, ProcessViewerEnd
 from agent_comms.nominal.field_codec import FieldCodec, RootId
 from agent_comms.transport.connector_profile import (
@@ -100,9 +101,15 @@ class Progress(WireExportObserver):
         self.updates.append(progress)
 
 
-@pytest.fixture
-def access():
-    client = ProcessRemoteCoreAccess(
+class ForkedRemoteCoreAccess(ProcessRemoteCoreAccess):
+    """The same reads through workers forked from this process, as on Android."""
+
+    helper_start = ForkedStart()
+
+
+@pytest.fixture(params=(ProcessRemoteCoreAccess, ForkedRemoteCoreAccess), ids=("spawned", "forked"))
+def access(request):
+    client = request.param(
         HttpsMcpEndpoint(URL("https://unused.example/mcp")),
         UiCredential(UiGrantId("1" * 32), RootId("a" * 32), 2**31, BearerSecret("test")))
     yield client
