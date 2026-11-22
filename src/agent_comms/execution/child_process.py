@@ -69,6 +69,12 @@ from typing import (
 )
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.helper_workers import (
+    ForkedTemplate,
+    ForkedWorkers,
+    HelperWorkers,
+    SpawnedWorkers,
+)
 from agent_comms.execution.launch_runtime import (
     INHERITED_ENVIRONMENT,
     LaunchRuntime,
@@ -765,6 +771,10 @@ class Platform(DeclaredFamily, affix="Platform"):
         """Keep the inherited executable name on platforms without a naming operation."""
         return None
 
+    def worker_start(self) -> WorkerStart:
+        """The platform's way to get worker processes: fresh interpreters."""
+        return SpawnedHelper()
+
     def lock_holders(self, descriptor: int) -> tuple[LockHolder, ...]:
         return (UnidentifiedLockHolder(),)
 
@@ -1038,6 +1048,11 @@ class AndroidPlatform(LinuxPlatform):
 
     # AOSP's AID_SYSTEM owns /data; app UID/GID pairs own their isolated sandboxes.
     system_identity = 1000
+
+    def worker_start(self) -> WorkerStart:
+        """An Android app's Python is built without named semaphores (bionic has none), so
+        it can build no process pool. Termux adds them, and forks serve it as well."""
+        return ForkedStart()
 
     def trusted_ancestor_owner(self, uid: int) -> bool:
         return uid == self.system_identity or super().trusted_ancestor_owner(uid)
@@ -1970,7 +1985,21 @@ class ReadWork(AsyncWork):
         pending.cancel()
 
 
-class HelperStart(ABC):
+class WorkerStart(ABC):
+    """How the application gets the processes it lends CPU work to: its render workers, the
+    workers that read and decode a remote Core's replies. Each platform declares its member
+    (``Platform.worker_start``); an owner of workers asks it, and never the platform."""
+
+    def prepare(self) -> None:
+        """Whatever the member needs done before a UI takes the terminal; nothing by default."""
+
+    @abstractmethod
+    def workers(self, max_workers: int, initializer: Callable[..., object] | None = None,
+                initargs: tuple[object, ...] = ()) -> HelperWorkers:
+        """Workers that each run ``initializer`` once, then the calls submitted to them."""
+
+
+class HelperStart(WorkerStart):
     """How a helper interpreter that runs the application's own code starts: a route
     observer, a render worker. Each owner that starts one declares its member.
 
@@ -1985,12 +2014,46 @@ class HelperStart(ABC):
         """Every member speaks spawn's protocol (a pickled process object on a pipe); a
         member decides only what interpreter receives it."""
 
+    def prepare(self) -> None:
+        """Initialize POSIX spawn bookkeeping before a UI captures stderr.
+
+        Python 3.14's resource tracker inherits stderr's file descriptor on first startup.
+        A terminal UI's capture can report -1 instead of raising UnsupportedOperation,
+        which is invalid in spawn's pass-fd list. The tracker is multiprocessing-owned and
+        shared with every other process pool in this interpreter.
+        """
+        if os.name == "posix":
+            from multiprocessing import resource_tracker
+
+            resource_tracker.ensure_running()
+
+    def workers(self, max_workers: int, initializer: Callable[..., object] | None = None,
+                initargs: tuple[object, ...] = ()) -> HelperWorkers:
+        return SpawnedWorkers(max_workers=max_workers, mp_context=self.context(),
+                              initializer=initializer, initargs=initargs)
+
 
 class SpawnedHelper(HelperStart):
     """A fresh interpreter per helper, importing what it runs."""
 
     def context(self) -> multiprocessing.context.SpawnContext:
         return multiprocessing.get_context("spawn")
+
+
+class ForkedStart(WorkerStart):
+    """Workers forked from the application through its one-thread template
+    (``helper_workers.ForkedTemplate``). For a platform whose Python cannot build a process
+    pool: an Android app's is built without named semaphores. A forked worker imports
+    nothing, where a fresh interpreter on a phone imported the application again for minutes."""
+
+    def prepare(self) -> None:
+        """Fork the template now, on the thread and at the moment the application chose:
+        its workers hold the modules loaded by then."""
+        ForkedTemplate.current()
+
+    def workers(self, max_workers: int, initializer: Callable[..., object] | None = None,
+                initargs: tuple[object, ...] = ()) -> HelperWorkers:
+        return ForkedWorkers(max_workers, initializer, initargs)
 
 
 async def join_retirement[Result](task: asyncio.Future[Result]) -> Result:
