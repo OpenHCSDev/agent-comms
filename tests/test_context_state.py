@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 from agent_comms.execution import context_state
+from agent_comms.execution.context_history import ContextHistory, ContextView, ViewTurn
 from agent_comms.execution.context_state import (
     ColdSlot,
     ContextStateStore,
@@ -115,6 +116,23 @@ def test_a_turn_end_commits_the_context_as_files_with_a_history(store, tmp_path)
     before = branch.history()[-1].id
     assert branch.load_text("ctx/0003-tool.txt", ref=before) == "big output"
     assert store.history("never-published").record() is None
+
+
+def test_a_context_its_holder_hands_over_is_the_same_record_as_a_published_one(store, tmp_path):
+    """A holder with no harness (a practice attempt) commits its own view: same files, same
+    content id as the served thread's record of the same context."""
+    publish(tmp_path, "served", ("user", "TASK"), ("assistant", "plan"), tokens=7)
+    served = store.history("served").record()
+
+    held = ContextHistory(store.repository, "held")
+    handed = held.commit(ContextView("SYSTEM", {"strict_target": 26624, "tokens": 7},
+                                     (ViewTurn("user", "TASK"), ViewTurn("assistant", "plan"))))
+
+    assert handed == served is not None
+    assert held.branch().list_files("ctx") == ["ctx/0001-user.txt", "ctx/0002-assistant.txt"]
+    held.commit(ContextView("SYSTEM", {"tokens": 3}, (ViewTurn("assistant", "kept: plan"),)))
+    assert held.branch().list_files("ctx") == ["ctx/0001-assistant.txt"]
+    assert (held.sizes().before, held.sizes().after) == (7, 3)
 
 
 def test_returning_to_a_conversation_restores_the_state_saved_when_it_lost_the_slot(
