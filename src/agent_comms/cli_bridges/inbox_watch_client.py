@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
+import hashlib
 import os
 import re
 import secrets
@@ -40,6 +42,7 @@ from agent_comms.cli_bridges.claude_transcript import (
     WATCH_REPLACED,
     WATCH_STOPPED,
     WINDOW_ENDED,
+    FilesWanted,
     PrintedLedger,
     PrintedNow,
     RecentClaudeWindow,
@@ -47,6 +50,7 @@ from agent_comms.cli_bridges.claude_transcript import (
     ReconnectUrl,
     RunningClaude,
     WatchedDelivery,
+    WatchedFilePart,
 )
 from agent_comms.cli_bridges.harness_delivery_states import PrintLedgerId
 from agent_comms.cli_bridges.session_watch import WatchClaim
@@ -537,6 +541,35 @@ class InboxSocket:
         self.ledger.record(delivery.message.reference)
         print(line, flush=True)
         await socket.send_str(PrintedNow(printed=(delivery.message.reference,)).line())
+        if delivery.files:
+            await socket.send_str(FilesWanted(printed=(delivery.message.reference,)).line())
+        await asyncio.sleep(self.batch_gap_seconds)
+
+    def filed_at(self, part: WatchedFilePart) -> Path:
+        """Where one of a message's files is kept: beside the messages, named for its message,
+        its position and its own name."""
+        return self.exports / f"{part.message.name}.{part.position}.{Path(part.name).name}"
+
+    async def filed(self, part: WatchedFilePart) -> None:
+        """Keep one piece of a file; with its last piece the file is whole, checked against
+        the digest the bus holds for it, and named to the session in an event of its own. The
+        message's event has already had its batch, so this line never reads as its body."""
+        path = self.filed_at(part)
+        arriving = path.with_name(path.name + ".arriving")
+        self.exports.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with arriving.open("w" if part.part == 1 else "a", encoding="ascii") as text:
+            text.write(part.data)
+        if part.part < part.parts:
+            return
+        data = base64.b64decode(arriving.read_text(encoding="ascii"))
+        arriving.unlink()
+        if hashlib.sha256(data).hexdigest() != part.sha256:
+            print(f"File {part.position} of {part.message.name} ({part.name}) did not arrive "
+                  "whole and was not kept; comms_message_file still reads it.", flush=True)
+        else:
+            path.write_bytes(data)
+            print(f"File {part.position} of {part.message.name} is on your disk: {path} "
+                  f"({part.mime_type}, {part.size} bytes). Read that path to see it.", flush=True)
         await asyncio.sleep(self.batch_gap_seconds)
 
     async def publishing(self, socket: ClientWebSocketResponse) -> None:
@@ -597,10 +630,14 @@ class InboxSocket:
                     return WatchEnd.closed(socket.close_code, "")
 
     async def received(self, frame: str, socket: ClientWebSocketResponse) -> None:
-        """A message, or the connector's reconnect URL, which is kept and never shown."""
+        """A message, a piece of a file one carries, or the connector's reconnect URL, which
+        is kept and never shown."""
         if frame.startswith(ReconnectUrl.wire_prefix):
             self.redials.held = ReconnectWith(ReconnectUrl.model_validate_json(frame).url)
             self.redials.told = self.redials.told.reconnectable()
+            return
+        if frame.startswith(WatchedFilePart.wire_prefix):
+            await self.filed(WatchedFilePart.model_validate_json(frame))
             return
         await self.deliver(frame, socket)
 

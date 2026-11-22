@@ -35,6 +35,7 @@ from agent_comms.cli_bridges.claude_transcript import (
     ReconnectUrl,
     ReportedLedger,
     WatchedDelivery,
+    WatchedFilePart,
     WatchReport,
 )
 from agent_comms.cli_bridges.harness_delivery_states import (
@@ -247,6 +248,21 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
         end the first while its frame might still be lost in a reset."""
         await self.socket.send_str(self.offer.line())
         logging.info("Watch for %s sent its reconnect URL on request", self.transcript_thread)
+
+    async def files_wanted(self, shown: frozenset[MessageReference]) -> None:
+        """The bytes of every file these messages carry, for the messages this watch's thread
+        was sent: an attempt is recorded before a message's frame goes out, so a message with
+        none was never this thread's to read."""
+        sent = await self.coordinator_read(lambda db: frozenset(
+            delivery.reference for reference in shown for delivery in HarnessDelivery.select(
+                db, bridge=self.delivery_kind, recipient_lookup=self.recipient_lookup,
+                message_id=reference.message_id)))
+        files = self.comms.messaging.files
+        for file in await asyncio.to_thread(files.of, sent & shown):
+            for part in WatchedFilePart.of(await asyncio.to_thread(files.content, file)):
+                await self.socket.send_str(part.line())
+        logging.info("Watch for %s was sent the files of %s", self.transcript_thread,
+                     ", ".join(sorted(reference.name for reference in sent & shown)) or "nothing")
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         state, offset = self.start_state(), 0
