@@ -149,6 +149,7 @@ from agent_comms.transport.tool_request import (
     PublishingToolRequest,
     ReadTool,
     ServedRequest,
+    ShortListed,
     ThreadContextAction,
     ThreadReadTool,
     ThreadToolRequest,
@@ -808,7 +809,7 @@ class CommsSetProjectTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadsTool(ReadTool, NativeToolRequest):
+class CommsThreadsTool(ShortListed, ReadTool, NativeToolRequest):
     label = "Comms Threads"
     description = (
         "List agent threads with status and pending counts, plus one delivery summary "
@@ -1185,7 +1186,7 @@ class CommsSubtaskTool(CommsAuthoredTaskTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsHistoryTool(ReadTool, NativeToolRequest):
+class CommsHistoryTool(ShortListed, ReadTool, NativeToolRequest):
     label = "Conversation history"
     description = (
         "Read one bounded, newest-first channel or DM history page. "

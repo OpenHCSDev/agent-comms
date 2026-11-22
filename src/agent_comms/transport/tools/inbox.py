@@ -21,7 +21,7 @@ from agent_comms.nominal.field_codec import GoalId, NullMember, WireOmitDefault
 from agent_comms.planning.goal_waits import NoStandbyReview, StandbyReview
 from agent_comms.transport.request import tool_field
 from agent_comms.transport.tool_caller import ToolCaller
-from agent_comms.transport.tool_request import NativeToolRequest
+from agent_comms.transport.tool_request import NativeToolRequest, ShortListed
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
@@ -59,7 +59,7 @@ class NoStandby(NullMember):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsInboxTool(NativeToolRequest):
+class CommsInboxTool(ShortListed, NativeToolRequest):
     label = "Comms Inbox"
     description = (
         "Fetch one oldest-first page of messages no harness attempted and no native input took, "

@@ -52,6 +52,7 @@ from agent_comms.cli_verbs.declared_verb import DeclaredVerb
 from agent_comms.comms import Comms, client_wire, wire
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.service_passes import ServicePassStore
+from agent_comms.errors import UnexposedToolError
 from agent_comms.execution.child_process import (
     GitChildren,
     HelperStart,
@@ -65,6 +66,7 @@ from agent_comms.execution.child_process import (
 )
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms_hooks import ToolRefusedError
+from pydantic import JsonValue
 from agent_comms.execution.launch_root import started
 from agent_comms.execution.watch_passes import ConnectorWatch, Watch
 from agent_comms.host_services import HostService
@@ -102,6 +104,7 @@ from agent_comms.transport.connector_caller import (
 from agent_comms.transport.connector_profile import (
     MCP_PATH,
     OBSERVE_PATH,
+    SHORT_MCP_PATH,
     HttpsMcpEndpoint,
     UiConnectionProfile,
     UiGrantId,
@@ -142,11 +145,18 @@ from agent_comms.transport.mcp import (
 from agent_comms.transport.progress import CancellableWireExport, WireExportObserver
 from agent_comms.transport.request import tool_field
 from agent_comms.transport.served_endpoints import OfferedByTailnet, ServedEndpoints
-from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tool_request import ConnectorService, NoConnectorService, ServedRequest
+from agent_comms.transport.tool_caller import ThreadCaller, ToolCaller
+from agent_comms.transport.tool_request import (
+    ConnectorService,
+    NoConnectorService,
+    ServedRequest,
+    ShortListed,
+    ToolArgumentsRefusedError,
+)
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools.orders import CommsHeadVerdictTool, HeadVerdictTool
 from agent_comms.transport.tools.send import CommsSendTool, SendTool
+from agent_comms.transport.tools.served import SearchToolLookup
 from agent_comms.ui_model.observation import RelayConnection, relay_frames, serve_encoded
 
 """A JSON-RPC request id, as the client chose it."""
@@ -171,7 +181,8 @@ class SystemdSite(web.TCPSite):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorSendTool(SendTool, ConnectorTool, declared_name=CommsSendTool.declared_name):
+class ConnectorSendTool(
+        ShortListed, SendTool, ConnectorTool, declared_name=CommsSendTool.declared_name):
     request: Annotated[
         RequestSelection,
         *tool_field("Owner request ID; omitted selects the recipient's newest open request"),
@@ -202,6 +213,85 @@ class ConnectorWatchTool(ConnectorTool, declared_name="comms_watch"):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
         return self.service.watch_url(caller.identity(comms).name)
+
+
+@dataclass(frozen=True)
+class FoundTool:
+    name: str
+    description: str
+    takes: dict[str, JsonValue]
+    """What the tool is given, as a JSON Schema; comms_call_tool passes it as `arguments`."""
+
+
+@dataclass(frozen=True)
+class ToolsFound(ToolResult):
+    tools: tuple[FoundTool, ...]
+    more: tuple[str, ...]
+    """The names of the matches past the limit, to search for more narrowly."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorFindToolTool(
+        ShortListed, ConnectorTool, declared_name="comms_find_tool"):
+    """The short list's way to every tool it leaves out: what it finds is what the director's
+    grant may call, described as that grant's own list would describe it."""
+
+    label = "Find a Tool"
+    description = (
+        "Find any other tool on this bus: goals, orders, reviews, threads, channels, boards, "
+        "installs and the rest. Give words from its name or from what it does; every word must "
+        "match, and no words matches all of them. Each match comes with what it does and what "
+        "it takes. Then run it with comms_call_tool."
+    )
+    query: Annotated[str, *tool_field("Words the tool's name or description must contain")] = ""
+    limit: Annotated[int, *tool_field(
+        "How many matches to describe in full; the rest are named only")] = 5
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ToolsFound:
+        found = SearchToolLookup(self.query).selected(tuple(CALLER.exposed().values()))
+        return ToolsFound(
+            tuple(FoundTool(tool.declared_name, tool.description, CALLER.input_schema(tool))
+                  for tool in found[:self.limit]),
+            tuple(tool.declared_name for tool in found[self.limit:]))
+
+
+@dataclass(frozen=True, kw_only=True)
+class NamedCall:
+    name: Annotated[str, *tool_field("The tool's name, as comms_find_tool gives it")]
+    arguments: Annotated[dict[str, JsonValue], *tool_field(
+        "What that tool takes, as comms_find_tool describes it")] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorCallToolTool(
+        ShortListed, NamedCall, ConnectorTool, declared_name="comms_call_tool"):
+    """A call of this tool is a call of the tool it names: that tool decides how the call
+    runs, what it may change and what it answers, exactly as when it is called directly."""
+
+    label = "Call a Tool by Name"
+    description = (
+        "Run any tool comms_find_tool found: give its name and, as arguments, what it takes. "
+        "The answer is that tool's own answer."
+    )
+
+    @classmethod
+    def reached(
+        cls, arguments: Mapping[str, object], exposed: Mapping[str, type[ServedRequest]],
+    ) -> tuple[type[ServedRequest], Mapping[str, object]]:
+        keys = {plan.key for plan in FieldCodec.field_plans(NamedCall)}
+        try:
+            call = FieldCodec.decode(
+                NamedCall, {key: value for key, value in arguments.items() if key in keys})
+        except MalformedRecord as error:
+            raise ToolArgumentsRefusedError(
+                f"Invalid {cls.declared_name} arguments: {error}") from error
+        if call.name not in exposed:
+            raise UnexposedToolError(f"The connector exposes no tool {call.name!r}.")
+        rest = {key: value for key, value in arguments.items() if key not in keys}
+        return exposed[call.name].reached({**rest, **call.arguments}, exposed)
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ToolResult:
+        raise ToolRefusedError(f"{self.declared_name} runs as the tool it names, never itself.")
 
 
 @dataclass(frozen=True)
@@ -778,9 +868,9 @@ class Connector(ConnectorService, McpServer):
             tool.cancel_on_shutdown(call)
         await asyncio.gather(*(call for call, tool in pending), return_exceptions=True)
 
-    @property
-    def resource_metadata_url(self) -> str:
-        return f"{self.issuer}/.well-known/oauth-protected-resource"
+    def resource_metadata_url(self, address: str = "") -> str:
+        """Where a client reads which resource `address` is; unnamed, the MCP address."""
+        return f"{self.issuer}/.well-known/oauth-protected-resource{address}"
 
     @contextmanager
     def opened_wire(self) -> Iterator[Comms]:
@@ -833,6 +923,11 @@ class Connector(ConnectorService, McpServer):
                 web.post("/token", self.token),
                 web.post(MCP_PATH, self.mcp),
                 web.get(MCP_PATH, self.sign_in_first),
+                web.get(
+                    f"/.well-known/oauth-protected-resource{SHORT_MCP_PATH}",
+                    self.resource_metadata),
+                web.post(SHORT_MCP_PATH, self.short_mcp),
+                web.get(SHORT_MCP_PATH, self.short_sign_in_first),
                 web.get(OBSERVE_PATH, self.observe),
                 web.get("/watch/{ticket}", self.inbox_watch),
             ]
@@ -907,8 +1002,10 @@ class Connector(ConnectorService, McpServer):
             self.watch_tasks.clear()
 
     async def resource_metadata(self, request: web.Request) -> web.Response:
+        """The resource is the address the metadata path names; unnamed, the MCP address."""
+        address = request.path.removeprefix(self.resource_metadata_url().removeprefix(self.issuer))
         return web.json_response(FieldCodec.encode(
-            ResourceMetadata(f"{self.issuer}{MCP_PATH}", (self.issuer,))))
+            ResourceMetadata(f"{self.issuer}{address or MCP_PATH}", (self.issuer,))))
 
     async def server_metadata(self, request: web.Request) -> web.Response:
         return web.json_response(FieldCodec.encode(ServerMetadata(
@@ -1099,6 +1196,10 @@ class Connector(ConnectorService, McpServer):
         await self.bearer_caller(request)
         raise web.HTTPMethodNotAllowed(request.method, ["POST"])
 
+    async def short_sign_in_first(self, request: web.Request) -> web.Response:
+        await self.bearer_caller(request, SHORT_MCP_PATH)
+        raise web.HTTPMethodNotAllowed(request.method, ["POST"])
+
     @staticmethod
     def refused(data: object, error: McpError) -> web.Response:
         logging.warning("MCP request refused (%s): %s", type(error).__name__, error.message)
@@ -1110,15 +1211,16 @@ class Connector(ConnectorService, McpServer):
         caller.require_root(self.root)
         return caller
 
-    async def bearer_caller(self, request: web.Request) -> ConnectorCaller:
-        """The request's bearer grant, or the OAuth challenge every route answers with."""
+    async def bearer_caller(self, request: web.Request, address: str = "") -> ConnectorCaller:
+        """The request's bearer grant, or the OAuth challenge every route answers with,
+        pointing at the metadata of the address that was asked."""
         token = request.headers.get("Authorization", "").removeprefix("Bearer ")
         try:
             return await asyncio.to_thread(self.caller_for, token)
         except GrantRefusedError:
             raise web.HTTPUnauthorized(
                 headers={
-                    "WWW-Authenticate": (f'Bearer resource_metadata="{self.resource_metadata_url}"')
+                    "WWW-Authenticate": (f'Bearer resource_metadata="{self.resource_metadata_url(address)}"')
                 }
             )
 
@@ -1140,7 +1242,15 @@ class Connector(ConnectorService, McpServer):
         return viewer
 
     async def mcp(self, request: web.Request) -> web.StreamResponse:
-        caller = await self.bearer_caller(request)
+        return await self.answered(request, await self.bearer_caller(request))
+
+    async def short_mcp(self, request: web.Request) -> web.StreamResponse:
+        """The same protocol for the same grants, with the short tool list."""
+        caller = await self.bearer_caller(request, SHORT_MCP_PATH)
+        return await self.answered(request, caller.at_short_address())
+
+    async def answered(
+        self, request: web.Request, caller: ConnectorCaller) -> web.StreamResponse:
         try:
             data = await request.json()
         except json.JSONDecodeError as error:

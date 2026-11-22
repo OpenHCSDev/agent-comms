@@ -25,7 +25,12 @@ from agent_comms.transport.tool_caller import (
     ThreadCaller,
     ToolCaller,
 )
-from agent_comms.transport.tool_request import ReadTool, ServedRequest, ToolArgumentsRefusedError
+from agent_comms.transport.tool_request import (
+    ReadTool,
+    ServedRequest,
+    ShortListed,
+    ToolArgumentsRefusedError,
+)
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
@@ -58,6 +63,15 @@ class ConnectorCaller(ToolCaller):
 
     def exposed(self) -> dict[str, type[ServedRequest] | type[ConnectorTool]]:
         return {tool.declared_name: tool for tool in ServedRequest.members_with(ServedRequest)}
+
+    def listed(self) -> dict[str, type[ServedRequest] | type[ConnectorTool]]:
+        """The tools this caller's list names. Every exposed tool can be called, listed or not."""
+        return self.exposed()
+
+    def at_short_address(self) -> ConnectorCaller:
+        """This caller as the short address answers it. A grant with no short list is shown
+        its whole one."""
+        return self
 
     def acting(self, arguments: Mapping[str, object]) -> tuple[ToolCaller, Mapping[str, object]]:
         return self, arguments
@@ -172,6 +186,20 @@ class DirectorCaller(OperatorOutcomes, ForkingCaller):
         return super().exposed() | {
             tool.declared_name: tool for tool in ConnectorTool.members_with(ConnectorTool)
         }
+
+    def at_short_address(self) -> ShortListDirectorCaller:
+        return ShortListDirectorCaller(self.name)
+
+
+@dataclass(frozen=True)
+class ShortListDirectorCaller(DirectorCaller):
+    """The director's grant at the short address, for a client that stops reading at a long
+    tool list (Gemini's custom app, 2026-11-22: it signed in, read 118 tools and said
+    "account linking is required"). It may call everything the director may; its list names
+    only the ShortListed tools, two of which find any other tool and call it by name."""
+
+    def listed(self) -> dict[str, type[ServedRequest] | type[ConnectorTool]]:
+        return {name: tool for name, tool in self.exposed().items() if issubclass(tool, ShortListed)}
 
 
 class ConnectorTool(ServedRequest[DirectorCaller], affix="ConnectorTool"):

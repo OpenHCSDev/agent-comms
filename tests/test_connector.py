@@ -87,11 +87,13 @@ from agent_comms.transport.connector_caller import (
     UiReadCaller,
 )
 from agent_comms.transport.connector_profile import (
-    OBSERVE_PATH,
     BearerSecret,
     HttpsMcpEndpoint,
-    UiCredential,
+    MCP_PATH,
+    OBSERVE_PATH,
+    SHORT_MCP_PATH,
     UiConnectionProfile,
+    UiCredential,
     UiGrantId,
     UiGrantSummary,
 )
@@ -867,6 +869,49 @@ async def test_connector_lists_every_tool(client, store, comms):
     writes = [tool["description"] for tool in listed if not tool["annotations"]["readOnlyHint"]]
     assert writes and all(description.endswith(ToolRequest.bus_effect) for description in writes)
     assert all("claude-ai to call this without asking" in description for description in writes)
+
+
+async def test_the_short_address_lists_a_few_tools_and_reaches_all_of_them(client, comms):
+    """A client that stops reading at a long tool list is given /mcp/short: the same sign-in
+    and the same grant, a list of seven, and every other tool found and called by name."""
+    knocked = await client.get(SHORT_MCP_PATH)
+    pointer = knocked.headers["WWW-Authenticate"].split('"')[1]
+    assert knocked.status == 401 and pointer.endswith(SHORT_MCP_PATH)
+    described = await (await client.get(URL(pointer).path)).json()
+    assert described["resource"].endswith(SHORT_MCP_PATH)
+
+    headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
+
+    async def asked(address: str, name: str, arguments: dict) -> dict:
+        answered = await client.post(address, headers=headers, json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": name, "arguments": arguments}})
+        return (await answered.json())["result"]
+
+    listed = (await (await client.post(SHORT_MCP_PATH, json=LIST, headers=headers)).json())[
+        "result"]["tools"]
+    assert sorted(tool["name"] for tool in listed) == [
+        "comms_call_tool", "comms_channels", "comms_find_tool", "comms_history", "comms_inbox",
+        "comms_send", "comms_threads"]
+    # The whole short list is smaller than the long list's one largest tool.
+    assert len(json.dumps(listed)) < 20_000
+
+    found = (await asked(SHORT_MCP_PATH, "comms_find_tool", {"query": "export wire"}))[
+        "structuredContent"]
+    assert [tool["name"] for tool in found["tools"]] == ["comms_export_wire"]
+    assert found["tools"][0]["takes"] == CALLER.input_schema(CALLER.exposed()["comms_export_wire"])
+    everything = (await asked(SHORT_MCP_PATH, "comms_find_tool", {"limit": 2}))["structuredContent"]
+    assert [len(everything["tools"]), len(everything["more"])] == [2, len(CALLER.exposed()) - 2]
+
+    # A tool the short list leaves out answers by name exactly as it does called directly.
+    direct = await asked(MCP_PATH, "comms_registry", {})
+    by_name = await asked(SHORT_MCP_PATH, "comms_call_tool", {"name": "comms_registry"})
+    assert not direct["isError"] and by_name == direct
+    assert await asked(SHORT_MCP_PATH, "comms_registry", {}) == direct
+    unknown = await asked(SHORT_MCP_PATH, "comms_call_tool", {"name": "comms_nothing"})
+    assert unknown["isError"] and "comms_nothing" in unknown["content"][0]["text"]
+    unnamed = await asked(SHORT_MCP_PATH, "comms_call_tool", {"arguments": {}})
+    assert unnamed["isError"] and "name" in unnamed["content"][0]["text"]
 
 
 async def test_connector_mcp_is_stateless(client, comms):

@@ -40,6 +40,21 @@ network and refuses to sign in to ("resolves to private network address ... whic
 blocked") unless this is set. Off the tailnet the name resolves to a public address
 and the setting changes nothing.
 
+## A client that takes few tools
+
+`/mcp` lists every tool, about 120 of them and half a megabyte of schema. The Gemini
+app's custom-app form signs in, reads that list and stops ("Account linking is required
+to use this custom app", 2026-11-22). Give such a client the same address with `/short`
+on the end:
+
+```
+https://<connector host>/mcp/short
+```
+
+Sign-in and the grant are the same. The list is seven tools: send, inbox, history,
+channels, threads, `comms_find_tool` (search every other tool and read what it takes)
+and `comms_call_tool` (run one by name). Nothing is out of reach, and `/mcp` is unchanged.
+
 ## Hosts that require a client ID or secret
 
 First copy the exact callback URL displayed by that host. Register it locally on

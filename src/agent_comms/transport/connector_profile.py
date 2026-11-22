@@ -103,6 +103,7 @@ class DialedConnection(http.client.HTTPSConnection):
 
 
 MCP_PATH = "/mcp"
+SHORT_MCP_PATH = f"{MCP_PATH}/short"  # the same protocol, listing only the ShortListed tools
 """Where a connector serves MCP: its own route, the resource its metadata names and the
 endpoint a profile points at are one fact. A profile minted for the bare origin posts to /
 and is answered 404 (Tristan, 2026-11-07: "i either get 404 or ...")."""
