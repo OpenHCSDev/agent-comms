@@ -277,12 +277,15 @@ class ReplyingThreadOutput(ThreadOutput):
 
     def flush_before(self, key: TurnItem) -> None:
         """A later item makes each held assistant item no longer its turn's last: it is said
-        now to whoever hears each reply, and published."""
+        now to whoever hears each reply, and published. One that already landed (the turn's
+        window read again after a re-arm) is said to no one again."""
         for previous in tuple(self.pending):
             if previous != key:
                 item = self.pending.pop(previous)
-                super().publish_item(self.replied(item, self.reply_targets(
-                    previous.turn_id, lambda message: message.sender_role.hears_each_reply())))
+                if not self.transcript.landed(item.turn_id, item.item_id):
+                    item = self.replied(item, self.reply_targets(
+                        item.turn_id, lambda message: message.sender_role.hears_each_reply()))
+                super().publish_item(item)
 
     def reply_targets(
         self, turn_id: NativeTurnId, hears: Callable[[Message], bool],

@@ -1461,6 +1461,13 @@ class ExternalTranscript(TranscriptSource, DurableStore):
             DraftAppendRow.delete(
                 connection, thread=self.lookup, turn_id=turn_id, item_id=item_id)
 
+    def landed(self, turn_id: NativeTurnId, item_id: NativeItemId) -> bool:
+        """Whether this item is already published here: a reader that re-arms mid-turn reads
+        the turn's window again, and what landed before is not said again."""
+        with self.snapshot() as connection:
+            return bool(ExternalItemRow.count(
+                connection, thread=self.lookup, turn_id=turn_id, item_id=item_id))
+
     def _insert_once(self, connection, turn_id, item_id, events, seq) -> bool:
         key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
         if ExternalItemRow.count(connection, **key):

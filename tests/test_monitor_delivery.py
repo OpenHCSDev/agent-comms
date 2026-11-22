@@ -1228,6 +1228,12 @@ def test_a_person_is_sent_what_a_session_says_before_its_turn_ends(comms, tmp_pa
     assert sent() == ((person.sender, "yes, reading you"),)
     says("c", "done")
     assert sent() == ((person.sender, "yes, reading you"), (person.sender, "still working"))
+    # A reader re-armed mid-turn reads the turn's window again from a fresh output: what
+    # already landed is not said a second time.
+    output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
+    for item, words in (("a", "yes, reading you"), ("b", "still working"), ("c", "done")):
+        says(item, words)
+    assert len(sent()) == 2
     output.end_turn(turn)
     assert sent()[2:] == tuple(sorted(((asker.name, "done"), (person.sender, "done"))))
 
