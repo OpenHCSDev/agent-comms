@@ -171,9 +171,9 @@ async def test_a_watch_is_sent_no_file_of_a_message_it_was_never_sent(
     """Holding a watch proves one thread, and a file goes only with a message that thread's
     watch was sent: asking for any other message by its reference gets nothing."""
     client, token = session
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
     other = comms.messaging.send("cloud", "sender", "not yours", files=(
         FileUpload.of("secret.txt", "text/plain", b"private"),)).message
-    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
     await socket.send_str(FilesWanted(printed=(other.reference,)).line())
     comms.messaging.send("sender", "cloud", "yours")
     assert (await frame(socket))["text"] == "yours"
