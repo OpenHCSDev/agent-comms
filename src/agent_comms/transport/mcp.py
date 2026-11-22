@@ -455,7 +455,7 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
                 UnexposedToolError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
-            tool, arguments = tool.reached(self.params.arguments, caller.exposed())
+            tool, arguments = tool.reached(self.params.arguments, caller)
             answered = await connector.call(tool, arguments, caller, observer)
             return answered.result()
         except (

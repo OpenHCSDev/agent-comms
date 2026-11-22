@@ -10,7 +10,6 @@ from agent_comms.transport.tool_request import (
     CoreRead,
     HostArea,
     HumanToolRequest,
-    ScreensArea,
 )
 from agent_comms.transport.tools.tailnet import (
     CommsTailnetBusesTool,
@@ -24,7 +23,7 @@ class ServedCommsTailnetBusesTool(HostArea, CoreRead[TailnetBusesRead], CommsTai
         return TailnetBusesRead(TailnetBuses.seen())
 
 
-class ServedCommsTailnetProfileTool(ScreensArea, HumanToolRequest[AskedPeer], CommsTailnetProfileTool):
+class ServedCommsTailnetProfileTool(HostArea, HumanToolRequest[AskedPeer], CommsTailnetProfileTool):
     def answered(self, comms: Comms) -> AskedPeer:
         """Core ssh's to a peer its own tailnet reports, whoever named it and however.
 

@@ -937,6 +937,14 @@ async def test_the_short_address_lists_one_tool_per_area_and_runs_the_rest_throu
         ("comms_registry", "comms_menu_threads")]
     screens = await asked(SHORT_MCP_PATH, "comms_find_tool", {"query": "export wire"})
     assert screens["structuredContent"] == {"tools": [], "described": []}
+    # A menu offers what its grant could run and use: not a tool that needs the owner's own
+    # screen as its caller, nor the native harness's tool loader. Neither is named anywhere.
+    host = (await asked(SHORT_MCP_PATH, "comms_menu_host", {}))["structuredContent"]
+    offered = {tool["name"] for tool in host["tools"]}
+    assert "comms_install" in offered
+    assert not offered & {"comms_tailnet_profile", "comms_discover"}
+    refused = await asked(SHORT_MCP_PATH, "comms_menu_host", {"do": "comms_tailnet_profile"})
+    assert refused["isError"] and "comms_install" in refused["content"][0]["text"]
 
     # A tool run through its menu answers exactly as it does called directly.
     direct = await asked(MCP_PATH, "comms_registry", {})
