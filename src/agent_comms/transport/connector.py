@@ -401,7 +401,14 @@ class TokenGrant(DeclaredFamily, affix="Grant"):
 
     @classmethod
     def received(cls, form: Mapping[str, object]) -> Self:
-        return FieldCodec.decode(cls, dict(form))
+        """The grant a form names, read from that grant's own fields: an OAuth peer may
+        send parameters this server does not read, as `register` and `authorize` allow."""
+        tag = cls.family_discriminator
+        try:
+            member = cls.member_named(form.get(tag))
+        except UnknownFamilyMember as error:
+            raise OAuthError("unsupported_grant_type", str(error)) from error
+        return FieldCodec.decode(cls, {tag: form[tag], **declared(member, form)})
 
     @abstractmethod
     def redeemed(self, grants: ConnectorGrants) -> ConnectorGrants:
@@ -1035,10 +1042,9 @@ class Connector(ConnectorService, McpServer):
     async def token(self, request: web.Request) -> web.Response:
         try:
             grant = TokenGrant.received(await request.post())
+            exchanged = await asyncio.to_thread(self.store.update, grant.exchange)
         except MalformedRecord as error:
             return OAuthError("invalid_request", str(error)).response()
-        try:
-            exchanged = await asyncio.to_thread(self.store.update, grant.exchange)
         except OAuthError as refusal:
             return refusal.response()
         return web.json_response(

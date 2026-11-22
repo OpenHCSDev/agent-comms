@@ -70,6 +70,7 @@ from agent_comms.transport.connector import (
     ConnectorVerb,
     GrantUiVerb,
     LongLivedRoute,
+    RefreshTokenGrant,
     RevokeVerb,
     RunningRequest,
     RegisteredClientCredential,
@@ -671,10 +672,13 @@ async def test_loopback_client_uses_its_registered_path_random_port_and_issuer(
     assert metadata["token_endpoint_auth_methods_supported"] == [
         "none", "client_secret_post",
     ]
-    registered_uri = OAuthRedirectUri(URL("http://127.0.0.1/oauth/callback"))
-    callback = OAuthRedirectUri(URL("http://127.0.0.1:43123/oauth/callback"))
+    callback = OAuthRedirectUri(URL("http://localhost:43123/oauth/callback"))
+    resource = f"{connector.issuer}/mcp"
+    # Gemini CLI's own registration body: it names the port it listens on this run.
     registered = await (await client.post("/register", json={
-        "redirect_uris": [str(registered_uri.url)], "client_name": "Gemini CLI",
+        "client_name": "Gemini CLI MCP Client", "redirect_uris": [str(callback.url)],
+        "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"],
+        "token_endpoint_auth_method": "none", "scope": "",
     })).json()
     assert "client_secret" not in registered
     assert "client_secret_expires_at" not in registered
@@ -686,7 +690,8 @@ async def test_loopback_client_uses_its_registered_path_random_port_and_issuer(
         "gemini-state",
     )
     response = await client.get(
-        "/authorize", params=FieldCodec.encode(query), allow_redirects=False,
+        "/authorize", params=FieldCodec.encode(query) | {"resource": resource},
+        allow_redirects=False,
     )
     assert response.status == 302
     redirected = URL(response.headers["Location"])
@@ -703,11 +708,22 @@ async def test_loopback_client_uses_its_registered_path_random_port_and_issuer(
         redirect_uri=OAuthRedirectUri(URL("http://127.0.0.1:43123/wrong")),
     )))
     assert wrong.status == 400 and (await wrong.json())["error"] == "invalid_grant"
-    token = await ClientLogin(query, verifier).redeem(client, code)
+    issued = await (await client.post("/token", data=FieldCodec.encode(AuthorizationCodeGrant(
+        code=code, code_verifier=verifier, client_id=query.client_id,
+        redirect_uri=callback, resource=resource,
+    )))).json()
+    # A refresh may name the scope and audience it wants; this server reads neither.
+    renewed = await client.post("/token", data=FieldCodec.encode(RefreshTokenGrant(
+        refresh_token=issued["refresh_token"], client_id=query.client_id, resource=resource,
+    )) | {"scope": "mcp", "audience": resource})
+    assert renewed.status == 200
     listed = await client.post(
-        "/mcp", json=LIST, headers={"Authorization": f"Bearer {token}"},
+        "/mcp", json=LIST,
+        headers={"Authorization": f"Bearer {(await renewed.json())['access_token']}"},
     )
     assert listed.status == 200
+    unsupported = await client.post("/token", data={"grant_type": "password", "client_id": "c"})
+    assert (await unsupported.json())["error"] == "unsupported_grant_type"
 
 
 async def test_static_confidential_client_returns_its_secret_once_and_requires_it(

@@ -26,13 +26,19 @@ Gemini CLI user configuration (`~/.gemini/settings.json`):
     "agent-comms": {
       "url": "https://ts-gaming.tail553874.ts.net/mcp",
       "type": "http",
-      "oauth": {"enabled": true}
+      "oauth": {"enabled": true, "allowPrivateNetwork": true}
     }
   }
 }
 ```
 
 Then run `/mcp auth agent-comms` and `/mcp list`.
+
+`allowPrivateNetwork` is for a machine on the tailnet: there the connector's name
+resolves to its tailnet address (`100.x`), which Gemini CLI treats as a private
+network and refuses to sign in to ("resolves to private network address ... which is
+blocked") unless this is set. Off the tailnet the name resolves to a public address
+and the setting changes nothing.
 
 ## Hosts that require a client ID or secret
 
