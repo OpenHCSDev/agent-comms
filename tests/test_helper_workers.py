@@ -7,11 +7,12 @@ import signal
 import sys
 import threading
 import time
+import urllib.error
 from pathlib import Path
 
 import pytest
 
-from agent_comms.execution.child_process import ForkedStart
+from agent_comms.execution.child_process import ForkedStart, SpawnedHelper
 from agent_comms.execution.helper_workers import ForkedTemplate, LostHelperWorkerError
 
 LOADED_BEFORE_FORK = object()
@@ -36,6 +37,12 @@ def threads() -> int:
 
 def fail() -> None:
     raise ValueError("no such row")
+
+
+def refused() -> None:
+    """What a worker's HTTP call raises when the bus answers 503: an exception pickle can
+    write and cannot rebuild."""
+    raise urllib.error.HTTPError("https://bus.example/mcp", 503, "Service Unavailable", {}, None)
 
 
 def die() -> None:
@@ -84,6 +91,21 @@ def test_a_failure_crosses_as_itself_and_the_worker_serves_the_next_call(workers
         workers.submit(fail).result(timeout=10)
     assert "In helper worker" in "".join(raised.value.__notes__)
     assert workers.submit(where).result(timeout=10)[0] != os.getpid()
+
+
+@pytest.mark.parametrize("start", [ForkedStart, SpawnedHelper])
+def test_a_failure_pickle_cannot_rebuild_crosses_as_its_builtin_ancestor(start):
+    """Each member's caller gets an OSError naming the HTTPError, with where it was raised,
+    and the workers serve the next call: no TypeError about a constructor, no broken pool."""
+    made = start().workers(1)
+    try:
+        with pytest.raises(OSError, match="HTTPError: HTTP Error 503: Service Unavailable") as raised:
+            made.submit(refused).result(timeout=60)
+        assert type(raised.value) is OSError
+        assert "In helper worker" in "".join(raised.value.__notes__)
+        assert made.submit(threads).result(timeout=60) >= 1
+    finally:
+        made.shutdown(wait=True)
 
 
 def test_a_worker_lost_under_a_call_fails_it_and_is_replaced(workers):
