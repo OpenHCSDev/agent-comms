@@ -38,8 +38,9 @@ from functools import cached_property, partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import Annotated, ClassVar, Literal, Self
+from urllib.parse import unquote
 
-from aiohttp import web
+from aiohttp import BasicAuth, web
 from aiohttp.typedefs import Handler
 from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
 from yarl import URL
@@ -360,7 +361,8 @@ class ClientRegistration:
 
     redirect_uris: tuple[OAuthRedirectUri, ...]
     client_name: str = "unnamed client"
-    token_endpoint_auth_method: Literal["none", "client_secret_post"] = "none"
+    token_endpoint_auth_method: Literal[
+        "none", "client_secret_post", "client_secret_basic"] = "none"
 
     def __post_init__(self) -> None:
         if not self.redirect_uris or len(set(self.redirect_uris)) != len(self.redirect_uris):
@@ -476,7 +478,8 @@ class ServerMetadata:
     response_types_supported: tuple[str, ...] = ("code",)
     grant_types_supported: tuple[str, ...] = field(default_factory=TokenGrant.names)
     code_challenge_methods_supported: tuple[str, ...] = ("S256",)
-    token_endpoint_auth_methods_supported: tuple[str, ...] = ("none", "client_secret_post")
+    token_endpoint_auth_methods_supported: tuple[str, ...] = (
+        "none", "client_secret_post", "client_secret_basic")
     authorization_response_iss_parameter_supported: bool = True
 
 
@@ -829,6 +832,7 @@ class Connector(ConnectorService, McpServer):
                 web.post(ApprovalLink.route, self.confirm),
                 web.post("/token", self.token),
                 web.post(MCP_PATH, self.mcp),
+                web.get(MCP_PATH, self.sign_in_first),
                 web.get(OBSERVE_PATH, self.observe),
                 web.get("/watch/{ticket}", self.inbox_watch),
             ]
@@ -913,11 +917,16 @@ class Connector(ConnectorService, McpServer):
 
     async def register(self, request: web.Request) -> web.Response:
         try:
+            asked = await request.json()
             registration = FieldCodec.decode(
-                ClientRegistration, declared(ClientRegistration, await request.json())
+                ClientRegistration, declared(ClientRegistration, asked)
             )
         except (MalformedRecord, json.JSONDecodeError) as error:
-            return OAuthError("invalid_redirect_uri", str(error)).response()
+            return self.sign_in_refused("register", OAuthError("invalid_redirect_uri", str(error)))
+        self.sign_in_heard(
+            "register", request, asked, ClientRegistration, client=registration.client_name,
+            method=registration.token_endpoint_auth_method,
+            callbacks=[uri.url.host for uri in registration.redirect_uris])
         client_id = OAuthClientId(secrets.token_urlsafe(16))
         registered, reply = registration.issued(client_id, int(time.time()))
         await asyncio.to_thread(
@@ -959,6 +968,10 @@ class Connector(ConnectorService, McpServer):
             raise web.HTTPTooManyRequests(
                 text=str(refusal), headers={"Retry-After": str(CODE_SECONDS)}
             ) from refusal
+        self.sign_in_heard(
+            "authorize", request, request.query, AuthorizationQuery,
+            client=grants.clients[query.client_id].name, callback=query.redirect_uri.url.host,
+            answered="code" if grants.trusts(browser) else "approval page")
         if grants.trusts(browser):
             raise web.HTTPFound(
                 query.redirect(code, self.issuer), headers={"Cache-Control": "no-store"}
@@ -1040,16 +1053,51 @@ class Connector(ConnectorService, McpServer):
         raise response
 
     async def token(self, request: web.Request) -> web.Response:
+        form = dict(await request.post())
+        header = request.headers.get("Authorization", "")
         try:
-            grant = TokenGrant.received(await request.post())
+            if header.startswith("Basic "):
+                # RFC 6749 2.3.1: a client holding a secret may send it in this header.
+                basic = BasicAuth.decode(header)
+                form |= {
+                    "client_id": unquote(basic.login), "client_secret": unquote(basic.password)}
+            grant = TokenGrant.received(form)
             exchanged = await asyncio.to_thread(self.store.update, grant.exchange)
-        except MalformedRecord as error:
-            return OAuthError("invalid_request", str(error)).response()
+        except ValueError as error:
+            return self.sign_in_refused("token", OAuthError("invalid_request", str(error)))
         except OAuthError as refusal:
-            return refusal.response()
+            return self.sign_in_refused("token", refusal)
+        self.sign_in_heard(
+            "token", request, form, type(grant), grant=grant.declared_name,
+            secret_in="header" if header.startswith("Basic ") else "form")
         return web.json_response(
             FieldCodec.encode(exchanged), headers={"Cache-Control": "no-store"}
         )
+
+    @staticmethod
+    def sign_in_heard(
+        step: str, request: web.Request, asked: Mapping[str, object], record: type,
+        **said: object,
+    ) -> None:
+        """One line per sign-in step naming who asked and for what: the program calling, the
+        client's name, its callback's host and the names of the parameters this server does
+        not read. Never a value that is a secret, a code or a token."""
+        ignored = sorted(
+            set(asked) - set(declared(record, asked)) - {TokenGrant.family_discriminator})
+        logging.info("Sign-in %s: %s", step, json.dumps(
+            said | {"ignored": ignored, "agent": request.headers.get("User-Agent", "")}))
+
+    @staticmethod
+    def sign_in_refused(step: str, refusal: OAuthError) -> web.Response:
+        logging.warning(
+            "Sign-in %s refused (%s): %s", step, refusal.error, refusal.error_description)
+        return refusal.response()
+
+    async def sign_in_first(self, request: web.Request) -> web.Response:
+        """A GET or HEAD of the MCP address: without a grant it is told where to sign in, as a
+        POST is; with one, that this address takes POST."""
+        await self.bearer_caller(request)
+        raise web.HTTPMethodNotAllowed(request.method, ["POST"])
 
     @staticmethod
     def refused(data: object, error: McpError) -> web.Response:
