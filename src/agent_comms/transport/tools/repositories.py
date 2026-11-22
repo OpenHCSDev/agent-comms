@@ -16,7 +16,10 @@ from agent_comms.projects.shell_effects import ReadRepositoryStorageEffect
 from agent_comms.projects.storage_projection import StorageProjection
 from agent_comms.transport.request import tool_field
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tool_request import ThreadToolRequest
+from agent_comms.transport.tool_request import (
+    HostArea,
+    ThreadToolRequest,
+)
 from agent_comms.transport.tool_result import ToolResult
 
 
@@ -33,7 +36,7 @@ class RepositoryReadResult(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRepositoryReadTool(ThreadToolRequest, RepositoryReader):
+class CommsRepositoryReadTool(HostArea, ThreadToolRequest, RepositoryReader):
     label = "Read repository"
     description = (
         "Acquire a read-only repository source without a goal or problem. "

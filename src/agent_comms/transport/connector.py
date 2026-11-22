@@ -31,7 +31,7 @@ import socket
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
@@ -147,11 +147,18 @@ from agent_comms.transport.request import tool_field
 from agent_comms.transport.served_endpoints import OfferedByTailnet, ServedEndpoints
 from agent_comms.transport.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.transport.tool_request import (
+    ChannelsArea,
     ConnectorService,
+    GoalsArea,
+    HostArea,
+    MessagesArea,
     NoConnectorService,
     ServedRequest,
     ShortListed,
+    ThreadsArea,
+    ToolArea,
     ToolArgumentsRefusedError,
+    WorkArea,
 )
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools.orders import CommsHeadVerdictTool, HeadVerdictTool
@@ -182,6 +189,7 @@ class SystemdSite(web.TCPSite):
 
 @dataclass(frozen=True, kw_only=True)
 class ConnectorSendTool(
+        MessagesArea,
         ShortListed, SendTool, ConnectorTool, declared_name=CommsSendTool.declared_name):
     request: Annotated[
         RequestSelection,
@@ -194,7 +202,7 @@ class ConnectorSendTool(
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorWatchTool(ConnectorTool, declared_name="comms_watch"):
+class ConnectorWatchTool(MessagesArea, ConnectorTool, declared_name="comms_watch"):
     label = "Watch Inbox"
     description = (
         "Get a one-use wss:// URL that pushes your inbox, so a message wakes this session. Open it "
@@ -216,82 +224,182 @@ class ConnectorWatchTool(ConnectorTool, declared_name="comms_watch"):
 
 
 @dataclass(frozen=True)
-class FoundTool:
+class NamedTool:
     name: str
-    description: str
+    does: str
+    run_with: str
+    """The short list's tool that runs this one: pass this name as its `do`."""
+
+
+@dataclass(frozen=True)
+class DescribedTool(NamedTool):
     takes: dict[str, JsonValue]
-    """What the tool is given, as a JSON Schema; comms_call_tool passes it as `arguments`."""
+    """What the tool is given, as a JSON Schema; it goes in `given`."""
 
 
 @dataclass(frozen=True)
 class ToolsFound(ToolResult):
-    tools: tuple[FoundTool, ...]
-    more: tuple[str, ...]
-    """The names of the matches past the limit, to search for more narrowly."""
+    tools: tuple[NamedTool, ...]
+    described: tuple[DescribedTool, ...]
+
+
+class ToolMenu(ConnectorTool, declared_name=None):
+    """A short-list tool that shows other tools. What it shows is what the director's grant
+    may call, described as that grant's own list would describe it. Many matches are named
+    in a line each; a few come with everything they take, so a broad look stays small."""
+
+    described_at_most: ClassVar[int] = 3
+
+    def shown(self, offered: Iterable[type[ServedRequest]], words: str) -> ToolsFound:
+        found = tuple(
+            NamedTool(tool.declared_name, tool.description, AreaTool.running(tool).declared_name)
+            for tool in SearchToolLookup(words).selected(tuple(offered)))
+        if len(found) > self.described_at_most:
+            return ToolsFound(found, ())
+        exposed = CALLER.exposed()
+        return ToolsFound((), tuple(
+            DescribedTool(one.name, one.does, one.run_with, CALLER.input_schema(exposed[one.name]))
+            for one in found))
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorFindToolTool(
-        ShortListed, ConnectorTool, declared_name="comms_find_tool"):
-    """The short list's way to every tool it leaves out: what it finds is what the director's
-    grant may call, described as that grant's own list would describe it."""
-
-    label = "Find a Tool"
-    description = (
-        "Find any other tool on this bus: goals, orders, reviews, threads, channels, boards, "
-        "installs and the rest. Give words from its name or from what it does; every word must "
-        "match, and no words matches all of them. Each match comes with what it does and what "
-        "it takes. Then run it with comms_call_tool."
-    )
-    query: Annotated[str, *tool_field("Words the tool's name or description must contain")] = ""
-    limit: Annotated[int, *tool_field(
-        "How many matches to describe in full; the rest are named only")] = 5
-
-    def apply(self, comms: Comms, caller: ToolCaller) -> ToolsFound:
-        found = SearchToolLookup(self.query).selected(tuple(CALLER.exposed().values()))
-        return ToolsFound(
-            tuple(FoundTool(tool.declared_name, tool.description, CALLER.input_schema(tool))
-                  for tool in found[:self.limit]),
-            tuple(tool.declared_name for tool in found[self.limit:]))
+class AreaAsk:
+    about: Annotated[str, *tool_field(
+        "Words to narrow this area's tools to; three or fewer matches come with what each takes"
+    )] = ""
+    do: Annotated[str, *tool_field(
+        "The tool to run, by name. Leave it out to see what this area can do")] = ""
+    given: Annotated[dict[str, JsonValue], *tool_field(
+        "What the tool named in `do` takes")] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)
-class NamedCall:
-    name: Annotated[str, *tool_field("The tool's name, as comms_find_tool gives it")]
-    arguments: Annotated[dict[str, JsonValue], *tool_field(
-        "What that tool takes, as comms_find_tool describes it")] = field(default_factory=dict)
+class AreaTool(ShortListed, AreaAsk, ToolMenu, declared_name=None):
+    """One short-list tool for everything about one thing. Asked nothing, it shows its area's
+    tools. Given `do`, the call is a call of that tool: it decides how the call runs, what it
+    may change and what it answers, exactly as when it is called directly. A tool joins an
+    area by inheriting it, so nothing here names a tool."""
 
+    area: ClassVar[type[ToolArea]]
 
-@dataclass(frozen=True, kw_only=True)
-class ConnectorCallToolTool(
-        ShortListed, NamedCall, ConnectorTool, declared_name="comms_call_tool"):
-    """A call of this tool is a call of the tool it names: that tool decides how the call
-    runs, what it may change and what it answers, exactly as when it is called directly."""
+    @classmethod
+    def offered(
+        cls, exposed: Mapping[str, type[ServedRequest]],
+    ) -> dict[str, type[ServedRequest]]:
+        return {name: tool for name, tool in exposed.items() if issubclass(tool, cls.area)}
 
-    label = "Call a Tool by Name"
-    description = (
-        "Run any tool comms_find_tool found: give its name and, as arguments, what it takes. "
-        "The answer is that tool's own answer."
-    )
+    @classmethod
+    def running(cls, tool: type[ServedRequest]) -> type[AreaTool]:
+        """The area tool that runs `tool`."""
+        running, = (one for one in AreaTool.members_with(AreaTool) if issubclass(tool, one.area))
+        return running
+
+    @classmethod
+    def menus(cls) -> tuple[type[ToolArea], ...]:
+        """The areas the short list offers."""
+        return tuple(one.area for one in AreaTool.members_with(AreaTool))
+
+    @classmethod
+    def listed_description(cls) -> str:
+        """The list says what the area can do, so a client need not ask before it knows."""
+        runs = ", ".join(cls.offered(CALLER.exposed()))
+        return f"{cls.description} It runs: {runs}. {cls.bus_effect}"
 
     @classmethod
     def reached(
         cls, arguments: Mapping[str, object], exposed: Mapping[str, type[ServedRequest]],
     ) -> tuple[type[ServedRequest], Mapping[str, object]]:
-        keys = {plan.key for plan in FieldCodec.field_plans(NamedCall)}
+        keys = {plan.key for plan in FieldCodec.field_plans(AreaAsk)}
         try:
-            call = FieldCodec.decode(
-                NamedCall, {key: value for key, value in arguments.items() if key in keys})
+            ask = FieldCodec.decode(
+                AreaAsk, {key: value for key, value in arguments.items() if key in keys})
         except MalformedRecord as error:
             raise ToolArgumentsRefusedError(
                 f"Invalid {cls.declared_name} arguments: {error}") from error
-        if call.name not in exposed:
-            raise UnexposedToolError(f"The connector exposes no tool {call.name!r}.")
+        if not ask.do:
+            return cls, arguments
+        offered = cls.offered(exposed)
+        if ask.do not in offered:
+            raise UnexposedToolError(
+                f"{cls.declared_name} runs {', '.join(offered)}; it has no {ask.do!r}.")
         rest = {key: value for key, value in arguments.items() if key not in keys}
-        return exposed[call.name].reached({**rest, **call.arguments}, exposed)
+        return offered[ask.do].reached({**rest, **ask.given}, exposed)
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> ToolResult:
-        raise ToolRefusedError(f"{self.declared_name} runs as the tool it names, never itself.")
+    def apply(self, comms: Comms, caller: ToolCaller) -> ToolsFound:
+        return self.shown(self.offered(CALLER.exposed()).values(), self.about)
+
+
+class MessagesAreaTool(AreaTool, declared_name="comms_menu_messages"):
+    label = "Messages"
+    description = (
+        "Everything about messages beyond sending and the inbox: a conversation's history, "
+        "a message's files, what became of a message, why a send was refused, an inbox watch."
+    )
+    area = MessagesArea
+
+
+class ThreadsAreaTool(AreaTool, declared_name="comms_menu_threads"):
+    label = "Threads"
+    description = (
+        "Everything about a thread, which is one agent or person on the bus: start, stop, "
+        "fork, archive, rename, change its model, tag it, read its turns and transcript."
+    )
+    area = ThreadsArea
+
+
+class ChannelsAreaTool(AreaTool, declared_name="comms_menu_channels"):
+    label = "Channels"
+    description = (
+        "Everything about channels: read one, list them, pin and sort them and their "
+        "members, saved views and tags."
+    )
+    area = ChannelsArea
+
+
+class GoalsAreaTool(AreaTool, declared_name="comms_menu_goals"):
+    label = "Goals"
+    description = (
+        "Everything about goals, which are what a thread is working toward: set, edit, pause, "
+        "resume and clear one, report progress, read its history, record a decision, "
+        "constraint or subtask."
+    )
+    area = GoalsArea
+
+
+class WorkAreaTool(AreaTool, declared_name="comms_menu_work"):
+    label = "Board and Orders"
+    description = (
+        "Everything about the team's work: the board, problems, orders and their delivery, "
+        "reviews and verdicts, and how the team is doing."
+    )
+    area = WorkArea
+
+
+class HostAreaTool(AreaTool, declared_name="comms_menu_host"):
+    label = "Host"
+    description = (
+        "Everything about the machine the bus runs on: install the latest code, restarts, "
+        "resources and logs, background runs, other buses on the tailnet."
+    )
+    area = HostArea
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorFindToolTool(ShortListed, ToolMenu, declared_name="comms_find_tool"):
+    """A search across every area the short list offers."""
+
+    label = "Find a Tool"
+    description = (
+        "Search every tool on this bus by words from its name or from what it does; every "
+        "word must match. Many matches come back as a name and a line each, with the tool "
+        "that runs them; three or fewer come with everything they take."
+    )
+    query: Annotated[str, *tool_field("Words the tool's name or description must contain")] = ""
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ToolsFound:
+        return self.shown(
+            (tool for tool in CALLER.exposed().values() if issubclass(tool, AreaTool.menus())),
+            self.query)
 
 
 @dataclass(frozen=True)
@@ -307,7 +415,7 @@ class ModelServed(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorServeModelTool(ConnectorTool, declared_name="comms_serve_model"):
+class ConnectorServeModelTool(ThreadsArea, ConnectorTool, declared_name="comms_serve_model"):
     """Starts agent-comms-model-agent on the bus host, the machine the connector runs on, so a
     session anywhere can put a served model on the bus without anyone pasting a command
     (Tristan, 2026-11-18: "add a mcp command so it can be run remotely"). The bridge reads the
@@ -371,7 +479,7 @@ class ConnectorServeModelTool(ConnectorTool, declared_name="comms_serve_model"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorHeadVerdictTool(HeadVerdictTool, ConnectorTool,
+class ConnectorHeadVerdictTool(WorkArea, HeadVerdictTool, ConnectorTool,
                                declared_name=CommsHeadVerdictTool.declared_name):
     """Director and native callers share the same persisted verdict and publication path."""
 

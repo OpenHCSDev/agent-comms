@@ -62,6 +62,7 @@ from agent_comms.storage.store_files import ExclusiveLock, StoreGuard, _store_lo
 from agent_comms.team.standing_rules import ServicePassFailing
 from agent_comms.transport.connector import (
     ApprovalAudience,
+    AreaTool,
     ApprovalLink,
     AuthorizationCodeGrant,
     BoundedRoute,
@@ -73,6 +74,7 @@ from agent_comms.transport.connector import (
     RefreshTokenGrant,
     RevokeVerb,
     RunningRequest,
+    ToolMenu,
     RegisteredClientCredential,
     ServeVerb,
 )
@@ -134,7 +136,7 @@ from agent_comms.transport.mcp import (
 from agent_comms.transport.progress import CancellableWireExport, WireExportObserver
 from agent_comms.transport.request import ToolCall, ToolRequest
 from agent_comms.transport.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
-from agent_comms.transport.tool_request import ReadTool
+from agent_comms.transport.tool_request import ReadTool, ScreensArea
 from agent_comms.transport.tools.channels import ChannelListing, CommsChannelsTool
 from agent_comms.transport.tools.inbox import CommsInboxTool
 from agent_comms.transport.tools.reads import TranscriptPageRead
@@ -871,9 +873,11 @@ async def test_connector_lists_every_tool(client, store, comms):
     assert all("claude-ai to call this without asking" in description for description in writes)
 
 
-async def test_the_short_address_lists_a_few_tools_and_reaches_all_of_them(client, comms):
+async def test_the_short_address_lists_one_tool_per_area_and_runs_the_rest_through_them(
+        client, comms):
     """A client that stops reading at a long tool list is given /mcp/short: the same sign-in
-    and the same grant, a list of seven, and every other tool found and called by name."""
+    and the same grant, a few tools called directly and one tool for each area, which shows
+    the area's tools and runs them."""
     knocked = await client.get(SHORT_MCP_PATH)
     pointer = knocked.headers["WWW-Authenticate"].split('"')[1]
     assert knocked.status == 401 and pointer.endswith(SHORT_MCP_PATH)
@@ -891,27 +895,48 @@ async def test_the_short_address_lists_a_few_tools_and_reaches_all_of_them(clien
     listed = (await (await client.post(SHORT_MCP_PATH, json=LIST, headers=headers)).json())[
         "result"]["tools"]
     assert sorted(tool["name"] for tool in listed) == [
-        "comms_call_tool", "comms_channels", "comms_find_tool", "comms_history", "comms_inbox",
-        "comms_send", "comms_threads"]
-    # The whole short list is smaller than the long list's one largest tool.
-    assert len(json.dumps(listed)) < 20_000
+        "comms_board", "comms_channel", "comms_channels", "comms_find_tool", "comms_history",
+        "comms_inbox", "comms_menu_channels", "comms_menu_goals", "comms_menu_host",
+        "comms_menu_messages", "comms_menu_threads", "comms_menu_work", "comms_send",
+        "comms_threads"]
+    # The whole short list is a third of the long list's one largest tool.
+    assert len(json.dumps(listed)) < 30_000
+    goals, = (tool for tool in listed if tool["name"] == "comms_menu_goals")
+    assert "comms_pause_goal" in goals["description"]
 
-    found = (await asked(SHORT_MCP_PATH, "comms_find_tool", {"query": "export wire"}))[
+    # Every tool is about one thing, so one menu runs it; the app's own screens have none.
+    exposed = CALLER.exposed()
+    menus = [tool for tool in exposed.values() if issubclass(tool, AreaTool)]
+    about = [[menu.declared_name for menu in menus if issubclass(tool, menu.area)]
+             for tool in exposed.values() if not issubclass(tool, ToolMenu)]
+    assert {len(one) for one in about} == {0, 1}
+    assert sum(not one for one in about) == sum(
+        issubclass(tool, ScreensArea) for tool in exposed.values())
+
+    # A whole area is a line a tool; a narrowed look comes with what the tool takes.
+    menu = (await asked(SHORT_MCP_PATH, "comms_menu_goals", {}))["structuredContent"]
+    assert len(menu["tools"]) > 3 and not menu["described"]
+    assert {tool["run_with"] for tool in menu["tools"]} == {"comms_menu_goals"}
+    narrowed = (await asked(SHORT_MCP_PATH, "comms_menu_goals", {"about": "comms_pause_goal"}))[
         "structuredContent"]
-    assert [tool["name"] for tool in found["tools"]] == ["comms_export_wire"]
-    assert found["tools"][0]["takes"] == CALLER.input_schema(CALLER.exposed()["comms_export_wire"])
-    everything = (await asked(SHORT_MCP_PATH, "comms_find_tool", {"limit": 2}))["structuredContent"]
-    assert [len(everything["tools"]), len(everything["more"])] == [2, len(CALLER.exposed()) - 2]
+    paused, = narrowed["described"]
+    assert paused["name"] == "comms_pause_goal" and not narrowed["tools"]
+    assert paused["takes"] == CALLER.input_schema(exposed["comms_pause_goal"])
+    found = (await asked(SHORT_MCP_PATH, "comms_find_tool", {"query": "comms_registry"}))[
+        "structuredContent"]
+    assert [(tool["name"], tool["run_with"]) for tool in found["described"]] == [
+        ("comms_registry", "comms_menu_threads")]
+    screens = await asked(SHORT_MCP_PATH, "comms_find_tool", {"query": "export wire"})
+    assert screens["structuredContent"] == {"tools": [], "described": []}
 
-    # A tool the short list leaves out answers by name exactly as it does called directly.
+    # A tool run through its menu answers exactly as it does called directly.
     direct = await asked(MCP_PATH, "comms_registry", {})
-    by_name = await asked(SHORT_MCP_PATH, "comms_call_tool", {"name": "comms_registry"})
-    assert not direct["isError"] and by_name == direct
-    assert await asked(SHORT_MCP_PATH, "comms_registry", {}) == direct
-    unknown = await asked(SHORT_MCP_PATH, "comms_call_tool", {"name": "comms_nothing"})
-    assert unknown["isError"] and "comms_nothing" in unknown["content"][0]["text"]
-    unnamed = await asked(SHORT_MCP_PATH, "comms_call_tool", {"arguments": {}})
-    assert unnamed["isError"] and "name" in unnamed["content"][0]["text"]
+    through = await asked(SHORT_MCP_PATH, "comms_menu_threads", {"do": "comms_registry"})
+    assert not direct["isError"] and through == direct
+    elsewhere = await asked(SHORT_MCP_PATH, "comms_menu_goals", {"do": "comms_registry"})
+    assert elsewhere["isError"] and "comms_pause_goal" in elsewhere["content"][0]["text"]
+    malformed = await asked(SHORT_MCP_PATH, "comms_menu_goals", {"do": 3})
+    assert malformed["isError"] and "do" in malformed["content"][0]["text"]
 
 
 async def test_connector_mcp_is_stateless(client, comms):

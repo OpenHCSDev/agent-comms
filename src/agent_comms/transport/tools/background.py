@@ -18,7 +18,10 @@ from agent_comms.transport.background_runs import (
     ShellRun,
 )
 from agent_comms.transport.request import tool_field
-from agent_comms.transport.tool_request import ThreadToolRequest
+from agent_comms.transport.tool_request import (
+    HostArea,
+    ThreadToolRequest,
+)
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
@@ -39,7 +42,7 @@ class BackgroundStatusRead(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRunBackgroundTool(ThreadToolRequest, declared_name="run_background"):
+class CommsRunBackgroundTool(HostArea, ThreadToolRequest, declared_name="run_background"):
     label = "Run in background"
     description = (
         "Start a shell command detached and return immediately: the turn keeps going while "
@@ -64,7 +67,7 @@ class CommsRunBackgroundTool(ThreadToolRequest, declared_name="run_background"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsBackgroundStatusTool(ThreadToolRequest, declared_name="background_status"):
+class CommsBackgroundStatusTool(HostArea, ThreadToolRequest, declared_name="background_status"):
     label = "Background status"
     description = (
         "Report where one background run stands (running, ended and how, or told) and the "

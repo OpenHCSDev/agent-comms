@@ -47,7 +47,11 @@ from agent_comms.planning.goals import GoalDeclaration
 from agent_comms.planning.progress_claims import ProgressClaim
 from agent_comms.transport.request import ListedNames, OmittedNames, tool_field
 from agent_comms.transport.tool_caller import ThreadCaller, ToolCaller
-from agent_comms.transport.tool_request import ThreadReadTool, ThreadToolRequest
+from agent_comms.transport.tool_request import (
+    GoalsArea,
+    ThreadReadTool,
+    ThreadToolRequest,
+)
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
@@ -132,7 +136,7 @@ class GoalChangeTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSetGoalTool(GoalChangeTool):
+class CommsSetGoalTool(GoalsArea, GoalChangeTool):
     label = "Set persistent goal"
     description = (
         "Set or replace your own persistent goal, or a teammate's when thread names one. "
@@ -148,7 +152,7 @@ class CommsSetGoalTool(GoalChangeTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsGoalTool(ThreadToolRequest):
+class CommsGoalTool(GoalsArea, ThreadToolRequest):
     label = "Goal progress"
     description = (
         "Update goal progress; complete it or block it when user input is needed. Use "
@@ -203,7 +207,7 @@ class CommsGoalTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsResumeGoalTool(GoalChangeTool):
+class CommsResumeGoalTool(GoalsArea, GoalChangeTool):
     label = "Resume paused goal"
     description = (
         "Resume a paused goal, your own or a teammate's, with the same ID only after an explicit "
@@ -234,7 +238,7 @@ class CommsResumeGoalTool(GoalChangeTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsEditGoalTool(GoalChangeTool):
+class CommsEditGoalTool(GoalsArea, GoalChangeTool):
     label = "Edit goal text"
     description = (
         "Edit an existing goal's text, your own or a teammate's, while keeping its identity, "
@@ -257,7 +261,7 @@ class CommsEditGoalTool(GoalChangeTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsClearGoalTool(GoalChangeTool):
+class CommsClearGoalTool(GoalsArea, GoalChangeTool):
     label = "Clear goal"
     description = (
         "Clear a goal, your own or a teammate's, leaving that thread with no goal. Held "
@@ -277,7 +281,7 @@ class CommsClearGoalTool(GoalChangeTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsPauseGoalTool(GoalChangeTool):
+class CommsPauseGoalTool(GoalsArea, GoalChangeTool):
     label = "Pause goal"
     description = (
         "Pause a goal, your own or a teammate's, keeping its identity; comms_resume_goal "
@@ -299,7 +303,7 @@ class CommsPauseGoalTool(GoalChangeTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsGoalHistoryTool(ThreadReadTool):
+class CommsGoalHistoryTool(GoalsArea, ThreadReadTool):
     label = "Goal history"
     description = "Read recorded goal revisions and recorded provenance and observation gaps."
     goal_id: Annotated[

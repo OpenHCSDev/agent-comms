@@ -109,12 +109,17 @@ from agent_comms.transport.serving.served_requests import OwnedRead, OwnerLiveRe
 from agent_comms.transport.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.transport.tool_declaration import EditCall
 from agent_comms.transport.tool_request import (
+    GoalsArea,
     HumanToolRequest,
     NativeToolRequest,
     PublishingToolRequest,
     ReadTool,
+    ScreensArea,
+    ShortListed,
     ThreadReadTool,
+    ThreadsArea,
     ThreadToolRequest,
+    WorkArea,
 )
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools.reads import (
@@ -177,7 +182,7 @@ class CommsTodoTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsChangeProblemTool(CommsTodoTool, declared_name="comms_todo"):
+class CommsChangeProblemTool(WorkArea, CommsTodoTool, declared_name="comms_todo"):
     operation: Annotated[
         TodoOperation, *tool_field("Typed assignment, strike, release or state command")
     ]
@@ -187,7 +192,7 @@ class CommsChangeProblemTool(CommsTodoTool, declared_name="comms_todo"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsVerdictTool(ThreadToolRequest):
+class CommsVerdictTool(WorkArea, ThreadToolRequest):
     """One verdict is a batch of one: Goals.judge_calls owns checking and recording."""
     label = "Judge order tool call"
     description = (
@@ -208,7 +213,7 @@ class CommsVerdictTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsVerdictsTool(ThreadToolRequest):
+class CommsVerdictsTool(WorkArea, ThreadToolRequest):
     label = "Judge many order tool calls"
     description = (
         "Record many verdicts in one call: each is checked against its order before any is "
@@ -262,7 +267,7 @@ class CommsHeadVerdictTool(HeadVerdictTool, ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsUnjudgedTool(ThreadReadTool):
+class CommsUnjudgedTool(WorkArea, ThreadReadTool):
     label = "Unjudged edits"
     description = "Read original edit calls since each open order, excluding that order's recorded verdicts."
 
@@ -290,7 +295,7 @@ class BoardReadTool(ThreadReadTool, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTeamLoadTool(BoardReadTool, declared_name="comms_team_load"):
+class CommsTeamLoadTool(WorkArea, BoardReadTool, declared_name="comms_team_load"):
     label = "Measured teammate load"
     description = "Read retained teammate load with recorded service failures and its original completion clock."
 
@@ -306,7 +311,7 @@ class TeamBoard(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsBoardTool(BoardReadTool):
+class CommsBoardTool(ShortListed, WorkArea, BoardReadTool):
     label = "Team board"
     description = (
         "Read the team board as text: what needs action, stalls, PRs nobody owns, idle work "
@@ -318,7 +323,7 @@ class CommsBoardTool(BoardReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsBoardActionTool(HumanToolRequest[BoardActionApplied]):
+class CommsBoardActionTool(ScreensArea, HumanToolRequest[BoardActionApplied]):
     label = "Apply board action"
     description = "Apply one declaration-bound action from the selected recipient's Team board."
     offer: Annotated[BoardActionOffer, *tool_field("The exact action offered by the board row")]
@@ -339,7 +344,7 @@ class CommsBoardActionTool(HumanToolRequest[BoardActionApplied]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsHudTool(ThreadReadTool):
+class CommsHudTool(WorkArea, ThreadReadTool):
     label = "Team HUD"
     description = (
         "Read the teammate's latest published Tristan frame: orders, review timers, "
@@ -352,7 +357,7 @@ class CommsHudTool(ThreadReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsFireTool(ThreadToolRequest):
+class CommsFireTool(WorkArea, ThreadToolRequest):
     label = "Fire teammate"
     description = (
         "Release every open problem the teammate holds in one operation, recording one "
@@ -366,7 +371,7 @@ class CommsFireTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsCorrectWordingTool(ThreadToolRequest):
+class CommsCorrectWordingTool(WorkArea, ThreadToolRequest):
     label = "Correct teammate wording"
     description = (
         "Answer a teammate's jargon with a correction naming its open orders; the teammate's "
@@ -393,7 +398,7 @@ class CommsCorrectWordingTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTodoListTool(BoardReadTool):
+class CommsTodoListTool(WorkArea, BoardReadTool):
     label = "Read problems"
     description = "Read the team's Todo orders, review timers, strikes and hunts."
 
@@ -418,7 +423,7 @@ class CommsStandingRulesTool(CommsHudTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderTool(ThreadToolRequest):
+class CommsOrderTool(WorkArea, ThreadToolRequest):
     label = "Assign problem order"
     description = (
         "Reserve the order's Todo assignments in one transaction and publish its Goal with "
@@ -442,7 +447,7 @@ class CommsOrderTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsProblemNumberTool(ThreadToolRequest):
+class CommsProblemNumberTool(WorkArea, ThreadToolRequest):
     label = "Reserve problem number"
     description = (
         "Reserve the next free problem number for comms_todo_create, the same allocation "
@@ -463,7 +468,7 @@ class CommsTodoCreateTool(CommsOrderTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller, TodoChanged], ThreadToolRequest):
+class CommsOrderDeliverTool(WorkArea, PublishingToolRequest[ThreadCaller, TodoChanged], ThreadToolRequest):
     label = "Claim order delivery"
     description = (
         "Record the holder's delivery claim and answer its teammate. "
@@ -515,7 +520,7 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller, TodoChanged], Th
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderDoneTool(CommsTodoTool):
+class CommsOrderDoneTool(WorkArea, CommsTodoTool):
     label = "Check delivered order"
     description = "Verify and deliver an open order by its own ID; the teammate's Goal is unchanged."
     order_id: Annotated[OrderId, *tool_field("Exact open order ID")]
@@ -553,7 +558,7 @@ class CommsOrderDoneTool(CommsTodoTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderCheckTool(CommsTodoTool):
+class CommsOrderCheckTool(WorkArea, CommsTodoTool):
     label = "Correct order check"
     description = (
         "Replace the check of an open order, recording the old check, the new one and "
@@ -571,7 +576,7 @@ class CommsOrderCheckTool(CommsTodoTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderRunTool(CommsTodoTool):
+class CommsOrderRunTool(WorkArea, CommsTodoTool):
     label = "Correct order run"
     description = (
         "Replace the run text that closes an open application order, recording the old run "
@@ -588,7 +593,7 @@ class CommsOrderRunTool(CommsTodoTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderServeTool(CommsTodoTool):
+class CommsOrderServeTool(WorkArea, CommsTodoTool):
     label = "Name order phase"
     description = (
         "Name the plan phase an open order serves; only its teammate may invoke this "
@@ -601,7 +606,7 @@ class CommsOrderServeTool(CommsTodoTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsProblemCloseTool(CommsTodoTool):
+class CommsProblemCloseTool(WorkArea, CommsTodoTool):
     label = "Close installed problem"
     description = (
         "Record installed application evidence and close only a problem with no open order."
@@ -619,7 +624,7 @@ class CommsProblemCloseTool(CommsTodoTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTurnsTool(ThreadReadTool):
+class CommsTurnsTool(ThreadsArea, ThreadReadTool):
     label = "Read turns"
     description = ("Read bounded conversation excerpts and tool-call outcomes. "
                    "Use detail=original for complete recorded events, including raw evidence. "
@@ -639,7 +644,7 @@ class CommsTurnsTool(ThreadReadTool):
         return answer.without_tool_results(type(self).declared_name)
 
 
-class ServedInputDeliveryRead(OwnedRead, InputDeliveryRead):
+class ServedInputDeliveryRead(ThreadsArea, OwnedRead, InputDeliveryRead):
     """Serving the delivery projection: the owner's queue when observed, else the stored one."""
 
     def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> DeliveryOverview:
@@ -659,7 +664,7 @@ class ServedInputDeliveryRead(OwnedRead, InputDeliveryRead):
         )
 
 
-class ServedOwnerGoalRead(OwnerLiveRead, OwnerGoalRead):
+class ServedOwnerGoalRead(GoalsArea, OwnerLiveRead, OwnerGoalRead):
     """Serving the goal snapshot from the live native owner, with the turn it read; an
     external CLI's goal is the bus's own, read with no native turn."""
 
@@ -682,7 +687,7 @@ class ServedOwnerGoalRead(OwnerLiveRead, OwnerGoalRead):
         return GoalSnapshotReply.from_snapshot(snapshot, UpdateMetadata.of(TurnChangedUpdate(turn)))
 
 
-class ServedTranscriptPageRead(CapturesTranscriptPage, ThreadReadTool, TranscriptPageRead):
+class ServedTranscriptPageRead(ThreadsArea, CapturesTranscriptPage, ThreadReadTool, TranscriptPageRead):
     """Serving one transcript page under the reader's authority."""
 
     def capture_as(self, comms: Comms, reader: ReadAuthority) -> TranscriptRead:
@@ -694,7 +699,7 @@ class ServedTranscriptPageRead(CapturesTranscriptPage, ThreadReadTool, Transcrip
         )
 
 
-class ServedTeammateRead(UiRead, ReadTool, NativeToolRequest, TeammateRead):
+class ServedTeammateRead(WorkArea, UiRead, ReadTool, NativeToolRequest, TeammateRead):
     """Serving one teammate card, refused when the frame or the card moved on."""
 
     def apply(self, comms: Comms, reader: ReadAuthority) -> TeammateDetail:
@@ -739,7 +744,7 @@ class ServedTeammateRead(UiRead, ReadTool, NativeToolRequest, TeammateRead):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderStoryTool(ReadTool, NativeToolRequest):
+class CommsOrderStoryTool(WorkArea, ReadTool, NativeToolRequest):
     label = "Order story"
     description = (
         "Read a saved order's dated facts from its Todo, oldest first. "
@@ -753,7 +758,7 @@ class CommsOrderStoryTool(ReadTool, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTeamStoryTool(ReadTool, NativeToolRequest, declared_name="comms_fleet_story"):
+class CommsTeamStoryTool(WorkArea, ReadTool, NativeToolRequest, declared_name="comms_fleet_story"):
     label = "Team story"
     description = ("Read what each held order on the shared board is doing now, one line per "
                    "order; orders held by unregistered participants collapse into one line.")
@@ -763,7 +768,7 @@ class CommsTeamStoryTool(ReadTool, NativeToolRequest, declared_name="comms_fleet
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderWorkTool(ReadTool, NativeToolRequest):
+class CommsOrderWorkTool(WorkArea, ReadTool, NativeToolRequest):
     label = "Order work"
     description = (
         "Read every tool call the problem's assignee made since its order, newest "
@@ -816,7 +821,7 @@ class EmergencyReleased(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsEmergencyReleaseTool(ThreadToolRequest, declared_name="comms_emergency_release"):
+class CommsEmergencyReleaseTool(WorkArea, ThreadToolRequest, declared_name="comms_emergency_release"):
     """The andon cord: any teammate may pull it, the way anyone on a Toyota line can stop the
     line. The rules stay; only the current pile and the current holds go, and the pull is
     posted under the puller's name, so a cheat is caught in the open."""
