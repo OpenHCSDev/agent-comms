@@ -53,6 +53,13 @@ class NoConnectorService(ConnectorService):
         raise ToolRefusedError("Only a connector call can open an inbox watch.")
 
 
+class ShortListed:
+    """A tool the connector's short list names itself. Every other tool is found and called
+    by name through that list, so a client that takes few tools still reaches all of them."""
+
+    __slots__ = ()
+
+
 class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
     AsyncWork, ThreadCommandAvailability, ToolRequest[Result],
     metaclass=ServesDeclaration, declared_name=None,
@@ -83,6 +90,14 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
     ) -> dict[str, JsonValue]:
         """The reply every adapter receives: the encoding of the tool's declared result."""
         return cls.decoded(comms, arguments).replied(comms, caller)
+
+    @classmethod
+    def reached(
+        cls, arguments: Mapping[str, object], exposed: Mapping[str, type[ServedRequest]],
+    ) -> tuple[type[ServedRequest], Mapping[str, object]]:
+        """The tool a call of this one runs, and what that tool is given: this one, as given.
+        Only a tool that calls another by name answers as the other."""
+        return cls, arguments
 
     @classmethod
     def decoded(cls, comms: Comms, arguments: Mapping[str, object]) -> Self:

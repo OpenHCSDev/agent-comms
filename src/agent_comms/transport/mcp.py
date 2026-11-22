@@ -314,7 +314,7 @@ class ToolsListMessage(McpRequest, declared_name="tools/list"):
 
     async def result(self, connector: McpServer, caller: ConnectorCaller) -> ToolsListResult:
         return ToolsListResult(tuple(
-            ToolDescription.of(name, tool, caller) for name, tool in caller.exposed().items()
+            ToolDescription.of(name, tool, caller) for name, tool in caller.listed().items()
         ))
 
 
@@ -460,7 +460,8 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
                 UnexposedToolError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
-            answered = await connector.call(tool, self.params.arguments, caller, observer)
+            tool, arguments = tool.reached(self.params.arguments, caller.exposed())
+            answered = await connector.call(tool, arguments, caller, observer)
             return answered.result()
         except (
             # Invalid input (ToolRefusedError, MalformedRecord, an unrecorded time) and any
