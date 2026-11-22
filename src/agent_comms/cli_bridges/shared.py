@@ -11,6 +11,7 @@ import secrets
 import signal
 import socket
 import sqlite3
+import shlex
 import sys
 import time
 import traceback
@@ -181,6 +182,10 @@ class ReaderState:
     async def part_observed(self, message_id: MessageId, number: int) -> None:
         """Only an attached reader has a flow-control window."""
 
+    async def remind(self, line: str) -> None:
+        """Only an attached reader can be shown a reminder; one that attaches later is shown
+        the next."""
+
     async def attach(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return SessionRefused(error="This session already has a Monitor reader")
 
@@ -261,6 +266,9 @@ class AttachedReader(UnreadyReader):
 
     async def part_observed(self, message_id: MessageId, number: int) -> None:
         await self.attachment.observed(message_id, number)
+
+    async def remind(self, line: str) -> None:
+        await self.attachment.peer.write(line)
 
     async def deliver(self, bridge: LineMonitorBridge, message: Message) -> type[Outcome]:
         return await bridge.deliver_to(self.attachment, message)
@@ -1159,6 +1167,35 @@ class IncomingFrame(ABC):
     HEADER = 'Comms in'
     HEADER_PREFIX = HEADER + ' · '
     """How a shown message's first line starts; no body line shown inline may start so."""
+    reply_route: ClassVar[str] = ''
+    """How a session of this harness answers a person while it is still working, as one line
+    naming `{target}`; a frame with none shows no such line. A session's turn can run for
+    hours, and what reaches a person during it differs by harness (Claude Code replaces text
+    written before a tool call with its own summary, which is never sent), so the message
+    itself says how to answer it: no session has to be told, or to remember."""
+
+    @classmethod
+    def routed(cls, reply_route: str) -> type[Self]:
+        """This frame for a bridge whose session answers through `reply_route`."""
+        return type(cls.__name__, (cls,), {'reply_route': reply_route})
+
+    @property
+    def route(self) -> str:
+        """The reply line, under a message whose sender hears each reply (a person)."""
+        if not self.reply_route or not self.message.sender_role.hears_each_reply():
+            return ''
+        return '\n' + self.reply_route.format(target=self.message.exact_reply_target)
+
+    OWED_PREFIX: ClassVar[str] = 'Comms owed · '
+    """How a reminder starts: no header (`HEADER_PREFIX`), so a transcript reads it as text
+    of no message and it confirms nothing."""
+
+    def owed(self, seconds: float) -> str:
+        """The reminder a session is shown when the person who wrote this has had nothing
+        back from it for `seconds`: one line, with the way to answer."""
+        return (f'{self.OWED_PREFIX}{self.message.sender} has had no answer to '
+                f'{self.message.reference.name} for {round(seconds / 60)} min.'
+                + self.route.replace('\n', ' '))
     @property
     def header(self) -> str:
         """Where it was posted (a channel, or the thread a direct message went to), who sent
@@ -1168,9 +1205,15 @@ class IncomingFrame(ABC):
                 f'reply to {self.message.exact_reply_target} · {self.message.reference.name}\n')
 
     @property
-    def text(self) -> str:
+    def tail(self) -> str:
+        """What a shown message carries under its body: the files it names, then how to
+        answer it. One statement, for a message shown inline and for one read from a file."""
         files = "".join(f"\n{file.mention}" for file in self.files)
-        return self.header + self.message.body + (f"\n{files}" if files else "")
+        return (f"\n{files}" if files else "") + self.route
+
+    @property
+    def text(self) -> str:
+        return self.header + self.message.body + self.tail
 
 class BridgeLog(io.TextIOBase):
     """The bridge process's stderr, including tracebacks and partial print writes."""
@@ -1903,6 +1946,8 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
 
     def __init__(self, options: Options, address: SessionBinding, db: sqlite3.Connection) -> None:
         super().__init__(options, address, db)
+        self.incoming_frame = type(self).incoming_frame.routed(self.reply_route())
+        self.owed: set[asyncio.Task[None]] = set()
         self.reader: ReaderState = NoReader()
         self.reader_changed = asyncio.Condition()
         self.retirement: BridgeExit = BridgeExit()
@@ -1910,6 +1955,17 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     async def declare_reader(self, status: ThreadStatus) -> None:
         await self.comms.bus.when_open(lambda: self.comms.registry.register(
             self.comms.registry.require(self.binding.bus), status))
+
+    def reply_route(self) -> str:
+        """This bridge's own send, as the line a person's message carries: it reaches them
+        at once, where what the session writes reaches them only as its turn's last words
+        or when its harness keeps the words it wrote."""
+        send = shlex.join((str(Path(sys.argv[0]).absolute()), Send.command_name(),
+                           '--state', str(self.options.state.absolute()), '--to'))
+        return (f'To answer {{target}} before this turn ends, run: '
+                f'{send} {{target}} --body "..." '
+                '(your turn\'s last message is sent to them by itself; '
+                'text written before a tool call may never be).')
 
     def watch_record(self, binding: SessionBinding) -> WatchRecord:
         command = (str(Path(sys.argv[0]).absolute()), Watch.command_name(),
@@ -1974,7 +2030,38 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         attempt = self.attempt(message, UnconfirmedOutcome)
         await self.coordinator_write(partial(attempt.apply, receiving))
         await frame.emit_to(attachment, self.window_bytes, self.exports)
+        if frame.route:
+            reminding = asyncio.create_task(self.remind_owed(frame))
+            self.owed.add(reminding)
+            reminding.add_done_callback(self.owed.discard)
         return EmittedOutcome
+
+    OWED_AFTER: ClassVar[tuple[float, ...]] = (120.0, 600.0)
+    """Seconds after a person's message was shown at which this bridge looks for an answer
+    to it on the bus, and reminds the session when there is none."""
+
+    def answered(self, message: Message) -> bool:
+        """Whether this thread has sent the message's reply target anything since it."""
+        bus, after = self.comms.bus.bus, message.reference.seq
+        while page := bus.since(after, 200):
+            if any(record.sender == self.binding.bus and record.target == message.exact_reply_target
+                   for record in page):
+                return True
+            after = page[-1].reference.seq
+        return False
+
+    async def remind_owed(self, frame: IncomingFrame) -> None:
+        """A person who wrote into a working session is owed an answer while it works. The
+        message said how to give one (`IncomingFrame.route`); a session that still gave none
+        is told so by the bridge, which reads the bus, and not left to its own memory: its
+        harness may have dropped what it wrote, and neither it nor the person can tell."""
+        waited = 0.0
+        for after in self.OWED_AFTER:
+            await asyncio.sleep(after - waited)
+            waited = after
+            if await asyncio.to_thread(self.answered, frame.message):
+                return
+            await self.reader.remind(frame.owed(waited))
 
     async def show_sent(self, result: SendResult) -> None:
         print(self.encode(self.sent_text(result)), flush=True)
