@@ -1320,6 +1320,10 @@ class FrameLink(MetadataRecord, declared_name="frame-link"):
     """A harness artifact frame link; no model input, delivery claim or turn boundary."""
 
 
+class DataFlowRecords(MetadataRecord, declared_name="data-flow-records"):
+    """The harness's own record of which tools moved data; no model input or turn boundary."""
+
+
 class AttachmentPayload(OpenWire, ABC, affix=""):
 
     @abstractmethod
