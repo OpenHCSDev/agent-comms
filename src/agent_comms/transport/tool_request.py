@@ -97,7 +97,9 @@ class HostArea(ToolArea):
 
 
 class ScreensArea(ToolArea):
-    """What the app's own screens read and write; a chat rarely wants these."""
+    """What only the app's own screens or the native harness can use: tools that need the
+    human owner's screen as their caller, and the harness's own tool loader. No menu offers
+    them, since a chat's grant is refused by the first kind and has no use for the second."""
 
     __slots__ = ()
 

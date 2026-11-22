@@ -340,7 +340,7 @@ class SearchToolLookup(ToolLookup, declared_name="search"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsDiscoverTool(HostArea, ReadTool, NativeToolRequest):
+class CommsDiscoverTool(ScreensArea, ReadTool, NativeToolRequest):
     """The native adapter activates these declarations through Pi's existing tool loader."""
 
     label = "Find and load Comms tools"
