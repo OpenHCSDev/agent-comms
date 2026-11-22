@@ -851,6 +851,7 @@ async def test_connector_lists_every_tool(client, store, comms):
             # _handshake owns what that first part says.
             "instructions": InitializeResult.announcing(
                 BusIdentityStore.serving(comms.root.resolve()).announced(str(comms.root.resolve())),
+                CALLER.listed().values(),
             ).instructions,
         },
     }
@@ -891,6 +892,14 @@ async def test_the_short_address_lists_one_tool_per_area_and_runs_the_rest_throu
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": name, "arguments": arguments}})
         return (await answered.json())["result"]
+
+    # The handshake speaks for the tools the list names: menus here, the inbox watch there.
+    initialize = {"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {}}
+    short, long = [
+        (await (await client.post(address, headers=headers, json=initialize)).json())[
+            "result"]["instructions"] for address in (SHORT_MCP_PATH, MCP_PATH)]
+    assert "comms_menu_" in short and "comms_watch" not in short
+    assert "comms_watch" in long and "comms_menu_" in long
 
     listed = (await (await client.post(SHORT_MCP_PATH, json=LIST, headers=headers)).json())[
         "result"]["tools"]

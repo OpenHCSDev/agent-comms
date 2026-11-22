@@ -133,9 +133,12 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
         """The reply every adapter receives: the encoding of the tool's declared result."""
         return cls.decoded(comms, arguments).replied(comms, caller)
 
+    handshake: ClassVar[str] = ""
+    """What a client is told at the handshake when its list names this tool."""
+
     @classmethod
-    def listed_description(cls) -> str:
-        """What a tool list says this tool does."""
+    def listed_description(cls, grant: ToolCaller) -> str:
+        """What `grant`'s tool list says this tool does."""
         return f"{cls.description} {cls.bus_effect}"
 
     @classmethod
@@ -165,6 +168,10 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
 
     def served_by(self, service: ConnectorService) -> Self:
         """A request that asks nothing of its connector runs the same under any of them."""
+        return self
+
+    def asked_by(self, grant: ToolCaller) -> Self:
+        """A request that asks nothing of the grant it arrived under runs the same under any."""
         return self
 
     def replied(self, comms: Comms, caller: ToolCaller) -> dict[str, JsonValue]:
