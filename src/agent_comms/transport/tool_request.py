@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-import threading
-import uuid
+import time
 from abc import ABC, abstractmethod
 from annotationlib import Format, ForwardRef, get_annotations
 from collections.abc import Mapping
@@ -19,7 +18,15 @@ from agent_comms.execution.child_process import AsyncWork, ReadWork
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, ToolCallId
 from agent_comms.nominal.served_declaration import ServesDeclaration
 from agent_comms.registry.threads import ThreadCommandAvailability
-from agent_comms.messaging.messages import NoticeRole
+from agent_comms.transport.background_runs import (
+    BackgroundRunStarted,
+    BackgroundRunStore,
+    EndedState,
+    RaisedState,
+    ReturnedState,
+    RunState,
+    ToolCallRun,
+)
 from agent_comms.transport.native_tools import CoordinationCall, NativeToolDeclaration
 from agent_comms.transport.progress import WireExportObserver
 from agent_comms.transport.request import (
@@ -33,17 +40,6 @@ from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller, Tool
 from agent_comms.transport.tool_declaration import NativeRequestTools
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
-
-_BACKGROUND_TAIL = 2000
-
-
-@dataclass(frozen=True)
-class BackgroundCallStarted(ToolResult):
-    """The receipt of a deferred tool call: its result arrives as a message to the thread."""
-
-    run_id: str
-    tool: str
-
 
 class ToolArgumentsRefusedError(MalformedRecord, ToolRefusedError):
     """Bad external tool arguments, not malformed stored state or a broken implementation."""
@@ -123,29 +119,28 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
         applied = caller.invoke(cast(ServedRequest, self), comms)
         return self.reply(FieldCodec.encode(applied.to_wire()), caller)
 
-    def started_in_background(self, comms: Comms, caller: ToolCaller) -> BackgroundCallStarted:
-        """Detach the apply: the caller hears back through its own thread the moment the
-        apply lands. The capability is the base's; a leaf adds nothing to be backgroundable."""
+    def started_in_background(self, comms: Comms, caller: ToolCaller) -> BackgroundRunStarted:
+        """Detach the apply as a background run: its result is the run's output, and the
+        caller hears how it ended like any other run. The capability is the base's; a leaf
+        adds nothing to be backgroundable."""
         if not isinstance(caller, ThreadCaller):
             raise ToolRefusedError(
                 f"{self.declared_name}: background runs need a thread caller to notify.")
-        run_id = f"{caller.name}-{self.declared_name}-{uuid.uuid4().hex[:8]}"
+        store = BackgroundRunStore.at(comms.root)
+        run = ToolCallRun.hosted(store.log_directory, caller.name, self.declared_name)
 
-        def deferred() -> None:
+        def applied() -> RunState:
             try:
-                applied = caller.invoke(cast(ServedRequest, self), comms)
-                rendered = json.dumps(FieldCodec.encode(applied.to_wire()), default=str)
-                outcome = "finished"
+                result = caller.invoke(cast(ServedRequest, self), comms)
+                rendered = json.dumps(FieldCodec.encode(result.to_wire()), default=str)
+                ended: type[EndedState] = ReturnedState
             except Exception as error:  # noqa: BLE001 - the caller hears every failure
                 rendered = f"{type(error).__name__}: {error}"
-                outcome = "failed"
-            comms.messaging.send(caller.name, caller.name,
-                f"Background {self.declared_name} {outcome}:\n{rendered[:_BACKGROUND_TAIL]}",
-                role=NoticeRole())
+                ended = RaisedState
+            Path(run.log).write_text(rendered, encoding="utf-8")
+            return ended(at=time.time())
 
-        threading.Thread(target=deferred, daemon=True,
-                         name=f"background-{run_id}").start()
-        return BackgroundCallStarted(run_id=run_id, tool=self.declared_name)
+        return store.start(run, applied, comms.messaging)
 
     def board(self, comms: Comms, caller: ToolCaller) -> tuple[str, ...]:
         """The new board rows naming the caller of this verb, carried beside its reply: the

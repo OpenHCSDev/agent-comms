@@ -94,6 +94,13 @@ class OrderNotice(OwnerNotice, declared_name="order_notice"):
 
 
 @dataclass(frozen=True)
+class BackgroundRunNotice(OwnerNotice, declared_name="background_run"):
+    """Core tells a thread how a run it started in the background ended. Core watched the run,
+    so the thread is not made its own sender: a thread cannot message itself, and the result
+    starts or steers a turn like any line of his."""
+
+
+@dataclass(frozen=True)
 class MeantNotice(OwnerNotice, declared_name="meant_question"):
     """The rule gate asks a session whether it meant the answers it just wrote, and tells off a
     dodge (rule_deal.MeantRecord). It lands mid-turn like any line of his."""
