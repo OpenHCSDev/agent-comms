@@ -31,7 +31,7 @@ from agent_comms.cli_bridges.session_ledger import SessionLedger
 from agent_comms.cli_bridges.shared import WireReference
 from agent_comms.cli_bridges.wire_models import WireModel
 from agent_comms.messaging.bus_publication import Delivered
-from agent_comms.messaging.message_files import MessageFile
+from agent_comms.messaging.message_files import MessageFile, MessageFileContent
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import FieldCodec, StoredSessionId
@@ -152,6 +152,10 @@ class ReceivesWatchReports(ABC):
     async def reconnectable(self) -> None:
         """The client can reconnect on its own: hand it this watch's standing reconnect URL."""
 
+    @abstractmethod
+    async def files_wanted(self, shown: frozenset[MessageReference]) -> None:
+        """The client keeps the files of these messages on its own disk: send their bytes."""
+
 
 class ReconnectUrl(WireModel):
     """The connector's one frame that is not a message: where this watch's client reconnects
@@ -162,6 +166,41 @@ class ReconnectUrl(WireModel):
     protocol: Literal['agent-comms-watch-reconnect'] = 'agent-comms-watch-reconnect'
     wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(protocol) + ','
     url: str
+
+    def line(self) -> str:
+        return self.model_dump_json()
+
+
+class WatchedFilePart(WireModel):
+    """One piece of one file a pushed message carries, sent to a client that asked for that
+    message's files. The session reads a picture from its own disk; the only other read hands
+    the bytes back as text inside the conversation, where a phone photo is several million
+    characters. The pieces of a file arrive in order and joined they are its base64 text."""
+
+    protocol: Literal['agent-comms-watch-file'] = 'agent-comms-watch-file'
+    wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(protocol) + ','
+    message: WireReference
+    position: int
+    name: str
+    mime_type: str
+    size: int
+    sha256: str
+    part: int
+    parts: int
+    data: str
+
+    PART_CHARS: ClassVar[int] = 1024 * 1024
+    """Under the 4 MiB a websocket client takes in one frame by default."""
+
+    @classmethod
+    def of(cls, content: MessageFileContent) -> tuple[Self, ...]:
+        file, text = content.file, content.data
+        pieces = tuple(text[start:start + cls.PART_CHARS]
+                       for start in range(0, len(text), cls.PART_CHARS)) or ("",)
+        return tuple(cls(message=file.message, position=file.position, name=file.name,
+                         mime_type=file.mime_type, size=file.size, sha256=file.sha256,
+                         part=number, parts=len(pieces), data=piece)
+                     for number, piece in enumerate(pieces, start=1))
 
     def line(self) -> str:
         return self.model_dump_json()
@@ -246,6 +285,15 @@ class ReconnectsAlone(WatchReport, declared_name='reconnects'):
     async def received(self, pushed: ReceivesWatchReports) -> None:
         await super().received(pushed)
         await pushed.reconnectable()
+
+
+class FilesWanted(WatchReport, declared_name='files'):
+    """The messages just shown carry files, and this client writes a message's files to its
+    session's disk: send their bytes as WatchedFilePart frames. A client that never says so
+    gets only messages, which is all an older client can decode."""
+
+    async def received(self, pushed: ReceivesWatchReports) -> None:
+        await pushed.files_wanted(frozenset(self.printed))
 
 
 WATCH_REPORT = WireModel.adapter(WatchReport.declared_union())

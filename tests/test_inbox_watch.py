@@ -28,6 +28,7 @@ from agent_comms.cli_bridges.claude_transcript import (
     WATCH_DEFERRED,
     WATCH_REPLACED,
     PrintedLedger,
+    FilesWanted,
     ReconnectsAlone,
     ReconnectUrl,
 )
@@ -129,6 +130,54 @@ async def delivered_lines(client, token: str, comms: Comms, exports: Path, capsy
             lines += capsys.readouterr().out.splitlines()
     watch.cancel()
     return lines
+
+
+async def test_a_pushed_messages_file_lands_on_the_sessions_disk_as_the_file_it_is(
+    session, comms: Comms, tmp_path: Path, capsys
+) -> None:
+    """Tristan's whiteboard photo: the event named it and the only read handed 3.6 MB back as
+    4.9 million characters inside the conversation, which a session refuses. The client asks
+    for the files of a message it showed and keeps each beside its messages, so the session
+    opens a picture as it opens any file. A file larger than one frame arrives in pieces."""
+    client, token = session
+    exports = tmp_path / "state" / "messages"
+    exports.parent.mkdir(mode=0o700)
+    photo = bytes(range(256)) * 5000  # 1.28 MB, so 1.7 million characters: two pieces
+    files = (FileUpload.of("board.jpg", "image/jpeg", photo), FileUpload.of("note.txt", "text/plain", b"hi"))
+    url = str(client.make_url(await watch_path(client, token, "cloud")))
+    watch = asyncio.create_task(InboxSocket(url, exports).carried())
+    message = comms.messaging.send("sender", "cloud", "the board", files=files).message
+    lines: list[str] = []
+    async with asyncio.timeout(30):
+        while sum("is on your disk" in line for line in lines) < 2:
+            assert not watch.done(), watch.result()
+            await asyncio.sleep(0.05)
+            lines += capsys.readouterr().out.splitlines()
+    watch.cancel()
+
+    board = exports / f"{message.reference.name}.0.board.jpg"
+    assert board.read_bytes() == photo
+    assert (exports / f"{message.reference.name}.1.note.txt").read_bytes() == b"hi"
+    assert sorted(path.name for path in exports.iterdir()) == [board.name, board.name.replace("0.board.jpg", "1.note.txt")]
+    # The message's event comes first and is unchanged; each file is named in a later line.
+    shown = lines.index(next(line for line in lines if line.startswith("Comms in")))
+    said = next(line for line in lines if "is on your disk" in line)
+    assert lines.index(said) > shown and str(board) in said and "image/jpeg" in said
+
+
+async def test_a_watch_is_sent_no_file_of_a_message_it_was_never_sent(
+    session, comms: Comms,
+) -> None:
+    """Holding a watch proves one thread, and a file goes only with a message that thread's
+    watch was sent: asking for any other message by its reference gets nothing."""
+    client, token = session
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    other = comms.messaging.send("cloud", "sender", "not yours", files=(
+        FileUpload.of("secret.txt", "text/plain", b"private"),)).message
+    await socket.send_str(FilesWanted(printed=(other.reference,)).line())
+    comms.messaging.send("sender", "cloud", "yours")
+    assert (await frame(socket))["text"] == "yours"
+    await socket.close()
 
 
 async def test_the_cloud_client_shows_a_message_that_fits_one_event_as_written(
