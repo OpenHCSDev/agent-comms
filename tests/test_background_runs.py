@@ -149,10 +149,9 @@ def test_a_run_that_ended_while_the_bridge_was_down_is_reported_at_the_next_touc
     until(lambda: run.exit_file.exists(), bool)
     assert notices(wired) == () and isinstance(stored(wired, run.run_id).state, RunningState)
 
-    status(wired)
+    (row,) = status(wired).runs
 
-    ended = reported(wired, run.run_id)
-    assert isinstance(ended.state, ExitedState) and ended.state.code == 7
+    assert isinstance(row.run.state, ExitedState) and row.run.state.code == 7 and row.run.reported
     assert "exited with code 7" in notices(wired)[0]
 
 
