@@ -97,7 +97,8 @@ class HostArea(ToolArea):
 
 
 class ScreensArea(ToolArea):
-    """What the app's own screens read and write; a chat rarely wants these."""
+    """What the app's own screens read and write. A chat's grant could run some of these
+    and would not want to, so no menu offers the area."""
 
     __slots__ = ()
 
@@ -142,11 +143,17 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
         return f"{cls.description} {cls.bus_effect}"
 
     @classmethod
+    def offered_to(cls, grant: ToolCaller) -> bool:
+        """Whether a menu asked under `grant` offers this tool: not one the grant could
+        never run, nor one it has no use for."""
+        return True
+
+    @classmethod
     def reached(
-        cls, arguments: Mapping[str, object], exposed: Mapping[str, type[ServedRequest]],
+        cls, arguments: Mapping[str, object], grant: ToolCaller,
     ) -> tuple[type[ServedRequest], Mapping[str, object]]:
-        """The tool a call of this one runs, and what that tool is given: this one, as given.
-        Only a tool that calls another by name answers as the other."""
+        """The tool a call of this one under `grant` runs, and what that tool is given: this
+        one, as given. Only a tool that calls another by name answers as the other."""
         return cls, arguments
 
     @classmethod
@@ -237,6 +244,15 @@ class HumanToolRequest[Result: ToolResult = ToolResult](
 ):
     """A request only the owner's UI may make: Core checks the human caller here, once,
     and the member answers from comms alone."""
+
+    @classmethod
+    def offered_to(cls, grant: ToolCaller) -> bool:
+        """Only to a grant the human check below would let through."""
+        try:
+            grant.require_human()
+        except ToolRefusedError:
+            return False
+        return True
 
     def apply(self, comms: Comms, caller: ToolCaller) -> Result:
         caller.require_human()

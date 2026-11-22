@@ -302,10 +302,10 @@ class AreaTool(ShortListed, AreaAsk, ToolMenu, declared_name=None):
     area: ClassVar[type[ToolArea]]
 
     @classmethod
-    def offered(
-        cls, exposed: Mapping[str, type[ServedRequest]],
-    ) -> dict[str, type[ServedRequest]]:
-        return {name: tool for name, tool in exposed.items() if issubclass(tool, cls.area)}
+    def offered(cls, grant: ConnectorCaller) -> dict[str, type[ServedRequest]]:
+        """The area's tools a menu asked under `grant` shows and runs."""
+        return {name: tool for name, tool in grant.exposed().items()
+                if issubclass(tool, cls.area) and tool.offered_to(grant)}
 
     @classmethod
     def running(cls, tool: type[ServedRequest]) -> type[AreaTool]:
@@ -314,19 +314,14 @@ class AreaTool(ShortListed, AreaAsk, ToolMenu, declared_name=None):
         return running
 
     @classmethod
-    def menus(cls) -> tuple[type[ToolArea], ...]:
-        """The areas the short list offers."""
-        return tuple(one.area for one in AreaTool.members_with(AreaTool))
-
-    @classmethod
     def listed_description(cls, grant: ConnectorCaller) -> str:
         """The list says what the area can do, so a client need not ask before it knows."""
-        runs = ", ".join(cls.offered(grant.exposed()))
+        runs = ", ".join(cls.offered(grant))
         return f"{cls.description} It runs: {runs}. {cls.bus_effect}"
 
     @classmethod
     def reached(
-        cls, arguments: Mapping[str, object], exposed: Mapping[str, type[ServedRequest]],
+        cls, arguments: Mapping[str, object], grant: ConnectorCaller,
     ) -> tuple[type[ServedRequest], Mapping[str, object]]:
         keys = {plan.key for plan in FieldCodec.field_plans(AreaAsk)}
         try:
@@ -337,15 +332,15 @@ class AreaTool(ShortListed, AreaAsk, ToolMenu, declared_name=None):
                 f"Invalid {cls.declared_name} arguments: {error}") from error
         if not ask.do:
             return cls, arguments
-        offered = cls.offered(exposed)
+        offered = cls.offered(grant)
         if ask.do not in offered:
             raise UnexposedToolError(
                 f"{cls.declared_name} runs {', '.join(offered)}; it has no {ask.do!r}.")
         rest = {key: value for key, value in arguments.items() if key not in keys}
-        return offered[ask.do].reached({**rest, **ask.given}, exposed)
+        return offered[ask.do].reached({**rest, **ask.given}, grant)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ToolsFound:
-        return self.shown(self.offered(self.grant.exposed()).values(), self.about)
+        return self.shown(self.offered(self.grant).values(), self.about)
 
 
 class MessagesAreaTool(AreaTool, declared_name="comms_menu_messages"):
@@ -417,7 +412,8 @@ class ConnectorFindToolTool(ShortListed, ToolMenu, declared_name="comms_find_too
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ToolsFound:
         return self.shown(
-            (tool for tool in self.grant.exposed().values() if issubclass(tool, AreaTool.menus())),
+            (tool for menu in AreaTool.members_with(AreaTool)
+             for tool in menu.offered(self.grant).values()),
             self.query)
 
 

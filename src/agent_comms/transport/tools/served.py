@@ -353,6 +353,12 @@ class CommsDiscoverTool(HostArea, ReadTool, NativeToolRequest):
     @classmethod
     def loads_tools(cls) -> bool:
         return True
+
+    @classmethod
+    def offered_to(cls, grant: ToolCaller) -> bool:
+        """It loads tools into a native harness for one turn; a connector's client has its
+        own list and nothing for this to load into."""
+        return False
     native_call = CommunicationCall
     selection: Annotated[ToolLookup, *tool_field("Search words or select exact tool names")]
 
