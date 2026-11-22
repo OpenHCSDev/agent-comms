@@ -1,9 +1,7 @@
-"""A context language model's context, recorded in git; its cache, kept across threads.
+"""A served context language model's cache, kept across threads, beside its context in git.
 
-Git holds the state. Each CLM conversation is one branch of a bare repository (Polystore
-``GitBackend``): the system prompt, every turn of the live context as the harness last sent
-it, the harness's budget state, and the identity of the cache that goes with it. A turn's
-end is a commit, so the context has a history, a diff per edit, and a content id.
+Git holds the state (``context_history``): each CLM conversation is one branch, a turn's end
+is a commit, and the identity of the cache that goes with a context is recorded with it.
 
 The cache is a local copy that is checked, never trusted. One llama-server slot serves every
 CLM thread, so a thread that takes the slot from another used to re-read its whole context
@@ -27,22 +25,18 @@ from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.coordination.coordinator import Coordination
+from agent_comms.execution.context_history import ContextHistory, ContextView
 from agent_comms.execution.context_sizes import ContextSizes
 from agent_comms.execution.launch_runtime import RestartEnvironment
 from agent_comms.execution.native_arguments import ClmLocalProvider, TurnHost
-
-if TYPE_CHECKING:
-    from polystore.git import GitBackend
 
 logger = logging.getLogger(__name__)
 
 # clm_reference.mjs publishes the live view it sent to this file in the session's directory.
 LIVE_CONTEXT_ROOT = Path("/tmp/.live_ctx")
 VIEW_NAME = "LIVE_VIEW.json"
-CONTEXT_DIRECTORY = "ctx"
 CACHE_MANIFEST = "cache/slot.json"
 
 
@@ -89,19 +83,8 @@ class SlotServer:
 
 
 @dataclass(frozen=True)
-class ContextHistory:
-    """One conversation's branch: its recorded context and its cache's identity."""
-
-    repository: Path
-    session: str
-
-    def branch(self) -> GitBackend:
-        # Polystore is imported where a branch is opened, which only the host of a turn does:
-        # every client imports this module to discover declarations (RootFile.load_declarations)
-        # and the phone app does not ship Polystore.
-        from polystore.git import GitBackend
-
-        return GitBackend(self.repository, f"refs/clm/{self.session}")
+class PublishedHistory(ContextHistory):
+    """A served conversation's history: its context is the view its harness last published."""
 
     def record(self) -> str | None:
         """Commit the live view the harness last published; the context's content id, or
@@ -109,45 +92,7 @@ class ContextHistory:
         published = LIVE_CONTEXT_ROOT / self.session / VIEW_NAME
         if not published.is_file():
             return None
-        view = json.loads(published.read_text(encoding="utf-8"))
-        branch = self.branch()
-        turns = {
-            f"{CONTEXT_DIRECTORY}/{number:04d}-{turn['role']}.txt": turn["text"]
-            for number, turn in enumerate(view["turns"], start=1)
-        }
-        if branch.exists(CONTEXT_DIRECTORY):
-            for stale in set(branch.list_files(CONTEXT_DIRECTORY)) - set(turns):
-                branch.delete(stale)
-        branch.save_batch(
-            [view["system"], json.dumps(view["budget"], sort_keys=True), *turns.values()],
-            ["system.txt", "harness.json", *turns],
-        )
-        branch.checkpoint(f"context: {len(turns)} turns")
-        return branch.tree_id(CONTEXT_DIRECTORY) if turns else None
-
-    def sizes(self) -> ContextSizes:
-        """The size the context had at the record before this turn and the size this turn
-        recorded: its last two records are the whole comparison, so nothing is carried from
-        the turn's end to the caller that reports it, and a turn that recorded nothing
-        compares a commit with itself."""
-        branch = self.branch()
-        recorded = branch.history(limit=2)
-        if len(recorded) < 2:
-            return ContextSizes.unrecorded()
-        after, before = (recorded_tokens(branch, ref=commit.id) for commit in recorded)
-        return ContextSizes(before, after)
-
-    def context_id(self, branch: GitBackend) -> str | None:
-        return branch.tree_id(CONTEXT_DIRECTORY) if branch.exists(CONTEXT_DIRECTORY) else None
-
-
-def recorded_tokens(branch: GitBackend, ref: str | None = None) -> int | None:
-    """The context size the harness stated when one view was recorded. A view that predates
-    the field, and a conversation that published none, state no size."""
-    try:
-        return json.loads(branch.load_text("harness.json", ref=ref)).get("tokens")
-    except (FileNotFoundError, ValueError):
-        return None
+        return self.commit(ContextView.published(published.read_text(encoding="utf-8")))
 
 
 class SlotHandoff:
@@ -199,8 +144,8 @@ class ContextStateStore:
     def repository(self) -> Path:
         return self.directory / "context.git"
 
-    def history(self, session: str) -> ContextHistory:
-        return ContextHistory(self.repository, session)
+    def history(self, session: str) -> PublishedHistory:
+        return PublishedHistory(self.repository, session)
 
     @contextmanager
     def _locked(self) -> Iterator[None]:
