@@ -57,8 +57,46 @@ class HelperWorkers(ABC):
         """Stop the workers now; a call still running in one is lost."""
 
 
+def carried(failure: Exception) -> Exception:
+    """A worker's failure as it crosses to the application: with where it was raised, and
+    as an exception pickle can rebuild there. Called while the failure is being handled.
+
+    An exception can pickle and still not be rebuilt: urllib's ``HTTPError`` pickles with
+    no arguments and its constructor takes five, so the bus answering 503 inside a worker
+    reached a forked worker's caller as a ``TypeError`` about ``HTTPError.__init__``, and
+    in CPython's pool it ended the pool for every later call (``BrokenProcessPool``). Such
+    a failure crosses as its nearest built-in ancestor, carrying its class, its message and
+    its notes: a caller that handles ``OSError`` still handles it."""
+    failure.add_note(f"In helper worker {os.getpid()}:\n{traceback.format_exc()}")
+    try:
+        pickle.loads(pickle.dumps(failure, protocol=5))
+    except Exception:  # noqa: BLE001 -- whatever stops it crossing as itself, it crosses named
+        text = f"{type(failure).__qualname__}: {failure}"
+        for ancestor in type(failure).__mro__:
+            if ancestor.__module__ != "builtins":
+                continue
+            try:
+                named = ancestor(text)
+            except TypeError:  # a built-in whose constructor wants more than a message
+                continue
+            named.__notes__ = list(failure.__notes__)
+            return named
+    return failure
+
+
+def _carrying[T, **P](function: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> T:
+    """What a spawned worker runs: the call, its failure made to cross (`carried`)."""
+    try:
+        return function(*args, **kwargs)
+    except Exception as failure:  # noqa: BLE001 -- the failure crosses to the caller
+        raise carried(failure) from None
+
+
 class SpawnedWorkers(ProcessPoolExecutor, HelperWorkers):
     """CPython's process pool over a multiprocessing context."""
+
+    def submit[T, **P](self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> Future[T]:
+        return super().submit(_carrying, fn, *args, **kwargs)
 
     def start(self) -> None:
         """Start the configured workers without occupying one with a dummy call.
@@ -124,11 +162,7 @@ def _serve_calls(stream: socket.socket) -> None:
             function, args, kwargs = pickle.loads(request)
             answer = pickle.dumps((True, function(*args, **kwargs)), protocol=5)
         except Exception as failure:  # noqa: BLE001 -- the failure crosses to the caller
-            failure.add_note(f"In helper worker {os.getpid()}:\n{traceback.format_exc()}")
-            try:
-                answer = pickle.dumps((False, failure), protocol=5)
-            except Exception:  # noqa: BLE001 -- an exception that cannot cross is named instead
-                answer = pickle.dumps((False, RuntimeError(f"{type(failure).__name__}: {failure}")))
+            answer = pickle.dumps((False, carried(failure)), protocol=5)
         try:
             _write_frame(stream, answer)
         except OSError:
