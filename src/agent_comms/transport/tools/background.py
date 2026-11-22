@@ -60,7 +60,7 @@ class CommsRunBackgroundTool(ThreadToolRequest, declared_name="run_background"):
         store = BackgroundRunStore.of(comms)
         store.recover()
         return store.start(ShellRun.launched(
-            store.log_directory, caller.authority(comms).incarnation, self.command, self.seconds))
+            store.log_directory, caller.own_incarnation(comms), self.command, self.seconds))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -81,6 +81,6 @@ class CommsBackgroundStatusTool(ThreadToolRequest, declared_name="background_sta
         store.recover()
         return BackgroundStatusRead(runs=tuple(
             BackgroundRunStatus(run, run.tail(self.tail_bytes))
-            for run in store.for_thread(caller.authority(comms).incarnation)
+            for run in store.for_thread(caller.own_incarnation(comms))
             if self.run_id in ("", run.run_id)
         ))

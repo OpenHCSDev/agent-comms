@@ -21,6 +21,7 @@ from agent_comms.execution.child_process import (
     ResidentManager,
 )
 from agent_comms.registry.thread_identity import ThreadIncarnation, ThreadIncarnationRecord
+from agent_comms.registry.threads import Thread
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.task_attachments.owner_notices import BackgroundRunNotice
 from agent_comms.transport.background_runs import (
@@ -41,13 +42,25 @@ from agent_comms.transport.background_runs import (
     ToolCallRun,
     UntoldState,
 )
-from agent_comms.transport.tool_caller import ThreadCaller
+from agent_comms.transport.tool_caller import ActsForTeam
 from agent_comms.transport.tools.background import (
     CommsBackgroundStatusTool,
     CommsRunBackgroundTool,
 )
 
 THREAD = "PR111"
+
+
+class ActingForFixer(ActsForTeam):
+    """A session under a shared grant: its own thread, another thread's authority."""
+
+    def authority(self, comms: Comms) -> Thread:
+        return comms.registry.require("fixer")
+
+
+CALLER = ActingForFixer(THREAD)
+"""Who uses these tools: a session under a shared connector name. A caller that is its own
+authority is the one arrangement that hides a run recorded under the wrong thread."""
 
 
 def until[T](read: Callable[[], T], holds: Callable[[T], bool], seconds: float = 10.0) -> T:
@@ -111,12 +124,12 @@ def dead_process() -> ProcessIdentity:
 
 def status(comms: Comms, run_id: str = ""):
     return CommsBackgroundStatusTool(thread=THREAD, run_id=run_id).apply(
-        comms, ThreadCaller(THREAD))
+        comms, CALLER)
 
 
 def test_a_shell_run_tells_its_thread_the_exit_code_and_output(wired: Comms) -> None:
     started = CommsRunBackgroundTool(thread=THREAD, command="echo out; exit 3").apply(
-        wired, ThreadCaller(THREAD))
+        wired, CALLER)
 
     outcome = told(wired, started.run_id).outcome
 
@@ -128,7 +141,7 @@ def test_a_shell_run_tells_its_thread_the_exit_code_and_output(wired: Comms) -> 
 
 def test_a_run_past_its_deadline_is_killed_and_says_so(wired: Comms) -> None:
     started = CommsRunBackgroundTool(thread=THREAD, command="sleep 60", seconds=1).apply(
-        wired, ThreadCaller(THREAD))
+        wired, CALLER)
 
     assert isinstance(told(wired, started.run_id).outcome, KilledOutcome)
     process = stored(wired, started.run_id).process
@@ -136,6 +149,22 @@ def test_a_run_past_its_deadline_is_killed_and_says_so(wired: Comms) -> None:
         os.waitpid(process.pid, 0)
     assert not Platform.current().matches(process)
     assert "hit its deadline and was killed" in notices(wired)[0]
+
+
+@pytest.mark.parametrize("started", [
+    lambda comms, caller: CommsRunBackgroundTool(thread=THREAD, command="true").apply(
+        comms, caller).run_id,
+    lambda comms, caller: CommsBackgroundStatusTool(thread=THREAD, background=True).replied(
+        comms, caller)["run_id"],
+], ids=["shell", "tool_call"])
+def test_a_run_belongs_to_the_caller_that_started_it_not_the_thread_it_acts_for(
+        wired: Comms, started) -> None:
+    run_id = started(wired, CALLER)
+
+    told(wired, run_id)
+    assert stored(wired, run_id).thread == thread_of(wired) and len(notices(wired)) == 1
+    assert [row.run.run_id for row in CommsBackgroundStatusTool(thread=THREAD).apply(
+        wired, CALLER).runs] == [run_id]
 
 
 def test_a_shell_run_is_launched_as_the_hosts_resident_manager_places_it(
@@ -211,7 +240,7 @@ def test_a_reused_pid_is_not_adopted_as_the_run(wired: Comms) -> None:
 
 def test_a_background_tool_call_is_a_run_whose_result_is_its_output(wired: Comms) -> None:
     started = CommsBackgroundStatusTool(thread=THREAD, background=True).replied(
-        wired, ThreadCaller(THREAD))
+        wired, CALLER)
 
     assert isinstance(told(wired, started["run_id"]).outcome, ReturnedOutcome)
     assert isinstance(stored(wired, started["run_id"]), ToolCallRun)
@@ -222,7 +251,7 @@ def test_a_background_tool_call_is_a_run_whose_result_is_its_output(wired: Comms
 
 def test_a_background_tool_call_that_raises_tells_the_failure(wired: Comms) -> None:
     started = CommsRunBackgroundTool(thread=THREAD, command=" ", background=True).replied(
-        wired, ThreadCaller(THREAD))
+        wired, CALLER)
 
     assert isinstance(told(wired, started["run_id"]).outcome, RaisedOutcome)
     assert "A background command cannot be empty." in notices(wired)[0]

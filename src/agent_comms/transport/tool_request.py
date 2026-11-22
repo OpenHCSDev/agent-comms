@@ -124,7 +124,7 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
         store = BackgroundRunStore.of(comms)
         store.recover()
         return store.start(ToolCallRun.hosted(
-            store.log_directory, caller.authority(comms).incarnation, self.declared_name,
+            store.log_directory, caller.own_incarnation(comms), self.declared_name,
             partial(caller.invoke, cast(ServedRequest, self), comms)))
 
     def board(self, comms: Comms, caller: ToolCaller) -> tuple[str, ...]:
