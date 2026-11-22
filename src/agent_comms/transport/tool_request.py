@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
-import time
 from abc import ABC, abstractmethod
 from annotationlib import Format, ForwardRef, get_annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import ClassVar, NoReturn, Self, cast
 
@@ -21,10 +20,6 @@ from agent_comms.registry.threads import ThreadCommandAvailability
 from agent_comms.transport.background_runs import (
     BackgroundRunStarted,
     BackgroundRunStore,
-    EndedState,
-    RaisedState,
-    ReturnedState,
-    RunState,
     ToolCallRun,
 )
 from agent_comms.transport.native_tools import CoordinationCall, NativeToolDeclaration
@@ -126,21 +121,11 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
         if not isinstance(caller, ThreadCaller):
             raise ToolRefusedError(
                 f"{self.declared_name}: background runs need a thread caller to notify.")
-        store = BackgroundRunStore.at(comms.root)
-        run = ToolCallRun.hosted(store.log_directory, caller.name, self.declared_name)
-
-        def applied() -> RunState:
-            try:
-                result = caller.invoke(cast(ServedRequest, self), comms)
-                rendered = json.dumps(FieldCodec.encode(result.to_wire()), default=str)
-                ended: type[EndedState] = ReturnedState
-            except Exception as error:  # noqa: BLE001 - the caller hears every failure
-                rendered = f"{type(error).__name__}: {error}"
-                ended = RaisedState
-            Path(run.log).write_text(rendered, encoding="utf-8")
-            return ended(at=time.time())
-
-        return store.start(run, applied, comms.messaging)
+        store = BackgroundRunStore.of(comms)
+        store.recover()
+        return store.start(ToolCallRun.hosted(
+            store.log_directory, caller.authority(comms).incarnation, self.declared_name,
+            partial(caller.invoke, cast(ServedRequest, self), comms)))
 
     def board(self, comms: Comms, caller: ToolCaller) -> tuple[str, ...]:
         """The new board rows naming the caller of this verb, carried beside its reply: the
