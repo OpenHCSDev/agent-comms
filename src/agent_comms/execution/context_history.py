@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,7 @@ from agent_comms.execution.context_sizes import ContextSizes
 
 if TYPE_CHECKING:
     from polystore.git import GitBackend
+    from polystore.git_stream import GitStreamBackend
 
 CONTEXT_DIRECTORY = "ctx"
 
@@ -93,6 +95,25 @@ class ContextHistory:
 
     def context_id(self, branch: GitBackend) -> str | None:
         return branch.tree_id(CONTEXT_DIRECTORY) if branch.exists(CONTEXT_DIRECTORY) else None
+
+
+@dataclass(frozen=True)
+class StreamedHistory(ContextHistory):
+    """A conversation recorded through the repository's one open git, for a holder that
+    records often and is read later: a record starts no process, and is on disk, where
+    another process reads it, at ``flush``. The branch has this one writer."""
+
+    @cached_property
+    def stream(self) -> GitStreamBackend:
+        from polystore.git_stream import GitStreamBackend
+
+        return GitStreamBackend(self.repository, f"refs/clm/{self.session}")
+
+    def branch(self) -> GitStreamBackend:
+        return self.stream
+
+    def flush(self) -> None:
+        self.stream.flush()
 
 
 def recorded_tokens(branch: GitBackend, ref: str | None = None) -> int | None:
