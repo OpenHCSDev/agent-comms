@@ -23,7 +23,7 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
-from aiohttp import ClientSession, CookieJar, web
+from aiohttp import BasicAuth, ClientSession, CookieJar, web
 from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
 
@@ -333,6 +333,11 @@ async def test_a_request_without_an_approved_token_is_refused(client, store):
         refused = await client.post("/mcp", json=LIST, headers=headers)
         assert refused.status == 401
         assert "oauth-protected-resource" in refused.headers["WWW-Authenticate"]
+    # A client that knocks with GET or HEAD before it signs in is told the same thing.
+    for knock in (client.get, client.head):
+        knocked = await knock("/mcp")
+        assert knocked.status == 401
+        assert "oauth-protected-resource" in knocked.headers["WWW-Authenticate"]
     assert (await client.get("/.well-known/oauth-authorization-server")).status == 200
 
 
@@ -670,7 +675,7 @@ async def test_loopback_client_uses_its_registered_path_random_port_and_issuer(
     metadata = await (await client.get("/.well-known/oauth-authorization-server")).json()
     assert metadata["authorization_response_iss_parameter_supported"] is True
     assert metadata["token_endpoint_auth_methods_supported"] == [
-        "none", "client_secret_post",
+        "none", "client_secret_post", "client_secret_basic",
     ]
     callback = OAuthRedirectUri(URL("http://localhost:43123/oauth/callback"))
     resource = f"{connector.issuer}/mcp"
@@ -810,6 +815,12 @@ async def test_dynamic_registration_honors_confidential_authentication(
     assert issued.status == 200
     assert tokens["token_type"] == "bearer"
     assert tokens["access_token"] and tokens["refresh_token"] and tokens["expires_in"] > 0
+    # The same client may send its ID and secret in the Authorization header instead.
+    renewed = await client.post(
+        "/token", data={"grant_type": "refresh_token", "refresh_token": tokens["refresh_token"]},
+        auth=BasicAuth(credential.client_id, credential.client_secret),
+    )
+    assert renewed.status == 200 and (await renewed.json())["access_token"]
 
 
 async def test_connector_lists_every_tool(client, store, comms):
