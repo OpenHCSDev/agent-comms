@@ -1,232 +1,117 @@
-# Plan: Background tool runs for agent-comms (concrete edits, no improvising)
+# Plan: background runs for agent-comms
 
-Status: authored by inference3, 2026-11-21, from the traced domain model. Every edit below is
-drafted code at a named file:line. Implementation is typing these in and running the live test;
-the only named lookup is marked LOOKUP.
+Status, 2026-11-22: built and on main (#5074–#5080). One thread is open: the live test, which
+needs an install on a bus host. The first draft of this plan carried 170 lines of code to type
+in; that code delivered no notice on either path and is gone. This file now holds what a
+hardened plan holds (skills/plan-hardening/SKILL.md): deliverables, prior art, owner map,
+family map, dry-run log.
 
-## Domain model (the one paragraph)
+## Deliverables
 
-Kinds: background runs (a shell command started detached, owned by a thread), tool calls (comms
-tools execute in the bridge via `NativeToolCall.execute` → `await action()`), notifications
-(messages through `Messaging.send`, which the delivery machinery steers into a live turn or
-queues for the next). Varies: runs by state (running/finished/killed). Shared: the run store
-(owned), the exit watcher, the delivery path. Crossing: none — the bridge outlives turns and
-the notification is just a message, so the delivery system answers "which turn is live" by
-existing design.
+| Thread | True in the tree when | State |
+|---|---|---|
+| A thread starts work detached | `run_background` and `background=true` on any tool answer at once with a run id | done |
+| The thread is told how it ended | a `BackgroundRunNotice` reaches the thread's inbox with the outcome and the log tail | done, `tests/test_background_runs.py` |
+| A bridge restart loses nothing | the next tool touch watches live runs again and reports ended ones once | done in tests; **live step 4 open** |
+| The state says what happened | exit code, deadline kill and a vanished process are different states | done |
 
-## Edit 1 — NEW file `src/agent_comms/transport/tools/background.py`
+## Prior art and reuse
 
-The whole feature, one owner module. Full draft below (the implementation may fix syntax and
-field-lookup details; the declarations, defaults and behaviors are fixed):
+Nothing was downloaded; everything below already existed in the tree and is reused, not rebuilt.
 
-```python
-"""Background tool runs: start a shell command detached, get told when it's done.
+| Need | Reused | Where |
+|---|---|---|
+| A process that cannot be confused with a later one under the same pid | `ProcessIdentity` | `src/agent_comms/execution/child_process.py:395` |
+| Wait for exit, signal a whole group | `Platform.wait_any_exited`, `terminate_group`, `force_group` | `src/agent_comms/execution/child_process.py:742,987` |
+| States with declared successors | `LifecycleState`, `Terminal` | `src/agent_comms/nominal/lifecycle.py:15`, `lifecycle_capability.py` |
+| Core telling a thread something, as a line that starts a turn | `OwnerNotice` | `src/agent_comms/task_attachments/owner_notices.py:41` |
+| A durable document under the bus root | `SingleFileStore`, `RuntimeFile`, `LockedStore` | `src/agent_comms/storage/` |
 
-A run is a record in a durable store, so a bridge restart cannot lose it: the next tool
-touch re-adopts live runs and reports the ones that finished while the bridge was down.
-Completion is delivered as a message to the requesting thread, which the delivery machinery
-steers into a live turn or queues for the next one — the same road every message takes.
-"""
+Two facts the first draft did not know, both found by running the real send path:
+`Messaging.send` refuses a kind that is not sendable (`messaging/sending.py:140`) and a thread
+messaging itself (`messaging/channel_targets.py:508`); and `wait_any_exited` returns at its
+timeout, it does not raise.
 
-from __future__ import annotations
+## Owner map
 
-import subprocess
-import threading
-import uuid
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Annotated
+| Concept | Owner |
+|---|---|
+| The run family, its states, the store, the watcher | `src/agent_comms/transport/background_runs.py` |
+| The two tools | `src/agent_comms/transport/tools/background.py` |
+| `background=true` on every tool | `ServedRequest.started_in_background`, `src/agent_comms/transport/tool_request.py` |
+| The `background` argument | `ToolRequest.background`, `src/agent_comms/transport/request.py:98` |
+| The notice | `BackgroundRunNotice`, `src/agent_comms/task_attachments/owner_notices.py` |
+| Tool registration | the import in `src/agent_comms/transport/tools/served.py` |
+| The store file | `background_run_records.json` under the bus root; logs in `logs/` beside it |
 
-from agent_comms.comms import Comms
-from agent_comms.execution.child_process import Platform
-from agent_comms.storage.locked_store import LockedStore
-from agent_comms.transport.request import tool_field
-from agent_comms.transport.tool_caller import ToolCaller
-from agent_comms.transport.tool_request import ThreadToolRequest
-from agent_comms.transport.tool_result import ToolResult
-from agent_comms_hooks import ToolRefusedError
+## Family map
 
-NOTICE_SENDER = "background-runs"
-DEFAULT_SECONDS = 3600
-TAIL_BYTES = 2000
+```
+BackgroundRun                    run_id, thread, log, process (ProcessIdentity), started_at,
+ ├─ ShellRun                     state, reported      command, seconds; exit code in <log>.exit
+ └─ ToolCallRun                                       tool; process is the hosting bridge
 
+RunState (LifecycleState)
+ ├─ RunningState                 → any ended state
+ └─ EndedState (Terminal)        at
+     ├─ ExitedState              code
+     ├─ KilledState              the deadline passed and the group was killed
+     ├─ ReturnedState            a tool call's result is in its log
+     ├─ RaisedState              a tool call's error is in its log
+     └─ GoneState                the process ended and left no outcome
 
-@dataclass(frozen=True)
-class BackgroundRunRecord:
-    """One detached run: who asked, what runs, where the output goes, what it cost."""
-
-    run_id: str
-    thread: str
-    command: str
-    log: str
-    pid: int
-    started_at: float
-    seconds: int
-
-
-@dataclass(frozen=True)
-class BackgroundRunHandle(ToolResult):
-    """What the caller gets back immediately: the run keeps going without the turn."""
-
-    run_id: str
-    pid: int
-    log: str
-
-
-@dataclass(frozen=True)
-class BackgroundStatusRead(ToolResult):
-    """One run's state, or every run this thread owns."""
-
-    runs: tuple[dict[str, str | int], ...]
-
-
-def runs_store(comms: Comms) -> LockedStore:
-    """LOOKUP: the runtime root under the comms root — same area the native slots use."""
-    return LockedStore(_runs_root(comms) / "background_runs.json", BackgroundRunRecord)
-
-
-def _launch_detached(command: str, log: Path) -> subprocess.Popen:
-    """The one detached-shell launch: session-leader, output to the owned log."""
-    return subprocess.Popen(
-        ["/bin/bash", "-c", command],
-        stdout=open(log, "ab"), stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL, start_new_session=True,
-    )
-
-
-def _start(run: BackgroundRunRecord, comms: Comms) -> None:
-    """Watch one run to its exit, then notify the requesting thread. A thread per run:
-    the bridge outlives turns, and wait-then-notify is all the watcher does."""
-    identity = Platform.current().identity(run.pid)
-
-    def watch() -> None:
-        try:
-            Platform.current().wait_any_exited((identity,), run.seconds)
-        except TimeoutError:
-            Platform.current().terminate_group(identity)
-            Platform.current().wait_any_exited((identity,), 30.0)
-            _notify(run, comms, "timed out and was killed")
-            return
-        _notify(run, comms, "finished")
-
-    threading.Thread(target=watch, daemon=True, name=f"background-{run.run_id}").start()
-
-
-def _notify(run: BackgroundRunRecord, comms: Comms, outcome: str) -> None:
-    tail = _tail(Path(run.log))
-    body = (f"Background run {run.run_id} {outcome}.\n"
-            f"command: {run.command}\nlast {TAIL_BYTES} bytes of output:\n{tail}")
-    comms.messaging.send(NOTICE_SENDER, run.thread, body)
-
-
-def _tail(log: Path) -> str:
-    try:
-        return log.read_bytes()[-TAIL_BYTES:].decode(errors="replace")
-    except FileNotFoundError:
-        return "(no output)"
-
-
-@dataclass(frozen=True)
-class CommsRunBackgroundTool(ThreadToolRequest):
-    label = "Run in background"
-    description = (
-        "Start a shell command detached and return immediately: the turn keeps going while "
-        "the command runs. Its output streams to a log file this tool owns; when the command "
-        "exits (or its deadline passes), a message with the outcome and the log tail is sent "
-        "to this thread. Use background_status to poll or tail earlier."
-    )
-    thread: Annotated[str, *tool_field("Thread name")]
-    command: Annotated[str, *tool_field("Shell command to run detached")]
-    seconds: Annotated[int, *tool_field("Kill the command after this many seconds")] = (
-        DEFAULT_SECONDS
-    )
-
-    def apply(self, comms: Comms, caller: ToolCaller) -> BackgroundRunHandle:
-        if not self.command.strip():
-            raise ToolRefusedError("A background command cannot be empty.")
-        store = runs_store(comms)
-        log_dir = _runs_root(comms) / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        run_id = f"{self.thread}-{uuid.uuid4().hex[:8]}"
-        log = log_dir / f"{run_id}.log"
-        process = _launch_detached(self.command, log)
-        run = BackgroundRunRecord(
-            run_id=run_id, thread=self.thread, command=self.command, log=str(log),
-            pid=process.pid, started_at=0.0, seconds=self.seconds,
-        )
-        store.add(run)
-        _start(run, comms)
-        return BackgroundRunHandle(run_id=run_id, pid=process.pid, log=str(log))
-
-
-@dataclass(frozen=True)
-class CommsBackgroundStatusTool(ThreadToolRequest):
-    label = "Background status"
-    description = (
-        "Report one background run's state (running, finished, or gone) and the tail of its "
-        "log; without run_id, list every background run this thread owns. This also re-adopts "
-        "runs a bridge restart left behind."
-    )
-    thread: Annotated[str, *tool_field("Thread name")]
-    run_id: Annotated[str, *tool_field("Run id from run_background; empty lists all")] = ""
-    tail_bytes: Annotated[int, *tool_field("Bytes of log tail to return")] = TAIL_BYTES
-
-    def apply(self, comms: Comms, caller: ToolCaller) -> BackgroundStatusRead:
-        store = runs_store(comms)
-        platform = Platform.current()
-        rows = []
-        for run in store.members():
-            if self.run_id and run.run_id != self.run_id:
-                continue
-            alive = platform.matches(platform.identity(run.pid))
-            rows.append({
-                "run_id": run.run_id, "command": run.command, "pid": run.pid,
-                "state": "running" if alive else "finished", "log": run.log,
-                "tail": _tail(Path(run.log))[-self.tail_bytes:],
-            })
-        return BackgroundStatusRead(runs=tuple(rows))
+BackgroundRunStore               start → recover, record, watch
+                                 recover → watch unwatched running runs, report, forget
+                                 watch → wait, settle, report   (one thread per run)
+                                 settle → only a running run changes state
+                                 report → claim unreported ended runs in one transaction
 ```
 
-## Edit 2 — registration, one line
+Consumers hold `BackgroundRun` and `RunState`; nothing outside the family tests a member.
 
-`src/agent_comms/transport/tools/served.py` after line 157:
+## Decided
 
-```python
-from agent_comms.transport.tools import background  # registers the background run family
-```
+1. **Who speaks** — Core, as an owner notice. The first draft's plain sender name and the
+   later non-conversation kind are both gone.
+2. **Restart recovery** — on touch: both tools and every `background=true` call recover first.
+   No bridge-startup edit.
+3. **Deadline** — the tool's `seconds` (default 3600), counted from the recorded start, so a
+   recovered run keeps the time it had left.
+4. **Exit code** — the session leader writes it beside the log. The command author adds nothing.
+5. **Retention** — a reported run is forgotten a day after it ended, with its files.
 
-The `NativeRequestTools.members_with` catalog derives the rest; the module import is the whole
-registration.
+## Dry-run log
 
-## Named defaults (decided, not open)
+Each step, the file it touches and the check that catches its failure. All run in
+`tests/test_background_runs.py` (15 cases, about 4 s) except the last row.
 
-1. **Sender identity** — `background-runs`, a plain sender name; the body names the run.
-2. **Run store path** — under the comms root's runtime area (the LOOKUP above resolves the
-   exact directory; the native slots dir is the precedent).
-3. **Restart recovery** — sweep-on-touch: the status tool and run_background both first scan
-   the store for unreported finished runs. A run that finished while the bridge was down is
-   reported at the next touch, not by a startup hook — no bridge-startup edit.
-4. **Kill deadline** — the tool's `seconds` (default 3600); the watcher kills the process
-   group on deadline and says so in the notice.
-5. **Exit code** — carried in the log tail (the watcher appends `EXIT:$?` to the log before
-   notifying is NOT possible — the watcher is not the shell). Instead: the watcher records the
-   outcome string ("finished"/"timed out and was killed") in the notice; the exit code lives
-   in the log if the command echoes it. Command authors who need the code end their command
-   with `; echo EXIT:$?`.
+| Step | Check |
+|---|---|
+| Exit code and tail reach the thread | `test_a_shell_run_reports_its_exit_code_and_output_to_its_thread` |
+| Deadline kill | `test_a_run_past_its_deadline_is_killed_and_says_so` |
+| Ended while the bridge was down | `test_a_run_that_ended_while_the_bridge_was_down_is_reported_at_the_next_touch` |
+| Still alive after a restart | `test_a_run_still_alive_after_a_restart_is_watched_again` |
+| Process vanished | `test_a_run_whose_process_vanished_without_an_exit_code_is_gone` |
+| Pid reuse | `test_a_reused_pid_is_not_adopted_as_the_run` |
+| Tool call returns, raises, bridge died | the three `tool_call` cases |
+| Reported once | `test_an_ended_run_is_reported_once_however_often_it_is_touched` |
+| A real bridge restart, a real session woken | **not run: the live test below** |
 
-## The live test (the proof, run in this session after an install)
+Known edge, stated not fixed: a call from another bus with `background=true` decodes the reply
+as the tool's own result (`src/agent_comms/transport/remote_core.py:215`) and fails to decode
+the run handle. The owner's UI never sets `background`.
 
-1. `agent-comms install` (the bridge restart puts the new code in my session's catalog).
-2. Call `run_background` with `sleep 5 && echo done`, keep working — expect the
-   "background run finished" message within ~5s, mid-turn or next turn.
-3. Call `run_background` with `sleep 90`, immediately call `background_status` — expect
-   "running" and the log tail.
-4. Restart the bridge while the 90s run is live; after restart call `background_status` —
-   expect the run reported (finished) via sweep-on-touch, notification delivered.
-5. Call `run_background` with `sleep 9999 --seconds 5` — expect the timeout kill and a
-   "timed out and was killed" notice.
+## The live test (open; needs an install on a bus host)
+
+1. `agent-comms install`. Delete the old `background_runs.json` under the bus root: it has no reader.
+2. `run_background` with `sleep 5; echo done; exit 3`, keep working. Expect a line in this
+   thread within about 5 s saying `exited with code 3`, with `done` in the tail.
+3. `run_background` with `sleep 90`, then `background_status`. Expect `running` and the tail.
+4. Restart the bridge while the 90 s run is live, then `background_status`. Expect `running`
+   again, then one `exited with code 0` line when it ends.
+5. `run_background` with `sleep 9999`, `seconds` 5. Expect `hit its deadline and was killed`.
+6. Any tool with `background=true`. Expect `returned its result` and the result in the tail.
 
 ## Done-when
 
-The five live steps pass in this session. The tools are declared families (no new
-string-dispatch). The `setsid` idiom is dead: no agent hand-rolls a background launch again.
+The six live steps pass in a session on a bus host.

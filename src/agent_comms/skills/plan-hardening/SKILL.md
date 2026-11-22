@@ -33,6 +33,23 @@ allowed once; skipping it twice means the plan still carries a guess where a fac
 8. **Execute** only when everything is sound and mostly mechanical. Ambition lives in the plan;
    mechanics live in the execution.
 
+## What a hardened plan contains
+
+Each step leaves a named section, so "did step 5 happen" is read off the plan, not argued.
+`plans/background-runs.md` is the worked example.
+
+| Step | Section in the plan |
+|---|---|
+| 1 | **Deliverables**: one row per thread, what is true in the tree when it is done, its state |
+| 2 | **Prior art and reuse**: what exists, where, its measured result; or the cost of building |
+| 4 | **Owner map**: each concept and its owning declaration, file:line |
+| 5 | **Family map**: the hierarchy, each member and what it alone declares |
+| 7 | **Dry-run log**: each step, the file it touches, the check that catches its failure |
+
+Steps 3 and 6 leave no section of their own: they are what makes the others shorter and true.
+A drafted code block is not a section. The first background-runs plan carried 170 lines of
+code to type in and no owner map; neither of its two notice paths could send.
+
 ## Failures each step exists to catch
 
 (1) building a hope (a thread nobody de-aspirated), (2) rebuilding existing work, (3)
