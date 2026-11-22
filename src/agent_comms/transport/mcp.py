@@ -11,7 +11,7 @@ import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, Literal, Self
 
@@ -174,23 +174,18 @@ class InitializeResult(McpResult):
         "inbox (comms_inbox with thread set to it) holds only what is sent to it."
     )
 
-    reachable: ClassVar[str] = (
-        "Connecting under a name is not done until your inbox watch is open, exactly as a local "
-        "session's bridge is: call comms_watch and at once run the URL it returns with "
-        "agent-comms-inbox-watch under your Monitor tool (longest timeout), and open it again "
-        "whenever it ends. While it runs your thread shows bridged and each message wakes you; "
-        "without it you show 'no bridge' whenever you are idle and nothing reaches you."
-    )
-
     @classmethod
-    def announcing(cls, bus: str) -> Self:
-        """The handshake a server answers: which bus it is, and then how to share it.
+    def announcing(cls, bus: str, listed: Iterable[type[ToolRequest]] = ()) -> Self:
+        """The handshake a server answers: which bus it is, how to share it, and then what
+        each listed tool has to say before its first call, so a client is never told to
+        call a tool its list does not name.
 
         Which bus comes first because a session holding several connectors reads this as
         the one thing that distinguishes them; everything else here is the same on all of
         them, which was exactly the trouble.
         """
-        return cls(instructions=f"{bus}\n\n{cls.shared_grant}\n\n{cls.reachable}")
+        said = dict.fromkeys(tool.handshake for tool in listed if tool.handshake)
+        return cls(instructions="\n\n".join((bus, cls.shared_grant, *said)))
 
 
 @dataclass(frozen=True)
@@ -211,7 +206,7 @@ class ToolDescription:
         cls, name: str, tool: type[ToolRequest], caller: ConnectorCaller
     ) -> ToolDescription:
         """The name is the key tools/call dispatches on, so listing and calling share it."""
-        return cls(name, tool.label, tool.listed_description(),
+        return cls(name, tool.label, tool.listed_description(caller),
                    caller.input_schema(tool), ToolAnnotations(tool.is_read_only()))
 
 
@@ -297,7 +292,7 @@ class InitializeMessage(McpRequest, declared_name="initialize"):
     params: dict[str, object]
 
     async def result(self, connector: McpServer, caller: ConnectorCaller) -> InitializeResult:
-        return InitializeResult.announcing(connector.announces())
+        return InitializeResult.announcing(connector.announces(), caller.listed().values())
 
 
 @dataclass(frozen=True, kw_only=True)

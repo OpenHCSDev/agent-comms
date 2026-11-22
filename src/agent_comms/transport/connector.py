@@ -213,6 +213,13 @@ class ConnectorWatchTool(MessagesArea, ConnectorTool, declared_name="comms_watch
         "The URL expires in a minute. When the Monitor expires or the watch says it ended, call "
         "this again. Never post the URL anywhere."
     )
+    handshake = (
+        "Connecting under a name is not done until your inbox watch is open, exactly as a local "
+        "session's bridge is: call comms_watch and at once run the URL it returns with "
+        "agent-comms-inbox-watch under your Monitor tool (longest timeout), and open it again "
+        "whenever it ends. While it runs your thread shows bridged and each message wakes you; "
+        "without it you show 'no bridge' whenever you are idle and nothing reaches you."
+    )
     service: Annotated[ConnectorService, WireTransient()] = field(
         default_factory=NoConnectorService, compare=False)
 
@@ -243,12 +250,23 @@ class ToolsFound(ToolResult):
     described: tuple[DescribedTool, ...]
 
 
+@dataclass(frozen=True, kw_only=True)
 class ToolMenu(ConnectorTool, declared_name=None):
-    """A short-list tool that shows other tools. What it shows is what the director's grant
-    may call, described as that grant's own list would describe it. Many matches are named
-    in a line each; a few come with everything they take, so a broad look stays small."""
+    """A short-list tool that shows other tools. What it shows is what the grant it was
+    asked under may call, described as that grant's own list would describe it. Many
+    matches are named in a line each; a few come with everything they take, so a broad
+    look stays small."""
 
     described_at_most: ClassVar[int] = 3
+    handshake = (
+        "Each comms_menu_ tool is everything about one subject: call it with nothing to see "
+        "its tools, with `about` to read what one takes, and with `do` and `given` to run "
+        "one. comms_find_tool searches all of them."
+    )
+    grant: Annotated[ConnectorCaller, WireTransient()] = field(default=CALLER, compare=False)
+
+    def asked_by(self, grant: ConnectorCaller) -> Self:
+        return replace(self, grant=grant)
 
     def shown(self, offered: Iterable[type[ServedRequest]], words: str) -> ToolsFound:
         found = tuple(
@@ -256,9 +274,10 @@ class ToolMenu(ConnectorTool, declared_name=None):
             for tool in SearchToolLookup(words).selected(tuple(offered)))
         if len(found) > self.described_at_most:
             return ToolsFound(found, ())
-        exposed = CALLER.exposed()
+        exposed = self.grant.exposed()
         return ToolsFound((), tuple(
-            DescribedTool(one.name, one.does, one.run_with, CALLER.input_schema(exposed[one.name]))
+            DescribedTool(
+                one.name, one.does, one.run_with, self.grant.input_schema(exposed[one.name]))
             for one in found))
 
 
@@ -300,9 +319,9 @@ class AreaTool(ShortListed, AreaAsk, ToolMenu, declared_name=None):
         return tuple(one.area for one in AreaTool.members_with(AreaTool))
 
     @classmethod
-    def listed_description(cls) -> str:
+    def listed_description(cls, grant: ConnectorCaller) -> str:
         """The list says what the area can do, so a client need not ask before it knows."""
-        runs = ", ".join(cls.offered(CALLER.exposed()))
+        runs = ", ".join(cls.offered(grant.exposed()))
         return f"{cls.description} It runs: {runs}. {cls.bus_effect}"
 
     @classmethod
@@ -326,7 +345,7 @@ class AreaTool(ShortListed, AreaAsk, ToolMenu, declared_name=None):
         return offered[ask.do].reached({**rest, **ask.given}, exposed)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ToolsFound:
-        return self.shown(self.offered(CALLER.exposed()).values(), self.about)
+        return self.shown(self.offered(self.grant.exposed()).values(), self.about)
 
 
 class MessagesAreaTool(AreaTool, declared_name="comms_menu_messages"):
@@ -398,7 +417,7 @@ class ConnectorFindToolTool(ShortListed, ToolMenu, declared_name="comms_find_too
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ToolsFound:
         return self.shown(
-            (tool for tool in CALLER.exposed().values() if issubclass(tool, AreaTool.menus())),
+            (tool for tool in self.grant.exposed().values() if issubclass(tool, AreaTool.menus())),
             self.query)
 
 
@@ -1003,7 +1022,7 @@ class Connector(ConnectorService, McpServer):
         with self.opened_wire() as comms:
             acting, rest = caller.acting(arguments)
             caller.prepare_call(comms, acting)
-            request = tool.decoded(comms, rest).bound(observer).served_by(self)
+            request = tool.decoded(comms, rest).bound(observer).served_by(self).asked_by(caller)
             return AnsweredCall(request.replied(comms, acting), request.board(comms, acting))
 
     def cancel_call(self, request_id: JsonRpcId) -> None:
