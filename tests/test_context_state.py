@@ -9,7 +9,12 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 from agent_comms.execution import context_state
-from agent_comms.execution.context_history import ContextHistory, ContextView, ViewTurn
+from agent_comms.execution.context_history import (
+    ContextHistory,
+    ContextView,
+    StreamedHistory,
+    ViewTurn,
+)
 from agent_comms.execution.context_state import (
     ColdSlot,
     ContextStateStore,
@@ -118,13 +123,15 @@ def test_a_turn_end_commits_the_context_as_files_with_a_history(store, tmp_path)
     assert store.history("never-published").record() is None
 
 
-def test_a_context_its_holder_hands_over_is_the_same_record_as_a_published_one(store, tmp_path):
+@pytest.mark.parametrize("history", [ContextHistory, StreamedHistory])
+def test_a_context_its_holder_hands_over_is_the_same_record_as_a_published_one(
+        store, tmp_path, history):
     """A holder with no harness (a practice attempt) commits its own view: same files, same
-    content id as the served thread's record of the same context."""
+    content id as the served thread's record of the same context, whichever way it writes."""
     publish(tmp_path, "served", ("user", "TASK"), ("assistant", "plan"), tokens=7)
     served = store.history("served").record()
 
-    held = ContextHistory(store.repository, "held")
+    held = history(store.repository, "held")
     handed = held.commit(ContextView("SYSTEM", {"strict_target": 26624, "tokens": 7},
                                      (ViewTurn("user", "TASK"), ViewTurn("assistant", "plan"))))
 
@@ -133,6 +140,9 @@ def test_a_context_its_holder_hands_over_is_the_same_record_as_a_published_one(s
     held.commit(ContextView("SYSTEM", {"tokens": 3}, (ViewTurn("assistant", "kept: plan"),)))
     assert held.branch().list_files("ctx") == ["ctx/0001-assistant.txt"]
     assert (held.sizes().before, held.sizes().after) == (7, 3)
+    # Anyone else who opens the branch reads the same two records.
+    assert [commit.message for commit in ContextHistory(store.repository, "held").branch().history()] \
+        == ["context: 1 turns", "context: 2 turns"]
 
 
 def test_returning_to_a_conversation_restores_the_state_saved_when_it_lost_the_slot(
