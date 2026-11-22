@@ -211,7 +211,7 @@ class ToolDescription:
         cls, name: str, tool: type[ToolRequest], caller: ConnectorCaller
     ) -> ToolDescription:
         """The name is the key tools/call dispatches on, so listing and calling share it."""
-        return cls(name, tool.label, f"{tool.description} {tool.bus_effect}",
+        return cls(name, tool.label, tool.listed_description(),
                    caller.input_schema(tool), ToolAnnotations(tool.is_read_only()))
 
 

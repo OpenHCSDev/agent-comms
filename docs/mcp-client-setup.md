@@ -51,9 +51,12 @@ on the end:
 https://<connector host>/mcp/short
 ```
 
-Sign-in and the grant are the same. The list is seven tools: send, inbox, history,
-channels, threads, `comms_find_tool` (search every other tool and read what it takes)
-and `comms_call_tool` (run one by name). Nothing is out of reach, and `/mcp` is unchanged.
+Sign-in and the grant are the same. The list is fourteen tools. Seven are called
+directly: send, inbox, history, one channel, channels, threads, the board. Six are menus,
+one for each thing the bus is about (`comms_menu_messages`, `_threads`, `_channels`,
+`_goals`, `_work`, `_host`): asked nothing, a menu shows its tools; given `do` and
+`given`, it runs one. `comms_find_tool` searches across the menus. The tools only the
+app's own screens use are not offered here. `/mcp` is unchanged.
 
 ## Hosts that require a client ID or secret
 

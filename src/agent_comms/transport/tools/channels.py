@@ -13,7 +13,12 @@ from agent_comms.display_order import ChannelSort
 from agent_comms.messaging.channels import SavedView
 from agent_comms.presentation import ChannelView
 from agent_comms.transport.tool_caller import ToolCaller
-from agent_comms.transport.tool_request import NativeToolRequest, ReadTool, ShortListed
+from agent_comms.transport.tool_request import (
+    ChannelsArea,
+    NativeToolRequest,
+    ReadTool,
+    ShortListed,
+)
 from agent_comms.transport.tool_result import ToolResult
 
 @dataclass(frozen=True)
@@ -24,7 +29,7 @@ class ChannelListing(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsChannelsTool(ShortListed, ReadTool, NativeToolRequest):
+class CommsChannelsTool(ChannelsArea, ShortListed, ReadTool, NativeToolRequest):
     label = "List channels"
     description = "List named tag views and their current member threads; #any includes everyone."
 

@@ -141,18 +141,25 @@ from agent_comms.transport.serving.owner_launch import HostResources
 from agent_comms.transport.tool_caller import ThreadCaller, ThreadListing, ToolCaller
 from agent_comms.transport.tool_declaration import NativeRequestTools
 from agent_comms.transport.tool_request import (
+    ChannelsArea,
     CoreRead,
+    GoalsArea,
+    HostArea,
     HumanToolRequest,
     LiveOwnerTool,
+    MessagesArea,
     NativeToolRequest,
     ObservedToolRequest,
     PublishingToolRequest,
     ReadTool,
+    ScreensArea,
     ServedRequest,
     ShortListed,
     ThreadContextAction,
     ThreadReadTool,
+    ThreadsArea,
     ThreadToolRequest,
+    WorkArea,
 )
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools import background  # registers the background run family
@@ -333,7 +340,7 @@ class SearchToolLookup(ToolLookup, declared_name="search"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsDiscoverTool(ReadTool, NativeToolRequest):
+class CommsDiscoverTool(HostArea, ReadTool, NativeToolRequest):
     """The native adapter activates these declarations through Pi's existing tool loader."""
 
     label = "Find and load Comms tools"
@@ -354,14 +361,14 @@ class CommsDiscoverTool(ReadTool, NativeToolRequest):
                                    for tool in self.selection.selected(NativeRequestTools.members_with(NativeRequestTools))))
 
 
-class ServedCommsChannelTool(CoreRead[Channel], CommsChannelTool):
+class ServedCommsChannelTool(ShortListed, ChannelsArea, CoreRead[Channel], CommsChannelTool):
     """Serving CommsChannelTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> Channel:
         return comms.bus.require_channel(self.name)
 
 
-class ServedCommsHistoricalThreadsTool(CoreRead[HistoricalThreadsRead], CommsHistoricalThreadsTool):
+class ServedCommsHistoricalThreadsTool(ThreadsArea, CoreRead[HistoricalThreadsRead], CommsHistoricalThreadsTool):
     """Serving CommsHistoricalThreadsTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> HistoricalThreadsRead:
@@ -370,6 +377,7 @@ class ServedCommsHistoricalThreadsTool(CoreRead[HistoricalThreadsRead], CommsHis
 
 @dataclass(frozen=True, kw_only=True)
 class ServedCommsExportWireTool(
+        ScreensArea,
     ObservedToolRequest[ToolCaller, WireExportProvenance],
     HumanToolRequest[WireExportProvenance],
     CommsExportWireTool,
@@ -382,7 +390,7 @@ class ServedCommsExportWireTool(
                                        limit=self.limit, observer=self.observer)
 
 
-class ServedCommsImportThreadTool(HumanToolRequest[ThreadImported], CommsImportThreadTool):
+class ServedCommsImportThreadTool(ScreensArea, HumanToolRequest[ThreadImported], CommsImportThreadTool):
     """Serving CommsImportThreadTool."""
 
     def answered(self, comms: Comms) -> ThreadImported:
@@ -390,7 +398,7 @@ class ServedCommsImportThreadTool(HumanToolRequest[ThreadImported], CommsImportT
                                           name=self.name, worktree=self.worktree)
 
 
-class ServedCommsContextInspectionTool(CoreRead[ContextInspectionRead], CommsContextInspectionTool):
+class ServedCommsContextInspectionTool(ScreensArea, CoreRead[ContextInspectionRead], CommsContextInspectionTool):
     """Serving CommsContextInspectionTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ContextInspectionRead:
@@ -405,7 +413,7 @@ class ServedCommsContextInspectionTool(CoreRead[ContextInspectionRead], CommsCon
             ImportedSessionMetadata.sources_for_owner(comms.registry, thread))
 
 
-class ServedCommsImportedSourceTool(CoreRead[ContextSourceText], CommsImportedSourceTool):
+class ServedCommsImportedSourceTool(ScreensArea, CoreRead[ContextSourceText], CommsImportedSourceTool):
     """Serving CommsImportedSourceTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ContextSourceText:
@@ -423,21 +431,21 @@ class SavedManifestRead[R: ToolResult = ToolResult](
         return self.reference.read(comms.contexts, self.owner, comms.registry)
 
 
-class ServedCommsSavedSourceTool(SavedManifestRead[ContextSourceText], CommsSavedSourceTool):
+class ServedCommsSavedSourceTool(ScreensArea, SavedManifestRead[ContextSourceText], CommsSavedSourceTool):
     """Serving CommsSavedSourceTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ContextSourceText:
         return self.manifest(comms).public_source_text(comms, self.position, self.source)
 
 
-class ServedCommsSavedSegmentTool(SavedManifestRead[SegmentManifest], CommsSavedSegmentTool):
+class ServedCommsSavedSegmentTool(ScreensArea, SavedManifestRead[SegmentManifest], CommsSavedSegmentTool):
     """Serving CommsSavedSegmentTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> SegmentManifest:
         return self.manifest(comms).selected_segment(self.position, self.contributors)
 
 
-class ServedCommsOwnerRequestTool(HumanToolRequest[OwnerAnswered], CommsOwnerRequestTool):
+class ServedCommsOwnerRequestTool(ScreensArea, HumanToolRequest[OwnerAnswered], CommsOwnerRequestTool):
     """Serving CommsOwnerRequestTool."""
 
     def answered(self, comms: Comms) -> OwnerAnswered:
@@ -452,14 +460,14 @@ class ServedCommsOwnerRequestTool(HumanToolRequest[OwnerAnswered], CommsOwnerReq
         return OwnerAnswered(FieldCodec.decode(JsonValue, answer()))
 
 
-class ServedCommsMoveThreadProjectTool(HumanToolRequest[ProjectChangeResult], CommsMoveThreadProjectTool):
+class ServedCommsMoveThreadProjectTool(ScreensArea, HumanToolRequest[ProjectChangeResult], CommsMoveThreadProjectTool):
     """Serving CommsMoveThreadProjectTool."""
 
     def answered(self, comms: Comms) -> ProjectChangeResult:
         return comms.threads.set_project(self.owner, self.path)
 
 
-class ServedCommsRenameManagedThreadTool(HumanToolRequest[RenameThreadResult], CommsRenameManagedThreadTool):
+class ServedCommsRenameManagedThreadTool(ScreensArea, HumanToolRequest[RenameThreadResult], CommsRenameManagedThreadTool):
     """Serving CommsRenameManagedThreadTool."""
 
     def answered(self, comms: Comms) -> RenameThreadResult:
@@ -467,7 +475,7 @@ class ServedCommsRenameManagedThreadTool(HumanToolRequest[RenameThreadResult], C
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSetThreadTitleTool(HumanToolRequest[ThreadTitleResult]):
+class CommsSetThreadTitleTool(ScreensArea, HumanToolRequest[ThreadTitleResult]):
     """The owner's UI corrects a managed thread's label without renaming it."""
 
     label = "Set managed thread title"
@@ -483,21 +491,21 @@ class CommsSetThreadTitleTool(HumanToolRequest[ThreadTitleResult]):
         return comms.threads.set_managed_title(self.thread, self.title, owner=self.owner)
 
 
-class ServedCommsCaptureHumanInputTool(HumanToolRequest[HumanInputOrigin], CommsCaptureHumanInputTool):
+class ServedCommsCaptureHumanInputTool(ScreensArea, HumanToolRequest[HumanInputOrigin], CommsCaptureHumanInputTool):
     """Serving CommsCaptureHumanInputTool."""
 
     def answered(self, comms: Comms) -> HumanInputOrigin:
         return HumanInputOrigin.capture(comms, self.claimed_identity)
 
 
-class ServedCommsThreadPresentationTool(CoreRead[NotifiedThreadPresentation], CommsThreadPresentationTool):
+class ServedCommsThreadPresentationTool(ScreensArea, CoreRead[NotifiedThreadPresentation], CommsThreadPresentationTool):
     """Serving CommsThreadPresentationTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> NotifiedThreadPresentation:
         return comms.views.thread_presentations((self.thread,)).read(self.thread).published()
 
 
-class ServedCommsQueueActionTool(HumanToolRequest[QueueActionApplied], CommsQueueActionTool):
+class ServedCommsQueueActionTool(ScreensArea, HumanToolRequest[QueueActionApplied], CommsQueueActionTool):
     """Serving CommsQueueActionTool."""
 
     def answered(self, comms: Comms) -> QueueActionApplied:
@@ -506,14 +514,14 @@ class ServedCommsQueueActionTool(HumanToolRequest[QueueActionApplied], CommsQueu
         return QueueActionApplied(original.name)
 
 
-class ServedCommsWireRevisionTool(CoreRead[WireRevision], CommsWireRevisionTool):
+class ServedCommsWireRevisionTool(ScreensArea, CoreRead[WireRevision], CommsWireRevisionTool):
     """Serving CommsWireRevisionTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> WireRevision:
         return comms.views.revision()
 
 
-class ServedCommsMarkPageReadTool(HumanToolRequest[PageMarked], CommsMarkPageReadTool):
+class ServedCommsMarkPageReadTool(ScreensArea, HumanToolRequest[PageMarked], CommsMarkPageReadTool):
     """Serving CommsMarkPageReadTool."""
 
     def answered(self, comms: Comms) -> PageMarked:
@@ -521,21 +529,21 @@ class ServedCommsMarkPageReadTool(HumanToolRequest[PageMarked], CommsMarkPageRea
         return PageMarked(len(self.page.messages))
 
 
-class ServedCommsThreadRelationshipsTool(CoreRead[ThreadCommsSnapshot], CommsThreadRelationshipsTool):
+class ServedCommsThreadRelationshipsTool(ScreensArea, CoreRead[ThreadCommsSnapshot], CommsThreadRelationshipsTool):
     """Serving CommsThreadRelationshipsTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadCommsSnapshot:
         return comms.relationships.snapshot(self.owner)
 
 
-class ServedCommsSetRelationshipOrderTool(HumanToolRequest[RelationshipOrdered], CommsSetRelationshipOrderTool):
+class ServedCommsSetRelationshipOrderTool(ScreensArea, HumanToolRequest[RelationshipOrdered], CommsSetRelationshipOrderTool):
     """Serving CommsSetRelationshipOrderTool."""
 
     def answered(self, comms: Comms) -> RelationshipOrdered:
         return RelationshipOrdered(comms.relationships.set_order(self.owner, self.group, self.order))
 
 
-class ServedCommsTargetActionsTool(CoreRead[TargetActionsRead], CommsTargetActionsTool):
+class ServedCommsTargetActionsTool(ScreensArea, CoreRead[TargetActionsRead], CommsTargetActionsTool):
     """Serving CommsTargetActionsTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TargetActionsRead:
@@ -544,6 +552,7 @@ class ServedCommsTargetActionsTool(CoreRead[TargetActionsRead], CommsTargetActio
 
 
 class ServedCommsPrepareTargetActionTool(
+        ScreensArea,
     CoreRead[PreparedTargetAction], CommsPrepareTargetActionTool, AwaitsWork
 ):
     """Serving CommsPrepareTargetActionTool."""
@@ -552,28 +561,28 @@ class ServedCommsPrepareTargetActionTool(
         return self.run_awaited(self.action.prepared(comms.configuration_catalogs))
 
 
-class ServedCommsTargetEditTool(HumanToolRequest[TargetEditResult | Channel], CommsTargetEditTool):
+class ServedCommsTargetEditTool(ScreensArea, HumanToolRequest[TargetEditResult | Channel], CommsTargetEditTool):
     """Serving CommsTargetEditTool."""
 
     def answered(self, comms: Comms) -> TargetEditResult | Channel:
         return self.edit.apply(comms)
 
 
-class ServedCommsRetiredViewsTool(CoreRead[RetiredViews], CommsRetiredViewsTool):
+class ServedCommsRetiredViewsTool(ScreensArea, CoreRead[RetiredViews], CommsRetiredViewsTool):
     """Serving CommsRetiredViewsTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RetiredViews:
         return comms.views.retired_views(self.threads, self.channels)
 
 
-class ServedCommsThreadConfigurationTool(CoreRead[CoordinationChangedUpdate], CommsThreadConfigurationTool):
+class ServedCommsThreadConfigurationTool(ScreensArea, CoreRead[CoordinationChangedUpdate], CommsThreadConfigurationTool):
     """Serving CommsThreadConfigurationTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> CoordinationChangedUpdate:
         return comms.configuration.answer(self.thread)
 
 
-class ServedCommsSessionThreadTool(CoreRead[ProjectThreadSelection], CommsSessionThreadTool):
+class ServedCommsSessionThreadTool(ScreensArea, CoreRead[ProjectThreadSelection], CommsSessionThreadTool):
     """Serving CommsSessionThreadTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ProjectThreadSelection:
@@ -581,7 +590,7 @@ class ServedCommsSessionThreadTool(CoreRead[ProjectThreadSelection], CommsSessio
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsPinChannelTool(NativeToolRequest):
+class CommsPinChannelTool(ChannelsArea, NativeToolRequest):
     label = "Pin Channel"
     description = (
         "Persist whether a channel is pinned. Pinned channels sort before unpinned "
@@ -595,7 +604,7 @@ class CommsPinChannelTool(NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsPinThreadTool(NativeToolRequest):
+class CommsPinThreadTool(ChannelsArea, NativeToolRequest):
     label = "Pin Thread in Channel"
     description = (
         "Persist whether a member is pinned within one channel. Pins do not change "
@@ -633,7 +642,7 @@ class CallerSubject(NullMember, ToolSubject):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, NativeToolRequest):
+class CommsModelTool(ThreadsArea, NextTurnConfiguration, NativeOwnerCommand, NativeToolRequest):
     label = "Change Thread Model"
     description = (
         "Change this thread's model, or another thread's model, for its future turns. "
@@ -653,7 +662,7 @@ class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, NativeToolReques
         return ModelChanged(thread=thread.name, model=thread.model, thinking_level=thread.thinking_level, service_tier=thread.service_tier)
 
 
-class ServedCommsSortChannelsTool(NativeToolRequest, CommsSortChannelsTool):
+class ServedCommsSortChannelsTool(ChannelsArea, NativeToolRequest, CommsSortChannelsTool):
     """Serving CommsSortChannelsTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ChannelOrderSet:
@@ -661,7 +670,7 @@ class ServedCommsSortChannelsTool(NativeToolRequest, CommsSortChannelsTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTagsTool(NativeToolRequest):
+class CommsTagsTool(ChannelsArea, NativeToolRequest):
     label = "Manage tags"
     description = (
         "List, create, rename, or delete tags. Renaming/deleting updates thread "
@@ -677,7 +686,7 @@ class CommsTagsTool(NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadTagsTool(NativeToolRequest):
+class CommsThreadTagsTool(ThreadsArea, NativeToolRequest):
     label = "Assign thread tags"
     description = (
         "Add/remove tags on a thread. Omit thread to manage your own tags. Channel "
@@ -699,7 +708,7 @@ class CommsThreadTagsTool(NativeToolRequest):
         return ThreadTags(thread.name, tuple(sorted(thread.tags)))
 
 
-class ServedCommsConversationPageTool(CoreRead[MessagePage], CommsConversationPageTool):
+class ServedCommsConversationPageTool(ScreensArea, CoreRead[MessagePage], CommsConversationPageTool):
     """Serving CommsConversationPageTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePage:
@@ -707,7 +716,7 @@ class ServedCommsConversationPageTool(CoreRead[MessagePage], CommsConversationPa
         return history.page(comms.views.presentation, self.bounds)
 
 
-class ServedCommsConversationRevisionTool(CoreRead[ConversationRevision], CommsConversationRevisionTool):
+class ServedCommsConversationRevisionTool(ScreensArea, CoreRead[ConversationRevision], CommsConversationRevisionTool):
     """Serving CommsConversationRevisionTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ConversationRevision:
@@ -715,14 +724,14 @@ class ServedCommsConversationRevisionTool(CoreRead[ConversationRevision], CommsC
         return history.revision(comms.views, self.conversation, self.seen, worktree=self.project)
 
 
-class ServedCommsLatestSequenceTool(CoreRead[LatestSequence], CommsLatestSequenceTool):
+class ServedCommsLatestSequenceTool(ScreensArea, CoreRead[LatestSequence], CommsLatestSequenceTool):
     """Serving CommsLatestSequenceTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> LatestSequence:
         return LatestSequence(LiveCursor(comms.views.latest_sequence()))
 
 
-class ServedCommsServedRootTool(CoreRead[ServedRoot], CommsServedRootTool):
+class ServedCommsServedRootTool(ScreensArea, CoreRead[ServedRoot], CommsServedRootTool):
     """Serving CommsServedRootTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ServedRoot:
@@ -731,7 +740,7 @@ class ServedCommsServedRootTool(CoreRead[ServedRoot], CommsServedRootTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSetChannelMetadataTool(NativeToolRequest):
+class CommsSetChannelMetadataTool(ChannelsArea, NativeToolRequest):
     label = "Set channel presentation"
     description = (
         "Set presentation-only parent and archive state. These fields never alter "
@@ -747,7 +756,7 @@ class CommsSetChannelMetadataTool(NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSetViewTool(NativeToolRequest):
+class CommsSetViewTool(ChannelsArea, NativeToolRequest):
     label = "Set non-routable view"
     description = (
         "Create/update a typed participant or activity projection. Views cannot receive"
@@ -764,7 +773,7 @@ class CommsSetViewTool(NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsDeleteViewTool(NativeToolRequest):
+class CommsDeleteViewTool(ChannelsArea, NativeToolRequest):
     label = "Delete non-routable view"
     description = "Delete a saved projection without changing tags, channels, messages, or threads."
     name: Annotated[str, *tool_field("Saved view name")]
@@ -774,7 +783,7 @@ class CommsDeleteViewTool(NativeToolRequest):
         return channels.CommsChannelsTool().apply(comms, caller)
 
 
-class ServedCommsSortChannelTool(NativeToolRequest, CommsSortChannelTool):
+class ServedCommsSortChannelTool(ChannelsArea, NativeToolRequest, CommsSortChannelTool):
     """Serving CommsSortChannelTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> Channel:
@@ -782,7 +791,7 @@ class ServedCommsSortChannelTool(NativeToolRequest, CommsSortChannelTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSetProjectTool(ThreadToolRequest):
+class CommsSetProjectTool(ThreadsArea, ThreadToolRequest):
     label = "Change Project"
     description = (
         "Change your own persistent project directory and synchronize attached clients."
@@ -809,7 +818,7 @@ class CommsSetProjectTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadsTool(ShortListed, ReadTool, NativeToolRequest):
+class CommsThreadsTool(ThreadsArea, ShortListed, ReadTool, NativeToolRequest):
     label = "Comms Threads"
     description = (
         "List agent threads with status and pending counts, plus one delivery summary "
@@ -823,21 +832,21 @@ class CommsThreadsTool(ShortListed, ReadTool, NativeToolRequest):
         return caller.listing(comms, threads.threads)
 
 
-class ServedCommsRegistryTool(CoreRead[RegistrySnapshot], CommsRegistryTool):
+class ServedCommsRegistryTool(ThreadsArea, CoreRead[RegistrySnapshot], CommsRegistryTool):
     """Serving CommsRegistryTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RegistrySnapshot:
         return comms.registry.snapshot()
 
 
-class ServedCommsRegistrySliceTool(CoreRead[RegistrySlice], CommsRegistrySliceTool):
+class ServedCommsRegistrySliceTool(ScreensArea, CoreRead[RegistrySlice], CommsRegistrySliceTool):
     """Serving CommsRegistrySliceTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RegistrySlice:
         return comms.registry.snapshot().only(self.threads)
 
 
-class ServedCommsReferenceNamesTool(CoreRead[ReferenceNames], CommsReferenceNamesTool):
+class ServedCommsReferenceNamesTool(ScreensArea, CoreRead[ReferenceNames], CommsReferenceNamesTool):
     """Serving CommsReferenceNamesTool."""
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ReferenceNames:
@@ -855,7 +864,7 @@ class MessageOutcomes(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsMessageOutcomesTool(ReadTool, NativeToolRequest):
+class CommsMessageOutcomesTool(MessagesArea, ReadTool, NativeToolRequest):
     label = "Message outcomes"
     description = (
         "Read one message's recipient outcomes: the message once, then one page of recipient "
@@ -885,7 +894,7 @@ class CommsMessageOutcomesTool(ReadTool, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsResourcesTool(ThreadReadTool):
+class CommsResourcesTool(HostArea, ThreadReadTool):
     label = "Host resources"
     description = (
         "Read a running thread's shared Python host memory, module and owner counts, "
@@ -898,7 +907,7 @@ class CommsResourcesTool(ThreadReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsHostLogTool(ReadTool, NativeToolRequest):
+class CommsHostLogTool(HostArea, ReadTool, NativeToolRequest):
     label = "Host log"
     description = (
         "Read the host's connector journal, latest install diagnostics or busiest processes, with "
@@ -917,7 +926,7 @@ class CommsHostLogTool(ReadTool, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsWorkBranchesTool(ReadTool, NativeToolRequest):
+class CommsWorkBranchesTool(WorkArea, ReadTool, NativeToolRequest):
     label = "Work branches"
     description = (
         "Branches with commits not on main, newest first, each with its open PR or linked "
@@ -938,7 +947,7 @@ class CommsWorkBranchesTool(ReadTool, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsCollaborationTool(ThreadToolRequest):
+class CommsCollaborationTool(ThreadsArea, ThreadToolRequest):
     label = "Manage mutual collaboration"
     description = (
         "Create, update or end one mutual contact with another agent. Either "
@@ -958,7 +967,7 @@ class CommsCollaborationTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsCollaborationsTool(ThreadReadTool):
+class CommsCollaborationsTool(ThreadsArea, ThreadReadTool):
     label = "List collaborations"
     description = (
         "Read explicit contacts and goal-derived awareness with provenance, without "
@@ -976,7 +985,7 @@ class CommsCollaborationsTool(ThreadReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRenameSelfTool(ThreadToolRequest):
+class CommsRenameSelfTool(ThreadsArea, ThreadToolRequest):
     label = "Rename Comms Thread"
     description = (
         "Rename your own persistent thread to a new display name; the thread name is that"
@@ -989,7 +998,7 @@ class CommsRenameSelfTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSetOwnThreadTitleTool(ThreadToolRequest):
+class CommsSetOwnThreadTitleTool(ThreadsArea, ThreadToolRequest):
     """A thread corrects its own display title without touching its identity."""
 
     label = "Set Comms Thread Title"
@@ -1008,7 +1017,7 @@ class SendRefusalsRead(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSendRefusalsTool(ReadTool, NativeToolRequest):
+class CommsSendRefusalsTool(MessagesArea, ReadTool, NativeToolRequest):
     label = "Comms Send Refusals"
     description = "Read original refused-send outcomes; reading records no new outcome."
     sender: Annotated[str, *tool_field("Sender to filter; empty reads all senders")] = (
@@ -1027,7 +1036,7 @@ class CommsSendRefusalsTool(ReadTool, NativeToolRequest):
         ))
 
 
-class ServedCommsUserSendTool(PublishingToolRequest[ToolCaller, MessagePublished], CommsUserSendTool):
+class ServedCommsUserSendTool(ScreensArea, PublishingToolRequest[ToolCaller, MessagePublished], CommsUserSendTool):
     """Serving CommsUserSendTool."""
 
     def publish(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
@@ -1060,6 +1069,7 @@ class ServedMessageFileRead(MessageFileRead):
 
 
 class ServedCommsMessageFilesTool(
+        MessagesArea,
     ServedMessageFileRead, CoreRead[MessageFilesRead], CommsMessageFilesTool,
 ):
     """Serving CommsMessageFilesTool."""
@@ -1070,6 +1080,7 @@ class ServedCommsMessageFilesTool(
 
 
 class ServedCommsMessageFileTool(
+        MessagesArea,
     ServedMessageFileRead, CoreRead[MessageFileContent], CommsMessageFileTool,
 ):
     """Serving CommsMessageFileTool."""
@@ -1080,7 +1091,7 @@ class ServedCommsMessageFileTool(
         return files.content(files.require(message, self.position))
 
 
-class ServedCommsMarkThreadViewReadTool(HumanToolRequest[ThreadViewMarked], CommsMarkThreadViewReadTool):
+class ServedCommsMarkThreadViewReadTool(ScreensArea, HumanToolRequest[ThreadViewMarked], CommsMarkThreadViewReadTool):
     """Serving CommsMarkThreadViewReadTool."""
 
     def answered(self, comms: Comms) -> ThreadViewMarked:
@@ -1118,7 +1129,7 @@ class CommsAuthoredTaskTool(ThreadToolRequest, PublishingToolRequest[ThreadCalle
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsDecisionTool(CommsAuthoredTaskTool):
+class CommsDecisionTool(GoalsArea, CommsAuthoredTaskTool):
     label = "Record Decision"
     description = (
         "Record a chosen alternative and valid rejected alternatives on its original "
@@ -1140,7 +1151,7 @@ class CommsDecisionTool(CommsAuthoredTaskTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsConstraintTool(CommsAuthoredTaskTool):
+class CommsConstraintTool(GoalsArea, CommsAuthoredTaskTool):
     label = "Record Constraint"
     description = (
         "Declare an exact authored restriction on its original wire message; wording "
@@ -1163,7 +1174,7 @@ class CommsConstraintTool(CommsAuthoredTaskTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSubtaskTool(CommsAuthoredTaskTool):
+class CommsSubtaskTool(GoalsArea, CommsAuthoredTaskTool):
     label = "Record Subtask"
     description = (
         "Explicitly record whether a described subtask is completed or unfinished. "
@@ -1186,7 +1197,7 @@ class CommsSubtaskTool(CommsAuthoredTaskTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsHistoryTool(ShortListed, ReadTool, NativeToolRequest):
+class CommsHistoryTool(MessagesArea, ShortListed, ReadTool, NativeToolRequest):
     label = "Conversation history"
     description = (
         "Read one bounded, newest-first channel or DM history page. "
@@ -1211,7 +1222,7 @@ class CommsHistoryTool(ShortListed, ReadTool, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRestartQueueTool(ReadTool, NativeToolRequest):
+class CommsRestartQueueTool(HostArea, ReadTool, NativeToolRequest):
     label = "Restart Queue Status"
     description = "Inspect queued, restarted, stale, or uncertain attempts for a thread."
     name: Annotated[str, *tool_field("Agent thread")]
@@ -1222,7 +1233,7 @@ class CommsRestartQueueTool(ReadTool, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsCancelRestartTool(NativeToolRequest):
+class CommsCancelRestartTool(HostArea, NativeToolRequest):
     label = "Cancel Queued Restart"
     description = "Cancel pending restarts for a thread; cannot undo an attempted restart."
     name: Annotated[str, *tool_field("Agent thread")]
@@ -1233,7 +1244,7 @@ class CommsCancelRestartTool(NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsForkTool(LiveOwnerTool, NativeOwnerCommand, ThreadContextAction):
+class CommsForkTool(ThreadsArea, LiveOwnerTool, NativeOwnerCommand, ThreadContextAction):
     label = "Comms Fork"
     description = "Fork a child agent thread from a registered parent's persistent session."
     action_label = "Fork from this thread"
@@ -1260,7 +1271,7 @@ class InstallLaunches(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsInstallTool(NativeToolRequest):
+class CommsInstallTool(HostArea, NativeToolRequest):
     label = "Install Latest Mains"
     description = (
         "Launch Core's installer for every configured main the installed build lacks: the same "
@@ -1274,7 +1285,7 @@ class CommsInstallTool(NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ThreadContextAction):
+class CommsStopTool(ThreadsArea, NativeOwnerCommand, OwnerLifecycleControl, ThreadContextAction):
     label = "Stop Comms Thread"
     description = "Stop a thread after verifying that its process owns the registered identity."
     action_label = "Stop process"
@@ -1285,7 +1296,7 @@ class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ThreadContextActi
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStartTool(LiveOwnerTool, NativeOwnerCommand, StartOwnerControl, ThreadContextAction):
+class CommsStartTool(ThreadsArea, LiveOwnerTool, NativeOwnerCommand, StartOwnerControl, ThreadContextAction):
     label = "Start Comms Thread"
     description = (
         "Start a stopped agent thread with its saved conversation and configuration. "
@@ -1301,6 +1312,7 @@ class CommsStartTool(LiveOwnerTool, NativeOwnerCommand, StartOwnerControl, Threa
 
 @dataclass(frozen=True, kw_only=True)
 class CommsQueueRestartTool(
+        HostArea,
     LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleControl, ThreadContextAction,
 ):
     label = "Queue Idle Owner Restart"
@@ -1317,7 +1329,7 @@ class CommsQueueRestartTool(
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsArchiveTool(ArchiveOwnerControl, ThreadContextAction):
+class CommsArchiveTool(ThreadsArea, ArchiveOwnerControl, ThreadContextAction):
     label = "Archive Comms Thread"
     description = "Archive a stopped thread while retaining its messages."
     action_label = "Archive stopped thread"

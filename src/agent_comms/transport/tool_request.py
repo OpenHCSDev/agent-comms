@@ -60,6 +60,48 @@ class ShortListed:
     __slots__ = ()
 
 
+class ToolArea:
+    """What a tool is about. The connector's short list names one tool for each area, which
+    shows the area's tools and runs any of them by name; a new tool joins its area's menu
+    by inheriting the area."""
+
+    __slots__ = ()
+
+
+class MessagesArea(ToolArea):
+    __slots__ = ()
+
+
+class ThreadsArea(ToolArea):
+    __slots__ = ()
+
+
+class ChannelsArea(ToolArea):
+    __slots__ = ()
+
+
+class GoalsArea(ToolArea):
+    __slots__ = ()
+
+
+class WorkArea(ToolArea):
+    """The board: problems, orders, reviews and how the team is doing."""
+
+    __slots__ = ()
+
+
+class HostArea(ToolArea):
+    """The machine the bus runs on: installs, restarts, logs, other buses."""
+
+    __slots__ = ()
+
+
+class ScreensArea(ToolArea):
+    """What the app's own screens read and write; a chat rarely wants these."""
+
+    __slots__ = ()
+
+
 class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
     AsyncWork, ThreadCommandAvailability, ToolRequest[Result],
     metaclass=ServesDeclaration, declared_name=None,
@@ -90,6 +132,11 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
     ) -> dict[str, JsonValue]:
         """The reply every adapter receives: the encoding of the tool's declared result."""
         return cls.decoded(comms, arguments).replied(comms, caller)
+
+    @classmethod
+    def listed_description(cls) -> str:
+        """What a tool list says this tool does."""
+        return f"{cls.description} {cls.bus_effect}"
 
     @classmethod
     def reached(
