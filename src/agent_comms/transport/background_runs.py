@@ -142,6 +142,13 @@ class BackgroundRun(DeclaredFamily, affix="Run"):
         """Block until the process ends and answer the state its end left. The same wait
         serves a run this bridge started and one a restart left behind."""
 
+    @abstractmethod
+    def left_behind(self) -> RunState:
+        """The state a process that has already ended left for this run."""
+
+    def alive(self) -> bool:
+        return Platform.current().matches(self.process)
+
     def tail(self, limit: int = TAIL_BYTES) -> str:
         try:
             return Path(self.log).read_bytes()[-limit:].decode(errors="replace")
@@ -202,11 +209,11 @@ class ShellRun(BackgroundRun):
         platform = Platform.current()
         deadline = self.started_at + self.seconds
         platform.wait_any_exited((self.process,), deadline - time.time())
-        if time.time() < deadline or not platform.matches(self.process):
+        if time.time() < deadline or not self.alive():
             return self.left_behind()
         platform.terminate_group(self.process)
         platform.wait_any_exited((self.process,), KILL_GRACE)
-        if platform.matches(self.process):
+        if self.alive():
             platform.force_group(self.process)
         return KilledState(at=time.time())
 
@@ -236,6 +243,9 @@ class ToolCallRun(BackgroundRun):
 
     def wait(self) -> RunState:
         Platform.current().wait_any_exited((self.process,), math.inf)
+        return self.left_behind()
+
+    def left_behind(self) -> RunState:
         return GoneState(at=time.time())
 
 
@@ -286,12 +296,17 @@ class BackgroundRunStore(
         return BackgroundRunStarted(run_id=run.run_id, log=run.log)
 
     def recover(self, messaging: Messaging) -> None:
-        """What every tool touch does first: watch the running runs no watcher here holds
-        (a bridge restart left them), report the ended ones nobody was told about, and
-        forget reported runs past their retention."""
+        """What every tool touch does first, for the runs a bridge restart left with no
+        watcher: a run whose process has ended takes the state it left, here, so the answer
+        that follows is already true; a run still alive is watched again. Then the ended
+        runs nobody was told about are reported, and reported runs past retention forgotten."""
         for run in self.read().runs.values():
-            if run.state.successors():
+            if not run.state.successors():
+                continue
+            if run.alive():
                 self.watch(run, run.wait, messaging)
+            else:
+                self.settle(run.run_id, run.left_behind())
         self.report(messaging)
         self.forget(time.time())
 
