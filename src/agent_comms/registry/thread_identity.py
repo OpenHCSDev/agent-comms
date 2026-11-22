@@ -656,6 +656,13 @@ class ThreadRole(
         return False
 
     @classmethod
+    def hears_each_reply(cls) -> bool:
+        """Whether this sender is sent everything a session says in the turn their message
+        is in, as it is said. An agent is sent the turn's last words only: each message wakes
+        it, and what a session says between its calls is not an answer to act on."""
+        return False
+
+    @classmethod
     def require_automated_publication(cls, refusal: Exception) -> None:
         raise refusal
 
@@ -826,6 +833,13 @@ class UserThreadRole(NonExecutingThreadRole, ThreadRole):
 
     @classmethod
     def allows_automatic_reply(cls) -> bool:
+        return True
+
+    @classmethod
+    def hears_each_reply(cls) -> bool:
+        """A person steering a session that is hours into one turn cannot tell whether it
+        read them if its words reach them only when the turn ends (2026-11-21: an hour of
+        answers stayed in the session while their sender wrote "you're dodging me")."""
         return True
 
     @classmethod

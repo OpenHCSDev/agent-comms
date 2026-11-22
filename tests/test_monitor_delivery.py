@@ -1199,6 +1199,45 @@ def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tm
     assert replies == (("teammate", "colleague answers"), ("colleague", "teammate answers"))
 
 
+def test_a_person_is_sent_what_a_session_says_before_its_turn_ends(comms, tmp_path):
+    """A turn can run for hours. A person who wrote into it is sent each thing the session
+    says as soon as the next item follows it, and the last words when the turn ends; an
+    agent that asked in the same turn is sent the last words only."""
+    speaker, asker = (comms.registry.declare(ExternalThread(
+        name, frozenset(), Checkout(tmp_path))) for name in ("speaker", "asker"))
+    comms.registry.set_team_project(RegisteredTeamProject(()))
+    output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
+    turn = NativeTurnId("long-turn")
+    person = comms.messaging.send_user_message(
+        ThreadTarget(speaker.name), "are you reading me", worktree=Checkout(tmp_path))
+    question = comms.messaging.send(asker.name, speaker.name, "what is left", QuestionKind).message
+    output.delivered(turn, (person.reference, question.reference))
+
+    def says(item: str, words: str) -> None:
+        item_id = NativeItemId(item)
+        output.publish_item(FinishedItem(turn_id=turn, item_id=item_id, events=(
+            AssistantTranscript(words, timestamp=1.0, position=item_id),)))
+
+    def sent() -> tuple[tuple[str, str], ...]:
+        return tuple((message.target, message.body) for message in comms.bus.bus.message_history()
+                     if message.sender == speaker.name)
+
+    says("a", "yes, reading you")
+    assert sent() == ()  # nothing follows it yet: it may still be the turn's last words
+    says("b", "still working")
+    assert sent() == ((person.sender, "yes, reading you"),)
+    says("c", "done")
+    assert sent() == ((person.sender, "yes, reading you"), (person.sender, "still working"))
+    # A reader re-armed mid-turn reads the turn's window again from a fresh output: what
+    # already landed is not said a second time.
+    output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
+    for item, words in (("a", "yes, reading you"), ("b", "still working"), ("c", "done")):
+        says(item, words)
+    assert len(sent()) == 2
+    output.end_turn(turn)
+    assert sent()[2:] == tuple(sorted(((asker.name, "done"), (person.sender, "done"))))
+
+
 @pytest.mark.parametrize(('rows', 'parts'), (
     ((1, 2, 3, 4), ('one\n', 'two')),
     ((1, 2, 3), ('one\n', 'two')),

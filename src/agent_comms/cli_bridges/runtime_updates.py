@@ -23,7 +23,6 @@ from agent_comms.messaging.sending import Messaging
 from agent_comms.registry import activity
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.thread_identity import OfferedTools
-from agent_comms.registry.thread_status import ThreadStatus
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.transcript.external_transcript_rows import ExternalPage
@@ -38,6 +37,7 @@ if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import TranscriptBridge
     from agent_comms.comms import Comms
     from agent_comms.importing import ImportBuffer
+    from agent_comms.messaging.messages import Message
 
 
 @dataclass
@@ -251,7 +251,9 @@ class ThreadOutput(activity.ThreadOutput):
 
 @dataclass
 class ReplyingThreadOutput(ThreadOutput):
-    """The last finished assistant item replies only to deliveries that opened its turn."""
+    """What a session says replies to the deliveries of its turn: its last finished assistant
+    item to all of them, and every earlier one, as soon as it is finished, to the senders who
+    hear each reply (`ThreadRole.hears_each_reply`: a person)."""
 
     messaging: Messaging = field(kw_only=True)
     pending: dict[TurnItem, FinishedItem] = field(default_factory=dict)
@@ -274,9 +276,48 @@ class ReplyingThreadOutput(ThreadOutput):
         return cls(transcript, comms.agents, messaging=comms.messaging)
 
     def flush_before(self, key: TurnItem) -> None:
+        """A later item makes each held assistant item no longer its turn's last: it is said
+        now to whoever hears each reply, and published. One that already landed (the turn's
+        window read again after a re-arm) is said to no one again."""
         for previous in tuple(self.pending):
             if previous != key:
-                super().publish_item(self.pending.pop(previous))
+                item = self.pending.pop(previous)
+                if not self.transcript.landed(item.turn_id, item.item_id):
+                    item = self.replied(item, self.reply_targets(
+                        item.turn_id, lambda message: message.sender_role.hears_each_reply()))
+                super().publish_item(item)
+
+    def reply_targets(
+        self, turn_id: NativeTurnId, hears: Callable[[Message], bool],
+    ) -> dict[str, list[MessageReference]]:
+        """Where this turn's deliveries are answered, with the originals each answer names."""
+        replies: dict[str, list[MessageReference]] = {}
+        opening = self.messaging.bus.bus.messages_for_references(
+            self.transcript.opening_for(turn_id))
+        for message in opening:
+            if hears(message):
+                for target in message.automatic_reply_targets():
+                    replies.setdefault(target, []).append(message.reference)
+        return replies
+
+    def replied(
+        self, item: FinishedItem, replies: dict[str, list[MessageReference]],
+    ) -> FinishedItem:
+        """``item`` sent to each of ``replies`` once, carrying the messages that sent it."""
+        if not replies:
+            return item
+        registry = self.messaging.registry.snapshot()
+        for target, references in sorted(replies.items()):
+            if (item.key, target) not in self.sent:
+                self.sent[item.key, target] = registry.status(target).reply(
+                    self.messaging, sender=self.activity_thread, target=target,
+                    body=item.assistant_text, answers=tuple(references),
+                    source_turn=NoSourceTurn(),
+                )
+        published = tuple(publication for target in sorted(replies)
+                          for publication in self.sent[item.key, target])
+        return replace(item, events=tuple(
+            event.with_publications(published) for event in item.events))
 
     def publish_item(self, item: FinishedItem) -> None:
         self.flush_before(item.key)
@@ -291,32 +332,10 @@ class ReplyingThreadOutput(ThreadOutput):
         super().publish_draft(item)
 
     def end_turn(self, turn_id: NativeTurnId) -> None:
-        opening = self.messaging.bus.bus.messages_for_references(self.transcript.opening_for(turn_id))
-        replies: dict[str, list[MessageReference]] = {}
-        for message in opening:
-            for target in message.automatic_reply_targets():
-                replies.setdefault(target, []).append(message.reference)
-        recipients: dict[str, ThreadStatus] = {}
-        if replies:
-            registry = self.messaging.registry.snapshot()
-            recipients = {target: registry.status(target) for target in replies}
+        replies = self.reply_targets(turn_id, lambda message: True)
         for key in tuple(self.pending):
-            if key.turn_id != turn_id:
-                continue
-            item = self.pending[key]
-            for target, references in sorted(replies.items()):
-                if (key, target) not in self.sent:
-                    self.sent[key, target] = recipients[target].reply(
-                        self.messaging, sender=self.activity_thread, target=target,
-                        body=item.assistant_text, answers=tuple(references),
-                        source_turn=NoSourceTurn(),
-                    )
-            published = tuple(publication for target in sorted(replies)
-                              for publication in self.sent[key, target])
-            super().publish_item(replace(item, events=tuple(
-                event.with_publications(published) for event in item.events
-            )))
-            del self.pending[key]
+            if key.turn_id == turn_id:
+                super().publish_item(self.replied(self.pending.pop(key), replies))
         super().end_turn(turn_id)
 
     def end_all_turns(self) -> None:
