@@ -182,6 +182,11 @@ class ThreadCaller(ToolCaller):
     def own_thread(self) -> str:
         return self.name
 
+    def own_incarnation(self, comms: Comms) -> ThreadIncarnation:
+        """The thread this caller is, whoever it acts for: what is started for a caller is
+        told to that caller."""
+        return comms.registry.require(self.name).incarnation
+
     def require_directive(self, comms: Comms, body: str) -> None:
         """A unit's or a script's send is a message, not a directive."""
 
