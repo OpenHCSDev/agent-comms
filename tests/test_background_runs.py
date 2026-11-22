@@ -14,7 +14,12 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import Comms
-from agent_comms.execution.child_process import Platform, ProcessIdentity
+from agent_comms.execution.child_process import (
+    NoResidentManager,
+    Platform,
+    ProcessIdentity,
+    ResidentManager,
+)
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.task_attachments.owner_notices import BackgroundRunNotice
 from agent_comms.transport.background_runs import (
@@ -114,6 +119,28 @@ def _reaped(process: ProcessIdentity) -> bool:
     with suppress(ChildProcessError):
         os.waitpid(process.pid, 0)
     return not Platform.current().matches(process)
+
+
+def test_a_shell_run_is_launched_as_the_hosts_resident_manager_places_it(
+        wired: Comms, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bridge that is a systemd unit takes its cgroup with it when it restarts, so the
+    launch is the resident manager's: its command and its environment, whatever the host."""
+
+    class Placing(NoResidentManager):
+        def command(self, command: tuple[str, ...]) -> tuple[str, ...]:
+            return ("/usr/bin/env", "PLACED_BY=manager", *command)
+
+        def handoff_environment(self, environment) -> dict[str, str]:
+            return {**environment, "HANDED": "off"}
+
+    monkeypatch.setattr(ResidentManager, "current", staticmethod(lambda: Placing()))
+    try:
+        run = left_by_dead_bridge(wired, launched(wired, "echo $PLACED_BY $HANDED"))
+    finally:
+        Placing.withdraw()
+    until(lambda: run.exit_file.exists(), bool)
+
+    assert run.tail().strip() == "manager off"
 
 
 def test_a_run_that_ended_while_the_bridge_was_down_is_reported_at_the_next_touch(
