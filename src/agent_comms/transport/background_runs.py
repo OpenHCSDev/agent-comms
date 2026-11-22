@@ -10,6 +10,7 @@ run that outlives its bridge is watched again and one that ended in the meantime
 from __future__ import annotations
 
 import math
+import os
 import subprocess
 import threading
 import time
@@ -20,7 +21,11 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.execution.child_process import Platform, ProcessIdentity
+from agent_comms.execution.child_process import (
+    Platform,
+    ProcessIdentity,
+    ResidentManager,
+)
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -160,16 +165,20 @@ class ShellRun(BackgroundRun):
 
     @classmethod
     def launched(cls, directory: Path, thread: str, command: str, seconds: int) -> ShellRun:
-        """The one detached-shell launch: a session leader writing to the owned log. The
-        leader records the command's exit code in a file, because after a bridge restart the
-        command is nobody's child and its code can be read nowhere else."""
+        """The one detached-shell launch: a session leader writing to the owned log, in its
+        own scope under the host's resident manager, because a bridge that is a systemd unit
+        takes its whole cgroup with it when it restarts. The leader records the command's
+        exit code in a file: after a restart the command is nobody's child and its code can
+        be read nowhere else."""
         run_id, log = cls.named(directory, thread)
+        manager = ResidentManager.current()
         with open(log, "ab") as output:
             process = subprocess.Popen(
-                ["/bin/bash", "-c", 'bash -c "$1"; echo $? > "$2"', "background-run",
-                 command, str(cls.exit_file_of(log))],
-                stdout=output, stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL, start_new_session=True,
+                manager.command((
+                    "/bin/bash", "-c", 'bash -c "$1"; echo $? > "$2"', "background-run",
+                    command, str(cls.exit_file_of(log)))),
+                stdout=output, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                start_new_session=True, env=manager.handoff_environment(os.environ),
             )
         return cls(run_id=run_id, thread=thread, log=log, command=command, seconds=seconds,
                    process=Platform.current().identity(process.pid), started_at=time.time())
