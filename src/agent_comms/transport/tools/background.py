@@ -57,17 +57,18 @@ class CommsRunBackgroundTool(ThreadToolRequest, declared_name="run_background"):
     def apply(self, comms, caller) -> BackgroundRunStarted:
         if not self.command.strip():
             raise ToolRefusedError("A background command cannot be empty.")
-        store = BackgroundRunStore.at(comms.root)
-        run = ShellRun.launched(store.log_directory, self.thread, self.command, self.seconds)
-        return store.start(run, run.wait, comms.messaging)
+        store = BackgroundRunStore.of(comms)
+        store.recover()
+        return store.start(ShellRun.launched(
+            store.log_directory, caller.authority(comms).incarnation, self.command, self.seconds))
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsBackgroundStatusTool(ThreadToolRequest, declared_name="background_status"):
     label = "Background status"
     description = (
-        "Report where one background run stands (running, exited with its code, killed at its "
-        "deadline, returned, failed, or gone) and the tail of its log; without run_id, list "
+        "Report where one background run stands (running, ended and how, or told) and the "
+        "tail of its log; without run_id, list "
         "every background run this thread owns, shell commands and background=true tool calls "
         "alike. This also picks up runs a bridge restart left behind."
     )
@@ -76,10 +77,10 @@ class CommsBackgroundStatusTool(ThreadToolRequest, declared_name="background_sta
     tail_bytes: Annotated[int, *tool_field("Bytes of log tail to return")] = TAIL_BYTES
 
     def apply(self, comms, caller) -> BackgroundStatusRead:
-        store = BackgroundRunStore.at(comms.root)
-        store.recover(comms.messaging)
+        store = BackgroundRunStore.of(comms)
+        store.recover()
         return BackgroundStatusRead(runs=tuple(
             BackgroundRunStatus(run, run.tail(self.tail_bytes))
-            for run in store.for_thread(self.thread)
+            for run in store.for_thread(caller.authority(comms).incarnation)
             if self.run_id in ("", run.run_id)
         ))

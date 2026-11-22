@@ -47,24 +47,33 @@ timeout, it does not raise.
 ## Family map
 
 ```
-BackgroundRun                    run_id, thread, log, process (ProcessIdentity), started_at,
- ├─ ShellRun                     state, reported      command, seconds; exit code in <log>.exit
- └─ ToolCallRun                                       tool; process is the hosting bridge
+BackgroundRun                    run_id, thread (ThreadIncarnation), log (Path),
+ ├─ ShellRun                     process (ProcessIdentity), started_at, state
+ │                               command, seconds; exit code in <log>.exit
+ └─ ToolCallRun                  tool; process is the hosting bridge, which holds the call
 
-RunState (LifecycleState)
- ├─ RunningState                 → any ended state
- └─ EndedState (Terminal)        at
-     ├─ ExitedState              code
-     ├─ KilledState              the deadline passed and the group was killed
-     ├─ ReturnedState            a tool call's result is in its log
-     ├─ RaisedState              a tool call's error is in its log
-     └─ GoneState                the process ended and left no outcome
+RunState (LifecycleState)        each member says what a store touch does with a run in it
+ ├─ RunningState                 → ended
+ └─ OutcomeState                 outcome
+     ├─ EndedState               → telling
+     │   └─ UntoldState          a telling failed or its teller died; → telling
+     ├─ TellingState             teller (ProcessIdentity); → told, untold
+     └─ ToldState (Terminal)     told_at: the notice is on the bus
 
-BackgroundRunStore               start → recover, record, watch
-                                 recover → watch unwatched running runs, report, forget
-                                 watch → wait, settle, report   (one thread per run)
-                                 settle → only a running run changes state
-                                 report → claim unreported ended runs in one transaction
+RunOutcome                       at
+ ├─ ExitedOutcome                code
+ ├─ KilledOutcome                the deadline passed and the group was killed
+ ├─ ReturnedOutcome              a tool call's result is in its log
+ ├─ RaisedOutcome                a tool call's error is in its log
+ └─ GoneOutcome                  the process ended and left no outcome
+
+BackgroundRunStore.of(comms)     start → record, watch
+                                 recover → each run takes the state a touch finds, tell
+                                 watch → wait, settle, tell   (one thread per run)
+                                 settle → only a state the run's own state allows next
+                                 tell → forget, claim ended runs in one transaction,
+                                        publish, settle told; a failure settles untold
+                                        and raises
 ```
 
 Consumers hold `BackgroundRun` and `RunState`; nothing outside the family tests a member.
@@ -78,23 +87,27 @@ Consumers hold `BackgroundRun` and `RunState`; nothing outside the family tests 
 3. **Deadline** — the tool's `seconds` (default 3600), counted from the recorded start, so a
    recovered run keeps the time it had left.
 4. **Exit code** — the session leader writes it beside the log. The command author adds nothing.
-5. **Retention** — a reported run is forgotten a day after it ended, with its files.
+5. **Retention** — a told run is forgotten a day after it was told, with its files. A run whose
+   thread no longer exists is dropped untold: a later thread of the same name is another reader.
 
 ## Dry-run log
 
 Each step, the file it touches and the check that catches its failure. All run in
-`tests/test_background_runs.py` (15 cases, about 4 s) except the last row.
+`tests/test_background_runs.py` (20 cases, about 5 s) except the last row.
 
 | Step | Check |
 |---|---|
-| Exit code and tail reach the thread | `test_a_shell_run_reports_its_exit_code_and_output_to_its_thread` |
+| Exit code and tail reach the thread | `test_a_shell_run_tells_its_thread_the_exit_code_and_output` |
 | Deadline kill | `test_a_run_past_its_deadline_is_killed_and_says_so` |
-| Ended while the bridge was down | `test_a_run_that_ended_while_the_bridge_was_down_is_reported_at_the_next_touch` |
+| Ended while the bridge was down | `test_a_run_that_ended_while_the_bridge_was_down_is_told_by_the_next_touch` |
 | Still alive after a restart | `test_a_run_still_alive_after_a_restart_is_watched_again` |
 | Process vanished | `test_a_run_whose_process_vanished_without_an_exit_code_is_gone` |
 | Pid reuse | `test_a_reused_pid_is_not_adopted_as_the_run` |
 | Tool call returns, raises, bridge died | the three `tool_call` cases |
-| Reported once | `test_an_ended_run_is_reported_once_however_often_it_is_touched` |
+| Told once | `test_a_run_is_told_once_however_often_it_is_touched` |
+| A delivery that fails | `test_a_delivery_that_fails_raises_leaves_the_run_untold_and_the_next_touch_tells_it` |
+| A teller that died, a teller still alive | the two `telling` cases |
+| Thread recreated under the same name | `test_a_later_thread_of_the_same_name_does_not_inherit_the_run` |
 | A real bridge restart, a real session woken | **not run: the live test below** |
 
 Known edge, stated not fixed: a call from another bus with `background=true` decodes the reply
