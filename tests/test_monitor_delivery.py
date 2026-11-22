@@ -636,6 +636,65 @@ async def test_a_body_that_fits_one_event_goes_inline_and_exports_nothing(bridge
 
 
 @pytest.mark.asyncio
+async def test_a_persons_message_arrives_with_the_command_that_answers_them(bridge):
+    """A session's turn can run for hours, and its harness may never send what it writes
+    during it. A person's message says, as its last line, the command that answers them at
+    once; an agent's message, answered when the turn ends, says nothing. The line is part of
+    what is shown, so the same event still confirms the delivery."""
+    person = bridge.comms.messaging.send_user_message(
+        ThreadTarget('viewer'), 'are you reading me', worktree=Checkout(bridge.comms.root))
+    agent = bridge.comms.messaging.send('peer', 'viewer', 'what is left').message
+    async with attached_monitor(bridge) as reader:
+        await bridge.accept(person)
+        line = await only_event(reader)
+        header, body, route = line.split('\n')
+        assert body == 'are you reading me'
+        assert route.startswith(f'To answer {person.sender} before this turn ends, run: ')
+        assert (f"send --state {bridge.options.state.absolute()} --to {person.sender} "
+                '--body "..."') in route
+        await observe(bridge, notification(line).updates(ClaudeSession()))
+        await bridge.accept(agent)
+        assert (await only_event(reader)).split('\n')[1:] == ['what is left']
+    confirmed, = await bridge.attempts(person.message_id)
+    assert confirmed.outcome is DeliveredOutcome
+    # A message too long for one event is read from its file, which ends on the same line:
+    # every body row is a part, and the header and the reply line are parts of nothing.
+    long = bridge.comms.messaging.send_user_message(
+        ThreadTarget('viewer'), body_of(8), worktree=Checkout(bridge.comms.root))
+    frame = bridge.incoming_frame(long, ())
+    assert not frame.fits_one_event
+    assert frame.export_lines[-1] == route.replace(person.sender, long.sender)
+    parts = frame.read_parts(tuple(enumerate(frame.export_lines, 1)))
+    assert ''.join(part.body for part in parts) == long.body
+
+
+@pytest.mark.asyncio
+async def test_a_person_left_without_an_answer_is_named_to_the_session_until_it_answers(bridge):
+    """The session's harness may have dropped what it wrote, and neither it nor the person
+    can tell. The bridge reads the bus: a person's message with nothing sent back is named
+    to the session again, with the way to answer; once the session has sent them anything,
+    it is not."""
+    bridge.OWED_AFTER = (.2, .6, 1.)
+    person = bridge.comms.messaging.send_user_message(
+        ThreadTarget('viewer'), 'are you reading me', worktree=Checkout(bridge.comms.root))
+    async with attached_monitor(bridge) as reader:
+        await bridge.accept(person)
+        shown = await only_event(reader)
+        owed = await only_event(reader)
+        assert owed.startswith(
+            f'Comms owed · {person.sender} has had no answer to {person.reference.name} for ')
+        assert shown.split('\n')[-1] in owed  # the same way to answer
+        # A reminder is no message: the transcript's decoder reads it as nothing of ours.
+        frame, = ClaudeMonitorFrame.decode_event(owed)
+        assert frame.delivered() == ()
+        bridge.comms.messaging.send(bridge.binding.bus, person.sender, 'yes, reading you')
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(1.2):
+                await reader.readline()
+    assert not bridge.owed
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('parts', (2, 8, 23, 25, 46, 26))
 async def test_a_larger_message_is_one_notice_and_one_whole_read_confirms_it(bridge, parts):
     """The saved slow orders' part counts, and the smallest message that no longer fits one

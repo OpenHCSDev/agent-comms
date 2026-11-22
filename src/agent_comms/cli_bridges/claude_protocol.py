@@ -186,13 +186,17 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
     @cached_property
     def export_lines(self) -> tuple[str, ...]:
-        """The readable message: who sent it, then its lines as written."""
-        return (self.header.removesuffix('\n'), *(part.removesuffix('\n') for part in self.slices))
+        """The readable message: who sent it, its lines as written, then what every shown
+        message carries under its body (`tail`). The export once listed the header and body
+        on its own, so a long message named none of its files."""
+        return (self.header.removesuffix('\n'), *(part.removesuffix('\n') for part in self.slices),
+                *self.tail.split('\n')[1:])
 
     def read_parts(self, rows: tuple[tuple[int, str], ...]) -> tuple[MonitorPart, ...]:
         """The parts a Read showed, judged against the bus message and never decoded from the
         file. Any shown row that is not this message's line at that number confirms nothing.
-        Only one empty row right after the final LF is Read's terminator."""
+        Only one empty row right after the final LF is Read's terminator. The header above
+        the body and the tail under it are shown, and are no part of the body."""
         lines = self.export_lines
         shown = rows[:-1] if rows and rows[-1] == (len(lines) + 1, '') else rows
         if any(not 1 <= number <= len(lines) or lines[number - 1] != text for number, text in shown):
@@ -201,7 +205,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
                          id=self.message.message_id, sender=self.message.sender,
                          number=number - 1, total=len(self.slices),
                          body=self.slices[number - 2]))
-                     for number, _ in shown if number > 1)
+                     for number, _ in shown if 1 < number <= len(self.slices) + 1)
 
     def event(self, exports: Path) -> tuple[int, str]:
         """The message's one Monitor event and the reservation it fills. A body one batch holds
@@ -292,7 +296,7 @@ class MonitorShown(MonitorFrame, declared_name='shown'):
                 if message is None:
                     continue
                 observed = tuple(line.rstrip() for line in self.lines)
-                frame = ClaudeMonitorFrame(message, await bridge.files_of(message))
+                frame = bridge.incoming_frame(message, await bridge.files_of(message))
                 if frame.observed != observed:
                     await bridge.record_mismatch(
                         delivery, 'Shown lines do not equal the original message')
