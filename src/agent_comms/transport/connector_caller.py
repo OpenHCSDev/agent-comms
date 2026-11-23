@@ -10,6 +10,7 @@ from typing import Annotated
 from pydantic import JsonValue
 
 from agent_comms.comms import Comms
+from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.bus_publication import DirectorOrigin
 from agent_comms.messaging.read_basis import OperatorOutcomes
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RootId
@@ -44,7 +45,8 @@ class ActingFork:
     fork: Annotated[ForkCaller | NoThreadCaller, *tool_field(
         "Your own name on the bus, as {\"name\": \"...\"}. Several sessions share this grant, "
         "so take one distinct name and pass it on every call: what you send is from that name, "
-        "and its inbox holds what is sent to it. Omitted, you act as the shared grant itself."
+        "and its inbox holds what is sent to it. Passing an existing CLI-inbox thread's name "
+        "takes over that thread with its identity intact. Omitted, you act as the shared grant itself."
     )] = NoThreadCaller()
 
 
@@ -171,9 +173,30 @@ class ForkingCaller(ThreadConnectorCaller):
 @dataclass(frozen=True)
 class DirectorCaller(OperatorOutcomes, ForkingCaller):
     """claude-ai speaks for the owner, so its sends carry the director origin, which records each
-    message to a thread as a directive like the owner's own. Each remote Claude session on this
-    grant names itself with the fork argument: it is registered as claude-ai's child under its
-    own name, so teammates can tell the sessions apart and see who did what."""
+    message to a thread as a directive like the owner's own. Each remote session on this grant
+    names itself with the fork argument: an unused name is registered as claude-ai's child, and
+    an existing independent CLI-inbox thread's name binds onto that thread with its identity intact."""
+
+    def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
+        self.ensure_registered(comms)
+        self.identity(comms)
+        target = acting.own_thread()
+        if target != self.own_thread() and target in comms.registry:
+            existing = comms.registry.require(target)
+            if not existing.is_fork:
+                if not existing.independent_threads():
+                    raise ToolRefusedError(
+                        f"Thread {existing.name!r} is not an independent CLI-inbox thread."
+                    )
+                try:
+                    ExternalThread.stored(existing)
+                except RelationViolationError as error:
+                    raise ToolRefusedError(
+                        f"Thread {existing.name!r} runs on Native Pi; "
+                        "call comms_cli_inbox first to take it over from a CLI/MCP session."
+                    ) from error
+                return
+        acting.join(comms, self.own_thread())
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A directive passes DirectiveText."""

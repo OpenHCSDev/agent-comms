@@ -59,8 +59,6 @@ class ToolCaller(ReadAuthority):
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult: ...
 
     @abstractmethod
-
-    @abstractmethod
     def from_flag(self) -> tuple[str, ...]:
         """The command line's --from argument naming this caller, if it names a thread."""
 
@@ -220,7 +218,10 @@ class ActsForTeam(ThreadCaller):
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
         own = comms.registry.require(self.name).incarnation
-        return own.require_recorded().acting_for(self.authority(comms).acting_identity)
+        authority = self.authority(comms)
+        if authority.incarnation == own:
+            return authority.acting_identity
+        return own.require_recorded().acting_for(authority.acting_identity)
 
 
 @dataclass(frozen=True)
@@ -265,9 +266,7 @@ class ForkCaller(ActsForTeam, SubagentCaller):
         return binding.bus
 
     def authority(self, comms: Comms) -> Thread:
-        fork = comms.registry.require(self.name)
-        parent, = fork.parent.names()
-        return comms.registry.require(parent)
+        return comms.registry.require(comms.registry.require(self.name).teammate())
 
     @staticmethod
     def end_session(comms: Comms, callers: tuple[ForkCaller, ...]) -> tuple[ForkCaller, ...]:

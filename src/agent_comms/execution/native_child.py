@@ -297,7 +297,7 @@ class PiChild:
 
 @dataclass
 class PiSessionChild(PiChild):
-    key: tuple[NativePiRpcLaunch, tuple[int, int]]
+    key: tuple[NativePiRpcLaunch, tuple[tuple[int, int], ...]]
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
     coordination_revision: tuple[Provenance, ...] = ()
@@ -311,7 +311,7 @@ class PiSessionChild(PiChild):
 
     @classmethod
     async def start(
-        cls, key: tuple[NativePiRpcLaunch, tuple[int, int]], attestation: NativeAttestation,
+        cls, key: tuple[NativePiRpcLaunch, tuple[tuple[int, int], ...]], attestation: NativeAttestation,
     ) -> Self:
         launch, _ = key
         with ExitStack() as resources:
@@ -342,7 +342,7 @@ class NativeChildState(ABC):
             worktree=worktree, delivery=delivery, environment=environment, session_file=session_file,
         )
 
-    def reuse(self, key: tuple[NativePiRpcLaunch, tuple[int, int]]) -> PiSessionChild | None:
+    def reuse(self, key: tuple[NativePiRpcLaunch, tuple[tuple[int, int], ...]]) -> PiSessionChild | None:
         return None
 
     async def context_for_input(self, thread: Thread, context: TurnContext) -> TurnContext:
@@ -462,7 +462,7 @@ class RetainedNative(ChildNative):
                 current.child.forget_context()
             return data
 
-    def reuse(self, key: tuple[NativePiRpcLaunch, tuple[int, int]]) -> PiSessionChild | None:
+    def reuse(self, key: tuple[NativePiRpcLaunch, tuple[tuple[int, int], ...]]) -> PiSessionChild | None:
         if self.child.key == key and self.current:
             self.child.attestation = PendingAttestation(self.identity)
             return self.child

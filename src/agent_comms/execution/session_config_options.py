@@ -68,8 +68,12 @@ class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
             id=FieldCodec.encode(type(option)), name=option.title,
             description=option.description, category=option.category, type="select",
             current_value=next(choice.editor_value for choice in choices if choice.value == configured),
-            options=[SessionConfigSelectOption(name=choice.name, value=choice.editor_value)
-                     for choice in choices],
+            options=[
+                SessionConfigSelectOption(
+                    name=choice.name, value=choice.editor_value, description=choice.description,
+                )
+                for choice in choices
+            ],
         )
 
     async def options(
