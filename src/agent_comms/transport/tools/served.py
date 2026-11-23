@@ -26,6 +26,11 @@ from agent_comms.cli_verbs.cli_commands import (
     ThreadCreatedResult,
     ThreadStoppedResult,
 )
+from agent_comms.cli_verbs.cli_inbox import (
+    CliInboxCliCommand,
+    ThreadExecutionResult,
+)
+from agent_comms.cli_verbs.native_thread import NativeThreadCliCommand
 from agent_comms.cli_verbs.cli_result import CliResult, TargetEditResult
 from agent_comms.cli_verbs.delete_view import DeleteViewCliCommand
 from agent_comms.cli_verbs.fork import ForkCliCommand
@@ -126,6 +131,7 @@ from agent_comms.registry.thread_model import ThreadModel
 from agent_comms.transcript.transcripts import NotifiedThreadPresentation
 from agent_comms.registry.threads import (
     ArchiveOwnerControl,
+    ExternalOwnerCommand,
     NativeOwnerCommand,
     NextTurnConfiguration,
     OwnerLifecycleControl,
@@ -1299,6 +1305,36 @@ class CommsStopTool(ThreadsArea, NativeOwnerCommand, OwnerLifecycleControl, Thre
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadStoppedResult:
         return StopCliCommand(name=self.name).apply(comms)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsCliInboxTool(ThreadsArea, NativeOwnerCommand, OwnerLifecycleControl, ThreadContextAction):
+    label = "Switch to CLI Inbox"
+    description = (
+        "Switch a native Pi thread onto a CLI inbox without changing its identity, "
+        "aliases, tags, goal, orders, inbox cursor, or saved Pi session. Stops any "
+        "running native Pi process first so an external CLI or MCP session can take over."
+    )
+    action_label = "Switch to CLI inbox"
+    name: Annotated[str, *tool_field("Thread name", ContextSource(SubjectBinding))]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadExecutionResult:
+        return CliInboxCliCommand(name=self.name).apply(comms)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsNativeThreadTool(ThreadsArea, ExternalOwnerCommand, OwnerLifecycleControl, ThreadContextAction):
+    label = "Switch to Native Pi"
+    description = (
+        "Switch an independent CLI-inbox thread onto native Pi without changing its identity, "
+        "aliases, tags, goal, orders, or inbox cursor. Reuses its preserved Pi session when "
+        "present, or allocates a fresh session otherwise."
+    )
+    action_label = "Switch to Native Pi"
+    name: Annotated[str, *tool_field("Thread name", ContextSource(SubjectBinding))]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadExecutionResult:
+        return NativeThreadCliCommand(name=self.name).apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)

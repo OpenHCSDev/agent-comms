@@ -411,13 +411,27 @@ class RestartEnvironment(EnvironmentRecord):
         """This owner's Pi provider credentials, never an ambient or fork directory."""
         return self.native_config / "auth.json"
 
-    def auth_revision(self) -> tuple[int, int]:
-        """No credentials file yet is setup state, observed as a size no file has."""
+    @property
+    def models_file(self) -> Path:
+        """This owner's Pi custom provider and model catalog configuration."""
+        return self.native_config / "models.json"
+
+    @property
+    def catalog_files(self) -> tuple[Path, ...]:
+        """Every user-owned Pi catalog file whose edits invalidate model discovery or cached children."""
+        return (self.auth_file, self.models_file)
+
+    @staticmethod
+    def _file_revision(path: Path) -> tuple[int, int]:
         try:
-            info = self.auth_file.stat()
+            info = path.stat()
         except FileNotFoundError:
             return 0, -1
         return info.st_mtime_ns, info.st_size
+
+    def auth_revision(self) -> tuple[tuple[int, int], ...]:
+        """No file yet is setup state, observed as a size no file has."""
+        return tuple(self._file_revision(path) for path in self.catalog_files)
 
     def apply_runtime(self, source: Mapping[str, str]) -> dict[str, str]:
         """Preserve source credentials/settings; replace the declared runtime fields."""

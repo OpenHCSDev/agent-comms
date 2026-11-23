@@ -859,6 +859,21 @@ class ReportedModel(PiModel):
         return tuple(text for _provider in self.provider.present() for _id in self.id.present()
                      for text in self.thread_model().texts())
 
+    def catalog_label(self, qualified: str) -> str:
+        """Human-readable label when Pi reports a distinct display name alongside the id."""
+        display = next(iter(self.name.present()), "")
+        model_id = next(iter(self.id.present()), "")
+        if display and display not in (model_id, qualified):
+            return f"{display} ({qualified})"
+        return qualified
+
+    def catalog_description(self) -> str | None:
+        """Context window summary when Pi reports one."""
+        reported = next(iter(self.context_window.present()), None)
+        if reported is None or reported.count <= 0:
+            return None
+        return f"{reported.count:,} context"
+
 
 @dataclass(frozen=True)
 class PiContextUsage(PiPayload):

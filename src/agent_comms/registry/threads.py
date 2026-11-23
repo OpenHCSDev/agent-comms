@@ -24,6 +24,7 @@ from agent_comms.execution.pi_vocabulary import (
     ThinkingLevelField,
 )
 from agent_comms.execution.session_file import NoSessionFile, SessionFile
+from agent_comms.execution.unstarted_runtime import UnstartedRuntime
 from agent_comms.execution.turn_lease import (
     FinishedTurn,
     NoTurnRecord,
@@ -138,6 +139,12 @@ class NativeOwnerCommand(ThreadCommandAvailability):
     @classmethod
     def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
         return thread.native_command_available(cls, status)
+
+
+class ExternalOwnerCommand(ThreadCommandAvailability):
+    @classmethod
+    def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
+        return thread.external_command_available(cls, status)
 
 
 class OwnerLifecycleControl(ThreadCommandAvailability):
@@ -567,6 +574,10 @@ class Thread(
                                  status: ThreadStatus) -> bool:
         return False
 
+    def external_command_available(self, command: type[ThreadCommandAvailability],
+                                   status: ThreadStatus) -> bool:
+        return False
+
     def registered_status(self, requested: ThreadStatus) -> ThreadStatus:
         """The lifecycle a registration installs; Core launched this owner."""
         return requested
@@ -917,6 +928,20 @@ class NativeThread(Thread):
 class ExternalThread(Thread):
     __slots__ = ()
     required_refusal = "Only an external CLI can publish a bridge process."
+
+    def external_command_available(self, command: type[ThreadCommandAvailability],
+                                   status: ThreadStatus) -> bool:
+        return bool(self.independent_threads()) and command.available_for(
+            status, process=self.process_identity)
+
+    @cached_property
+    def runtime(self) -> RuntimeLocation:
+        """A CLI inbox publishes external transcript items even when it retains a prior Pi session."""
+        return UnstartedRuntime(self.backend)
+
+    @cached_property
+    def writable_runtime(self) -> RuntimeLocation:
+        return self.runtime
 
     def withdrawn(self) -> Thread:
         """The CLI bridge owns its binding and releases it as that process leaves

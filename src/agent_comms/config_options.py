@@ -148,7 +148,7 @@ class CatalogConfigOption(ConfigOption):
         self.owner = owner
         self.catalogs: dict[tuple[Path, tuple[str, ...]], asyncio.Task[list[CatalogChoice]]] = {}
         self.waiters: Counter[asyncio.Task[list[CatalogChoice]]] = Counter()
-        self.auth: tuple[int, int] | None = None
+        self.auth: tuple[tuple[int, int], ...] | None = None
         self.lock = asyncio.Lock()
 
     @property
@@ -343,12 +343,26 @@ class SpecifiedModels(ModelCatalog):
 
 @dataclass(frozen=True)
 class DiscoveredModels(ModelCatalog):
-    async def qualified(self, owner: ConfigOptions, worktree: Path) -> tuple[str, ...]:
+    async def choices(self, owner: ConfigOptions, worktree: Path) -> list[CatalogChoice]:
         data = await GetAvailableModels().discover(
             owner.launch.binary, owner.agent_args.argv, owner.route.root, package=owner.package,
             configuration=owner.launch.configuration, worktree=worktree,
         )
-        return tuple(text for model in data.models for text in model.catalog_texts())
+        seen: dict[str, CatalogChoice] = {}
+        for model in data.models:
+            for text in model.catalog_texts():
+                seen.setdefault(
+                    text,
+                    CatalogChoice(
+                        name=model.catalog_label(text),
+                        value=text,
+                        description=model.catalog_description(),
+                    ),
+                )
+        return list(seen.values())
+
+    async def qualified(self, owner: ConfigOptions, worktree: Path) -> tuple[str, ...]:
+        return tuple(choice.editor_value for choice in await self.choices(owner, worktree))
 
 
 @dataclass(eq=False)
@@ -388,7 +402,9 @@ class ConfigOptions:
         self, session_id: AcpSessionId, publish: Callable[[AcpSessionId], Awaitable[object]],
     ) -> None:
         """The session retires this configuration's watch with its other producers."""
-        async with aclosing(Bus.watch_sources(FileSource(self.launch.configuration.auth_file))) as observations:
+        async with aclosing(Bus.watch_sources(
+            *(FileSource(path) for path in self.launch.configuration.catalog_files),
+        )) as observations:
             async for _ in observations:
                 await publish(session_id)
 

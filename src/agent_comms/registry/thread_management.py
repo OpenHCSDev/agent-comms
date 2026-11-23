@@ -22,7 +22,6 @@ from agent_comms.execution.child_process import (
     ProcessState,
 )
 from agent_comms.execution.imported_conversation import ImportedConversation
-from agent_comms.execution.child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from agent_comms.execution.imported_messages import ImportLimits
 from agent_comms.execution.launch_runtime import LaunchRuntime, TagListText
 from agent_comms.execution.native_arguments import ConfiguredBinary, NativeArguments
@@ -75,7 +74,7 @@ from agent_comms.registry.thread_model import (
 )
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
 from agent_comms.registry.thread_settings import ThreadSettings
-from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.registry.thread_status import NoBridgeThreadStatus, StoppedThreadStatus
 from agent_comms.registry.thread_text import ForkedParent, GivenThreadText, ThreadText
 from agent_comms.registry.threads import (
     ExternalThread,
@@ -348,6 +347,68 @@ class ThreadManagement:
                     session_path.unlink(missing_ok=True)
                     raise
         return ThreadImported.of(name, session_path, snapshot)
+
+    def switch_to_cli_inbox(self, name: str) -> ExternalThread:
+        """Switch a native Pi thread onto a CLI inbox without changing its identity.
+
+        The birth (``created_at``), aliases, tags, goal, orders, storage roots, inbox
+        cursor and saved Pi ``session_file`` all stay. Any running native Pi process is
+        stopped first so one inbox never has two deliverers.
+        """
+        selected = self.registry.snapshot()
+        original = selected.require_member(name, NativeThread)
+        selected.status(original.name).require_visible(
+            f"Thread {original.name!r} is not visible; restore it before switching execution."
+        )
+        self.owners.stop(original.name)
+        with self.registry.store.editing() as edit:
+            current = edit.document.require(original.name)
+            if not edit.original.snapshot.same_thread(current, selected, original):
+                raise RelationViolationError("Thread changed while switching to CLI inbox.")
+            NativeThread.stored(current)
+            switched = current.without_turn().as_member(
+                ExternalThread, process_identity=NO_PROCESS,
+            )
+            self.registry.require_declaration_available(switched, NoBridgeThreadStatus())
+            self.registry._declare_in(edit, switched, NoBridgeThreadStatus())
+            return ExternalThread.stored(edit.document.require(original.name))
+
+    def switch_to_native(self, name: str) -> NativeThread:
+        """Switch an independent CLI-inbox thread onto native Pi without changing its identity.
+
+        Reuses its saved Pi ``session_file`` when one is already present, or allocates a
+        fresh bus session location otherwise. Any live CLI bridge or inbox watch is
+        released first so one inbox never has two deliverers.
+        """
+        selected = self.registry.snapshot()
+        original = selected.require_member(name, ExternalThread)
+        if not original.independent_threads():
+            raise RelationViolationError(
+                f"Thread {original.name!r} is a subagent; only independent threads can switch to native Pi."
+            )
+        selected.status(original.name).require_visible(
+            f"Thread {original.name!r} is not visible; restore it before switching execution."
+        )
+        self.owners.stop(original.name)
+        with self.registry.store.editing() as edit:
+            current = edit.document.require(original.name)
+            if not edit.original.snapshot.same_thread(current, selected, original):
+                raise RelationViolationError("Thread changed while switching to native Pi.")
+            ExternalThread.stored(current)
+            prior = current.session_file.location(current.backend)
+            session_file = (
+                current.session_file
+                if prior.is_resumable()
+                else RegistrySessionLocation.from_path(
+                    prior.new_location(self.root, current.worktree.path).read_key, self.root,
+                )
+            )
+            switched = current.without_turn().as_member(
+                NativeThread, process_identity=NO_PROCESS, session_file=session_file,
+            )
+            self.registry.require_declaration_available(switched, StoppedThreadStatus())
+            self.registry._declare_in(edit, switched, StoppedThreadStatus())
+            return NativeThread.stored(edit.document.require(original.name))
 
     def claim_thread(
         self,
@@ -636,7 +697,7 @@ class ThreadManagement:
                     raise RelationViolationError(
                         f"Thread {original.name!r} still has a live process; stop it first."
                     )
-                sessions[original.name] = original.runtime.storage_files()
+                sessions[original.name] = original.session_file.location(original.backend).storage_files()
                 for files in sessions[original.name]:
                     files.require_unreferenced()
             with self.registry.store.editing() as edit:

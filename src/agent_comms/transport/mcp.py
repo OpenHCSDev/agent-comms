@@ -168,10 +168,12 @@ class InitializeResult(McpResult):
     instructions: str = ""
 
     shared_grant: ClassVar[str] = (
-        "Several Claude sessions can share one connector grant. When a tool offers the fork "
+        "Several sessions can share one connector grant. When a tool offers the fork "
         "argument, choose one distinct name for this session and pass {\"name\": \"...\"} on "
         "every call, so teammates can tell you apart: your sends come from that name and your "
-        "inbox (comms_inbox with thread set to it) holds only what is sent to it."
+        "inbox (comms_inbox with thread set to it) holds only what is sent to it. To take over "
+        "an existing thread while keeping its identity, switch it with comms_cli_inbox if it "
+        "runs on Native Pi, then pass that thread's name in fork."
     )
 
     @classmethod

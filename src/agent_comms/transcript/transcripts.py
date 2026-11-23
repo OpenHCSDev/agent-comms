@@ -660,8 +660,8 @@ class Transcripts:
 
     def external(self, name: str) -> ExternalTranscript:
         """Where a CLI bridge publishes the items of its sessionless bus thread."""
-        page = LivePageSource().resolve(self, name, AtFrontier())
-        return page.runtime.external_records(page.root, page.thread.incarnation)
+        thread = self.registry.snapshot().require(name)
+        return thread.runtime.external_records(self.root, thread.incarnation)
 
     def _thread_transcript_source(
         self, name: str, limit: PageLimit, *, registry: RegistrySnapshot
