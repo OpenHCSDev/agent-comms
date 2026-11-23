@@ -13,6 +13,8 @@ import hashlib
 import json
 import os
 import secrets
+import shutil
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -344,6 +346,9 @@ def cmd_call(args: argparse.Namespace) -> int:
         if thread:
             tool_args["fork"] = {"name": thread}
 
+    if args.tool == "comms_watch":
+        raise SystemExit("Refusing to print comms_watch capability URL; use `run-watch` instead.")
+
     reply = _mcp_rpc(args.state, "tools/call", {"name": args.tool, "arguments": tool_args})
     result = reply.get("result", {})
     is_error = bool(result.get("isError"))
@@ -362,6 +367,57 @@ def cmd_call(args: argparse.Namespace) -> int:
             except Exception:
                 print(text)
     return 1 if is_error else 0
+
+
+def _extract_watch_url(result: dict[str, Any]) -> str | None:
+    structured = result.get("structuredContent")
+    if isinstance(structured, dict) and isinstance(structured.get("url"), str):
+        return structured["url"]
+    for item in result.get("content", []):
+        text = item.get("text", "")
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            continue
+        if isinstance(parsed, dict) and isinstance(parsed.get("url"), str):
+            return parsed["url"]
+    return None
+
+
+def cmd_run_watch(args: argparse.Namespace) -> int:
+    tool_args: dict[str, Any] = {}
+    if not args.no_fork:
+        st = _read_state(args.state)
+        thread = args.thread or st.get("thread")
+        if thread:
+            tool_args["fork"] = {"name": thread}
+
+    reply = _mcp_rpc(args.state, "tools/call", {"name": "comms_watch", "arguments": tool_args})
+    result = reply.get("result", {})
+    if result.get("isError"):
+        for item in result.get("content", []):
+            sys.stderr.write(f"{item.get('text', '')}\n")
+        return 1
+    url = _extract_watch_url(result)
+    if not url:
+        raise SystemExit("comms_watch did not return a watch URL.")
+
+    watch_bin = shutil.which("agent-comms-inbox-watch")
+    if watch_bin:
+        return subprocess.run([watch_bin, url]).returncode
+
+    root = _find_agent_comms_root(args.repo)
+    uv_bin = shutil.which("uv")
+    if root is not None and uv_bin:
+        return subprocess.run(
+            [uv_bin, "run", "--locked", "--no-dev", "agent-comms-inbox-watch", url],
+            cwd=str(root),
+        ).returncode
+
+    raise SystemExit(
+        "agent-comms-inbox-watch not found on PATH and no agent-comms checkout + uv found.\n"
+        "Install agent-comms or pass --repo /path/to/agent-comms."
+    )
 
 
 def _find_agent_comms_root(hint: str | None) -> Path | None:
@@ -465,6 +521,12 @@ def main() -> int:
     p_call.add_argument("--thread", default="", help="Override fork thread name for this call")
     p_call.add_argument("--no-fork", action="store_true", help="Do not inject fork={name: ...}")
     p_call.set_defaults(func=cmd_call)
+
+    p_watch = sub.add_parser("run-watch", help="Open a persistent inbox watch via agent-comms-inbox-watch")
+    p_watch.add_argument("--thread", default="", help="Override fork thread name for this watch")
+    p_watch.add_argument("--no-fork", action="store_true", help="Watch the top-level connector thread without fork")
+    p_watch.add_argument("--repo", default=None, help="Path to agent-comms checkout when agent-comms-inbox-watch is not on PATH")
+    p_watch.set_defaults(func=cmd_run_watch)
 
     p_deal = sub.add_parser("list-deal", help="Print ordered paper/rule/pattern files to read in full")
     p_deal.add_argument("repo", nargs="?", default=None, help="Path to agent-comms checkout")
