@@ -75,6 +75,12 @@ class ContextHistory:
         """The Zarr store beside the repository that keeps this host's uncut originals."""
         return self.repository.with_suffix(".zarr")
 
+    @staticmethod
+    def content_id(original: bytes) -> str:
+        """The id an original is kept under, here and wherever else it is named: the SHA-256
+        of its bytes."""
+        return hashlib.sha256(original).hexdigest()
+
     def retain(self, original: bytes) -> str:
         """Keep ``original`` as an array under its content id, once, and answer the id. The
         Zarr backend refuses a second write of a key, so an original already kept is not
@@ -83,7 +89,7 @@ class ContextHistory:
         import numpy
         from polystore.zarr import ZarrStorageBackend
 
-        digest = hashlib.sha256(original).hexdigest()
+        digest = self.content_id(original)
         store, path = ZarrStorageBackend(), self.originals_store / f"{digest}.bin"
         if not store.exists(path):
             store.save(numpy.frombuffer(original, dtype=numpy.uint8), path)
