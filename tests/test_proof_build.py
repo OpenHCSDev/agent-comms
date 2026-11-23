@@ -497,7 +497,8 @@ def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
     (due,) = InstallDue.due(bus, pulls)
     assert due.main == merge
     assert "#41 Install what merged" in due.line() and "#42 fix/next" in due.line()
-    assert "order install" in due.line().rsplit(" -> ", 1)[1]
+    assert f"install Core main {merge[:12]}" in due.action
+    assert due.line().endswith(f" -> {due.action}")
     due.enforce(bus)
     assert InstallLogs(bus.root).units() == ()
 
@@ -579,3 +580,94 @@ def test_only_an_order_still_owed_an_install_lets_the_build_speak(
     # Both installed members, not just the merge-observed one: InstalledEvidence is first in
     # the MRO of each, which is the whole reason one declaration can answer for both.
     assert delivered.installed(works, artifact).installed_line(build) == "Installed"
+
+
+def test_merged_delivered_order_checks_current_installed_build_not_stale_delivery_proof(
+    proof_build_checkouts, comms, tmp_path,
+):
+    """MergedDeliveredProblemOrder inherits DeliveredProblemOrder before MergedProblemOrder.
+    Overriding only installation_commits left installation_build resolving to the pre-install
+    delivery.proof_build, so TeamHeartbeat raised ProofBuildMismatchError on every pass once
+    any later install advanced the runtime past the delivery's build (P31 in personal-model)."""
+
+    graph = next(graph for graph in proof_build_checkouts
+                 if graph.repository.github == CorePackage.repository)
+    installed = RecordedBuildIdentity.installed()
+    selected = installed.for_repository(graph.repository)
+    older = replace(
+        installed,
+        commits=tuple(
+            replace(record, commit=graph.oldest) if record == selected else record
+            for record in installed.commits
+        ),
+    )
+    colleague = thread("colleague", comms.root, 1.0)
+    comms.registry.register(colleague)
+    delivery = CheckedCommitDelivery(
+        commit=graph.newer,
+        delivered_commit=graph.newer,
+        merge=MainDeliveryMerge(),
+        at=RecordedEventTime(1000),
+        proof_build=older,
+    )
+
+    # An unmerged delivery still binds to its recorded proof_build.
+    delivered_core = replace(order(graph.repository), run=MechanicalOrderRun()).delivered(delivery)
+    with pytest.raises(ProofBuildMismatchError, match="differs from installed"):
+        delivered_core.require_installation()
+
+    # Once observed merged, installation checks the current installed build for the merge SHA.
+    merged_core = delivered_core.merged(graph.newer)
+    todo_core = comms.goals.todos.create(
+        "P10", graph.repository.github, "Close mechanical merge after newer install",
+        creator=colleague, assigner=colleague.incarnation, owner=colleague,
+        generation=GoalId.mint(),
+        request=comms.goals.todos.add_request(colleague.incarnation, "Close after install").id,
+        review_at=RecordedEventTime(1000), order=merged_core,
+    )
+    # Still waiting while installed runtime predates the merge commit.
+    assert merged_core.run.after_merge(todo_core, merged_core).state is OpenTodoState
+
+    # Uninstalled repository (like personal-model) closes immediately without matching old proof_build.
+    uninstalled_repo = SourceRepository.create(
+        tmp_path / "uninstalled", RepositoryName("example", "uninstalled"),
+    )
+    delivered_uninstalled = replace(
+        order(uninstalled_repo), run=MechanicalOrderRun(),
+    ).delivered(replace(delivery, commit=uninstalled_repo.main_commit,
+                        delivered_commit=uninstalled_repo.main_commit))
+    merged_uninstalled = delivered_uninstalled.merged(uninstalled_repo.main_commit)
+    todo_uninstalled = comms.goals.todos.create(
+        "P11", uninstalled_repo.github, "Close uninstalled-repo mechanical merge",
+        creator=colleague, assigner=colleague.incarnation, owner=colleague,
+        generation=GoalId.mint(),
+        request=comms.goals.todos.add_request(colleague.incarnation, "Close uninstalled").id,
+        review_at=RecordedEventTime(1000), order=merged_uninstalled,
+    )
+    closed_uninstalled = merged_uninstalled.run.after_merge(todo_uninstalled, merged_uninstalled)
+    assert closed_uninstalled.state is DoneTodoState
+
+    # After advancing the installed build to graph.newer, both mechanical and application merges work.
+    runtime = LaunchRuntime.installed()
+    resolution = RuntimeResolution.at(runtime.prefix)
+    resolution.model_copy(update={"core_commit": graph.newer}).save(runtime.prefix)
+    assert merged_core.run.after_merge(todo_core, merged_core).state is DoneTodoState
+
+    works = "Open the installed application and confirm the merged delivery closes on current build"
+    artifact = tmp_path / "merged-delivered-proof.txt"
+    artifact.write_text(works)
+    merged_app = replace(
+        order(graph.repository), run=ApplicationOrderRun(works),
+    ).delivered(delivery).merged(graph.newer)
+    todo_app = comms.goals.todos.create(
+        "P12", graph.repository.github, "Close application merge after newer install",
+        creator=colleague, assigner=colleague.incarnation, owner=colleague,
+        generation=GoalId.mint(),
+        request=comms.goals.todos.add_request(colleague.incarnation, "Close app after install").id,
+        review_at=RecordedEventTime(1000), order=merged_app,
+    )
+    ThreadCaller("colleague").invoke(
+        CommsProblemCloseTool(problem=todo_app.id, works=works, artifact=str(artifact)),
+        comms,
+    )
+    assert comms.goals.todos.get(todo_app.id).state is DoneTodoState

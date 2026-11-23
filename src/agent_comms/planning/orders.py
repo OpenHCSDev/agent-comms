@@ -2917,8 +2917,9 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
 class MergedDeliveredProblemOrder(DeliveredProblemOrder, MergedProblemOrder):
     """The observed merge keeps its already checked delivery."""
 
-    # Installation follows the observed merge, not a pre-merge or squash head.
+    # Installation follows the observed merge and current build, not a pre-merge delivery proof.
     installation_commits = MergedProblemOrder.installation_commits
+    installation_build = MergedProblemOrder.installation_build
 
     @property
     def installed_type(self) -> type[InstalledMergedDeliveredProblemOrder]:
