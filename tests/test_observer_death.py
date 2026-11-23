@@ -21,12 +21,13 @@ from agent_comms.messaging.bus_read import (
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.nominal.field_codec import MessageId
+from agent_comms.planning.goals import NoGoal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.transport.serving.served_requests import OwnerLiveRead
 from agent_comms.transport.owner_connection import OwnerIdentityChangedError
-from agent_comms.transport.tools.reads import InputDeliveryRead
+from agent_comms.transport.tools.reads import InputDeliveryRead, OwnerGoalRead
 from agent_comms.ui_model.observation import (
     ObservationProcess,
     ObserverDied,
@@ -150,17 +151,19 @@ async def test_stale_owner_reads_preserve_the_observer(comms, durable_home, read
         process.status.raise_if_failed()
 
 
-@pytest.mark.parametrize("read_type", owner_reads(OwnerLiveRead))
-async def test_external_live_owner_reads_refuse_before_waiting_for_a_socket(
-    comms, durable_home, runtime_processes, read_type,
+async def test_external_owner_goal_read_answers_from_bus_without_waiting_for_a_socket(
+    comms, durable_home, runtime_processes,
 ):
-    """An external bridge has a live process and no runtime socket: the read refuses with the
-    original error instead of waiting for a socket that will never be served."""
+    """An external bridge has a live process and no runtime socket: OwnerGoalRead answers
+    the bus-held goal snapshot immediately instead of waiting for a native runtime socket."""
     owner = declare_owner(comms, "external-owner", runtime_processes[0].identity, ExternalThread)
     async with ObservationProcess.awaited(comms.route) as process:
-        with pytest.raises(RelationViolationError):
-            async with asyncio.timeout(30):
-                await process.read(read_type(str(comms.root), owner.incarnation))
+        async with asyncio.timeout(30):
+            reply = await process.read(ReadOwnerOperation(
+                str(comms.root), owner.incarnation, OwnerGoalRead(),
+            ))
+        assert reply.goal == NoGoal()
+        assert reply.meta.batch.updates == ()
         assert (await process.read(empty_window(comms.root))).outcomes == {}
         assert process.peer.process.is_alive()
         process.status.raise_if_failed()
