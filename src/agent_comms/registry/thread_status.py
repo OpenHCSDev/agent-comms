@@ -420,7 +420,7 @@ class StoppingThreadStatus(HostBoundPresence, StoppedPresence):
         return StoppedThreadStatus()
 
 
-class CliInboxPresence(AlwaysListed):
+class CliInboxPresence:
     """The declared inbox resolves its bridge process at every read."""
 
     def may_be_active(self) -> bool:
@@ -458,7 +458,7 @@ class ConnectedThreadStatus(DeclaredReaderPresence, RunningThreadStatus):
         return (name,)
 
 
-class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StoppedPresence):
+class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, AlwaysListed, StoppedPresence):
     """A live session bridge waiting for a Monitor to confirm its probe."""
 
     def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
@@ -477,7 +477,8 @@ class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StoppedPres
 class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedPresence):
     """A CLI inbox with no bridge attached; its messages wait unread.
 
-    It has no launched process to stop or restart, so it stays in every view.
+    With no live bridge process behind it, it follows StoppedPresence in roster views so
+    unchecking "show offline threads" filters it out alongside stopped threads.
     """
 
     def paused_since(self, last_seen: float) -> tuple[float, ...]:
