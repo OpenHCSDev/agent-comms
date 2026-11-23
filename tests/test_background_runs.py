@@ -7,6 +7,7 @@ import os
 import subprocess
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
@@ -22,7 +23,7 @@ from agent_comms.execution.child_process import (
 )
 from agent_comms.registry.thread_identity import ThreadIncarnation, ThreadIncarnationRecord
 from agent_comms.registry.threads import Thread
-from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.file_observation import FileRevision
 from agent_comms.task_attachments.owner_notices import BackgroundRunNotice
 from agent_comms.transport.background_runs import (
     RETENTION,
@@ -86,7 +87,7 @@ def notices(comms: Comms) -> tuple[str, ...]:
 
 
 def stored(comms: Comms, run_id: str) -> BackgroundRun:
-    return store_of(comms).read().runs[run_id]
+    return store_of(comms).record(run_id).read().require_present()
 
 
 def told(comms: Comms, run_id: str) -> ToldState:
@@ -98,8 +99,7 @@ def told(comms: Comms, run_id: str) -> ToldState:
 
 def left_by_dead_bridge[R: BackgroundRun](comms: Comms, run: R) -> R:
     """A run recorded by a bridge that then died: in the store, with no watcher here."""
-    store_of(comms).update(lambda current: DocumentChange.to(replace(
-        current, runs=current.runs | {run.run_id: run})))
+    store_of(comms).record(run.run_id).replace(run)
     return run
 
 
@@ -326,7 +326,7 @@ def test_a_later_thread_of_the_same_name_does_not_inherit_the_run(wired: Comms) 
     run = left_by_dead_bridge(wired, replace(ended(wired), thread=earlier))
 
     assert status(wired).runs == () and notices(wired) == ()
-    assert run.run_id not in store_of(wired).read().runs and not run.log.exists()
+    assert not store_of(wired).record(run.run_id).read().present() and not run.log.exists()
 
 
 def test_a_told_run_past_retention_is_forgotten_with_its_files(wired: Comms) -> None:
@@ -339,6 +339,45 @@ def test_a_told_run_past_retention_is_forgotten_with_its_files(wired: Comms) -> 
 
     assert [row.run.run_id for row in rows] == [fresh.run_id]
     assert not old.log.exists() and not old.exit_file.exists()
+
+
+def test_touching_settled_runs_does_not_rewrite_their_records(wired: Comms) -> None:
+    done = ExitedOutcome(time.time(), 0)
+    runs = tuple(
+        left_by_dead_bridge(wired, replace(ended(wired), state=ToldState(done, time.time())))
+        for _ in range(8)
+    )
+    before = {
+        run.run_id: FileRevision.capture(store_of(wired).record(run.run_id).path)
+        for run in runs
+    }
+
+    for _ in range(5):
+        assert len(status(wired).runs) == 8
+
+    after = {
+        run.run_id: FileRevision.capture(store_of(wired).record(run.run_id).path)
+        for run in runs
+    }
+    assert after == before
+
+
+def test_concurrent_background_runs_never_contend_across_runs(wired: Comms) -> None:
+    done = ExitedOutcome(time.time(), 0)
+    for _ in range(16):
+        left_by_dead_bridge(wired, replace(ended(wired), state=ToldState(done, time.time())))
+
+    def launch_and_poll(index: int) -> str:
+        started = CommsRunBackgroundTool(thread=THREAD, command=f"echo run-{index}").apply(
+            wired, CALLER)
+        status(wired, started.run_id)
+        return started.run_id
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        run_ids = tuple(pool.map(launch_and_poll, range(12)))
+
+    for run_id in run_ids:
+        assert isinstance(told(wired, run_id).outcome, ExitedOutcome)
 
 
 def test_the_states_a_run_may_take_next() -> None:

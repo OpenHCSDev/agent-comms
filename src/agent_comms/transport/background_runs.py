@@ -13,31 +13,37 @@ from __future__ import annotations
 
 import json
 import math
-import os
-import subprocess
 import threading
 import time
 import uuid
 from abc import abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.comms import Comms
 from agent_comms.execution.child_process import (
+    OutlivesLauncherLifetime,
     Platform,
     ProcessIdentity,
-    ResidentManager,
+    SpawnedProcess,
 )
+from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec, NullMember, PresentMember
 from agent_comms.nominal.lifecycle import LifecycleState
 from agent_comms.nominal.lifecycle_capability import Terminal
+from agent_comms.registry.registry_provenance import RegistryProvenance
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.storage.locked_store import DocumentChange, LockedStore, RuntimeFile
+from agent_comms.storage.locked_store import (
+    DocumentChange,
+    LockedStore,
+    PatternFile,
+    RuntimeFile,
+)
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
 from agent_comms.task_attachments.owner_notices import BackgroundRunNotice
 from agent_comms.transport.tool_result import ToolResult
@@ -206,8 +212,40 @@ class ToldState(Terminal, OutcomeState):
         return not has_reader or now - self.told_at > RETENTION
 
 
+class StoredBackgroundRun(DeclaredFamily, affix="Run"):
+    """What one run record file holds: a detached run, or absence before write / after forget."""
+
+    @abstractmethod
+    def present(self) -> tuple[BackgroundRun, ...]: ...
+
+    @abstractmethod
+    def require_present(self) -> BackgroundRun: ...
+
+    def settled(self, state: RunState) -> StoredBackgroundRun:
+        return self
+
+    def claimable(self, teller: ProcessIdentity) -> bool:
+        return False
+
+    def claimed(
+        self, teller: ProcessIdentity,
+    ) -> DocumentChange[StoredBackgroundRun, tuple[BackgroundRun, ...]]:
+        return DocumentChange(self, ())
+
+    def forgotten(self, now: float, snapshot: RegistryProvenance) -> bool:
+        return False
+
+    def files(self) -> tuple[Path, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class AbsentRun(NullMember, StoredBackgroundRun):
+    """A run record file not yet published, or already retired."""
+
+
 @dataclass(frozen=True, kw_only=True)
-class BackgroundRun(DeclaredFamily, affix="Run"):
+class BackgroundRun(PresentMember, StoredBackgroundRun, declared_name=None):
     """One detached run: which thread asked, the process whose life is the run's, where its
     output goes and where it stands."""
 
@@ -255,6 +293,24 @@ class BackgroundRun(DeclaredFamily, affix="Run"):
     def files(self) -> tuple[Path, ...]:
         return (self.log,)
 
+    def settled(self, state: RunState) -> StoredBackgroundRun:
+        return replace(self, state=state) if self.state.may_become(state) else self
+
+    def claimable(self, teller: ProcessIdentity) -> bool:
+        return self.state.claimed(teller) is not self.state
+
+    def claimed(
+        self, teller: ProcessIdentity,
+    ) -> DocumentChange[StoredBackgroundRun, tuple[BackgroundRun, ...]]:
+        state = self.state.claimed(teller)
+        if state is self.state:
+            return DocumentChange(self, ())
+        claimed = replace(self, state=state)
+        return DocumentChange(claimed, (claimed,))
+
+    def forgotten(self, now: float, snapshot: RegistryProvenance) -> bool:
+        return self.state.forgotten(now, has_reader=self.thread.current(snapshot))
+
 
 @dataclass(frozen=True, kw_only=True)
 class ShellRun(BackgroundRun):
@@ -273,17 +329,15 @@ class ShellRun(BackgroundRun):
         exit code in a file: after a restart the command is nobody's child and its code can
         be read nowhere else."""
         run_id, log = cls.named(directory, thread.name)
-        manager = ResidentManager.current()
         with open(log, "ab") as output:
-            process = subprocess.Popen(
-                manager.command((
-                    "/bin/bash", "-c", 'bash -c "$1"; echo $? > "$2"', "background-run",
-                    command, str(cls.exit_file_of(log)))),
-                stdout=output, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                start_new_session=True, env=manager.handoff_environment(os.environ),
+            child = SpawnedProcess.launch(
+                ("/bin/bash", "-c", 'bash -c "$1"; echo $? > "$2"', "background-run",
+                 command, str(cls.exit_file_of(log))),
+                stdio=DetachedChildStdio(stdout=output),
+                lifetime=OutlivesLauncherLifetime,
             )
         return cls(run_id=run_id, thread=thread, log=log, command=command, seconds=seconds,
-                   process=Platform.current().identity(process.pid), started_at=time.time())
+                   process=child.identity, started_at=time.time())
 
     @staticmethod
     def exit_file_of(log: Path) -> Path:
@@ -367,13 +421,6 @@ class ToolCallRun(BackgroundRun):
 
 
 @dataclass(frozen=True)
-class BackgroundRuns:
-    """Every background run this bus knows, keyed by its run id."""
-
-    runs: dict[str, BackgroundRun] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
 class BackgroundRunStarted(ToolResult):
     """What the caller gets back at once: the run keeps going without the turn."""
 
@@ -382,47 +429,113 @@ class BackgroundRunStarted(ToolResult):
 
 
 @dataclass(frozen=True, slots=True)
-class BackgroundRunStore(
-    SingleFileStore, RuntimeFile, LockedStore[BackgroundRuns], DependentStateTier,
+class BackgroundRunRecord(
+    PatternFile, SingleFileStore, RuntimeFile, LockedStore[StoredBackgroundRun],
+    DependentStateTier,
 ):
-    """The durable record of detached runs on one bus, and the one watcher that settles
-    them and tells their threads."""
+    """One detached run's durable record: its own file and lock, so no two runs contend."""
+
+    filename: ClassVar[str] = "background_runs/{run_id}.json"
+    record_type = StoredBackgroundRun
+
+    @classmethod
+    def for_run(cls, root: Path | str, run_id: str) -> BackgroundRunRecord:
+        path = cls.path_in(root, run_id=run_id)
+        if path.parent != cls.directory_in(root) / "background_runs" or path.stem != run_id:
+            raise ValueError(f"Invalid background run id: {run_id!r}")
+        return cls(path)
+
+    @classmethod
+    def all_in(cls, root: Path | str) -> tuple[BackgroundRunRecord, ...]:
+        return tuple(cls(path) for path in sorted(cls.matching_in(cls.directory_in(root))))
+
+    def empty(self) -> StoredBackgroundRun:
+        return AbsentRun()
+
+    def settle(self, state: RunState) -> None:
+        current = self.read()
+        if current.settled(state) is current:
+            return
+        self.update(lambda stored: DocumentChange.to(stored.settled(state)))
+
+    def claim(self, teller: ProcessIdentity) -> tuple[BackgroundRun, ...]:
+        if not self.read().claimable(teller):
+            return ()
+        return self.update(lambda stored: stored.claimed(teller))
+
+    def forget(self, now: float, snapshot: RegistryProvenance) -> bool:
+        if not self.read().forgotten(now, snapshot):
+            return False
+        files: tuple[Path, ...] = ()
+        with self.guarded_write():
+            latest = self._read_unlocked()
+            if not latest.forgotten(now, snapshot):
+                return False
+            files = latest.files()
+            self.retire()
+        for path in files:
+            path.unlink(missing_ok=True)
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class BackgroundRunStore:
+    """The detached runs on one bus, each in its own BackgroundRunRecord, and the watcher
+    that settles them and tells their threads."""
 
     comms: Comms
-    filename: ClassVar[str] = "background_run_records.json"
-    record_type = BackgroundRuns
     watching: ClassVar[set[str]] = set()
     watching_lock: ClassVar[threading.Lock] = threading.Lock()
 
     @classmethod
     def of(cls, comms: Comms) -> BackgroundRunStore:
-        return cls.at(comms.root, comms)
+        return cls(comms)
 
-    def empty(self) -> BackgroundRuns:
-        return BackgroundRuns()
+    @property
+    def root(self) -> Path:
+        return Path(self.comms.root)
 
     @property
     def log_directory(self) -> Path:
-        return self.path.parent / "logs"
+        return self.root / "logs"
+
+    def record(self, run_id: str) -> BackgroundRunRecord:
+        return BackgroundRunRecord.for_run(self.root, run_id)
+
+    def records(self) -> tuple[BackgroundRunRecord, ...]:
+        return BackgroundRunRecord.all_in(self.root)
+
+    def runs(self) -> tuple[BackgroundRun, ...]:
+        found = [
+            run for record in self.records()
+            for run in record.read().present()
+        ]
+        found.sort(key=lambda run: (run.started_at, run.run_id))
+        return tuple(found)
 
     def for_thread(self, thread: ThreadIncarnation) -> tuple[BackgroundRun, ...]:
-        return tuple(run for run in self.read().runs.values() if run.thread == thread)
+        return tuple(run for run in self.runs() if run.thread == thread)
 
     def start(self, run: BackgroundRun) -> BackgroundRunStarted:
-        """Record a run and watch it to its end."""
-        self.update(lambda current: DocumentChange.to(replace(
-            current, runs=current.runs | {run.run_id: run})))
+        """Record a run in its own file and watch it to its end."""
+        self.record(run.run_id).replace(run)
         self.watch(run)
         return BackgroundRunStarted(run_id=run.run_id, log=run.log)
 
     def recover(self) -> None:
-        """What every tool touch does first. A run a bridge restart left takes the state a
+        """What every tool touch does first. A run no watcher here holds takes the state a
         touch finds it in now (ended if its process is gone, owed again if its teller died)
-        and is watched if it is still running. Then every ended run is told."""
-        for run in self.read().runs.values():
-            found = run.state.recovered(run)
-            self.settle(run.run_id, found)
-            found.watched(self, run)
+        and is watched if it is still running. Settled runs are never rewritten."""
+        with self.watching_lock:
+            watched_here = frozenset(self.watching)
+        for record in self.records():
+            for run in record.read().present():
+                if run.run_id in watched_here:
+                    continue
+                found = run.state.recovered(run)
+                if found is not run.state:
+                    record.settle(found)
+                found.watched(self, run)
         self.tell()
 
     def watch(self, run: BackgroundRun) -> None:
@@ -446,59 +559,31 @@ class BackgroundRunStore(
     def settle(self, run_id: str, state: RunState) -> None:
         """A run takes a state only its own state allows next, so two watchers of one run
         cannot disagree about how it ended and a told run stays told."""
-        self.update(lambda current: DocumentChange.to(replace(current, runs={
-            key: replace(run, state=state)
-            if key == run_id and run.state.may_become(state) else run
-            for key, run in current.runs.items()
-        })))
+        self.record(run_id).settle(state)
 
     def tell(self) -> None:
         """Tell each thread about its ended runs. Told runs past retention, and ended runs
         whose thread no longer exists, are forgotten first, so a later thread of the same
-        name is never told. Claiming the rest is one store transaction, so a run is told
-        once however many watchers and touches see it. A run is told only once its notice
-        is on the bus: a delivery that raises leaves it, and every run claimed after it,
-        untold, and the error reaches whoever touched the store."""
-        self.forget(time.time())
+        name is never told. A run is told only once its notice is on the bus: a delivery
+        that raises leaves it, and every run claimed after it, untold, and the error reaches
+        whoever touched the store."""
+        now = time.time()
+        snapshot = self.comms.registry.snapshot()
         teller = ProcessIdentity.current()
-
-        def claimed(current: BackgroundRuns) -> DocumentChange[
-                BackgroundRuns, tuple[BackgroundRun, ...]]:
-            mine = {
-                key: replace(run, state=state) for key, run in current.runs.items()
-                if (state := run.state.claimed(teller)) is not run.state
-            }
-            return DocumentChange(
-                replace(current, runs=current.runs | mine), tuple(mine.values()))
-
-        telling = list(self.update(claimed))
+        telling: list[BackgroundRun] = []
+        for record in self.records():
+            if record.forget(now, snapshot):
+                continue
+            telling.extend(record.claim(teller))
+        telling.sort(key=lambda run: (run.started_at, run.run_id))
         try:
             while telling:
                 run = telling[0]
                 BackgroundRunNotice().publish(
-                    self.comms.messaging, ThreadTarget(run.thread.name), run.notice())
+                    self.comms.messaging, ThreadTarget(run.thread.resolved(snapshot).name),
+                    run.notice())
                 self.settle(run.run_id, run.state.delivered(time.time()))
                 del telling[0]
         finally:
             for run in telling:
                 self.settle(run.run_id, run.state.undelivered())
-
-    def has_reader(self, run: BackgroundRun) -> bool:
-        """Whether the thread that started the run still exists: a later thread of the same
-        name is a different reader."""
-        registry = self.comms.registry
-        return (run.thread.name in registry
-                and registry.require(run.thread.name).incarnation == run.thread)
-
-    def forget(self, now: float) -> None:
-        def kept(current: BackgroundRuns) -> DocumentChange[
-                BackgroundRuns, tuple[BackgroundRun, ...]]:
-            dropped = tuple(
-                run for run in current.runs.values()
-                if run.state.forgotten(now, has_reader=self.has_reader(run)))
-            return DocumentChange(replace(current, runs={
-                key: run for key, run in current.runs.items() if run not in dropped}), dropped)
-
-        for run in self.update(kept):
-            for path in run.files():
-                path.unlink(missing_ok=True)
