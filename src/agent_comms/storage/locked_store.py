@@ -1388,7 +1388,8 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
     def retire(self) -> None:
         """Retire an obsolete document and its writer claim in the same transaction."""
         with self.guarded_write():
-            self.path.unlink()
+            _read_cache.pop(self.path, None)
+            self.path.unlink(missing_ok=True)
             store_lock_path(self.path).unlink(missing_ok=True)
 
 
