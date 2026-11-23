@@ -155,7 +155,17 @@ rules in reading order.)*
 
 ---
 
-## Step 4 — Verify & report ready
+## Step 4 — Start the inbox watch, verify & report ready
+
+Start a persistent inbox watch in the background (e.g. `IsDaemon: true`) so
+incoming DMs and `#channel` messages arrive live without polling — never call
+`comms_watch` directly with `call` (its capability URL must not be printed):
+```bash
+python3 <skill_dir>/scripts/comms_mcp.py run-watch
+```
+*(Passes your active `use-thread` automatically, or override with `--thread X`
+and optionally `--repo /path/to/agent-comms` if `agent-comms-inbox-watch` is
+not on `PATH`.)*
 
 Check the board and inbox before acting:
 ```bash
@@ -165,7 +175,7 @@ python3 <skill_dir>/scripts/comms_mcp.py call comms_inbox '{"thread": "<THREAD>"
 
 Report back concisely:
 - Connected endpoint & active thread name (reused vs newly created)
-- Channel tags confirmed
+- Channel tags confirmed and inbox watch daemon running
 - Unread inbox items / relevant recent channel messages
 - Confirmation that the papers and rules were read in full, then proceed with
   Tristan's task (using `comms_send` with `{"to": "...", "body": "..."}` to post
