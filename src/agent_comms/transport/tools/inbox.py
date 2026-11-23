@@ -10,21 +10,24 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated
 
+from agent_comms.cli_bridges.history import RemoteWatchHistory
 from agent_comms.comms import Comms
 from agent_comms.input_attempt import UnresolvedInputReference
 from agent_comms.messaging.agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import AnyChannel
 from agent_comms.messaging.message_page import DisplayedMessagePage, InboxPage, PageBounds
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import GoalId, NullMember, WireOmitDefault
 from agent_comms.planning.goal_waits import NoStandbyReview, StandbyReview
 from agent_comms.transport.request import tool_field
-from agent_comms.transport.tool_caller import ToolCaller
+from agent_comms.transport.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.transport.tool_request import (
     MessagesArea,
     NativeToolRequest,
     ShortListed,
+    ThreadToolRequest,
 )
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
@@ -117,3 +120,32 @@ class CommsInboxTool(MessagesArea, ShortListed, NativeToolRequest):
             self.thread, comms.registry.snapshot(), CommandTarget.named(target),
             after=self.after, bounds=PageBounds(limit=self.limit),
         ))
+
+
+@dataclass(frozen=True)
+class DeliveryAcknowledged(ToolResult):
+    """The received messages whose delivery this thread confirmed into its context."""
+
+    thread: str
+    acknowledged: tuple[MessageReference, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsAckTool(MessagesArea, ThreadToolRequest, declared_name="comms_ack"):
+    label = "Acknowledge Delivery"
+    description = (
+        "Confirm that the named received messages entered this thread's context, settling "
+        "their delivery state to Read when the harness writes no local transcript. Only "
+        "messages this thread actually received may be acknowledged."
+    )
+    messages: Annotated[
+        tuple[MessageReference, ...],
+        *tool_field("Received message references ({seq, message_id}) to acknowledge"),
+    ]
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> DeliveryAcknowledged:
+        thread = caller.own_thread()
+        acknowledged = comms.messaging.acknowledge_deliveries(
+            thread, self.messages, bridge=RemoteWatchHistory,
+        )
+        return DeliveryAcknowledged(thread, acknowledged)

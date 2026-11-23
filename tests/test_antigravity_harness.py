@@ -23,9 +23,19 @@ from agent_comms.cli_bridges.inbox_watch_client import (
     WatchDelivered,
     session_transcript,
 )
-from agent_comms.cli_bridges.harness_delivery_states import DeliveredOutcome
+from agent_comms.cli_bridges.harness_delivery_states import (
+    AcknowledgedReceipt,
+    DeliveredOutcome,
+    EmittedOutcome,
+    ObservedMonitor,
+)
 from agent_comms.cli_bridges.history import RemoteWatchHistory
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+from agent_comms.messaging.notification_evidence import AllOutcomes
+from agent_comms.messaging.notification_progress import AnsweredResponse, HarnessConsumedProgress
+from agent_comms.nominal.field_codec import TranscriptRecordId
 from agent_comms.cli_bridges.runtime_updates import (
     FinishedItem,
     RuntimeInfoObserved,
@@ -485,3 +495,136 @@ async def test_local_thread_grant_calls_comms_watch_and_binds_existing_external_
                 )
                 ro_reply = await ro_resp.json()
                 assert ro_reply["result"]["isError"]
+
+
+async def test_comms_ack_and_answered_send_settle_cloud_delivery_without_transcript(
+    tmp_path: Path, comms: Comms
+) -> None:
+    comms.registry.declare(ExternalThread("antigravity", frozenset(), Checkout(comms.root)))
+    comms.registry.declare(ExternalThread("agy-cloud", frozenset({"model"}), Checkout(comms.root)))
+    comms.registry.declare(NativeThread("sender", frozenset(), Checkout(comms.root)))
+    comms.registry.declare(ExternalThread("bystander", frozenset(), Checkout(comms.root)))
+
+    first = comms.messaging.send("sender", "agy-cloud", "first cloud ping").message
+    second = comms.messaging.send("sender", "agy-cloud", "second cloud ping").message
+    third = comms.messaging.send("sender", "agy-cloud", "already confirmed by transcript").message
+    other = comms.messaging.send("sender", "bystander", "not for agy-cloud").message
+
+    lookup = comms.registry.require("agy-cloud").incarnation.require_recorded().lookup
+    observed = ObservedMonitor(
+        TranscriptRecordId("11111111-2222-3333-4444-555555555555"), 1795465000.0
+    )
+    with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+        with store.session.writing() as db:
+            HarnessDelivery(
+                RemoteWatchHistory, lookup, first.message_id, first.seq, EmittedOutcome
+            ).begin(store.assignments, db)
+            HarnessDelivery(
+                RemoteWatchHistory, lookup, second.message_id, second.seq, EmittedOutcome
+            ).begin(store.assignments, db)
+            HarnessDelivery(
+                RemoteWatchHistory, lookup, third.message_id, third.seq, DeliveredOutcome,
+                monitor=observed,
+            ).record(store.assignments, db)
+
+    before_first, = comms.views.message_notifications_for_references(
+        AllOutcomes(), (first.reference,)
+    ).outcomes[first.seq, first.message_id]
+    assert not before_first.state.is_consumed()
+
+    store = ConnectorStore.at(tmp_path / "auth")
+    port = unused_port()
+    connector = Connector(store, f"http://127.0.0.1:{port}", comms.root)
+    token = store.thread_granted("antigravity")
+
+    async with TestServer(connector.application(), port=port) as server:
+        async with TestClient(server) as client:
+            # 1) Explicit comms_ack flips EmittedOutcome -> DeliveredOutcome + AcknowledgedReceipt -> Read.
+            ack_resp = await client.post(
+                "/mcp",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "comms_ack",
+                        "arguments": {
+                            "fork": {"name": "agy-cloud"},
+                            "messages": [
+                                {"seq": first.seq, "message_id": str(first.message_id)},
+                                {"seq": third.seq, "message_id": str(third.message_id)},
+                            ],
+                        },
+                    },
+                },
+            )
+            ack_reply = await ack_resp.json()
+            assert not ack_reply["result"]["isError"], ack_reply
+
+            after_first, = comms.views.message_notifications_for_references(
+                AllOutcomes(), (first.reference,)
+            ).outcomes[first.seq, first.message_id]
+            assert after_first.state.is_consumed()
+            assert after_first.label.startswith(HarnessConsumedProgress.label)
+
+            # Stronger transcript proof on `third` is preserved (never downgraded to AcknowledgedReceipt).
+            with comms.registry.store.coordinator_reader.reader_snapshot() as db:
+                first_row, = HarnessDelivery.select(
+                    db, bridge=RemoteWatchHistory, recipient_lookup=lookup, message_id=first.message_id
+                )
+                third_row, = HarnessDelivery.select(
+                    db, bridge=RemoteWatchHistory, recipient_lookup=lookup, message_id=third.message_id
+                )
+            assert first_row.outcome is DeliveredOutcome
+            assert isinstance(first_row.monitor, AcknowledgedReceipt)
+            assert third_row.outcome is DeliveredOutcome
+            assert third_row.monitor == observed
+
+            # 2) Refuses acknowledging a message this thread never received.
+            bad_resp = await client.post(
+                "/mcp",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "comms_ack",
+                        "arguments": {
+                            "fork": {"name": "agy-cloud"},
+                            "messages": [{"seq": other.seq, "message_id": str(other.message_id)}],
+                        },
+                    },
+                },
+            )
+            bad_reply = await bad_resp.json()
+            assert bad_reply["result"]["isError"]
+
+            # 3) Replying via comms_send with answers settles open RemoteWatchHistory delivery automatically.
+            send_resp = await client.post(
+                "/mcp",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "comms_send",
+                        "arguments": {
+                            "fork": {"name": "agy-cloud"},
+                            "to": "sender",
+                            "body": "got your second ping",
+                            "answers": [{"seq": second.seq, "message_id": str(second.message_id)}],
+                        },
+                    },
+                },
+            )
+            send_reply = await send_resp.json()
+            assert not send_reply["result"]["isError"], send_reply
+
+            after_second, = comms.views.message_notifications_for_references(
+                AllOutcomes(), (second.reference,)
+            ).outcomes[second.seq, second.message_id]
+            assert after_second.state.is_consumed()
+            assert isinstance(after_second.answer, AnsweredResponse)

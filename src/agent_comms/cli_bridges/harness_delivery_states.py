@@ -193,3 +193,11 @@ class ObservedBridgeInput(ObservedInputEvidence):
     turn_id: NativeTurnId
     item_id: NativeItemId
     timestamp: float
+
+
+@dataclass(frozen=True)
+class AcknowledgedReceipt(ObservedInputEvidence):
+    """The recipient model itself named this message on its own grant, proving the message
+    entered its context when its harness writes no local transcript."""
+
+    timestamp: float

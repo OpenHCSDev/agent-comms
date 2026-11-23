@@ -170,6 +170,7 @@ from agent_comms.transport.tool_request import (
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools import background  # registers the background run family
 from agent_comms.transport.tools import channels
+from agent_comms.transport.tools import inbox  # registers comms_inbox and comms_ack
 from agent_comms.transport.tools.channels import ChannelListing
 from agent_comms.transport.tools.sidebar import (
     ChannelOrderSet,
