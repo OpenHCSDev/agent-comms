@@ -3,7 +3,7 @@ from copy import copy
 from agent_comms.cli_verbs.target_command_bindings import TargetCommandBindings
 from agent_comms.messaging.claim_registry_read import ClaimRegistryRead
 from agent_comms.registry.activity_registry_reads import ActivityRegistryRead
-from agent_comms.registry.presence_reads import PresenceEntry, PresenceSnapshot
+from agent_comms.registry.presence_reads import PresenceEntry
 
 """One registry document: thread facts, identity domains and lifecycle behavior."""
 
@@ -1276,7 +1276,6 @@ class RegistrySnapshot(
     ToolResult,
     ThreadOwnerSource[Thread],
     InputRegistry[Thread],
-    PresenceSnapshot,
     ActivityRegistryRead,
     ClaimRegistryRead[Thread],
 ):
@@ -1472,7 +1471,7 @@ class RegistrySnapshot(
     ) -> float | None:
         return self.require(actor).role.unread_since(since, recorded_delivery)
 
-    def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None) -> 'tuple[ThreadIncarnation, ...]':
+    def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None) -> tuple[ThreadIncarnation, ...]:
         return thread.role.displayed_recipient_effect(reads, message, thread, self, document)
 
     def recipient(
