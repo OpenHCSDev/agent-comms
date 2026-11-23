@@ -878,11 +878,24 @@ class GitHistoryRevision(GitSourceRevision):
             common / "packed-refs",
         )))
 
+    @staticmethod
+    def _worktree_head_paths(worktrees: Path) -> tuple[Path, ...]:
+        """Watch only the files ``git worktree list`` reads, never submodule trees or logs."""
+        if not worktrees.is_dir():
+            return (worktrees,)
+        paths: list[Path] = [worktrees]
+        with os.scandir(worktrees) as entries:
+            for entry in sorted(entries, key=lambda item: item.name):
+                if entry.is_dir(follow_symlinks=False):
+                    directory = Path(entry.path)
+                    paths.extend((directory, directory / "HEAD", directory / "gitdir"))
+        return tuple(paths)
+
     @classmethod
     def head_paths(cls, checkout: Checkout) -> tuple[Path, ...]:
         common = checkout.common_dir
         return tuple(dict.fromkeys((
-            *cls._tree_paths(common / "worktrees"),
+            *cls._worktree_head_paths(common / "worktrees"),
             common / "HEAD",
         )))
 
@@ -1130,12 +1143,53 @@ class CommitMessages:
         self, positions: Mapping[str, int],
     ) -> tuple[CommitWordPosting, ...]:
         """Encode the acquired index in the cache's positional representation."""
-        return tuple(
-            CommitWordPosting(
-                word,
-                tuple(sorted(positions[sha] for sha in posting if sha in positions)),
+        if CommitMessages.word_names.attrname in self.__dict__:
+            return tuple(
+                CommitWordPosting(
+                    word,
+                    tuple(sorted(positions[sha] for sha in posting if sha in positions)),
+                )
+                for word, posting in sorted(self.word_names.items())
             )
-            for word, posting in sorted(self.word_names.items())
+        postings: dict[str, set[int]] = {}
+        for sha, message in zip(self.shas, self.lowered):
+            position = positions.get(sha)
+            if position is None:
+                continue
+            for word in set(self.words.findall(message)):
+                postings.setdefault(word, set()).add(position)
+        return tuple(
+            CommitWordPosting(word, tuple(sorted(indexes)))
+            for word, indexes in sorted(postings.items())
+        )
+
+    @classmethod
+    def _updated_postings(
+        cls,
+        previous: Mapping[str, str],
+        current: Mapping[str, str],
+        retained: tuple[CommitWordPosting, ...],
+        positions: Mapping[str, int],
+    ) -> tuple[CommitWordPosting, ...]:
+        """Apply only changed commit messages to retained positional postings."""
+        postings = {posting.word: posting.positions for posting in retained}
+        edits: dict[str, set[int]] = {}
+        for sha in set(previous).union(current):
+            if previous.get(sha) == current.get(sha):
+                continue
+            before = set(cls.words.findall(previous[sha])) if sha in previous else set()
+            after = set(cls.words.findall(current[sha])) if sha in current else set()
+            position = positions.get(sha)
+            for word in before ^ after:
+                posting = edits.setdefault(word, set(postings.get(word, ())))
+                if word in after and position is not None:
+                    posting.add(position)
+                elif position is not None:
+                    posting.discard(position)
+        postings.update((word, tuple(sorted(posting))) for word, posting in edits.items())
+        return tuple(
+            CommitWordPosting(word, tuple(posting))
+            for word, posting in sorted(postings.items()) if posting
         )
 
     def following(self, commits: tuple[GitCommit, ...]) -> CommitMessages:
@@ -1219,27 +1273,12 @@ class RetainedCommitMessages(CommitMessages):
         nested immutable SHA maps merely to collapse them back to positions made a one-commit
         worker restart rebuild the entire index.
         """
-        previous, current = self._earlier.messages_by_sha, self.messages_by_sha
-        postings = {
-            posting.word: posting.positions
-            for posting in self._earlier.cache_postings(positions)
-        }
-        edits: dict[str, set[int]] = {}
-        for sha in set(previous).union(current):
-            if previous.get(sha) == current.get(sha):
-                continue
-            before = set(self.words.findall(previous[sha])) if sha in previous else set()
-            after = set(self.words.findall(current[sha])) if sha in current else set()
-            position = positions.get(sha)
-            for word in before ^ after:
-                posting = edits.setdefault(word, set(postings.get(word, ())))
-                if word in after and position is not None:
-                    posting.add(position)
-                elif position is not None:
-                    posting.discard(position)
-        postings.update((word, tuple(sorted(posting))) for word, posting in edits.items())
-        return tuple(CommitWordPosting(word, tuple(posting))
-                     for word, posting in sorted(postings.items()) if posting)
+        return self._updated_postings(
+            self._earlier.messages_by_sha,
+            self.messages_by_sha,
+            self._earlier.cache_postings(positions),
+            positions,
+        )
 
 
 @dataclass(frozen=True)
@@ -1425,7 +1464,17 @@ class RestoredCommitMessages(CommitMessages):
         self._positions = {posting.word: posting.positions for posting in postings}
 
     def following(self, commits: tuple[GitCommit, ...]) -> CommitMessages:
-        return self if commits == self._commits else super().following(commits)
+        if commits == self._commits:
+            return self
+        if CommitMessages.word_names.attrname in self.__dict__:
+            return super().following(commits)
+        positions = {commit.sha: index for index, commit in enumerate(commits)}
+        previous = dict(zip(self.shas, self.lowered))
+        current = {commit.sha: commit.message.lower() for commit in commits}
+        updated = self._updated_postings(
+            previous, current, self.cache_postings(positions), positions,
+        )
+        return RestoredCommitMessages(commits, updated)
 
     def acquired_index(self) -> CommitMessages:
         return self
@@ -1571,6 +1620,15 @@ class GitHistorySnapshot(DeclaredWireType):
         return RestoredCommitMessages(self.commits, self.postings)
 
 
+@dataclass(frozen=True, slots=True)
+class _RetainedHistoryCut:
+    """Identity of the snapshot last read from or written to disk, without retaining postings."""
+
+    source: GitGraphSource
+    heads: tuple[str, ...]
+    commits: tuple[GitCommit, ...]
+
+
 class GitHistoryCache:
     """One atomic current graph per Git common directory; never a version pile."""
 
@@ -1579,7 +1637,7 @@ class GitHistoryCache:
 
     def __init__(self, repository: Path) -> None:
         self.path = repository / self.relative_path
-        self.loaded: GitHistorySnapshot | None = None
+        self._retained: _RetainedHistoryCut | None = None
 
     def read(self, source: GitGraphSource) -> GitHistorySnapshot | None:
         try:
@@ -1591,11 +1649,16 @@ class GitHistoryCache:
             return None
         if decoded.source.graph_source() != source:
             return None
-        self.loaded = decoded
+        self._retained = _RetainedHistoryCut(
+            decoded.source.graph_source(), decoded.heads, decoded.commits,
+        )
         return decoded
 
     def write(self, snapshot: GitHistorySnapshot) -> None:
-        if snapshot == self.loaded:
+        cut = _RetainedHistoryCut(
+            snapshot.source.graph_source(), snapshot.heads, snapshot.commits,
+        )
+        if cut == self._retained:
             return
         try:
             # store_files reaches process launch, which already imports Checkout.
@@ -1607,7 +1670,7 @@ class GitHistoryCache:
         except OSError:
             # This derived acceleration never owns whether the source can be answered.
             return
-        self.loaded = snapshot
+        self._retained = cut
 
     def retains(
         self,
@@ -1616,10 +1679,10 @@ class GitHistoryCache:
         graph: Mapping[str, GitCommit],
     ) -> bool:
         return (
-            self.loaded is not None
-            and self.loaded.source.graph_source() == source
-            and self.loaded.heads == heads
-            and self.loaded.commits == tuple(graph.values())
+            self._retained is not None
+            and self._retained.source == source
+            and self._retained.heads == heads
+            and self._retained.commits == tuple(graph.values())
         )
 
 
@@ -1844,11 +1907,11 @@ class CheckoutHistory:
     @cached_property
     def messages(self) -> CommitMessages:
         captured = self._message_seed.following(tuple(self.graph.values()))
-        self._message_seed = captured
         source, heads = self.graph_request
         cache = self._cache or GitHistoryCache(source.repository)
         if not cache.retains(source, heads, self.graph):
             cache.write(GitHistorySnapshot.capturing(source, heads, self.graph, captured))
+        self._message_seed = captured
         self._cache = cache
         return captured
 
