@@ -891,6 +891,12 @@ class Thread(
     def executing(self) -> bool:
         return bool(self.turn_record.items_with(Executing, self))
 
+    def as_external_endpoint(self, channels: frozenset[str]) -> ExternalThread:
+        """Join ``channels`` on an independent external CLI endpoint; refuse other thread kinds."""
+        raise RelationViolationError(
+            f"{self.name!r} is a {type(self).__name__} thread, not a CLI endpoint."
+        )
+
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
         return FieldCodec.encode(self)
@@ -952,6 +958,9 @@ class ExternalThread(Thread):
     def serving_its_own_session(self) -> ExternalThread:
         """What this thread is once a process of its own serves it."""
         return self
+
+    def as_external_endpoint(self, channels: frozenset[str]) -> ExternalThread:
+        return self if channels <= self.tags else replace(self, tags=self.tags | channels)
 
     def stop_names(self, release_external: Callable[[str], None]) -> str | None:
         """No owner runtime serves an external endpoint (only RuntimeServer binds the socket a
@@ -1016,6 +1025,8 @@ class SubagentThread(ExternalThread, declared_name="subagent_execution"):
     def independent_threads(self) -> tuple[Thread, ...]:
         """A genuine in-turn child acts through its parent, not as another session."""
         return ()
+
+    as_external_endpoint = Thread.as_external_endpoint
 
     def teammate(self) -> str:
         """A genuine in-turn child works inside its parent's turn."""

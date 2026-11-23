@@ -14,13 +14,19 @@ import pytest
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from agent_comms.cli_bridges.model_agent_client import ChatCompletion, ChatEndpoint, ModelAgent
+from agent_comms.cli_bridges.model_agent_client import (
+    ChatCompletion,
+    ChatEndpoint,
+    HttpFailureReply,
+    ModelAgent,
+    ModelReply,
+)
 from agent_comms.comms import Comms
 from agent_comms.messaging.agent_inbox import TakenInputStart
 from agent_comms.messaging.messages import InfoKind
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_status import StoppedThreadStatus
-from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.registry.threads import ExternalThread, ForkThread, NativeThread
 
 from tests.conftest import declare_test_bus
 
@@ -173,3 +179,95 @@ def test_a_message_sent_while_the_bridge_was_down_is_answered_after_the_restart(
     before, after = asyncio.run(asyncio.wait_for(scenario(), timeout=60))
     assert before.startswith("echo: first")
     assert after.startswith("echo: sent during the gap")
+
+
+def test_a_stopped_fork_thread_is_not_an_external_endpoint_until_takeover(comms: Comms) -> None:
+    """ForkThread inherits ExternalThread via SubagentThread, so isinstance(current, ExternalThread)
+    used to treat a stopped fork as an endpoint instead of refusing or taking it over."""
+    declare_test_bus(comms, channels=("model_test",))
+    comms.registry.declare(
+        ForkThread(name="rl2", tags=frozenset(), worktree=Checkout(Path("/tmp/wt1"))),
+        StoppedThreadStatus(),
+    )
+    with pytest.raises(SystemExit):
+        asyncio.run(agent_on(comms)._register(comms))
+    assert type(comms.registry.require("rl2")) is ForkThread
+
+    asyncio.run(replace(agent_on(comms), takeover=True)._register(comms))
+    thread = comms.registry.require("rl2")
+    assert type(thread) is ExternalThread
+    assert "model_test" in thread.tags
+
+
+def test_model_reply_family_owns_history_logging_and_rejection_sampling(comms: Comms) -> None:
+    @dataclass(frozen=True, slots=True)
+    class ScriptedEndpoint(ChatEndpoint):
+        replies: tuple[ModelReply, ...] = ()
+        calls: list[int] = None  # type: ignore[assignment]
+
+        def call(self, messages: list[dict[str, str]]) -> ModelReply:
+            index = len(self.calls)
+            self.calls.append(index)
+            return self.replies[index]
+
+    async def run_best(agent: ModelAgent) -> tuple[ModelReply, str]:
+        return await agent._best_reply(asyncio.get_running_loop(), [])
+
+    # Failure settles immediately without sampling further candidates.
+    failure_calls: list[int] = []
+    failure_agent = ModelAgent(
+        name="rl2",
+        endpoint=ScriptedEndpoint(
+            url="http://unused", model="rl2",
+            replies=(HttpFailureReply(500, "boom"), ChatCompletion("later", "stop", 1)),
+            calls=failure_calls,
+        ),
+        root=comms.root,
+        rejection_k=3,
+    )
+    reply, rendered = asyncio.run(run_best(failure_agent))
+    assert isinstance(reply, HttpFailureReply)
+    assert failure_calls == [0]
+    assert reply.log_summary(rendered) == reply.display()
+    history: list[dict[str, str]] = []
+    reply.record_in(history)
+    assert history == []
+
+    # Clean completion records in history and logs char count.
+    clean_calls: list[int] = []
+    clean_agent = ModelAgent(
+        name="rl2",
+        endpoint=ScriptedEndpoint(
+            url="http://unused", model="rl2",
+            replies=(ChatCompletion("Clean plain reply.", "stop", 4),),
+            calls=clean_calls,
+        ),
+        root=comms.root,
+        rejection_k=3,
+    )
+    reply, rendered = asyncio.run(run_best(clean_agent))
+    assert isinstance(reply, ChatCompletion)
+    assert clean_calls == [0]
+    assert reply.log_summary(rendered) == f"{len(rendered)} chars"
+    reply.record_in(history)
+    assert history == [{"role": "assistant", "content": "Clean plain reply."}]
+
+    # Rejected candidates compare structural_reward and append the sampling footer.
+    rejected_calls: list[int] = []
+    rejected_agent = ModelAgent(
+        name="rl2",
+        endpoint=ScriptedEndpoint(
+            url="http://unused", model="rl2",
+            replies=(
+                ChatCompletion("<tool_call>bad</tool_call>", "stop", 5),
+                ChatCompletion("<tool_call>still bad</tool_call>", "stop", 5),
+            ),
+            calls=rejected_calls,
+        ),
+        root=comms.root,
+        rejection_k=2,
+    )
+    reply, rendered = asyncio.run(run_best(rejected_agent))
+    assert isinstance(reply, ChatCompletion)
+    assert rejected_calls == [0, 1]
+    assert "rejection-sampled 2×" in rendered
