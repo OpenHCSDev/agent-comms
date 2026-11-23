@@ -123,6 +123,12 @@ def test_antigravity_harness_registers_mcp_connector_and_links_skills(tmp_path: 
 
     mcp_path = tmp_path / ".gemini/config/mcp_config.json"
     mcp_path.parent.mkdir(parents=True)
+    # Antigravity may create a 0-byte mcp_config.json before any MCP server is configured.
+    mcp_path.write_text("", encoding="utf-8")
+    assert not harness.connector_registered()
+    harness.register_connector("http://127.0.0.1:41973/mcp", "tok-empty")
+    assert harness.connector_registered()
+
     mcp_path.write_text(json.dumps({"mcpServers": {"existing": {"command": "foo"}}}))
     assert not harness.connector_registered()
 

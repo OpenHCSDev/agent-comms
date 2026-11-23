@@ -46,12 +46,15 @@ def replace_link(link: Path, target: Path) -> None:
 
 
 def json_config(path: Path) -> dict:
-    """A harness's config file decoded once; one that isn't a JSON object is refused by name,
-    and it is left as it is, since rewriting it would lose whatever the owner has in there."""
+    """A harness's config file decoded once; an empty file holds no settings, while non-empty
+    invalid JSON is refused by name and left untouched."""
     if not path.exists():
         return {}
+    raw = path.read_text()
+    if not raw.strip():
+        return {}
     try:
-        document = json.loads(path.read_text())
+        document = json.loads(raw)
     except json.JSONDecodeError as error:
         raise ValueError(f"{path} isn't valid JSON ({error}): fix or move it; nothing changed") from error
     if not isinstance(document, dict):
