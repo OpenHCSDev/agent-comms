@@ -35,6 +35,7 @@ from agent_comms.execution.imported_conversation import ImportedConversation
 from agent_comms.execution.imported_messages import ImportLimits
 from agent_comms.importing import ImportSnapshot
 from agent_comms.installer.harness_install import (
+    AntigravityHarness,
     ClaudeCodeHarness,
     CodexHarness,
     Harness,
@@ -81,6 +82,10 @@ class ClaudeHistory(HarnessHistory):
 class RemoteWatchHistory(ClaudeHistory):
     """A Claude session on another machine woken over its inbox socket: nothing of it is readable
     here, so this member only names the delivery attempts the socket records."""
+
+
+class AntigravityHistory(HarnessHistory):
+    harness = AntigravityHarness
 
 
 class CodexHistory(HarnessHistory):

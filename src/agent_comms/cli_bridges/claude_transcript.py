@@ -156,6 +156,10 @@ class ReceivesWatchReports(ABC):
     async def files_wanted(self, shown: frozenset[MessageReference]) -> None:
         """The client keeps the files of these messages on its own disk: send their bytes."""
 
+    @abstractmethod
+    async def stream_antigravity(self) -> None:
+        """The client streams Antigravity `transcript.jsonl` records on this socket."""
+
 
 class ReconnectUrl(WireModel):
     """The connector's one frame that is not a message: where this watch's client reconnects
@@ -294,6 +298,13 @@ class FilesWanted(WatchReport, declared_name='files'):
 
     async def received(self, pushed: ReceivesWatchReports) -> None:
         await pushed.files_wanted(frozenset(self.printed))
+
+
+class AntigravityWatch(WatchReport, declared_name='antigravity'):
+    """This watch client streams Antigravity `transcript.jsonl` records instead of Claude JSONL."""
+
+    async def received(self, pushed: ReceivesWatchReports) -> None:
+        await pushed.stream_antigravity()
 
 
 WATCH_REPORT = WireModel.adapter(WatchReport.declared_union())

@@ -24,6 +24,7 @@ from typing import ClassVar
 from aiohttp import WSCloseCode, WSMsgType, web
 from yarl import URL
 
+from agent_comms.cli_bridges.antigravity_transcript import AntigravityJsonLines
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.claude_transcript import (
     WATCH_DEFERRED,
@@ -201,6 +202,28 @@ class WatchTickets:
         return ticket
 
 
+@dataclass
+class ActiveWatchDecoder:
+    """Mutable transcript decoder slot for one watch socket: starts on Claude JSONL for older
+    clients and switches cleanly when a client announces another declared format."""
+
+    decoder: ClaudeJsonLines | AntigravityJsonLines = field(default_factory=ClaudeJsonLines)
+    state: object = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.state = self.decoder.start_state()
+
+    def use(self, decoder: ClaudeJsonLines | AntigravityJsonLines) -> None:
+        self.decoder = decoder
+        self.state = decoder.start_state()
+
+    def line_updates(self, raw: bytes, offset: int, damage: str) -> Iterator[RuntimeUpdate]:
+        return self.decoder.line_updates(raw, self.state, offset, damage)
+
+    def window_ended(self) -> tuple[RuntimeUpdate, ...]:
+        return self.state.phase.window_ended(self.state)
+
+
 @dataclass(frozen=True)
 class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJsonLines):
     """A session's transcript as lines on its watch socket. Holding the ticket proved which
@@ -212,6 +235,7 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
     socket: web.WebSocketResponse
     offer: ReconnectUrl
     reported: ReportedLedger = field(default_factory=lambda: ReportedLedger())
+    active_decoder: ActiveWatchDecoder = field(default_factory=ActiveWatchDecoder)
 
     delivery_kind: ClassVar[type[RemoteWatchHistory]] = RemoteWatchHistory
     incoming_frame: ClassVar[type[ClaudeMonitorFrame]] = ClaudeMonitorFrame
@@ -264,19 +288,22 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
         logging.info("Watch for %s was sent the files of %s", self.transcript_thread,
                      ", ".join(sorted(reference.name for reference in sent & shown)) or "nothing")
 
+    async def stream_antigravity(self) -> None:
+        self.active_decoder.use(AntigravityJsonLines())
+
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
-        state, offset = self.start_state(), 0
+        offset = 0
         async for frame in self.socket:
             if frame.type is WSMsgType.TEXT and frame.data.startswith(WatchReport.wire_prefix):
                 await WATCH_REPORT.validate_json(frame.data).received(self)
             elif frame.type is WSMsgType.TEXT and frame.data == WINDOW_ENDED:
                 # The same gate a local bridge opens after replaying its window: without it the
                 # reader stays in replay, so chat publishes and activity never does.
-                for update in state.phase.window_ended(state):
+                for update in self.active_decoder.window_ended():
                     yield update
             elif frame.type is WSMsgType.TEXT:
                 raw = frame.data.encode()
-                for update in self.line_updates(raw, state, offset, DAMAGED_RECORD):
+                for update in self.active_decoder.line_updates(raw, offset, DAMAGED_RECORD):
                     yield update
                 offset += len(raw) + 1
 
