@@ -29,7 +29,7 @@ import traceback
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Generator, Iterator, Mapping
-from concurrent.futures import Future
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, AsyncExitStack, ExitStack, aclosing, nullcontext
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
@@ -65,6 +65,7 @@ from agent_comms.execution.child_process import (
     join_retirement,
 )
 from agent_comms.execution.launch_root import started
+from agent_comms.execution.publication_measurements import WorkCpu
 from agent_comms.history_views import RetiredViews, SidebarCut
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.installer.active_route import CommsRoute
@@ -1848,7 +1849,7 @@ class ObservationFailed(TaggedRecordMember, ServiceResult):
     error: str
 
     async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
-        await Coordination.run_worker(partial(process.peer.await_end, 2))
+        await process.run_worker(partial(process.peer.await_end, 2))
         raise process.ended(ServiceReported(self.error))
 
 
@@ -2413,6 +2414,7 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         """``source`` names who serves the observation: a route locally, a remote UI profile
         across the connector."""
         self._resources = ExitStack()
+        self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="observation-recv")
         # Resolved once, at attachment, with the loop that delivers answers.
         self._delivery: Future[asyncio.AbstractEventLoop] = Future()
         self.request_ids = itertools.count(1)
@@ -2584,6 +2586,18 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         finally:
             loop.remove_reader(descriptor)
 
+    async def run_worker[Result](self, operation: Callable[[], Result]) -> Result:
+        """Run one blocking pipe or peer operation on this observation's own thread.
+
+        Callers blocked in ``read_from_thread`` can fill the event loop's default executor
+        (Toad #2209); sharing that pool with ``receive`` deadlocks every read in flight.
+        """
+        pending = self._worker.submit(
+            Coordination.worker_context().run, WorkCpu.measured(operation),
+        )
+        await join_retirement(asyncio.wrap_future(pending))
+        return pending.result()
+
     async def receive(
         self, observed: Callable[[Observed], None], failed: Callable[[Exception], None],
     ) -> None:
@@ -2595,10 +2609,10 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         try:
             while True:
                 await self.readable()
-                result: ServiceResult = await Coordination.run_worker(self.connection.recv)
+                result: ServiceResult = await self.run_worker(self.connection.recv)
                 await result.received(self, observed)
         except (EOFError, ConnectionResetError):
-            await Coordination.run_worker(partial(self.peer.await_end, 2))
+            await self.run_worker(partial(self.peer.await_end, 2))
             failed(self.ended(ConnectionClosed()))
         except ObserverDied as error:
             failed(error)
@@ -2610,7 +2624,8 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
     async def retire(self) -> None:
         self.status.retire(self)
         async with AsyncExitStack() as release:
-            release.push_async_callback(Coordination.run_worker, self._resources.close)
+            release.callback(self._worker.shutdown, wait=True)
+            release.push_async_callback(self.run_worker, self._resources.close)
             await self._reader.aclose()
 
     async def close(self) -> None:
