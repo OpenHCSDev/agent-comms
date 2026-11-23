@@ -2,10 +2,21 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import partial
 from pathlib import Path
+import time
 
+from agent_comms.cli_bridges.harness_delivery_states import (
+    AcknowledgedReceipt,
+    DeliveredOutcome,
+    UnconfirmedOutcome,
+)
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.session import NativeCapture
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.errors import (
     CommittedMessageError,
     RelationViolationError,
@@ -63,7 +74,7 @@ from agent_comms.projects.change_report import NoChangeReport, ReportEvidence
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.registry.threads import Thread
+from agent_comms.registry.threads import ExternalThread, Thread
 
 
 class AnswerAuthority(ABC):
@@ -165,6 +176,8 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         )
         committed = self._publish(
             message, origin, destination=CommandTarget.named(target), files=files)
+        if answers and isinstance(owner, ExternalThread):
+            self._settle_answered_remote_deliveries(owner, answers, committed.timestamp)
         correction: CorrectionResult
         try:
             todos.correct(owner.incarnation, committed.message_id, body)
@@ -173,6 +186,82 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         else:
             correction = CorrectionComplete()
         return SendResult(committed, correction)
+
+    def acknowledge_deliveries(
+        self,
+        recipient: str,
+        references: Sequence[MessageReference],
+        *,
+        bridge: type[HarnessSession] = HarnessSession,
+        timestamp: float | None = None,
+    ) -> tuple[MessageReference, ...]:
+        """Confirm that the named received messages entered this recipient's context."""
+        unique = tuple(dict.fromkeys(references))
+        if not unique:
+            return ()
+        if recipient not in self.registry:
+            raise UnregisteredThreadError(f"Recipient {recipient!r} is not registered.")
+        owner = self.registry.require(recipient)
+        self.bus.bus.messages_for_references(unique)
+        unreceived = self.bus.bus.unreceived(SenderReceipts().lookups(owner), unique)
+        if unreceived:
+            raise UnreceivedAnswerError(
+                f"{owner.name} never received {', '.join(r.message_id for r in unreceived)}"
+                ", so it cannot acknowledge it")
+        self._record_acknowledged_deliveries(
+            owner, unique, time.time() if timestamp is None else timestamp, bridge=bridge,
+        )
+        return unique
+
+    def _settle_answered_remote_deliveries(
+        self,
+        owner: Thread,
+        answers: Sequence[MessageReference],
+        timestamp: float,
+    ) -> None:
+        """Settle open unconfirmed harness attempts when an external thread explicitly answers them."""
+        unique = tuple(dict.fromkeys(answers))
+        own_lookups = SenderReceipts().lookups(owner)
+        unreceived = frozenset(self.bus.bus.unreceived(own_lookups, unique))
+        own_answers = tuple(ref for ref in unique if ref not in unreceived)
+        if not own_answers:
+            return
+        lookup = owner.incarnation.require_recorded().lookup
+        keys = tuple((lookup, ref) for ref in own_answers)
+        with self.registry.store.coordinator_reader.reader_snapshot() as db:
+            pending = tuple(dict.fromkeys(
+                row.reference
+                for row in HarnessDelivery.for_recipients(db, keys)
+                if issubclass(row.outcome, UnconfirmedOutcome)
+            ))
+        if pending:
+            self._record_acknowledged_deliveries(owner, pending, timestamp)
+
+    def _record_acknowledged_deliveries(
+        self,
+        owner: Thread,
+        references: tuple[MessageReference, ...],
+        timestamp: float,
+        *,
+        bridge: type[HarnessSession] = HarnessSession,
+    ) -> None:
+        lookup = owner.incarnation.require_recorded().lookup
+        evidence = AcknowledgedReceipt(timestamp)
+        path = str(CoordinationStore.path_in(self.root))
+        with Coordination(path) as store, store.session.writing() as db:
+            for ref in references:
+                existing = HarnessDelivery.for_recipients(db, ((lookup, ref),))
+                if existing:
+                    for row in existing:
+                        row.apply(
+                            partial(replace, outcome=DeliveredOutcome, monitor=evidence),
+                            store.assignments, db,
+                        )
+                else:
+                    HarnessDelivery(
+                        bridge, lookup, ref.message_id, ref.seq,
+                        DeliveredOutcome, monitor=evidence,
+                    ).record(store.assignments, db)
 
     def _answered_by(self, owner: Thread, target: str,
                      source_turn: SourceTurn) -> tuple[MessageReference, ...]:
