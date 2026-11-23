@@ -340,6 +340,58 @@ class WatchStopped(WatchEnd):
 
 
 @dataclass(frozen=True)
+class WatchDelivered(WatchEnd):
+    """A one-shot wake reader delivered its message (and any attached files) and exited cleanly
+    so a harness that wakes on process exit (such as Antigravity) processes it at once."""
+
+    exit_code = 0
+
+    def line(self) -> str:
+        return ""
+
+
+class WatchDeliveryMode(ABC):
+    """Whether this watch stays open continuously (Claude Monitor) or exits after one delivery
+    (harnesses that wake on background-task completion)."""
+
+    @abstractmethod
+    def on_message(self, expected_files: int) -> WatchEnd | None: ...
+
+    @abstractmethod
+    def on_file(self) -> WatchEnd | None: ...
+
+
+class ContinuousDelivery(WatchDeliveryMode):
+    """Stay open across messages until the socket closes or the thread stops."""
+
+    def on_message(self, expected_files: int) -> WatchEnd | None:
+        del expected_files
+        return None
+
+    def on_file(self) -> WatchEnd | None:
+        return None
+
+
+@dataclass
+class ExitAfterDelivery(WatchDeliveryMode):
+    """Exit cleanly with code 0 once one message and all of its attached files have printed."""
+
+    delivered: bool = False
+    remaining_files: int = 0
+
+    def on_message(self, expected_files: int) -> WatchEnd | None:
+        self.delivered = True
+        self.remaining_files = expected_files
+        return WatchDelivered() if self.remaining_files == 0 else None
+
+    def on_file(self) -> WatchEnd | None:
+        if not self.delivered:
+            return None
+        self.remaining_files = max(0, self.remaining_files - 1)
+        return WatchDelivered() if self.remaining_files == 0 else None
+
+
+@dataclass(frozen=True)
 class RuntimeReplaced(BackToModel):
     """Core was reinstalled while this watch ran from the runtime it replaced. Re-dialling would
     keep the old client watching for ever: on 2026-11-06 the host's watch survived three installs
@@ -558,6 +610,7 @@ class InboxSocket:
     transcript: TranscriptRoute = UnfoundTranscript("no transcript was given to this watch")
     redials: Redials = field(default_factory=Redials)
     source: RunningSource = field(default_factory=RunningSource.current)
+    delivery_mode: WatchDeliveryMode = field(default_factory=ContinuousDelivery)
     """Where this process's client code came from: an install can replace an installed runtime's,
     never a checkout's."""
 
@@ -571,7 +624,7 @@ class InboxSocket:
     def ledger(self) -> PrintLedger:
         return self.transcript.ledger(self.exports.parent)
 
-    async def deliver(self, frame: str, socket: ClientWebSocketResponse) -> None:
+    async def deliver(self, frame: str, socket: ClientWebSocketResponse) -> WatchEnd | None:
         """Inline when one Monitor batch holds it, otherwise one notice naming its whole body.
         The ledger is written first: a freeze between it and the print leaves a message the bus
         never replays, never one the session saw twice."""
@@ -582,14 +635,17 @@ class InboxSocket:
         await socket.send_str(PrintedNow(printed=(delivery.message.reference,)).line())
         if delivery.files:
             await socket.send_str(FilesWanted(printed=(delivery.message.reference,)).line())
+        if ended := self.delivery_mode.on_message(len(delivery.files)):
+            return ended
         await asyncio.sleep(self.batch_gap_seconds)
+        return None
 
     def filed_at(self, part: WatchedFilePart) -> Path:
         """Where one of a message's files is kept: beside the messages, named for its message,
         its position and its own name."""
         return self.exports / f"{part.message.name}.{part.position}.{Path(part.name).name}"
 
-    async def filed(self, part: WatchedFilePart) -> None:
+    async def filed(self, part: WatchedFilePart) -> WatchEnd | None:
         """Keep one piece of a file; with its last piece the file is whole, checked against
         the digest the bus holds for it, and named to the session in an event of its own. The
         message's event has already had its batch, so this line never reads as its body."""
@@ -599,7 +655,7 @@ class InboxSocket:
         with arriving.open("w" if part.part == 1 else "a", encoding="ascii") as text:
             text.write(part.data)
         if part.part < part.parts:
-            return
+            return None
         data = base64.b64decode(arriving.read_text(encoding="ascii"))
         arriving.unlink()
         if hashlib.sha256(data).hexdigest() != part.sha256:
@@ -609,7 +665,10 @@ class InboxSocket:
             path.write_bytes(data)
             print(f"File {part.position} of {part.message.name} is on your disk: {path} "
                   f"({part.mime_type}, {part.size} bytes). Read that path to see it.", flush=True)
+        if ended := self.delivery_mode.on_file():
+            return ended
         await asyncio.sleep(self.batch_gap_seconds)
+        return None
 
     async def publishing(self, socket: ClientWebSocketResponse) -> None:
         try:
@@ -662,23 +721,23 @@ class InboxSocket:
             frame = await socket.receive()
             match frame.type:
                 case WSMsgType.TEXT:
-                    await self.received(frame.data, socket)
+                    if ended := await self.received(frame.data, socket):
+                        return ended
                 case WSMsgType.CLOSE:
                     return WatchEnd.closed(socket.close_code, f": {frame.extra}" if frame.extra else "")
                 case WSMsgType.CLOSING | WSMsgType.CLOSED | WSMsgType.ERROR:
                     return WatchEnd.closed(socket.close_code, "")
 
-    async def received(self, frame: str, socket: ClientWebSocketResponse) -> None:
+    async def received(self, frame: str, socket: ClientWebSocketResponse) -> WatchEnd | None:
         """A message, a piece of a file one carries, or the connector's reconnect URL, which
         is kept and never shown."""
         if frame.startswith(ReconnectUrl.wire_prefix):
             self.redials.held = ReconnectWith(ReconnectUrl.model_validate_json(frame).url)
             self.redials.told = self.redials.told.reconnectable()
-            return
+            return None
         if frame.startswith(WatchedFilePart.wire_prefix):
-            await self.filed(WatchedFilePart.model_validate_json(frame))
-            return
-        await self.deliver(frame, socket)
+            return await self.filed(WatchedFilePart.model_validate_json(frame))
+        return await self.deliver(frame, socket)
 
 
 def main() -> None:
@@ -690,9 +749,16 @@ def main() -> None:
         default=None,
         help="Explicit Antigravity transcript.jsonl path to stream alongside the inbox watch",
     )
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Exit 0 after printing one delivered message (and any attached files) to wake harnesses without streaming Monitor",
+    )
     args = parser.parse_args()
     exports = Path.home() / ".local" / "state" / "claude-comms-inbox" / "cloud" / "messages"
-    socket = InboxSocket(args.url, exports, session_transcript(args.transcript))
+    mode: WatchDeliveryMode = ExitAfterDelivery() if args.once else ContinuousDelivery()
+    socket = InboxSocket(args.url, exports, session_transcript(args.transcript), delivery_mode=mode)
     ended = asyncio.run(socket.carried())
-    print(ended.line(), flush=True)
+    if line := ended.line():
+        print(line, flush=True)
     sys.exit(ended.exit_code)

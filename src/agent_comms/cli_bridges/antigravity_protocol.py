@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import uuid
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass, field
@@ -9,6 +10,7 @@ from typing import ClassVar
 
 from pydantic import Field, JsonValue
 
+from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.cli_protocol import HistoryRecord, TaggedWire
 from agent_comms.cli_bridges.runtime_updates import (
     ActiveItem,
@@ -23,12 +25,17 @@ from agent_comms.cli_bridges.runtime_updates import (
     ToolDraft,
     TurnStarted,
 )
+from agent_comms.cli_bridges.shared import (
+    ForeignMonitorFrame,
+    MonitorObservation,
+    ObservedMonitor,
+)
 from agent_comms.cli_bridges.tool_calls import ToolCall
 from agent_comms.cli_bridges.wire_models import WireModel
 from agent_comms.execution.runtime_observations import TranscriptModelUsage
-from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
+from agent_comms.execution.turn_item import NamedSourceTurn, NativeItemId, NativeTurnId
 from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase
-from agent_comms.nominal.field_codec import TimestampText, ToolCallId
+from agent_comms.nominal.field_codec import TimestampText, ToolCallId, TranscriptRecordId
 from agent_comms.pi_counts import ReportedCount, UnreportedCount
 from agent_comms.registry.thread_model import ThreadModel
 from agent_comms.storage.recorded_time import EventTime
@@ -298,10 +305,48 @@ class CheckpointRecord(AntigravityRecord, declared_name="CHECKPOINT"):
         return (Summarized(self.content),) if self.content else ()
 
 
+_COMMAND_OUTPUT_MARKER = "Command output:\n"
+_LOG_TRAILER_RE = re.compile(r"\nLog: file://.*$", re.DOTALL)
+
+
+def _extract_command_output(content: str) -> str:
+    """Return the stdout body from an Antigravity background-task completion system message."""
+    normalized = content.replace("\r\n", "\n")
+    marker = normalized.find(_COMMAND_OUTPUT_MARKER)
+    if marker < 0:
+        return ""
+    body = normalized[marker + len(_COMMAND_OUTPUT_MARKER) :]
+    body = _LOG_TRAILER_RE.sub("", body)
+    body = body.removesuffix("</SYSTEM_MESSAGE>")
+    return body.rstrip("\n")
+
+
 class SystemMessageRecord(AntigravityRecord, declared_name="SYSTEM_MESSAGE"):
-    """Internal system message injected by Antigravity."""
+    """Internal system message injected by Antigravity, including background-task wake outputs."""
 
     content: str = ""
+
+    def updates(self, session: AntigravitySession) -> tuple[RuntimeUpdate, ...]:
+        output = _extract_command_output(self.content)
+        if not output:
+            return ()
+        frames = tuple(
+            frame
+            for frame in ClaudeMonitorFrame.decode_event(output)
+            if not isinstance(frame, ForeignMonitorFrame)
+        )
+        if not frames:
+            return ()
+        turn_id = session.open_turn(self.step_index)
+        record_id = TranscriptRecordId(
+            str(uuid.uuid5(uuid.NAMESPACE_URL, f"antigravity:{self.step_index}:{self.created_at}"))
+        )
+        observed = ObservedMonitor(record_id, self.timestamp)
+        source_turn = NamedSourceTurn(turn_id)
+        return (
+            TurnStarted(turn_id),
+            *(MonitorObservation(frame, observed, source_turn=source_turn) for frame in frames),
+        )
 
 
 class UnknownAntigravityRecord(AntigravityRecord, declared_name="unknown"):
