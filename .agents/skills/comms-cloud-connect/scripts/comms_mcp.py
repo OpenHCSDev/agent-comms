@@ -16,6 +16,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -426,6 +427,25 @@ def cmd_run_watch(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_wake_on(args: argparse.Namespace) -> int:
+    log = Path(args.log).expanduser()
+    while not log.exists():
+        time.sleep(0.5)
+    pos = args.offset if args.offset is not None else log.stat().st_size
+    while True:
+        time.sleep(args.poll)
+        cur = log.stat().st_size
+        if cur > pos:
+            with log.open("rb") as fh:
+                fh.seek(pos)
+                chunk = fh.read().decode("utf-8", errors="replace")
+            sys.stdout.write(chunk)
+            sys.stdout.flush()
+            return 0
+        if cur < pos:
+            pos = cur
+
+
 def _find_agent_comms_root(hint: str | None) -> Path | None:
     candidates: list[Path] = []
     if hint:
@@ -535,6 +555,12 @@ def main() -> int:
     p_watch.add_argument("--transcript", default=None, help="Explicit Antigravity transcript.jsonl path")
     p_watch.add_argument("--once", action="store_true", help="Exit 0 after printing one delivered message (for harnesses waking on exit)")
     p_watch.set_defaults(func=cmd_run_watch)
+
+    p_wake = sub.add_parser("wake-on", help="Exit with new lines as soon as a run-watch log grows (reactive wakeup)")
+    p_wake.add_argument("log", help="Path to the run-watch daemon log file")
+    p_wake.add_argument("--poll", type=float, default=2.0, help="Poll interval in seconds (default: 2.0)")
+    p_wake.add_argument("--offset", type=int, default=None, help="Starting byte offset (default: current file size)")
+    p_wake.set_defaults(func=cmd_wake_on)
 
     p_deal = sub.add_parser("list-deal", help="Print ordered paper/rule/pattern files to read in full")
     p_deal.add_argument("repo", nargs="?", default=None, help="Path to agent-comms checkout")
