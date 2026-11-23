@@ -402,15 +402,21 @@ def cmd_run_watch(args: argparse.Namespace) -> int:
     if not url:
         raise SystemExit("comms_watch did not return a watch URL.")
 
+    extra_args: list[str] = []
+    if args.transcript:
+        extra_args.extend(["--transcript", str(args.transcript)])
+    if args.once:
+        extra_args.append("--once")
+
     watch_bin = shutil.which("agent-comms-inbox-watch")
     if watch_bin:
-        return subprocess.run([watch_bin, url]).returncode
+        return subprocess.run([watch_bin, url, *extra_args]).returncode
 
     root = _find_agent_comms_root(args.repo)
     uv_bin = shutil.which("uv")
     if root is not None and uv_bin:
         return subprocess.run(
-            [uv_bin, "run", "--locked", "--no-dev", "agent-comms-inbox-watch", url],
+            [uv_bin, "run", "--locked", "--no-dev", "agent-comms-inbox-watch", url, *extra_args],
             cwd=str(root),
         ).returncode
 
@@ -526,6 +532,8 @@ def main() -> int:
     p_watch.add_argument("--thread", default="", help="Override fork thread name for this watch")
     p_watch.add_argument("--no-fork", action="store_true", help="Watch the top-level connector thread without fork")
     p_watch.add_argument("--repo", default=None, help="Path to agent-comms checkout when agent-comms-inbox-watch is not on PATH")
+    p_watch.add_argument("--transcript", default=None, help="Explicit Antigravity transcript.jsonl path")
+    p_watch.add_argument("--once", action="store_true", help="Exit 0 after printing one delivered message (for harnesses waking on exit)")
     p_watch.set_defaults(func=cmd_run_watch)
 
     p_deal = sub.add_parser("list-deal", help="Print ordered paper/rule/pattern files to read in full")
