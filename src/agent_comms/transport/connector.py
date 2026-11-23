@@ -100,6 +100,7 @@ from agent_comms.transport.connector_caller import (
     ConnectorCaller,
     ConnectorTool,
     GrantRefusedError,
+    ThreadConnectorTool,
 )
 from agent_comms.transport.connector_profile import (
     MCP_PATH,
@@ -202,7 +203,7 @@ class ConnectorSendTool(
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorWatchTool(MessagesArea, ConnectorTool, declared_name="comms_watch"):
+class ConnectorWatchTool(MessagesArea, ThreadConnectorTool, declared_name="comms_watch"):
     label = "Watch Inbox"
     description = (
         "Get a one-use wss:// URL that pushes your inbox, so a message wakes this session. Open it "
