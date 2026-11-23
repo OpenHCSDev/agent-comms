@@ -1,6 +1,7 @@
 """A malformed child reply releases the real worker that asked for it."""
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from queue import SimpleQueue
 from threading import Event, Thread
@@ -156,3 +157,22 @@ async def test_a_thread_read_is_served_by_the_child_and_never_kills_it(tmp_path)
         after = CoreReadOperation(str(comms.root), CommsThreadPresentationTool(thread="paged"))
         assert isinstance(await asyncio.to_thread(process.read_from_thread, after),
                           NotifiedThreadPresentation)
+
+
+async def test_saturating_the_default_executor_never_deadlocks_observation_receive(tmp_path):
+    """Toad #2209 root cause: when callers fill the loop's default executor with blocking
+    ``read_from_thread`` calls, ``ObservationProcess.receive`` must still read replies on its
+    own dedicated thread instead of queueing behind its own callers on ``asyncio.to_thread``."""
+
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(NativeThread("saturated", frozenset(), Checkout(tmp_path)))
+    loop = asyncio.get_running_loop()
+    loop.set_default_executor(ThreadPoolExecutor(max_workers=2, thread_name_prefix="bounded-default"))
+    async with ObservationProcess.awaited(comms.route) as process:
+        request = CoreReadOperation(str(comms.root), CommsThreadPresentationTool(thread="saturated"))
+        replies = await asyncio.wait_for(
+            asyncio.gather(*(asyncio.to_thread(process.read_from_thread, request) for _ in range(6))),
+            timeout=10,
+        )
+    assert len(replies) == 6
+    assert all(isinstance(reply, NotifiedThreadPresentation) for reply in replies)
