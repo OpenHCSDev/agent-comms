@@ -406,8 +406,6 @@ def cmd_run_watch(args: argparse.Namespace) -> int:
     extra_args: list[str] = []
     if args.transcript:
         extra_args.extend(["--transcript", str(args.transcript)])
-    if args.once:
-        extra_args.append("--once")
 
     watch_bin = shutil.which("agent-comms-inbox-watch")
     if watch_bin:
@@ -428,22 +426,23 @@ def cmd_run_watch(args: argparse.Namespace) -> int:
 
 
 def cmd_wake_on(args: argparse.Namespace) -> int:
-    log = Path(args.log).expanduser()
-    while not log.exists():
-        time.sleep(0.5)
-    pos = args.offset if args.offset is not None else log.stat().st_size
-    while True:
-        time.sleep(args.poll)
-        cur = log.stat().st_size
-        if cur > pos:
-            with log.open("rb") as fh:
-                fh.seek(pos)
-                chunk = fh.read().decode("utf-8", errors="replace")
-            sys.stdout.write(chunk)
-            sys.stdout.flush()
-            return 0
-        if cur < pos:
-            pos = cur
+    watch_bin = shutil.which("agent-comms-inbox-watch")
+    wait_args = ["--wait-log", str(Path(args.log).expanduser())]
+    if args.offset is not None:
+        wait_args.extend(["--offset", str(args.offset)])
+    if watch_bin:
+        return subprocess.run([watch_bin, *wait_args]).returncode
+    root = _find_agent_comms_root(args.repo)
+    uv_bin = shutil.which("uv")
+    if root is not None and uv_bin:
+        return subprocess.run(
+            [uv_bin, "run", "--locked", "--no-dev", "agent-comms-inbox-watch", *wait_args],
+            cwd=str(root),
+        ).returncode
+    raise SystemExit(
+        "agent-comms-inbox-watch not found on PATH and no agent-comms checkout + uv found.\n"
+        "Install agent-comms or pass --repo /path/to/agent-comms."
+    )
 
 
 def _find_agent_comms_root(hint: str | None) -> Path | None:
@@ -553,12 +552,11 @@ def main() -> int:
     p_watch.add_argument("--no-fork", action="store_true", help="Watch the top-level connector thread without fork")
     p_watch.add_argument("--repo", default=None, help="Path to agent-comms checkout when agent-comms-inbox-watch is not on PATH")
     p_watch.add_argument("--transcript", default=None, help="Explicit Antigravity transcript.jsonl path")
-    p_watch.add_argument("--once", action="store_true", help="Exit 0 after printing one delivered message (for harnesses waking on exit)")
     p_watch.set_defaults(func=cmd_run_watch)
 
-    p_wake = sub.add_parser("wake-on", help="Exit with new lines as soon as a run-watch log grows (reactive wakeup)")
+    p_wake = sub.add_parser("wake-on", help="Wait event-driven via agent-comms-inbox-watch --wait-log")
     p_wake.add_argument("log", help="Path to the run-watch daemon log file")
-    p_wake.add_argument("--poll", type=float, default=2.0, help="Poll interval in seconds (default: 2.0)")
+    p_wake.add_argument("--repo", default=None, help="Path to agent-comms checkout when agent-comms-inbox-watch is not on PATH")
     p_wake.add_argument("--offset", type=int, default=None, help="Starting byte offset (default: current file size)")
     p_wake.set_defaults(func=cmd_wake_on)
 
