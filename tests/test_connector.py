@@ -1681,13 +1681,29 @@ async def test_a_connector_names_its_bus_at_the_handshake(client, comms):
         "params": {"protocolVersion": PROTOCOL_VERSION, "capabilities": {},
                    "clientInfo": {"name": "test", "version": "1"}},
     })
-    instructions = (await response.json())["result"]["instructions"]
+    result = (await response.json())["result"]
+    instructions = result["instructions"]
     assert str(comms.root.resolve()) in instructions
     # The token, not the sentence around it: the sentence a bus with no identity answers
     # opens with the same words up to the root, which is how this first passed vacuously.
     named = re.search(r"identified as (\w+)", instructions)
     assert named and minted.holds(named.group(1)), f"No bus is named in: {instructions}"
     assert "distinct name" in instructions
+    assert result["serverInfo"] == {"name": minted.server_name(), "version": "1"}
+
+
+async def test_tailnet_connectors_announce_distinct_server_info_names(store, comms):
+    """Two tailnet connectors on different machines must not share ServerInfo.name='agent-comms',
+    which causes clients like Gemini Custom Connected Apps to reject the second connection."""
+    gaming = Connector(store, "https://ts-gaming.tail553874.ts.net", comms.root)
+    laptop = Connector(store, "https://laptop.tail553874.ts.net", comms.root)
+    loopback = Connector(store, "http://127.0.0.1:18766", comms.root)
+    assert gaming.server_info().name == "agent-comms-ts-gaming"
+    assert laptop.server_info().name == "agent-comms-laptop"
+    assert loopback.server_info().name == "agent-comms"
+    minted = BusIdentityStore.minted_for(comms.root.resolve())
+    assert loopback.server_info().name == minted.server_name()
+    assert gaming.server_info().name == "agent-comms-ts-gaming"
 
 
 async def test_a_call_that_asks_for_progress_streams_it_then_its_reply(client, store, comms, tmp_path):
