@@ -17,11 +17,10 @@ from agent_comms.cli_bridges.antigravity_transcript import (
 from agent_comms.cli_bridges.history import OfflineHistory, OnlineHistory
 from agent_comms.cli_bridges.inbox_watch_client import (
     AntigravityFollowedTranscript,
-    ExitAfterDelivery,
     FollowedTranscript,
     InboxSocket,
-    WatchDelivered,
     session_transcript,
+    wait_for_log_growth,
 )
 from agent_comms.cli_bridges.harness_delivery_states import (
     AcknowledgedReceipt,
@@ -327,7 +326,7 @@ async def test_inbox_watch_streams_antigravity_transcript_and_live_activity(
                         await watch
 
 
-async def test_inbox_watch_once_exits_on_message_and_antigravity_transcript_confirms_delivery(
+async def test_antigravity_persistent_watch_confirms_pty_double_cr_sync_and_async_wake(
     tmp_path: Path, comms: Comms, capsys: pytest.CaptureFixture[str]
 ) -> None:
     comms.registry.declare(ExternalThread("claude-ai", frozenset(), Checkout(comms.root)))
@@ -346,90 +345,117 @@ async def test_inbox_watch_once_exits_on_message_and_antigravity_transcript_conf
     transcript.parent.mkdir(parents=True)
     transcript.write_text(_sample_antigravity_lines()[0] + "\n", encoding="utf-8")
 
-    async def fresh_url(client: TestClient, token: str) -> str:
-        resp = await client.post(
-            "/mcp",
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {"name": "comms_watch", "arguments": {"fork": {"name": "agy-wake"}}},
-            },
-        )
-        reply = await resp.json()
-        assert not reply["result"]["isError"], reply
-        return str(client.make_url(URL(reply["result"]["structuredContent"]["url"]).path))
+    # Event-driven wait_for_log_growth wakes on append and normalizes PTY \r\n -> \n.
+    watch_log = tmp_path / "watch.log"
+    watch_log.write_bytes(b"initial\r\n")
+    waiter = asyncio.create_task(wait_for_log_growth(watch_log))
+    await asyncio.sleep(0.1)
+    with watch_log.open("ab") as fh:
+        fh.write(b"line-one\r\r\nline-two\r\n")
+    assert await asyncio.wait_for(waiter, timeout=5) == "line-one\nline-two\n"
 
     async with TestServer(connector.application(), port=port) as server:
         async with TestClient(server) as client:
             with store.granted("test") as token:
-                url1 = await fresh_url(client, token)
-                watch1 = asyncio.create_task(
-                    InboxSocket(
-                        url1,
-                        tmp_path / "messages",
-                        AntigravityFollowedTranscript(transcript),
-                        delivery_mode=ExitAfterDelivery(),
-                    ).carried()
+                resp = await client.post(
+                    "/mcp",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {"name": "comms_watch", "arguments": {"fork": {"name": "agy-wake"}}},
+                    },
                 )
-                await asyncio.sleep(0.2)
-                sent = comms.messaging.send("sender", "agy-wake", "yo from toad").message
-                ended = await asyncio.wait_for(watch1, timeout=15)
-                assert isinstance(ended, WatchDelivered)
-                assert ended.exit_code == 0
-                assert ended.line() == ""
+                reply = await resp.json()
+                assert not reply["result"]["isError"], reply
+                url = str(client.make_url(URL(reply["result"]["structuredContent"]["url"]).path))
 
-                printed = capsys.readouterr().out
-                assert f"{sent.seq}-{sent.message_id}" in printed
-                assert "yo from toad" in printed
-
-                # Simulate Antigravity writing the completed wake task's stdout into transcript.jsonl,
-                # then re-arming the watch on the next turn so PushedTranscript confirms delivery.
-                wake_step = {
-                    "step_index": 7,
-                    "source": "SYSTEM",
-                    "type": "SYSTEM_MESSAGE",
-                    "status": "DONE",
-                    "created_at": "2026-11-23T18:01:00Z",
-                    "content": (
-                        "The following is a <SYSTEM_MESSAGE>...\n\n<SYSTEM_MESSAGE>\n"
-                        '[Message] content=Task id "t-1" finished with result:\n'
-                        "Command exited with code 0.\n\n"
-                        f"Command output:\n{printed}\n"
-                        "Log: file:///tmp/task-1.log\n"
-                        "</SYSTEM_MESSAGE>"
-                    ),
-                }
-                with transcript.open("a", encoding="utf-8") as fh:
-                    fh.write(json.dumps(wake_step) + "\n")
-
-                url2 = await fresh_url(client, token)
-                watch2 = asyncio.create_task(
+                watch = asyncio.create_task(
                     InboxSocket(
-                        url2,
+                        url,
                         tmp_path / "messages",
                         AntigravityFollowedTranscript(transcript),
                     ).carried()
                 )
                 try:
+                    await asyncio.sleep(0.2)
+                    async_msg = comms.messaging.send("sender", "agy-wake", "async wake body").message
+                    sync_msg = comms.messaging.send("sender", "agy-wake", "sync wake body").message
+
+                    async with asyncio.timeout(15):
+                        printed = ""
+                        while (
+                            f"{async_msg.seq}-{async_msg.message_id}" not in printed
+                            or f"{sync_msg.seq}-{sync_msg.message_id}" not in printed
+                        ):
+                            printed += capsys.readouterr().out
+                            await asyncio.sleep(0.05)
+
+                    # Simulate double-CR PTY output in both SYSTEM_MESSAGE (async wake) and
+                    # GENERIC (synchronous run_command completion) while the same watch stays open.
+                    async_lines = [
+                        line for line in printed.splitlines()
+                        if f"{async_msg.seq}-{async_msg.message_id}" in line or line == "async wake body"
+                    ]
+                    sync_lines = [
+                        line for line in printed.splitlines()
+                        if f"{sync_msg.seq}-{sync_msg.message_id}" in line or line == "sync wake body"
+                    ]
+                    async_step = {
+                        "step_index": 7,
+                        "source": "SYSTEM",
+                        "type": "SYSTEM_MESSAGE",
+                        "status": "DONE",
+                        "created_at": "2026-11-23T18:01:00Z",
+                        "content": (
+                            "<SYSTEM_MESSAGE>\nCommand exited with code 0.\n\n"
+                            "Command output:\n"
+                            + "\r\r\n".join(async_lines)
+                            + "\r\r\n\nLog: file:///tmp/task-1.log\n</SYSTEM_MESSAGE>"
+                        ),
+                    }
+                    sync_step = {
+                        "step_index": 8,
+                        "source": "MODEL",
+                        "type": "GENERIC",
+                        "status": "DONE",
+                        "created_at": "2026-11-23T18:01:05Z",
+                        "content": (
+                            "Command exited with code 0.\n\n"
+                            "Command output:\n"
+                            + "\r\r\n".join(sync_lines)
+                            + "\r\r\n"
+                        ),
+                    }
+                    with transcript.open("a", encoding="utf-8") as fh:
+                        fh.write(json.dumps(async_step) + "\n")
+                        fh.write(json.dumps(sync_step) + "\n")
+
                     lookup = comms.registry.require("agy-wake").incarnation.require_recorded().lookup
                     async with asyncio.timeout(15):
                         while True:
                             with comms.registry.store.coordinator_reader.reader_snapshot() as db:
-                                rows = HarnessDelivery.select(
-                                    db,
-                                    bridge=RemoteWatchHistory,
-                                    recipient_lookup=lookup,
-                                    message_id=sent.message_id,
+                                r1 = HarnessDelivery.select(
+                                    db, bridge=RemoteWatchHistory,
+                                    recipient_lookup=lookup, message_id=async_msg.message_id,
                                 )
-                            if any(row.outcome is DeliveredOutcome for row in rows):
+                                r2 = HarnessDelivery.select(
+                                    db, bridge=RemoteWatchHistory,
+                                    recipient_lookup=lookup, message_id=sync_msg.message_id,
+                                )
+                            if (
+                                any(row.outcome is DeliveredOutcome and isinstance(row.monitor, ObservedMonitor) for row in r1)
+                                and any(row.outcome is DeliveredOutcome and isinstance(row.monitor, ObservedMonitor) for row in r2)
+                            ):
                                 break
                             await asyncio.sleep(0.05)
+                    # Persistent watch never exited!
+                    assert not watch.done()
                 finally:
-                    watch2.cancel()
+                    watch.cancel()
                     with pytest.raises(asyncio.CancelledError):
-                        await watch2
+                        await watch
 
 
 async def test_local_thread_grant_calls_comms_watch_and_binds_existing_external_thread(

@@ -273,12 +273,14 @@ class GenericStepRecord(AntigravityRecord, declared_name="GENERIC"):
             return ()
         ok = self.status != "ERROR"
         body = self.error if (not ok and self.error) else self.content
+        observations = _monitor_observations(self, body, session, open_turn=False) if ok else ()
         if session.pending_tools:
             draft = session.pending_tools.popleft()
             events = (*draft.events, draft.call.ended(body, ok, self.position, ts))
             return (
                 FinishedItem(turn_id=turn_id, item_id=draft.item_id, events=events),
                 ActiveItem(turn_id, draft.item_id, ModelWaitPhase()),
+                *observations,
             )
         if not ok and body:
             err_id = NativeItemId(f"agy-err-{self.step_index}")
@@ -289,7 +291,7 @@ class GenericStepRecord(AntigravityRecord, declared_name="GENERIC"):
                     events=(NoticeTranscript(body, position=self.position, timestamp=ts),),
                 ),
             )
-        return ()
+        return observations
 
 
 class CheckpointRecord(AntigravityRecord, declared_name="CHECKPOINT"):
@@ -307,11 +309,12 @@ class CheckpointRecord(AntigravityRecord, declared_name="CHECKPOINT"):
 
 _COMMAND_OUTPUT_MARKER = "Command output:\n"
 _LOG_TRAILER_RE = re.compile(r"\nLog: file://.*$", re.DOTALL)
+_CRLF_RE = re.compile(r"\r+\n")
 
 
 def _extract_command_output(content: str) -> str:
-    """Return the stdout body from an Antigravity background-task completion system message."""
-    normalized = content.replace("\r\n", "\n")
+    """Return the normalized stdout body from an Antigravity command completion record."""
+    normalized = _CRLF_RE.sub("\n", content).replace("\r", "\n")
     marker = normalized.find(_COMMAND_OUTPUT_MARKER)
     if marker < 0:
         return ""
@@ -321,32 +324,42 @@ def _extract_command_output(content: str) -> str:
     return body.rstrip("\n")
 
 
+def _monitor_observations(
+    record: AntigravityRecord,
+    content: str,
+    session: AntigravitySession,
+    *,
+    open_turn: bool,
+) -> tuple[RuntimeUpdate, ...]:
+    output = _extract_command_output(content)
+    if not output:
+        return ()
+    frames = tuple(
+        frame
+        for frame in ClaudeMonitorFrame.decode_event(output)
+        if not isinstance(frame, ForeignMonitorFrame)
+    )
+    if not frames:
+        return ()
+    turn_id = session.open_turn(record.step_index) if open_turn else session.turn_id
+    record_id = TranscriptRecordId(
+        str(uuid.uuid5(uuid.NAMESPACE_URL, f"antigravity:{record.step_index}:{record.created_at}"))
+    )
+    observed = ObservedMonitor(record_id, record.timestamp)
+    source_turn = NamedSourceTurn(turn_id)
+    observations = tuple(
+        MonitorObservation(frame, observed, source_turn=source_turn) for frame in frames
+    )
+    return (TurnStarted(turn_id), *observations) if open_turn else observations
+
+
 class SystemMessageRecord(AntigravityRecord, declared_name="SYSTEM_MESSAGE"):
     """Internal system message injected by Antigravity, including background-task wake outputs."""
 
     content: str = ""
 
     def updates(self, session: AntigravitySession) -> tuple[RuntimeUpdate, ...]:
-        output = _extract_command_output(self.content)
-        if not output:
-            return ()
-        frames = tuple(
-            frame
-            for frame in ClaudeMonitorFrame.decode_event(output)
-            if not isinstance(frame, ForeignMonitorFrame)
-        )
-        if not frames:
-            return ()
-        turn_id = session.open_turn(self.step_index)
-        record_id = TranscriptRecordId(
-            str(uuid.uuid5(uuid.NAMESPACE_URL, f"antigravity:{self.step_index}:{self.created_at}"))
-        )
-        observed = ObservedMonitor(record_id, self.timestamp)
-        source_turn = NamedSourceTurn(turn_id)
-        return (
-            TurnStarted(turn_id),
-            *(MonitorObservation(frame, observed, source_turn=source_turn) for frame in frames),
-        )
+        return _monitor_observations(self, self.content, session, open_turn=True)
 
 
 class UnknownAntigravityRecord(AntigravityRecord, declared_name="unknown"):
