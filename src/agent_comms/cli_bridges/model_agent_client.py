@@ -19,14 +19,16 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from contextlib import ExitStack
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from typing import ClassVar
 
 from agent_comms.comms import Comms
 from agent_comms.conversational_slop import ResponseContext, SlopVerdict, verify_all
+from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ProcessName
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.active_route import resolve_comms_route
@@ -41,12 +43,79 @@ from agent_comms.registry.threads import ExternalThread
 MODEL_AGENT_PROCESS = ProcessName("ac-model-agent")
 
 
+class SamplingOutcome(ABC):
+    """State of rejection sampling across candidate completions."""
+
+    settled: ClassVar[bool] = False
+
+    @abstractmethod
+    def consider(self, reply: ChatCompletion, verdict: SlopVerdict) -> SamplingOutcome: ...
+
+    @abstractmethod
+    def finish(self, attempts: int) -> tuple[ModelReply, str]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NoCandidate(SamplingOutcome):
+    def consider(self, reply: ChatCompletion, verdict: SlopVerdict) -> SamplingOutcome:
+        return ScoredCandidate(reply, verdict)
+
+    def finish(self, attempts: int) -> tuple[ModelReply, str]:
+        raise RuntimeError("Rejection sampling finished without any candidate")
+
+
+@dataclass(frozen=True, slots=True)
+class ScoredCandidate(SamplingOutcome):
+    reply: ChatCompletion
+    verdict: SlopVerdict
+
+    def consider(self, reply: ChatCompletion, verdict: SlopVerdict) -> SamplingOutcome:
+        if verdict.structural_reward > self.verdict.structural_reward:
+            return ScoredCandidate(reply, verdict)
+        return self
+
+    def finish(self, attempts: int) -> tuple[ModelReply, str]:
+        footer = (f"\n\n> _rejection-sampled {attempts}×, best reward "
+                  f"{self.verdict.structural_reward:.2f}; triggered {self.verdict.triggered}_")
+        return self.reply, self.reply.display() + footer
+
+
+@dataclass(frozen=True, slots=True)
+class SettledCandidate(SamplingOutcome):
+    settled: ClassVar[bool] = True
+    reply: ModelReply
+    rendered: str
+
+    def consider(self, reply: ChatCompletion, verdict: SlopVerdict) -> SamplingOutcome:
+        return self
+
+    def finish(self, attempts: int) -> tuple[ModelReply, str]:
+        return self.reply, self.rendered
+
+
 class ModelReply(DeclaredFamily, affix="Reply"):
     """Everything a chat/completions call can produce: one completion, or one named failure."""
 
     @abstractmethod
     def display(self) -> str:
         """The text the sender sees on the bus."""
+
+    def record_in(self, history: list[dict[str, str]]) -> None:
+        """Only successful completions enter per-sender conversation history."""
+
+    def log_summary(self, rendered: str) -> str:
+        """Failure types log their reply content inline so stdout shows what failed."""
+        return self.display()
+
+    def sample(
+        self,
+        attempt: int,
+        total: int,
+        context: ResponseContext,
+        current: SamplingOutcome,
+    ) -> SamplingOutcome:
+        """Transport/decode failures settle immediately instead of being rejection-sampled."""
+        return SettledCandidate(self, self.display())
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +127,27 @@ class ChatCompletion(ModelReply):
     def display(self) -> str:
         return (f"{self.content}\n\n---\n"
                 f"_{self.completion_tokens or '?'} tokens, finish {self.finish_reason}_")
+
+    def record_in(self, history: list[dict[str, str]]) -> None:
+        history.append({"role": "assistant", "content": self.content})
+
+    def log_summary(self, rendered: str) -> str:
+        return f"{len(rendered)} chars"
+
+    def sample(
+        self,
+        attempt: int,
+        total: int,
+        context: ResponseContext,
+        current: SamplingOutcome,
+    ) -> SamplingOutcome:
+        verdict = verify_all(self.content, context)
+        print(f"[model-agent]   candidate {attempt + 1}/{total}: "
+              f"reward={verdict.structural_reward:.2f} triggered={verdict.triggered}",
+              flush=True)
+        if verdict.passed:
+            return SettledCandidate(self, self.display())
+        return current.consider(self, verdict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,14 +312,9 @@ class ModelAgent:
             reply, rendered = await self._best_reply(loop, history)
             comms.messaging.send(self.name, message.exact_reply_target, rendered, InfoKind,
                                  answers=(message.reference,))
-            if isinstance(reply, ChatCompletion):
-                history.append({"role": "assistant", "content": reply.content})
-            # Success types log a char count; failure types log their reply content
-            # inline so the daemon stdout shows WHAT failed without a bus check.
-            suffix = (f"{len(rendered)} chars" if isinstance(reply, ChatCompletion)
-                      else reply.display())
+            reply.record_in(history)
             print(f"[model-agent] replied to {message.sender} with "
-                  f"{type(reply).__name__}: {suffix}", flush=True)
+                  f"{type(reply).__name__}: {reply.log_summary(rendered)}", flush=True)
 
     async def _register(self, comms: Comms) -> None:
         """Declare this thread as a CLI endpoint in its channels before watching or sending.
@@ -243,20 +328,21 @@ class ModelAgent:
         snapshot = comms.registry.snapshot()
         if snapshot.taken(self.name):
             current = comms.registry.require(self.name)
-            if isinstance(current, ExternalThread):
-                if self.channels <= current.tags:
-                    return
-                thread = replace(current, tags=current.tags | self.channels)
-            elif self.takeover:
+            try:
+                thread = current.as_external_endpoint(self.channels)
+            except RelationViolationError:
+                if not self.takeover:
+                    print(f"[model-agent] {self.name!r} is a {type(current).__name__} thread, "
+                          "not a CLI endpoint; restart with --takeover "
+                          "(comms_serve_model replace=true) to replace it", flush=True)
+                    raise SystemExit(2)
                 await comms.bus.when_open(partial(comms.threads.delete, self.name))
                 print(f"[model-agent] deleted the stopped {type(current).__name__} declaration "
                       f"of {self.name!r} to take the name over", flush=True)
                 thread = ExternalThread(self.name, self.channels, Checkout(Path.cwd()))
             else:
-                print(f"[model-agent] {self.name!r} is a {type(current).__name__} thread, not a "
-                      "CLI endpoint; restart with --takeover (comms_serve_model replace=true) to "
-                      "replace it", flush=True)
-                raise SystemExit(2)
+                if thread is current:
+                    return
         else:
             thread = ExternalThread(self.name, self.channels, Checkout(Path.cwd()))
         await comms.bus.when_open(partial(comms.registry.declare, thread))
@@ -294,7 +380,7 @@ class ModelAgent:
         return AfterMessageStart((answered or references)[-1])
 
     async def _best_reply(self, loop: asyncio.AbstractEventLoop,
-                          messages: list[dict]) -> tuple[ModelReply, str]:
+                          messages: list[dict[str, str]]) -> tuple[ModelReply, str]:
         """Return (reply-member, text-to-send).
 
         Single-pass (k=1): the reply's display() goes straight through.
@@ -306,28 +392,13 @@ class ModelAgent:
             reply = await loop.run_in_executor(None, self.endpoint.call, messages)
             return reply, reply.display()
 
-        best: tuple[ModelReply, SlopVerdict] | None = None
+        outcome: SamplingOutcome = NoCandidate()
         for attempt in range(self.rejection_k):
             reply = await loop.run_in_executor(None, self.endpoint.call, messages)
-            if not isinstance(reply, ChatCompletion):
-                # Transport/decode failures don't get rejection-sampled; a pod that is
-                # 500ing will 500 every candidate, so return the first non-success
-                # immediately with its display() text.
-                return reply, reply.display()
-            verdict = verify_all(reply.content, self.verifier_context)
-            print(f"[model-agent]   candidate {attempt + 1}/{self.rejection_k}: "
-                  f"reward={verdict.structural_reward:.2f} triggered={verdict.triggered}",
-                  flush=True)
-            if verdict.passed:
-                return reply, reply.display()
-            if best is None or verdict.structural_reward > best[1].structural_reward:
-                best = (reply, verdict)
-
-        assert best is not None  # k > 1 means we entered the loop at least once
-        reply, verdict = best
-        footer = (f"\n\n> _rejection-sampled {self.rejection_k}×, best reward "
-                  f"{verdict.structural_reward:.2f}; triggered {verdict.triggered}_")
-        return reply, reply.display() + footer
+            outcome = reply.sample(attempt, self.rejection_k, self.verifier_context, outcome)
+            if outcome.settled:
+                break
+        return outcome.finish(self.rejection_k)
 
 
 def main() -> None:
