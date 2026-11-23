@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 
 import json
 from collections.abc import Iterable, Mapping
@@ -18,11 +17,8 @@ from agent_comms.registry.namespace_reads import NamespaceRead
 from agent_comms.registry.recipient_activity import UnavailableRecipientActivity
 from agent_comms.registry.recipient_selection import RecipientSelection
 from agent_comms.registry.registry_names import RegistryNames as RegistryNames
+from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread, ThreadProvenance
-
-if TYPE_CHECKING:
-    from agent_comms.registry.thread_identity import ThreadIncarnation
-
 
 @dataclass(frozen=True, slots=True)
 class KnownRecipient(RecipientSelection):

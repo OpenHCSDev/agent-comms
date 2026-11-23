@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 
 from dataclasses import dataclass
 
@@ -12,10 +11,7 @@ from agent_comms.messaging.notification_progress import (
     TakenProgress,
 )
 from agent_comms.nominal.declared_family import DeclaredFamily
-
-if TYPE_CHECKING:
-    from agent_comms.registry.thread_identity import ThreadIncarnation
-
+from agent_comms.registry.thread_identity import ThreadIncarnation
 
 class RecipientActivity(
     DeclaredFamily,

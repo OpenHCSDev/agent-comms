@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,7 +19,6 @@ class BoardActionOffer(
     FrozenRecordMember,
     TaggedRecordMember,
     DeclaredFamily,
-    ABC,
     affix="Offer",
 ):
     """One action retains its declaration and bound source identity across the UI boundary."""

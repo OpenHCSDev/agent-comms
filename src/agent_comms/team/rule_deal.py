@@ -235,7 +235,7 @@ class Mute(Voice):
         return
 
 
-class DealDelivery(DeclaredFamily, ABC, affix="Delivery"):
+class DealDelivery(DeclaredFamily, affix="Delivery"):
     """How a session receives the sources it is dealt. The launch identity and the gate both
     hold this member, so they cannot disagree about what entered the system prompt."""
 
