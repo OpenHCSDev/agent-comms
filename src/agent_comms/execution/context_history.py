@@ -5,10 +5,16 @@ prompt, every turn of the context as it was last sent, and the budget's state. A
 is a commit, so the context has a history, a diff per edit, and a content id. Whoever holds
 the context says what it is (``ContextView``); a served thread's is the view its harness
 publishes, a practice attempt's is its own document.
+
+What a turn showed before any cut is its original, and it is an array, not text: Polystore's
+Zarr backend keeps it once under its content id beside the repository, and the commit's
+``originals.json`` says which original each recorded turn had. A view that cut or dropped
+the turn leaves the original recoverable from the commit that recorded it.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,14 +24,19 @@ from agent_comms.execution.context_sizes import ContextSizes
 
 if TYPE_CHECKING:
     from polystore.git import GitBackend
+    from polystore.zarr import ZarrStorageBackend
 
 CONTEXT_DIRECTORY = "ctx"
+ORIGINALS_INDEX = "originals.json"
 
 
 @dataclass(frozen=True)
 class ViewTurn:
     role: str
     text: str
+    #: The bytes the turn arrived as, before any cut (a whole tool result, a screen, an image).
+    #: ``text`` is what was sent; ``None`` when nothing was cut.
+    original: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -59,6 +70,38 @@ class ContextHistory:
 
         return GitBackend(self.repository, f"refs/clm/{self.session}")
 
+    @property
+    def originals_store(self) -> Path:
+        """The Zarr store beside the repository that keeps this host's uncut originals."""
+        return self.repository.with_suffix(".zarr")
+
+    def retain(self, original: bytes) -> str:
+        """Keep ``original`` as an array under its content id, once, and answer the id. The
+        Zarr backend refuses a second write of a key, so an original already kept is not
+        written again."""
+        # Zarr and numpy come with Polystore, imported where an original is kept, like the branch.
+        import numpy
+        from polystore.zarr import ZarrStorageBackend
+
+        digest = hashlib.sha256(original).hexdigest()
+        store, path = ZarrStorageBackend(), self.originals_store / f"{digest}.bin"
+        if not store.exists(path):
+            store.save(numpy.frombuffer(original, dtype=numpy.uint8), path)
+        return digest
+
+    def original(self, turn: str, ref: str | None = None) -> bytes | None:
+        """What ``turn`` (its ``ctx/`` file) showed before any cut, as of the commit ``ref``
+        (the newest by default). ``None`` for a turn that was recorded uncut."""
+        try:
+            digest = json.loads(self.branch().load_text(ORIGINALS_INDEX, ref=ref)).get(turn)
+        except (FileNotFoundError, ValueError):
+            return None
+        if digest is None:
+            return None
+        from polystore.zarr import ZarrStorageBackend
+
+        return bytes(ZarrStorageBackend().load(self.originals_store / f"{digest}.bin"))
+
     def commit(self, view: ContextView) -> str | None:
         """Commit ``view`` as this conversation's context. Answers the content id of its
         turns, or ``None`` for a context with none. That id is the turns alone; the commit is
@@ -68,13 +111,19 @@ class ContextHistory:
             f"{CONTEXT_DIRECTORY}/{number:04d}-{turn.role}.txt": turn.text
             for number, turn in enumerate(view.turns, start=1)
         }
+        originals = {
+            name: self.retain(turn.original)
+            for name, turn in zip(turns, view.turns, strict=True)
+            if turn.original
+        }
         # The turns are staged afresh as one batch, so a context that lost turns costs the same
         # few git processes as one that gained one; git stores each unchanged turn once.
         if branch.exists(CONTEXT_DIRECTORY):
             branch.delete_all(CONTEXT_DIRECTORY)
         branch.save_batch(
-            [view.system, json.dumps(view.budget, sort_keys=True), *turns.values()],
-            ["system.txt", "harness.json", *turns],
+            [view.system, json.dumps(view.budget, sort_keys=True),
+             json.dumps(originals, sort_keys=True), *turns.values()],
+            ["system.txt", "harness.json", ORIGINALS_INDEX, *turns],
         )
         branch.checkpoint(f"context: {len(turns)} turns")
         return branch.tree_id(CONTEXT_DIRECTORY) if turns else None

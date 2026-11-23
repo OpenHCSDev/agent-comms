@@ -135,6 +135,28 @@ def test_a_context_its_holder_hands_over_is_the_same_record_as_a_published_one(s
     assert (held.sizes().before, held.sizes().after) == (7, 3)
 
 
+def test_a_turns_uncut_original_is_kept_as_an_array_and_found_from_the_commit_that_recorded_it(store):
+    """The view carries a cut turn; the whole observation is a Zarr array beside the repository,
+    named by the commit, and it stays recoverable after a later view dropped the turn."""
+    held = ContextHistory(store.repository, "held")
+    uncut = ("line of a long tool result\n" * 400).encode()
+    held.commit(ContextView("SYSTEM", {"tokens": 9}, (
+        ViewTurn("user", "TASK"), ViewTurn("tool", "[cut: 400 lines]", original=uncut))))
+    first = held.branch().history()[0].id
+
+    assert held.original("ctx/0002-tool.txt") == uncut
+    assert held.original("ctx/0001-user.txt") is None
+    assert len(list(held.originals_store.glob("*.bin"))) == 1
+
+    held.commit(ContextView("SYSTEM", {"tokens": 3}, (
+        ViewTurn("user", "TASK"), ViewTurn("tool", "[cut: 400 lines]", original=uncut))))
+    assert len(list(held.originals_store.glob("*.bin"))) == 1  # kept once, not written again
+
+    held.commit(ContextView("SYSTEM", {"tokens": 1}, (ViewTurn("user", "TASK"),)))
+    assert held.original("ctx/0002-tool.txt") is None
+    assert held.original("ctx/0002-tool.txt", ref=first) == uncut
+
+
 def test_returning_to_a_conversation_restores_the_state_saved_when_it_lost_the_slot(
         store, tmp_path, llama):
     assert isinstance(turn(store, tmp_path, llama, "a", ("user", "A"), tokens=100), ColdSlot)
