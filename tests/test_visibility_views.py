@@ -9,15 +9,16 @@ from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import UserThreadRole
 from agent_comms.registry.thread_status import (
     ArchivedThreadStatus,
+    NoBridgeThreadStatus,
     StoppedThreadStatus,
 )
-from agent_comms.registry.threads import NativeThread
+from agent_comms.registry.threads import ExternalThread, NativeThread
 
 
 @pytest.mark.parametrize(("visibility", "shown"), [
-    (RosterVisibility(), {"active", "stopped"}),
+    (RosterVisibility(), {"active", "stopped", "cli-offline"}),
     (RosterVisibility(stopped=False), {"active"}),
-    (RosterVisibility(archived=True), {"active", "stopped", "archived"}),
+    (RosterVisibility(archived=True), {"active", "stopped", "cli-offline", "archived"}),
     (RosterVisibility(stopped=False, archived=True), {"active", "archived"}),
 ])
 def test_roster_visibility_selects_threads_and_channel_members(tmp_path, visibility, shown):
@@ -27,9 +28,11 @@ def test_roster_visibility_selects_threads_and_channel_members(tmp_path, visibil
     comms.owners.stop("stopped")
     comms.owners.stop("archived")
     comms.threads.archive("archived")
+    comms.registry.declare(ExternalThread("cli-offline", frozenset({'team'}), Checkout(tmp_path)))
     comms.registry.declare(NativeThread('human', frozenset({'team'}), Checkout(tmp_path), role=UserThreadRole))
     assert comms.registry.status("stopped") == StoppedThreadStatus()
     assert comms.registry.status("archived") == ArchivedThreadStatus()
+    assert comms.registry.status("cli-offline") == NoBridgeThreadStatus()
 
     snapshot = comms.views.viewer_snapshot(Checkout(tmp_path), visibility)
     assert set(snapshot.threads) == set(snapshot.channels["#team"].members) == shown
