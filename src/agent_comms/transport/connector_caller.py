@@ -103,6 +103,11 @@ class ThreadConnectorCaller(ConnectorCaller, ThreadCaller):
         self.identity(comms)
         acting.join(comms, self.own_thread())
 
+    def exposed(self) -> dict[str, type[ServedRequest] | type[ConnectorTool]]:
+        return super().exposed() | {
+            tool.declared_name: tool for tool in ConnectorTool.members_with(ThreadConnectorTool)
+        }
+
 
 @dataclass(frozen=True)
 class ReadOnlyConnectorCaller(ConnectorCaller, NoThreadCaller):
@@ -152,7 +157,8 @@ class UiCaller(ScopedUiCaller, HumanCaller):
 
 
 class ForkingCaller(ThreadConnectorCaller):
-    """A thread grant; its holder may act as one of its own registered teammate forks."""
+    """A thread grant; its holder may act as one of its own registered teammate forks, or bind
+    onto an existing independent CLI-inbox thread with its identity intact."""
 
     def acting(self, arguments: Mapping[str, object]) -> tuple[ToolCaller, Mapping[str, object]]:
         keys = {plan.key for plan in FieldCodec.field_plans(ActingFork)}
@@ -168,14 +174,6 @@ class ForkingCaller(ThreadConnectorCaller):
 
     def input_schema(self, tool: type[ToolRequest]) -> dict[str, JsonValue]:
         return FieldCodec.record_schema(tool, ActingFork)
-
-
-@dataclass(frozen=True)
-class DirectorCaller(OperatorOutcomes, ForkingCaller):
-    """claude-ai speaks for the owner, so its sends carry the director origin, which records each
-    message to a thread as a directive like the owner's own. Each remote session on this grant
-    names itself with the fork argument: an unused name is registered as claude-ai's child, and
-    an existing independent CLI-inbox thread's name binds onto that thread with its identity intact."""
 
     def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
         self.ensure_registered(comms)
@@ -197,6 +195,14 @@ class DirectorCaller(OperatorOutcomes, ForkingCaller):
                     ) from error
                 return
         acting.join(comms, self.own_thread())
+
+
+@dataclass(frozen=True)
+class DirectorCaller(OperatorOutcomes, ForkingCaller):
+    """claude-ai speaks for the owner, so its sends carry the director origin, which records each
+    message to a thread as a directive like the owner's own. Each remote session on this grant
+    names itself with the fork argument: an unused name is registered as claude-ai's child, and
+    an existing independent CLI-inbox thread's name binds onto that thread with its identity intact."""
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A directive passes DirectiveText."""
@@ -225,8 +231,14 @@ class ShortListDirectorCaller(DirectorCaller):
         return {name: tool for name, tool in self.exposed().items() if issubclass(tool, ShortListed)}
 
 
-class ConnectorTool(ServedRequest[DirectorCaller], affix="ConnectorTool"):
+class ConnectorTool[Caller: ThreadCaller = DirectorCaller](
+    ServedRequest[Caller], affix="ConnectorTool"
+):
     """Connector-only declarations are absent from the native/CLI tool registry."""
+
+
+class ThreadConnectorTool(ConnectorTool[ThreadCaller], declared_name=None):
+    """Connector-only declarations any registered thread grant may call."""
 
 
 CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.

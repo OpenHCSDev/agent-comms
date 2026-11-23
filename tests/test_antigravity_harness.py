@@ -51,7 +51,7 @@ from agent_comms.transcript.transcript_events import (
     UserTranscript,
 )
 from agent_comms.transport.connector import Connector
-from agent_comms.transport.connector_store import ConnectorStore
+from agent_comms.transport.connector_store import ConnectorStore, ReadServiceAccess
 
 
 def _sample_antigravity_lines() -> list[str]:
@@ -420,3 +420,68 @@ async def test_inbox_watch_once_exits_on_message_and_antigravity_transcript_conf
                     watch2.cancel()
                     with pytest.raises(asyncio.CancelledError):
                         await watch2
+
+
+async def test_local_thread_grant_calls_comms_watch_and_binds_existing_external_thread(
+    tmp_path: Path, comms: Comms
+) -> None:
+    comms.registry.declare(ExternalThread("antigravity", frozenset(), Checkout(comms.root)))
+    comms.registry.declare(ExternalThread("agy-existing", frozenset({"model"}), Checkout(comms.root)))
+    original = comms.registry.require("agy-existing")
+    store = ConnectorStore.at(tmp_path / "auth")
+    port = unused_port()
+    connector = Connector(store, f"http://127.0.0.1:{port}", comms.root)
+    token = store.thread_granted("antigravity")
+
+    async with TestServer(connector.application(), port=port) as server:
+        async with TestClient(server) as client:
+            resp = await client.post(
+                "/mcp",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "comms_watch",
+                        "arguments": {"fork": {"name": "agy-existing"}},
+                    },
+                },
+            )
+            reply = await resp.json()
+            assert not reply["result"]["isError"], reply
+            watch_url = reply["result"]["structuredContent"]["url"]
+            assert "/watch/" in watch_url
+
+            after = comms.registry.require("agy-existing")
+            assert after.incarnation == original.incarnation
+            assert not after.is_fork
+
+            # Director-only connector tools remain hidden from local thread grants.
+            director_only = await client.post(
+                "/mcp",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {"name": "comms_serve_model", "arguments": {}},
+                },
+            )
+            director_reply = await director_only.json()
+            assert director_reply["result"]["isError"]
+
+            # Read-only grants still cannot open an inbox watch.
+            with store.granted("readonly", grant_type=ReadServiceAccess) as ro_token:
+                ro_resp = await client.post(
+                    "/mcp",
+                    headers={"Authorization": f"Bearer {ro_token}"},
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {"name": "comms_watch", "arguments": {}},
+                    },
+                )
+                ro_reply = await ro_resp.json()
+                assert ro_reply["result"]["isError"]
