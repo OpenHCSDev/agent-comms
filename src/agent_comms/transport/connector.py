@@ -22,6 +22,7 @@ import asyncio
 import base64
 import hashlib
 import html
+import ipaddress
 import json
 import logging
 import os
@@ -141,6 +142,7 @@ from agent_comms.transport.mcp import (
     McpServer,
     MethodNotFoundError,
     ParseError,
+    ServerInfo,
     declared,
 )
 from agent_comms.transport.progress import CancellableWireExport, WireExportObserver
@@ -878,6 +880,22 @@ class Connector(ConnectorService, McpServer):
         starts, and a root prepared under this process should not keep answering that it
         has none."""
         return BusIdentityStore.serving(self.root).announced(str(self.root))
+
+    def server_info(self) -> ServerInfo:
+        """Distinct per-bus serverInfo.name so multi-connector clients (e.g. Gemini Custom
+        Connected Apps) do not reject a second bus as already connected under "agent-comms".
+
+        Prefer the public issuer's first DNS label when served on a named host (matching the
+        tailnet machine name like ``ts-gaming`` or ``laptop`` even when ``platform.node()``
+        differs), and fall back to the bus identity's own server_name on loopback/IP issuers.
+        """
+        host = (URL(self.issuer).host or "").strip()
+        if host and host.lower() != "localhost":
+            try:
+                ipaddress.ip_address(host)
+            except ValueError:
+                return ServerInfo(name=f"agent-comms-{host.split('.', 1)[0]}")
+        return ServerInfo(name=BusIdentityStore.serving(self.root).server_name())
 
     @cached_property
     def watch_tickets(self) -> WatchTickets:

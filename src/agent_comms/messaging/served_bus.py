@@ -56,6 +56,10 @@ class ServedBus(TaggedUnion, affix="Bus"):
         after reading something, and reading the wrong bus is the whole failure.
         """
 
+    @abstractmethod
+    def server_name(self) -> str:
+        """The MCP serverInfo.name distinguishing this bus from peers on other machines."""
+
 
 @dataclass(frozen=True)
 class UnidentifiedBus(NullMember, ServedBus):
@@ -77,6 +81,9 @@ class UnidentifiedBus(NullMember, ServedBus):
                 "that path is on. Other machines in this fleet keep a bus at the same path "
                 "and run threads under the same names, so a thread you find here may not be "
                 "the one you mean.")
+
+    def server_name(self) -> str:
+        return "agent-comms"
 
 
 @dataclass(frozen=True)
@@ -101,3 +108,6 @@ class IdentifiedBus(TaggedRecordMember, ServedBus):
                 f"{self.token}. Other machines in this fleet keep a bus at that same path "
                 "and run threads under the same names, so before you read a thread here as "
                 "your own, check that this is the bus you mean.")
+
+    def server_name(self) -> str:
+        return f"agent-comms-{self.host}"

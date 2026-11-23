@@ -68,6 +68,10 @@ class McpServer(ABC):
         and reading the wrong bus is the failure this answers, so the handshake says it.
         """
 
+    def server_info(self) -> ServerInfo:
+        """The MCP serverInfo identifying this endpoint's bus to multi-connector clients."""
+        return ServerInfo()
+
     @abstractmethod
     async def call(
         self, tool: type[ServedRequest] | type[ConnectorTool],
@@ -177,7 +181,12 @@ class InitializeResult(McpResult):
     )
 
     @classmethod
-    def announcing(cls, bus: str, listed: Iterable[type[ToolRequest]] = ()) -> Self:
+    def announcing(
+        cls,
+        bus: str,
+        listed: Iterable[type[ToolRequest]] = (),
+        server_info: ServerInfo = ServerInfo(),
+    ) -> Self:
         """The handshake a server answers: which bus it is, how to share it, and then what
         each listed tool has to say before its first call, so a client is never told to
         call a tool its list does not name.
@@ -187,7 +196,7 @@ class InitializeResult(McpResult):
         them, which was exactly the trouble.
         """
         said = dict.fromkeys(tool.handshake for tool in listed if tool.handshake)
-        return cls(instructions="\n\n".join((bus, cls.shared_grant, *said)))
+        return cls(server_info=server_info, instructions="\n\n".join((bus, cls.shared_grant, *said)))
 
 
 @dataclass(frozen=True)
@@ -294,7 +303,9 @@ class InitializeMessage(McpRequest, declared_name="initialize"):
     params: dict[str, object]
 
     async def result(self, connector: McpServer, caller: ConnectorCaller) -> InitializeResult:
-        return InitializeResult.announcing(connector.announces(), caller.listed().values())
+        return InitializeResult.announcing(
+            connector.announces(), caller.listed().values(), connector.server_info(),
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
