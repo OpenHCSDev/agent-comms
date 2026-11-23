@@ -183,3 +183,27 @@ def test_restart_cache_retains_exact_graph_and_postings_until_the_git_source_cha
         changed = RepositoryReads().history_for(Checkout(main))
         assert tuple(changed.commits(('main',), selected=CommitsNaming('P1'))) == expected
     assert [call.args[1] for call in acquired.call_args_list] == [(original, added)]
+
+
+def test_restored_messages_following_keeps_positional_postings_without_expanding_word_names(
+    tmp_path: Path,
+):
+    """Advancing a restored cache by one commit updates positional postings directly
+    without expanding every word into nested immutables.Map trees on naming() lookups."""
+    git = fixture_git.run
+    main = tmp_path / 'main'
+    main.mkdir()
+    git(main, 'init', '--initial-branch=main')
+    git(main, 'commit', '--allow-empty', '-m', 'P1 original')
+    RepositoryReads().history_for(Checkout(main)).messages
+
+    restarted_reads = RepositoryReads()
+    restarted = restarted_reads.history_for(Checkout(main))
+    assert len(tuple(restarted.commits(('main',), selected=CommitsNaming('P1')))) == 1
+    assert CommitMessages.word_names.attrname not in restarted.messages.__dict__
+
+    git(main, 'commit', '--allow-empty', '-m', 'P2 added')
+    following = RepositoryReads.retaining(restarted_reads).history_for(Checkout(main))
+    assert len(tuple(following.commits(('main',), selected=CommitsNaming('P1')))) == 1
+    assert len(tuple(following.commits(('main',), selected=CommitsNaming('P2')))) == 1
+    assert CommitMessages.word_names.attrname not in following.messages.__dict__

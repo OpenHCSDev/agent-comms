@@ -16,6 +16,7 @@ from agent_comms.projects.checkouts import (
     CommitsNaming,
     GitCommit,
     GitGraphRevision,
+    GitHistoryRevision,
     RepositoryReads,
 )
 from agent_comms.projects.git_errors import FailedGitCommand
@@ -382,3 +383,26 @@ def test_message_filters_preserve_each_selected_walk_and_old_capture(main):
     git(main, "commit", "--allow-empty", "-m", "P1 later")
     assert tuple(history.commits(("main",), selected=CommitsNaming("P1"))) == before
     assert len(tuple(Checkout(main).read().commits(("main",), selected=CommitsNaming("P1")))) == len(before) + 1
+
+
+def test_head_paths_skip_worktree_submodules_and_logs(main: Path) -> None:
+    """Linked worktree directories hold submodule trees (modules/) and reflogs (logs/) that
+    git worktree list never reads; walking them recursively retained 30k+ FileRevision objects
+    on the shared worker host."""
+    linked = main.parent / "linked-with-modules"
+    git(main, "worktree", "add", "-b", "linked-mod", str(linked))
+    admin = Checkout(main).common_dir / "worktrees" / "linked-with-modules"
+    submodule_file = admin / "modules" / "sub" / "objects" / "dummy"
+    submodule_file.parent.mkdir(parents=True)
+    submodule_file.write_text("x")
+    log_file = admin / "logs" / "HEAD"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    log_file.write_text("log")
+
+    paths = set(GitHistoryRevision.head_paths(Checkout(main)))
+    assert admin in paths
+    assert admin / "HEAD" in paths
+    assert admin / "gitdir" in paths
+    assert submodule_file not in paths
+    assert log_file not in paths
+    assert not any("modules" in path.parts or "logs" in path.parts for path in paths)
