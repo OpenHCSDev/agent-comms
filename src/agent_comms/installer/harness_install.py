@@ -223,6 +223,44 @@ class ClaudeCodeHarness(ConnectorClientHarness):
 
 
 @dataclass(frozen=True)
+class AntigravityHarness(ConnectorClientHarness, declared_name="antigravity"):
+    """Antigravity CLI (`agy`) connects to the local MCP connector through
+    `~/.gemini/config/mcp_config.json` and writes JSONL session transcripts under
+    `~/.gemini/antigravity-cli/brain/<conversation_id>/.system_generated/logs/transcript.jsonl`."""
+
+    executable: ClassVar[str] = "agy"
+    skills_dir: ClassVar[str] = ".gemini/config/skills"
+    bus_threads: ClassVar[tuple[str, ...]] = ("antigravity",)
+
+    @property
+    def mcp_config(self) -> Path:
+        return self.home / ".gemini/config/mcp_config.json"
+
+    def connector_registered(self) -> bool:
+        if not self.mcp_config.is_file():
+            return False
+        try:
+            document = json.loads(self.mcp_config.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        servers = document.get("mcpServers")
+        return isinstance(servers, dict) and "comms" in servers
+
+    def register_connector(self, url: str, token: str) -> None:
+        def add_comms(document: dict) -> None:
+            servers = document.setdefault("mcpServers", {})
+            servers["comms"] = {
+                "url": url,
+                "headers": {"Authorization": f"Bearer {token}"},
+            }
+
+        merge_json(self.mcp_config, add_comms)
+
+    def configure(self) -> tuple[Path, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
 class CodexHarness(InstalledHarness):
     """Codex is pushed to by a user service; the user starts it after binding a conversation."""
 

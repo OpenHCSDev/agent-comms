@@ -37,11 +37,17 @@ from aiohttp import (
 from aiohttp.helpers import get_env_proxy_for_url
 from yarl import URL
 
+from agent_comms.cli_bridges.antigravity_transcript import (
+    AntigravityTranscript,
+    RecentAntigravityWindow,
+    RunningAntigravity,
+)
 from agent_comms.cli_bridges.claude_transcript import (
     WATCH_DEFERRED,
     WATCH_REPLACED,
     WATCH_STOPPED,
     WINDOW_ENDED,
+    AntigravityWatch,
     FilesWanted,
     PrintedLedger,
     PrintedNow,
@@ -118,18 +124,24 @@ class TranscriptRoute(ABC):
 
 
 @dataclass(frozen=True)
-class FollowedTranscript(RecentClaudeWindow, TranscriptRoute):
-    """The session's own file, sent from its recent window onward as a local bridge reads it."""
+class LocalFileTranscriptRoute(TranscriptRoute, ABC):
+    """A local JSONL transcript tailed from its recent window onward, with watch URLs redacted."""
 
     source: Path
-
-    def ledger(self, state: Path) -> PrintLedger:
-        return SessionLedger(state / "printed" / self.source.stem)
 
     watch_url: ClassVar[re.Pattern[str]] = re.compile(r'wss?://[^\s"\'\\]+/watch/[\w-]+')
     hidden_url: ClassVar[str] = '[inbox watch URL]'
     """It lands inside whatever held the URL, including a task notification's XML, so it escapes
     nothing and needs no escaping."""
+
+    def ledger_name(self) -> str:
+        return self.source.stem
+
+    def ledger(self, state: Path) -> PrintLedger:
+        return SessionLedger(state / "printed" / self.ledger_name())
+
+    def opening_frames(self) -> tuple[str, ...]:
+        return ()
 
     @classmethod
     def line(cls, raw: bytes) -> str:
@@ -148,6 +160,8 @@ class FollowedTranscript(RecentClaudeWindow, TranscriptRoute):
         return offset
 
     async def sent(self, socket: ClientWebSocketResponse) -> None:
+        for frame in self.opening_frames():
+            await socket.send_str(frame)
         async with aclosing(Bus.watch_sources(FileSource(self.source))) as changes:
             await anext(changes)
             with self.source.open('rb') as stream:
@@ -160,6 +174,22 @@ class FollowedTranscript(RecentClaudeWindow, TranscriptRoute):
 
 
 @dataclass(frozen=True)
+class FollowedTranscript(LocalFileTranscriptRoute, RecentClaudeWindow):
+    """Claude Code's own file, sent from its recent window onward as a local bridge reads it."""
+
+
+@dataclass(frozen=True)
+class AntigravityFollowedTranscript(LocalFileTranscriptRoute, RecentAntigravityWindow):
+    """Antigravity's `transcript.jsonl`, announced as Antigravity before its lines stream."""
+
+    def ledger_name(self) -> str:
+        return AntigravityTranscript.conversation_id_of(self.source)
+
+    def opening_frames(self) -> tuple[str, ...]:
+        return (AntigravityWatch(printed=()).line(),)
+
+
+@dataclass(frozen=True)
 class UnfoundTranscript(TranscriptRoute):
     """Push still works without the transcript, so its absence is reported, not fatal."""
 
@@ -169,9 +199,18 @@ class UnfoundTranscript(TranscriptRoute):
         print(f"Your work will not show on the bus: {self.reason}", flush=True)
 
 
-def session_transcript() -> TranscriptRoute:
+def session_transcript(transcript: Path | None = None, *, home: Path | None = None) -> TranscriptRoute:
+    if transcript is not None:
+        if not transcript.is_file():
+            return UnfoundTranscript(f"FileNotFoundError: transcript not found: {transcript}")
+        return AntigravityFollowedTranscript(transcript)
+    if os.environ.get("CLAUDE_CODE_SESSION_ID", "").strip():
+        try:
+            return FollowedTranscript(RunningClaude(WatchClaim.environment_session()).source)
+        except (ValueError, KeyError, OSError) as failure:
+            return UnfoundTranscript(f"{type(failure).__name__}: {failure}")
     try:
-        return FollowedTranscript(RunningClaude(WatchClaim.environment_session()).source)
+        return AntigravityFollowedTranscript(RunningAntigravity.active(home=home).source)
     except (ValueError, KeyError, OSError) as failure:
         return UnfoundTranscript(f"{type(failure).__name__}: {failure}")
 
@@ -645,8 +684,15 @@ class InboxSocket:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("url", help="The one-use URL comms_watch returned")
+    parser.add_argument(
+        "--transcript",
+        type=Path,
+        default=None,
+        help="Explicit Antigravity transcript.jsonl path to stream alongside the inbox watch",
+    )
+    args = parser.parse_args()
     exports = Path.home() / ".local" / "state" / "claude-comms-inbox" / "cloud" / "messages"
-    socket = InboxSocket(parser.parse_args().url, exports, session_transcript())
+    socket = InboxSocket(args.url, exports, session_transcript(args.transcript))
     ended = asyncio.run(socket.carried())
     print(ended.line(), flush=True)
     sys.exit(ended.exit_code)
