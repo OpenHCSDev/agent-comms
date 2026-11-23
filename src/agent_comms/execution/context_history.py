@@ -9,6 +9,7 @@ publishes, a practice attempt's is its own document.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from functools import cached_property
@@ -80,6 +81,33 @@ class ContextHistory:
         )
         branch.checkpoint(f"context: {len(turns)} turns")
         return branch.tree_id(CONTEXT_DIRECTORY) if turns else None
+
+    def original_path(self, entered: str) -> Path:
+        """Where the uncut text behind one turn of the context is kept: an array of its bytes in a
+        zarr store beside the repository, named by the SHA-256 of the turn as it was sent, so any
+        turn of any recorded commit finds its original from its own text."""
+        digest = hashlib.sha256(entered.encode()).hexdigest()
+        # The extension is not one Polystore's zarr backend hands to the disk (.txt, .json).
+        return self.repository.with_name(f"{self.repository.name}.originals") / self.session / f"{digest}.utf8"
+
+    def keep_original(self, entered: str, original: str) -> None:
+        """Keep `original`, what a turn was before anything was cut from it, as one array chunk.
+        A text kept already is kept."""
+        import numpy as np
+        from polystore.zarr import ZarrStorageBackend
+
+        path = self.original_path(entered)
+        backend = ZarrStorageBackend()
+        if not backend.exists(path):
+            backend.save(np.frombuffer(original.encode(), dtype=np.uint8), path)
+
+    def original_of(self, entered: str) -> str:
+        """The uncut text of a turn as it was sent; the turn itself when nothing was kept for it."""
+        from polystore.zarr import ZarrStorageBackend
+
+        path = self.original_path(entered)
+        backend = ZarrStorageBackend()
+        return bytes(backend.load(path)).decode() if backend.exists(path) else entered
 
     def sizes(self) -> ContextSizes:
         """The size the context had at the record before this turn and the size this turn
