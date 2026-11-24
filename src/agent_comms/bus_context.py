@@ -97,7 +97,6 @@ class BusContext(
     RegistryBus,
     BusRoot,
     NotificationEvidenceSource[CapturedNotificationEvidence],
-    ABC,
 ):
     """Shared bus capability contract inherited by Comms."""
 

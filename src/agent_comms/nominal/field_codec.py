@@ -1690,6 +1690,11 @@ class FieldRepresentation[T](MroDispatch, ABC, JsonSchemaOwner):
         """argparse options for this representation's command-line text."""
         return {}
 
+    @classmethod
+    def stored_as_text(cls):
+        """Whether SQLite stores this field representation as TEXT."""
+        return False
+
 
 class StructuralRepresentation(FieldRepresentation):
     """The value has no representation codec, so FieldCodec handles its structure."""
@@ -2257,6 +2262,10 @@ class TextRepresentation[V](FieldRepresentation[V]):
     def schema(cls) -> dict[str, JsonValue]:
         form = cls.text_form()
         return {"type": "string", "description": f"{form.__module__}.{form.__qualname__} text"}
+
+    @classmethod
+    def stored_as_text(cls):
+        return True
 
 
 class ValidatedScalar(FieldRepresentation):

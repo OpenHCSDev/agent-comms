@@ -17,6 +17,7 @@ from agent_comms.attempt_store import AttemptStore
 from agent_comms.coordination.assignment_store import AssignmentStore
 from agent_comms.coordination.execution_store import ExecutionStore
 from agent_comms.coordination.participant_store import ParticipantStore, ParticipantStoreOwner
+from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.coordination.session import (
     CoordinationSession,
     CoordinationSessionOwner,
@@ -36,7 +37,6 @@ from agent_comms.storage.store_files import DEFAULT_STORE_CONTENTION, StoreConte
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.coordination.service_passes import ServicePassStore
     from agent_comms.execution.watch_passes import Watch
 
 Result = TypeVar("Result")
