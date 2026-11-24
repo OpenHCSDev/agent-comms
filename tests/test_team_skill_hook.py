@@ -3,6 +3,7 @@
 
 import io
 import json
+import sqlite3
 import subprocess
 import sys
 import time
@@ -61,10 +62,17 @@ from agent_comms.task_attachments.team_pings import (
     TeamDecisions,
     TeamPings,
     TeamUpdate,
-    TeamUpdateStore,
 )
 from agent_comms.team.package import TeamPackage
 from agent_comms.team.pattern_sources import PostmortemFailure
+from agent_comms.team.team_hud import (
+    CodexUsage,
+    TeamBoardPublicationStore,
+    TeamHud,
+    TeamPlan,
+    UnreadableUsage,
+)
+from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.team.rule_deal import (
     AuditDue,
     CompactedDeal,
@@ -359,7 +367,7 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
              SpinningTeammate(holder=worker, problem="P2", call_count=92))
     beat(comms, rules)
     beat(comms, rules)
-    head_line = f"--pr {request.pr} --head {request.head}"
+    head_line = f"{request.repo.to_wire()}#{request.pr} {request.head[:9]}"
 
     def shared_board() -> tuple[str, ...]:
         return tuple(entry.text for packet in TeamUpdate.latest(comms, colleague)
@@ -441,6 +449,15 @@ def test_rules_carrying_his_words_flag_their_board_lines():
     assert plain.addresses("worker")
 
 
+def publish_board(root: Path, packet: TeamUpdate) -> None:
+    hud = TeamHud(
+        teammate=packet.teammate, units=(), phases=(), load=OverloadDegradation(0, 0, 0),
+        forks=(), usage=CodexUsage(UnreadableUsage(reason="test fixture")),
+        packets=(packet,), open_pings=packet.handled,
+    )
+    TeamBoardPublicationStore.replace_all(root, TeamPlan(), (hud,))
+
+
 def test_a_tool_call_prints_only_new_rows_naming_its_session(
         notification_bus, tmp_path, monkeypatch):
     """Retained observations and the one Core delivery owner; publication stays muted."""
@@ -466,7 +483,7 @@ def test_a_tool_call_prints_only_new_rows_naming_its_session(
     elsewhere = RulePing(ReviewTimerUp, TextDigest.of("elsewhere"), text="Review worker P3",
                          subjects=(TeammateSubject(worker),), since=RecordedEventTime(began),
                          threads=("worker",))
-    TeamUpdateStore.record(comms.root, TeamDecisions(
+    publish_board(comms.root, TeamDecisions(
         colleague, (first, second, elsewhere), (first, second, elsewhere), ()))
     with claim.held(record), claim.reader_held():
         assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take(comms, admitted_binding(comms, "colleague"))
@@ -476,17 +493,17 @@ def test_a_tool_call_prints_only_new_rows_naming_its_session(
         )
         assert board_at(comms, began + 91) == ()
         changed = replace(first, observation=TextDigest.of("changed"), since=RecordedEventTime(began + 90))
-        TeamUpdateStore.record(comms.root, TeamDecisions(
+        publish_board(comms.root, TeamDecisions(
             colleague, (changed, second), (changed,), ()))
         assert board_at(comms, began + 92) == ("BOARD: Read worker P1 (0 min)",)
         # A fresh packet does not reset delivery, and the answer window rings only once.
-        TeamUpdateStore.record(comms.root, TeamDecisions(
+        publish_board(comms.root, TeamDecisions(
             colleague, (changed, second), (), ()))
         alarm = began + AwaitingTeam.seconds
         assert board_at(comms, alarm + 1) == ("BOARD: Review worker P2 (5 min)",)
         assert board_at(comms, alarm + 2) == ()
         assert delivered(comms) == 2
-        TeamUpdateStore.record(comms.root, TeamDecisions(colleague, (), (), ()))
+        publish_board(comms.root, TeamDecisions(colleague, (), (), ()))
         assert board_at(comms, alarm + 3) == ()
         assert delivered(comms) == 0
 
@@ -506,7 +523,7 @@ def test_a_verb_reply_carries_the_new_rows_naming_its_caller(notification_bus):
     theirs = RulePing(ReviewTimerUp, TextDigest.of("theirs"), text="Review worker P3",
                       subjects=(TeammateSubject(worker),), since=RecordedEventTime(began),
                       threads=("worker",))
-    TeamUpdateStore.record(comms.root, TeamDecisions(colleague, (mine, theirs), (mine, theirs), ()))
+    publish_board(comms.root, TeamDecisions(colleague, (mine, theirs), (mine, theirs), ()))
     caller = ThreadCaller("colleague")
 
     def answered(tool, arguments) -> AnsweredCall:
@@ -528,16 +545,13 @@ def test_a_busy_core_writer_never_fails_a_verb_that_landed(notification_bus):
     """#4088 send-back: the board runs after the verb's own write. When another writer holds
     coordination.sqlite3, that call carries no rows instead of raising, so a send that landed
     never comes back as a failure, and the rows stay unstamped for the next call."""
-    import sqlite3
-
-
     comms = notification_bus
     colleague = comms.registry.require("colleague").incarnation
     worker = comms.registry.require("worker").incarnation
     row = RulePing(ReviewTimerUp, TextDigest.of("busy"), text="Review worker P4",
                    subjects=(TeammateSubject(worker),), since=RecordedEventTime(time.time()),
                    threads=("colleague",))
-    TeamUpdateStore.record(comms.root, TeamDecisions(colleague, (row,), (row,), ()))
+    publish_board(comms.root, TeamDecisions(colleague, (row,), (row,), ()))
     caller = ThreadCaller("colleague")
     send = {"to": "outsider", "body": "landing while Core is busy"}
 
@@ -1196,23 +1210,25 @@ def test_reader_board_selects_its_rows_before_disposal_reads(notification_bus, m
     packet = prepared.delivery(reader, published=()).packet
     unrelated, mine = packet.handled[:-1], packet.handled[-1]
     reads = []
-    original = StoredHeadReview.head_reviews
+    original = StoredHeadReview.head_reviews_among
 
-    def read(cls, store, request):
-        reads.append(request)
-        return original(store, request)
+    def read(cls, db, requests):
+        reads.extend(requests)
+        return original(db, requests)
 
-    monkeypatch.setattr(StoredHeadReview, "head_reviews", classmethod(read))
+    monkeypatch.setattr(StoredHeadReview, "head_reviews_among", classmethod(read))
     assert packet.reader_board(comms, reader.name) == (mine.board_entry(),)
     assert reads == [mine_request]
     reads.clear()
     assert packet.board(comms) == tuple(ping.board_entry() for ping in packet.handled)
     assert set(reads) == {ping.subjects[0].request for ping in unrelated} | {mine_request}
 
-    def fail(cls, store, request):
-        raise ValueError(f"unreadable head {request.pr}")
+    def fail(cls, db, requests):
+        if requests:
+            raise ValueError(f"unreadable head {requests[0].pr}")
+        return {}
 
-    monkeypatch.setattr(StoredHeadReview, "head_reviews", classmethod(fail))
+    monkeypatch.setattr(StoredHeadReview, "head_reviews_among", classmethod(fail))
     # Unaddressed errors cannot break an unrelated tool reply; full board errors stay loud.
     elsewhere = TeamDecisions(reader, unrelated, (), ())
     assert elsewhere.reader_board(comms, reader.name) == ()
