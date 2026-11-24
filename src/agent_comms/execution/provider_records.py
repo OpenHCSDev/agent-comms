@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Annotated, ClassVar
 
@@ -22,6 +23,7 @@ from agent_comms.transcript.transcript_events import (
     UserTranscript,
 )
 from agent_comms.transport.tool_declaration import ToolDeclaration
+from agent_comms.transport.tool_denial import SelectedToolDenied
 
 
 @dataclass(frozen=True)
@@ -94,12 +96,53 @@ class PiContent(PresentMember, OpenPayload, affix="Content"):
     text: ClassVar[str] = ""
     def require_tool_round_allowed(self) -> None:
         """Content that does not allow a tool round refuses here."""
-        from agent_comms.transport.native_tool_transport import SelectedToolDenied
         raise SelectedToolDenied('Invalid native tool content')
 
     @property
     def final_text(self) -> str:
         raise NativePiUnavailable("Native Pi assistant returned non-text content")
+
+
+_LEADING_THINK_CLOSED = re.compile(r"^\s*<think>(.*?)</think>", re.DOTALL)
+_LEADING_THINK_UNCLOSED = re.compile(r"^\s*<think>(.*)\Z", re.DOTALL)
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedThinking:
+    """Leading ``<think>...</think>`` blocks separated once at the provider text boundary.
+
+    Anchoring at the start of the response keeps prose or code fences that merely
+    mention ``<think>`` untouched while decoding local OpenAI endpoints that embed
+    chain-of-thought inline instead of returning ``reasoning_content``.
+    """
+
+    thinking: str
+    visible: str
+
+    @classmethod
+    def parse(cls, text: str, reasoning: str = "") -> ParsedThinking:
+        parts: list[str] = []
+        stripped_reasoning = reasoning.strip()
+        if stripped_reasoning:
+            parts.append(stripped_reasoning)
+        remaining = text
+        while True:
+            match = _LEADING_THINK_CLOSED.match(remaining)
+            if match is None:
+                break
+            block = match.group(1).strip()
+            if block:
+                parts.append(block)
+            remaining = remaining[match.end():]
+        unclosed = _LEADING_THINK_UNCLOSED.match(remaining)
+        if unclosed is not None:
+            block = unclosed.group(1).strip()
+            if block:
+                parts.append(block)
+            remaining = ""
+        if not parts:
+            return cls(thinking="", visible=text)
+        return cls(thinking="\n\n".join(parts), visible=remaining.strip())
 
 
 @dataclass(frozen=True)
@@ -115,7 +158,13 @@ class TextContent(PiContent):
         return [UserTranscript(self.text, position=position, timestamp=timestamp)]
 
     def assistant_transcript(self, position: int, timestamp: float):
-        return [AssistantTranscript(self.text, position=position, timestamp=timestamp)]
+        parsed = ParsedThinking.parse(self.text)
+        events: list[ThinkingTranscript | AssistantTranscript] = []
+        if parsed.thinking:
+            events.append(ThinkingTranscript(parsed.thinking, position=position, timestamp=timestamp))
+        if parsed.visible or not events:
+            events.append(AssistantTranscript(parsed.visible, position=position, timestamp=timestamp))
+        return events
 
     text: str = field()
     text_signature: Annotated[

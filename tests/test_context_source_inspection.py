@@ -413,3 +413,15 @@ def test_a_saved_segment_shows_its_retained_text_or_says_none_was_kept():
     assert unretained.span_text(coordinates) == unretained.text
     with pytest.raises(ValueError):
         ContextSourceText(unretained.description, unretained.text).span_text(coordinates)
+
+
+def test_journal_provenance_compacts_large_entry_lists():
+    """TransformedInputSegment provenance on long sessions holds 1,000+ entry UUIDs.
+    Joining every UUID exploded Context Explorer tree labels to ~40 KB per segment."""
+    small = JournalProvenance("/home/ts/.agent-comms/sessions/s1.jsonl", ("e1", "e2"))
+    assert small.public_description() == "Native journal s1.jsonl · entries e1, e2"
+    entries = tuple(f"uuid-{i:04d}-abcdef012345" for i in range(1000))
+    large = JournalProvenance("/home/ts/.agent-comms/sessions/enrolled-abc.jsonl", entries)
+    desc = large.public_description()
+    assert desc == "Native journal enrolled-abc.jsonl · 1000 entries (uuid-000…uuid-099)"
+    assert len(desc) < 100
