@@ -31,6 +31,7 @@ from agent_comms.conversational_slop import ResponseContext, SlopVerdict, verify
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ProcessName
 from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.provider_records import ParsedThinking
 from agent_comms.installer.active_route import resolve_comms_route
 from agent_comms.messaging.agent_inbox import TakenInputStart
 from agent_comms.messaging.message_reference import AfterMessageStart, InboxStart
@@ -123,13 +124,24 @@ class ChatCompletion(ModelReply):
     content: str
     finish_reason: str
     completion_tokens: int | None
+    thinking: str = ""
 
     def display(self) -> str:
-        return (f"{self.content}\n\n---\n"
+        parts: list[str] = []
+        if self.thinking:
+            quoted = "\n".join(
+                f"> {line}" if line else ">" for line in self.thinking.splitlines()
+            )
+            parts.append(f"> _Thinking:_\n{quoted}")
+        if self.content:
+            parts.append(self.content)
+        body = "\n\n".join(parts)
+        return (f"{body}\n\n---\n"
                 f"_{self.completion_tokens or '?'} tokens, finish {self.finish_reason}_")
 
     def record_in(self, history: list[dict[str, str]]) -> None:
-        history.append({"role": "assistant", "content": self.content})
+        if self.content:
+            history.append({"role": "assistant", "content": self.content})
 
     def log_summary(self, rendered: str) -> str:
         return f"{len(rendered)} chars"
@@ -200,16 +212,23 @@ def _completion_from(raw: object) -> ModelReply:
     """
     try:
         choice = raw["choices"][0]
-        content = choice["message"]["content"] or ""
+        message = choice["message"]
+        raw_content = message.get("content") or ""
+        raw_reasoning = message.get("reasoning_content") or message.get("reasoning") or ""
         finish_reason = choice.get("finish_reason") or "stop"
         usage = raw.get("usage") or {}
         completion_tokens = usage.get("completion_tokens")
-    except (KeyError, IndexError, TypeError) as error:
+    except (KeyError, IndexError, TypeError, AttributeError) as error:
         return MalformedReply(type(error).__name__)
-    if not content:
+    parsed = ParsedThinking.parse(raw_content, raw_reasoning)
+    if not parsed.visible and not parsed.thinking:
         return EmptyContentReply(finish_reason)
-    return ChatCompletion(content=content, finish_reason=finish_reason,
-                          completion_tokens=completion_tokens)
+    return ChatCompletion(
+        content=parsed.visible,
+        finish_reason=finish_reason,
+        completion_tokens=completion_tokens,
+        thinking=parsed.thinking,
+    )
 
 
 @dataclass(frozen=True, slots=True)

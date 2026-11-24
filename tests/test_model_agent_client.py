@@ -17,11 +17,15 @@ from pathlib import Path
 from agent_comms.cli_bridges.model_agent_client import (
     ChatCompletion,
     ChatEndpoint,
+    EmptyContentReply,
     HttpFailureReply,
     ModelAgent,
     ModelReply,
+    _completion_from,
 )
 from agent_comms.comms import Comms
+from agent_comms.execution.provider_records import ParsedThinking, TextContent
+from agent_comms.transcript.transcript_events import AssistantTranscript, ThinkingTranscript
 from agent_comms.messaging.agent_inbox import TakenInputStart
 from agent_comms.messaging.messages import InfoKind
 from agent_comms.projects.checkouts import Checkout
@@ -271,3 +275,75 @@ def test_model_reply_family_owns_history_logging_and_rejection_sampling(comms: C
     assert isinstance(reply, ChatCompletion)
     assert rejected_calls == [0, 1]
     assert "rejection-sampled 2×" in rendered
+
+
+def test_completion_decodes_reasoning_content_and_inline_think_without_history_leak() -> None:
+    # Separate OpenAI reasoning_content (LoopedServer / llama-server --reasoning-format).
+    reply = _completion_from({
+        "choices": [{
+            "message": {
+                "content": "Final answer.",
+                "reasoning_content": "Certainty:\n- DEDUCED: checked",
+            },
+            "finish_reason": "stop",
+        }],
+        "usage": {"completion_tokens": 42},
+    })
+    assert isinstance(reply, ChatCompletion)
+    assert reply.thinking == "Certainty:\n- DEDUCED: checked"
+    assert reply.content == "Final answer."
+    rendered = reply.display()
+    assert "> _Thinking:_\n> Certainty:\n> - DEDUCED: checked" in rendered
+    assert "Final answer." in rendered
+    assert "<think>" not in rendered
+    history: list[dict[str, str]] = []
+    reply.record_in(history)
+    assert history == [{"role": "assistant", "content": "Final answer."}]
+
+    # Inline leading <think>...</think> decoded once at the boundary.
+    inline = _completion_from({
+        "choices": [{
+            "message": {"content": "<think>step 1\nstep 2</think>\n\nVisible reply."},
+            "finish_reason": "stop",
+        }],
+        "usage": {"completion_tokens": 18},
+    })
+    assert isinstance(inline, ChatCompletion)
+    assert inline.thinking == "step 1\nstep 2"
+    assert inline.content == "Visible reply."
+    assert "<think>" not in inline.display()
+
+    # Truncated thought (finish_reason=length, no answer yet) preserves thinking instead of EmptyContentReply.
+    truncated = _completion_from({
+        "choices": [{
+            "message": {"content": "<think>still working out the proof"},
+            "finish_reason": "length",
+        }],
+        "usage": {"completion_tokens": 1024},
+    })
+    assert isinstance(truncated, ChatCompletion)
+    assert truncated.thinking == "still working out the proof"
+    assert truncated.content == ""
+    history_after: list[dict[str, str]] = []
+    truncated.record_in(history_after)
+    assert history_after == []
+
+    # Truly empty content and reasoning still returns EmptyContentReply.
+    empty = _completion_from({"choices": [{"message": {"content": ""}, "finish_reason": "stop"}]})
+    assert isinstance(empty, EmptyContentReply)
+
+    # Prose merely discussing <think> stays intact.
+    prose = ParsedThinking.parse("Our parser strips <think>...</think> blocks.")
+    assert prose.thinking == ""
+    assert prose.visible == "Our parser strips <think>...</think> blocks."
+
+
+def test_native_text_content_splits_leading_inline_think_into_thinking_transcript() -> None:
+    events = TextContent("<think>checked file</think>\nDone.").assistant_transcript(7, 100.0)
+    assert len(events) == 2
+    assert isinstance(events[0], ThinkingTranscript) and events[0].text == "checked file"
+    assert isinstance(events[1], AssistantTranscript) and events[1].text == "Done."
+
+    plain = TextContent("Mentions <think> in prose.").assistant_transcript(8, 101.0)
+    assert len(plain) == 1
+    assert isinstance(plain[0], AssistantTranscript) and plain[0].text == "Mentions <think> in prose."

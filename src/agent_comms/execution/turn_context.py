@@ -177,7 +177,11 @@ class JournalProvenance(Provenance):
     entries: tuple[str, ...]
 
     def public_description(self) -> str:
-        return f"Native journal {self.path} · entries {', '.join(self.entries)}"
+        name = Path(self.path).name or self.path
+        count = len(self.entries)
+        if count <= 3:
+            return f"Native journal {name} · entries {', '.join(self.entries)}"
+        return f"Native journal {name} · {count} entries ({self.entries[0][:8]}…{self.entries[-1][:8]})"
 
     def journal_entries(self, identity: NativeSessionIdentity) -> tuple[str, ...]:
         identity.require_session(self.path)
