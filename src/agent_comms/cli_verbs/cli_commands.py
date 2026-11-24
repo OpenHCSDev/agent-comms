@@ -34,7 +34,7 @@ from agent_comms.execution.turn_context import (
     Sha256Digest,
     TurnContext,
 )
-from agent_comms.importing import ThreadImported
+from agent_comms.registry.thread_results import ThreadImported
 from agent_comms.messaging.history_result import HistoryPageResult
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily

@@ -63,6 +63,7 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, PresenceExclude, WireForm
 from agent_comms.notification_assignment import NotificationAssignment, NotificationSelection
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.ui_model.retired_views import RetiredViews
 from agent_comms.registry.history_read_source import HistoryReadSource
 from agent_comms.registry.notification_selection_read import ThreadSourceReader
 from agent_comms.registry.activity import ActivityCapture, ObservedActivity
@@ -178,14 +179,6 @@ class ThreadViewRead(ConversationPreparation):
         )
         if page.messages:
             self.views.mark_page_read(page, worktree=self.viewer.worktree)
-
-
-@dataclass(frozen=True)
-class RetiredViews(ToolResult):
-    """Views whose source no longer exists, as Core decided from one registry read."""
-
-    threads: frozenset[ThreadIncarnation]
-    channels: frozenset[str]
 
 
 @dataclass(frozen=True)

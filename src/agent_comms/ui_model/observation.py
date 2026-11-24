@@ -62,7 +62,8 @@ from agent_comms.execution.child_process import (
 )
 from agent_comms.execution.launch_root import started
 from agent_comms.execution.publication_measurements import WorkCpu
-from agent_comms.history_views import RetiredViews, SidebarCut
+from agent_comms.history_views import SidebarCut
+from agent_comms.ui_model.retired_views import RetiredViews
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.installer.active_route import CommsRoute
 from agent_comms.messaging.bus_read import CapturesTranscriptPage, OwnerScopedRead, UiRead
