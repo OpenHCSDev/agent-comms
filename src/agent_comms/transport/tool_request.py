@@ -31,6 +31,7 @@ from agent_comms.transport.request import (
     ToolRequest,
     declared_result,
 )
+from agent_comms.transport import served_tools
 from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
 from agent_comms.transport.tool_declaration import NativeRequestTools
 from agent_comms.transport.tool_result import ToolResult
@@ -109,6 +110,11 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
 ):
     """A tool request as the Core that runs it sees it: the declaration plus decoding a call,
     applying it under a caller and replying. Only the server imports this."""
+
+    @classmethod
+    def _member_declarations(cls):
+        cls.discover_package(served_tools)
+        return super()._member_declarations()
 
     @classmethod
     def result_type(cls) -> type[Result]:

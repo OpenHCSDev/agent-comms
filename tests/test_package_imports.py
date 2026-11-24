@@ -17,7 +17,7 @@ importlib.import_module({entrypoint!r})
 from agent_comms.registry.threads import Thread
 from agent_comms.agent_backend import AgentBackend, NewThreadBackend
 print(json.dumps({{
-    'catalog_loaded': 'agent_comms.transport.tools.served' in sys.modules,
+    'catalog_loaded': 'agent_comms.transport.served_tools.served' in sys.modules,
     'sealed': AgentBackend._sealed,
     'default': NewThreadBackend.selected().declared_name,
 }}))
@@ -41,7 +41,9 @@ from dataclasses import dataclass
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 goal_id = GoalId.mint()
 from agent_comms.transport.tool_declaration import ToolDeclaration
-assert 'agent_comms.transport.tools.served' not in sys.modules
+from agent_comms.transport.tools.sidebar import CommsServedRootTool
+assert 'agent_comms.transport.served_tools.served' not in sys.modules
+FieldCodec.encode(CommsServedRootTool())
 @dataclass(frozen=True)
 class SavedTool:
     tool: ToolDeclaration | None
@@ -51,5 +53,10 @@ record = FieldCodec.decode(SavedTool, {{'tool': {{
 assert record.tool.declared_name == 'comms_edit_goal'
 assert record.tool.goal_id == goal_id
 assert record.tool.text == 'retained text'
+assert 'agent_comms.transport.served_tools.served' not in sys.modules
+assert 'agent_comms.comms' not in sys.modules
+assert 'agent_comms.coordination.coordinator' not in sys.modules
+assert 'agent_comms.installer.runtime_resolution' not in sys.modules
+assert not any(m == 'packaging' or m.startswith('packaging.') for m in sys.modules)
 """
     subprocess.run([sys.executable, "-I", "-c", program], check=True, capture_output=True, text=True)

@@ -23,7 +23,7 @@ from agent_comms.team.rule_deal import (
 )
 from agent_comms.transport.native_tools import NativeToolDeclaration, ReadTool
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tools.orders import CommsEmergencyReleaseTool
+from agent_comms.transport.served_tools.orders import ServedCommsEmergencyReleaseTool
 from conftest import answer_deal
 
 
@@ -67,7 +67,7 @@ def test_emergency_release_runs_while_locked_and_preserves_evidence(team_bus):
     with pytest.raises(RulesUnread):
         bash.judge_under(gate)
 
-    release = CommsEmergencyReleaseTool()
+    release = ServedCommsEmergencyReleaseTool()
     release.create_call(ToolCallId("emergency"), {}).judge_under(gate)
     result = release.apply(team_bus, ThreadCaller("unit-x"))
 

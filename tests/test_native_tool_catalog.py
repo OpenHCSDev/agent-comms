@@ -7,7 +7,8 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_identity import ToolName
 from agent_comms.transport.tool_caller import NoThreadCaller
 from agent_comms.transport.tool_declaration import NativeRequestTools
-from agent_comms.transport.tools.served import CommsDiscoverTool, NamedToolLookup, SearchToolLookup
+from agent_comms.transport.served_tools.served import ServedCommsDiscoverTool as CommsDiscoverTool
+from agent_comms.transport.tools.commands import NamedToolLookup, SearchToolLookup
 
 
 def test_the_native_tool_catalog_builds_every_tool_schema():

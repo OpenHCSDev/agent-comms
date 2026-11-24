@@ -13,7 +13,7 @@ from agent_comms.cli_verbs.cli_result import TargetEditResult
 from agent_comms.cli_verbs.read_target import ReadTargetCliCommand
 from agent_comms.comms import wire
 from agent_comms.execution.owner_lifecycle import OwnerStartResult
-from agent_comms.messaging.channel_management import TagChangeResult
+from agent_comms.messaging.tag_edits import TagChangeResult
 from agent_comms.messaging.channels import Channel
 from agent_comms.transport.tools.sidebar import (
     CommsPrepareTargetActionTool,

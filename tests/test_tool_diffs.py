@@ -17,7 +17,7 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.transcript.transcript_events import SentTranscript
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tool_declaration import ToolDeclaration
-from agent_comms.transport.tools.served import invoke_tool
+from agent_comms.transport.served_tools.served import invoke_tool
 from bus_history import read_history
 from conftest import installed_comms, transcript_records
 

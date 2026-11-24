@@ -12,7 +12,7 @@ from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize
 from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller
-from agent_comms.transport.tools.served import ToolReplyResult, invoke_tool
+from agent_comms.transport.served_tools.served import ToolReplyResult, invoke_tool
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -23,7 +23,7 @@ from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_text import ForkedParent, NoParent
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tools.served import invoke_tool
+from agent_comms.transport.served_tools.served import invoke_tool
 from bus_history import read_history
 from conftest import installed_comms
 from agent_comms.registry.relationships import AddRelationshipEdit, UpdateRelationshipEdit, RemoveRelationshipEdit

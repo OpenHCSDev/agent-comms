@@ -3,26 +3,14 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from functools import partial
 from typing import Annotated
 
 from pydantic import JsonValue
 
-from agent_comms.acp_extension import (
-    GoalSnapshotReply,
-    TurnChangedUpdate,
-    UpdateMetadata,
-)
-from agent_comms.comms import Comms
-from agent_comms.coordination.work import CoordinationWork
+from agent_comms.bus_context import BusContext
 from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.errors import TodoError
 from agent_comms.execution.turn_bound import LastTurns, TurnBound, TurnsSince
-from agent_comms.execution.turn_bound import (
-    LastTurns,
-    TurnBound,
-    TurnsSince,
-)
 from agent_comms.execution.turn_digests import (
     ActivityTurnView,
     OrderEditsRead,
@@ -31,15 +19,6 @@ from agent_comms.execution.turn_digests import (
     UnavailableOrderEdits,
     UnjudgedEdits,
 )
-from agent_comms.input_attempt import UNOBSERVED_DELIVERY_SCOPE
-from agent_comms.input_disposition import DeliveryOverview
-from agent_comms.messaging.bus_read import (
-    CapturesTranscriptPage,
-    OwnerScopedRead,
-    UiRead,
-)
-from agent_comms.messaging.channel_targets import CommsTag
-from agent_comms.messaging.read_basis import ReadAuthority
 from agent_comms.messaging.send_result import MessagePublished
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -50,10 +29,8 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.planning.delivery_evidence import TodoProblems
 from agent_comms.planning.goal_actions import (
-    CompliedGoalAction,
     CreateProblemGoalAction,
     OrderGoalAction,
-    OwnerInvocable,
 )
 from agent_comms.planning.goals import Goal, OrderCheck
 from agent_comms.planning.held_orders import HeldOrders
@@ -78,13 +55,11 @@ from agent_comms.planning.orders import (
     OrderCompletion,
     OrderProgress,
     ProgressRead,
-    ProgressSource,
     ResumeClaimOrder,
     ServeTodo,
     Todo,
     TodoOperation,
     ToolCallVerdict,
-    WaivedVerdict,
 )
 from agent_comms.planning.problem_number import ProblemNumber
 from agent_comms.planning.progress_claims import ProgressClaim
@@ -96,25 +71,14 @@ from agent_comms.projects.head_review import (
 )
 from agent_comms.projects.work_branches import WorkBranchError
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.task_attachments.team_pings import TeamUpdate
-from agent_comms.team.board_actions import BoardActionApplied, BoardActionOffer
-from agent_comms.team.pi_rule_gate import PiThreadGate
 from agent_comms.team.team_hud import TeamBoardPublicationStore, TeamHud, TeamLoad
-from agent_comms.team.team_hud_records import Teammate, TeammateDetail, TeamOrderDetail
-from agent_comms.transcript.transcripts import TranscriptRead
-from agent_comms.transport.native_tools import CommunicationCall
-from agent_comms.transport.request import tool_field
-from agent_comms.transport.runtime_server import AttachedRuntimeRequestContext
-from agent_comms.transport.serving.served_requests import OwnedRead, OwnerLiveRead
+from agent_comms.transport.request import ToolRequest, tool_field
 from agent_comms.transport.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.transport.tool_declaration import EditCall
 from agent_comms.transport.tool_request import (
-    GoalsArea,
-    HumanToolRequest,
     NativeToolRequest,
     PublishingToolRequest,
     ReadTool,
-    ScreensArea,
     ShortListed,
     ThreadReadTool,
     ThreadsArea,
@@ -122,13 +86,6 @@ from agent_comms.transport.tool_request import (
     WorkArea,
 )
 from agent_comms.transport.tool_result import ToolResult
-from agent_comms.transport.tools.reads import (
-    InputDeliveryRead,
-    OwnerGoalRead,
-    TeammateRead,
-    TranscriptPageRead,
-)
-from agent_comms.transport.tools.sidebar import CommsBoardActionTool
 from agent_comms_hooks import ToolRefusedError
 
 
@@ -168,14 +125,14 @@ class CommsTodoTool(ThreadToolRequest):
     )
     problem: Annotated[str, *tool_field("Problem ID")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged | ProblemClosed:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> TodoChanged | ProblemClosed:
         todo = comms.goals.todos.get(self.problem)
         actor = caller.identity(comms)
         return self.result(comms.goals.change_problem(
             self.problem, self.operation_for(todo, actor, comms), actor))
 
     @abstractmethod
-    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: BusContext) -> TodoOperation:
         """Build the change, verifying any attached application claims before writing."""
 
     def result(self, changed: Todo) -> TodoChanged | ProblemClosed:
@@ -188,7 +145,7 @@ class CommsChangeProblemTool(WorkArea, CommsTodoTool, declared_name="comms_todo"
         TodoOperation, *tool_field("Typed assignment, strike, release or state command")
     ]
 
-    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: BusContext) -> TodoOperation:
         return self.operation.authored_by(actor)
 
 
@@ -206,7 +163,7 @@ class CommsVerdictTool(WorkArea, ThreadToolRequest):
         ToolCallVerdict, *tool_field("Accepted or send-back verdict on the judged tool call ID")
     ]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> TodoChanged:
         actor = caller.identity(comms)
         changed, = comms.goals.judge_calls(
             (JudgedCall(self.problem, self.operation.authored_by(actor)),), actor)
@@ -223,7 +180,7 @@ class CommsVerdictsTool(WorkArea, ThreadToolRequest):
     )
     verdicts: Annotated[tuple[JudgedCall, ...], *tool_field("One verdict per judged tool call")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> TodoList:
         actor = caller.identity(comms)
         return TodoList(comms.goals.judge_calls(
             tuple(replace(call, operation=call.operation.authored_by(actor))
@@ -243,7 +200,7 @@ class HeadVerdictTool:
     operation: Annotated[HeadVerdict, *tool_field("Accepted or rejected head verdict")]
     order: Annotated[HeadReviewOrder, *tool_field("Optional held-order link")] = NoHeadOrder()
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> HeadReviewed:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> HeadReviewed:
         actor = caller.head_review_actor(comms, self.request, self.order)
         problems: dict[str, str] = {}
         orders = self.order.prepared(comms.goals, problems)
@@ -272,7 +229,7 @@ class CommsUnjudgedTool(WorkArea, ThreadReadTool):
     label = "Unjudged edits"
     description = "Read original edit calls since each open order, excluding that order's recorded verdicts."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
+    def apply(self, comms: BusContext, caller: ToolCaller) -> UnjudgedEdits:
         owner = comms.registry.require(caller.subject(self.thread)).incarnation.require_recorded()
         passes = ServicePassStore.at(comms.root).read()
         edits: list[EditCall] = []
@@ -300,7 +257,7 @@ class CommsTeamLoadTool(WorkArea, BoardReadTool, declared_name="comms_team_load"
     label = "Measured teammate load"
     description = "Read retained teammate load with recorded service failures and its original completion clock."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> TeamLoad:
+    def apply(self, comms: BusContext, caller: ToolCaller) -> TeamLoad:
             return TeamBoardPublicationStore.read_for(comms, caller.subject(self.thread)).load_reading()
 
 
@@ -319,29 +276,8 @@ class CommsBoardTool(ShortListed, WorkArea, BoardReadTool):
         "and each teammate's card. comms_hud returns the records under it."
     )
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> TeamBoard:
+    def apply(self, comms: BusContext, caller: ToolCaller) -> TeamBoard:
             return TeamBoard(TeamBoardPublicationStore.read_for(comms, caller.subject(self.thread)).frame)
-
-
-@dataclass(frozen=True, kw_only=True)
-class ServedCommsBoardActionTool(
-    ScreensArea, HumanToolRequest[BoardActionApplied], CommsBoardActionTool
-):
-    """Serving CommsBoardActionTool."""
-
-    def answered(self, comms: Comms) -> BoardActionApplied:
-        recipient = self.offer.recipient
-        if not recipient.current(comms.registry.snapshot()):
-            raise ToolRefusedError("The board action recipient incarnation changed")
-        current = tuple(
-            action
-            for packet in TeamUpdate.latest(comms, recipient)
-            for ping in packet.handled
-            for action in ping.board_actions(packet.teammate)
-        )
-        if self.offer not in current:
-            raise ToolRefusedError("The board action is stale; read the current board")
-        return self.offer.execute(comms.root, recipient.name)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -353,7 +289,7 @@ class CommsHudTool(WorkArea, ThreadReadTool):
         "stale rows stay explicitly stale, and missing frames remain unavailable."
     )
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> TeamHud:
+    def apply(self, comms: BusContext, caller: ToolCaller) -> TeamHud:
             return TeamBoardPublicationStore.read_for(comms, caller.subject(self.thread))
 
 
@@ -367,7 +303,7 @@ class CommsFireTool(WorkArea, ThreadToolRequest):
     unit: Annotated[str, *tool_field("Teammate thread to fire")]
     reason: Annotated[StrikeReason, *tool_field("What the teammate did, plainly")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> TodoList:
         return TodoList(comms.goals.fire(self.unit, self.reason, caller.identity(comms)))
 
 
@@ -382,7 +318,7 @@ class CommsCorrectWordingTool(WorkArea, ThreadToolRequest):
     message_id: Annotated[MessageId, *tool_field("The teammate's message")]
     text: Annotated[str, *tool_field("The teammate's message text")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> MessagePublished:
         orders = [todo.id for todo in comms.goals.todos.board()
                   if todo.holder == self.unit]
         if not orders:
@@ -403,7 +339,7 @@ class CommsTodoListTool(WorkArea, BoardReadTool):
     label = "Read problems"
     description = "Read the team's Todo orders, review timers, strikes and hunts."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
+    def apply(self, comms: BusContext, caller: ToolCaller) -> TodoList:
         snapshot = comms.registry.snapshot()
         listed = tuple(comms.goals.todos.board())
         pulls = ProgressRead(listed)
@@ -437,7 +373,7 @@ class CommsOrderTool(WorkArea, ThreadToolRequest):
     ]
     owner: Annotated[str, *tool_field("Assignee thread")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> ProblemOrdered:
         order = self.order.bound_to(caller.identity(comms)).bound_in(
             comms.registry.snapshot().team_project)
         order = replace(order, review_at=order.review_at.continued_from(
@@ -455,7 +391,7 @@ class CommsProblemNumberTool(WorkArea, ThreadToolRequest):
         "order send uses: concurrent callers each get a distinct number, so none guesses one."
     )
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemNumberReserved:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> ProblemNumberReserved:
         return ProblemNumberReserved(comms.goals.todos.allocate_problem())
 
 
@@ -490,7 +426,7 @@ class CommsOrderDeliverTool(WorkArea, PublishingToolRequest[ThreadCaller, TodoCh
         "reviewer's exact name and birth. Saved claims retain this choice."
     )] = AssignedClaimReviewer()
 
-    def publish(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+    def publish(self, comms: BusContext, caller: ThreadCaller) -> TodoChanged:
         todo = comms.goals.todos.get(self.problem)
         actor = comms.registry.require(caller.name).incarnation
         generation = todo.held().generation
@@ -538,11 +474,11 @@ class CommsOrderDoneTool(WorkArea, CommsTodoTool):
     ]
 
     @classmethod
-    def context_types(cls, comms: Comms, arguments: Mapping[str, object]) -> Mapping[str, type[object]]:
+    def context_types(cls, comms: BusContext, arguments: Mapping[str, object]) -> Mapping[str, type[object]]:
         problem = FieldCodec.field_plan(cls, "problem").read(arguments)
         return {"delivery": comms.goals.todos.get(problem).order.checked().scope.delivery_class}
 
-    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: BusContext) -> TodoOperation:
         todo.require_maintainer(actor)
         todo.state.require_open(todo)
         order = todo.order.checked()
@@ -571,7 +507,7 @@ class CommsOrderCheckTool(WorkArea, CommsTodoTool):
     ]
     why: Annotated[str, *tool_field("Why the recorded check was wrong")]
 
-    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: BusContext) -> TodoOperation:
         return CorrectCheckTodo(expected_revision=todo.revision, actor=actor, reason=self.why,
                                 previous=todo.order.check, check=self.check)
 
@@ -587,7 +523,7 @@ class CommsOrderRunTool(WorkArea, CommsTodoTool):
     run: Annotated[str, *tool_field("The corrected run: what the installed app must show")]
     why: Annotated[str, *tool_field("Why the recorded run was wrong")]
 
-    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: BusContext) -> TodoOperation:
         previous = todo.order.checked().run
         return CorrectRunTodo(todo.revision, actor, self.why,
                               previous=previous, run=previous.retexted(self.run))
@@ -602,7 +538,7 @@ class CommsOrderServeTool(WorkArea, CommsTodoTool):
     )
     serves: Annotated[type[OrderPhase], *tool_field("The plan phase the order serves")]
 
-    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: BusContext) -> TodoOperation:
         return ServeTodo(todo.revision, actor, self.serves)
 
 
@@ -617,7 +553,7 @@ class CommsProblemCloseTool(WorkArea, CommsTodoTool):
     ]
     artifact: Annotated[str, *tool_field("Existing verification artifact file")]
 
-    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: BusContext) -> TodoOperation:
         return InstallTodo(todo.revision, actor, self.works, self.artifact)
 
     def result(self, changed: Todo) -> ProblemClosed:
@@ -637,111 +573,12 @@ class CommsTurnsTool(ThreadsArea, ThreadReadTool):
         type[TurnView], *tool_field("Activity excerpts by default; original returns complete evidence")
     ] = ActivityTurnView
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
+    def apply(self, comms: BusContext, caller: ToolCaller) -> ThreadTurns:
         answer = replace(
             comms.transcripts.turns(caller.subject(self.thread), self.window),
             detail=self.detail,
         )
         return answer.without_tool_results(type(self).declared_name)
-
-
-class ServedInputDeliveryRead(ThreadsArea, OwnedRead, InputDeliveryRead):
-    """Serving the delivery projection: the owner's queue when observed, else the stored one."""
-
-    def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> DeliveryOverview:
-        return comms.goals.input_delivery(
-            owner.name, include_history=self.include_history, scope=UNOBSERVED_DELIVERY_SCOPE,
-        )
-
-    async def owned(self, ctx: AttachedRuntimeRequestContext) -> DeliveryOverview:
-        scope = await ctx.server.agent.inputs.delivery_scope(ctx.session)
-        return await CoordinationWork.run_worker(
-            partial(
-                ctx.server.agent._comms.goals.input_delivery,
-                ctx.name,
-                include_history=self.include_history,
-                scope=scope,
-            )
-        )
-
-
-class ServedOwnerGoalRead(GoalsArea, OwnerLiveRead, OwnerGoalRead):
-    """Serving the goal snapshot from the live native owner, with the turn it read; an
-    external CLI's goal is the bus's own, read with no native turn."""
-
-    def held(self, comms: Comms, owner: ThreadIncarnation) -> GoalSnapshotReply:
-        return GoalSnapshotReply.from_snapshot(comms.goals.goal_snapshot(owner.name), UpdateMetadata.of())
-
-    async def owned(self, ctx: AttachedRuntimeRequestContext) -> GoalSnapshotReply:
-        snapshot = await CoordinationWork.run_worker(
-            partial(
-                ctx.server.agent._comms.goals.goal_snapshot,
-                ctx.name,
-            )
-        )
-        turn = await CoordinationWork.run_worker(
-            partial(
-                ctx.server.agent.turns.turn_state,
-                ctx.session,
-            )
-        )
-        return GoalSnapshotReply.from_snapshot(snapshot, UpdateMetadata.of(TurnChangedUpdate(turn)))
-
-
-class ServedTranscriptPageRead(ThreadsArea, CapturesTranscriptPage, ThreadReadTool, TranscriptPageRead):
-    """Serving one transcript page under the reader's authority."""
-
-    def capture_as(self, comms: Comms, reader: ReadAuthority) -> TranscriptRead:
-        return comms.transcripts.capture_page_read(
-            reader.subject(self.thread),
-            position=self.position,
-            limit=self.limit,
-            page_source=self.page_source,
-        )
-
-
-class ServedTeammateRead(WorkArea, UiRead, ReadTool, NativeToolRequest, TeammateRead):
-    """Serving one teammate card, refused when the frame or the card moved on."""
-
-    def apply(self, comms: Comms, reader: ReadAuthority) -> TeammateDetail:
-        snapshot = comms.registry.snapshot()
-        if not self.frame_owner.current(snapshot) or not self.unit.current(snapshot):
-            raise ToolRefusedError(
-                "The selected teammate or teammate incarnation is no longer current"
-            )
-        hud = TeamBoardPublicationStore.read_for(comms, self.frame_owner.name)
-        hud.require_current()
-        for card in hud.units:
-            if card.unit == self.unit:
-                return self.detail(comms, card)
-        raise ToolRefusedError(
-            "The selected teammate is no longer in this teammate's published frame"
-        )
-
-    def detail(self, comms: Comms, card: Teammate) -> TeammateDetail:
-        """Expand the published card this read selected from its original record owners."""
-        if card.order_ids != self.orders:
-            raise ToolRefusedError("The selected teammate's orders changed; read its current card")
-        store = comms.goals.todos
-        held = store.held_by(card.unit)
-        current = {todo.id: todo for todo in held}
-        if {(todo.id, todo.order.checked().id) for todo in held} != {
-            (order.problem, order.order) for order in card.orders
-        }:
-            raise ToolRefusedError(
-                "The selected teammate's assignments changed; read its current card"
-            )
-        pulls = ProgressRead(held)
-        details = tuple(TeamOrderDetail(
-            order, (current[order.problem].order.checked().instructions(current[order.problem]),),
-            OrderStory.collect(order.order, store.for_order(order.order)),
-            tuple(ProgressSource.of(current[order.problem], comms.registry, pulls).commits()),
-        ) for order in card.orders)
-        turns = comms.transcripts.turns(card.unit.name, LastTurns())
-        snapshot = comms.registry.snapshot()
-        if turns.thread != card.unit or not card.unit.current(snapshot):
-            raise ToolRefusedError("The selected incarnation changed while its details were read")
-        return TeammateDetail(card, details, turns.to_wire())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -754,7 +591,7 @@ class CommsOrderStoryTool(WorkArea, ReadTool, NativeToolRequest):
     )
     order_id: Annotated[OrderId, *tool_field("Immutable order ID")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> OrderStory:
+    def apply(self, comms: BusContext, caller: ToolCaller) -> OrderStory:
         return OrderStory.collect(self.order_id, comms.goals.todos.for_order(self.order_id))
 
 
@@ -764,7 +601,7 @@ class CommsTeamStoryTool(WorkArea, ReadTool, NativeToolRequest, declared_name="c
     description = ("Read what each held order on the shared board is doing now, one line per "
                    "order; orders held by unregistered participants collapse into one line.")
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> TeamStory:
+    def apply(self, comms: BusContext, caller: ToolCaller) -> TeamStory:
         return TeamStory.collect(comms.goals.held_orders())
 
 
@@ -777,7 +614,7 @@ class CommsOrderWorkTool(WorkArea, ReadTool, NativeToolRequest):
     )
     problem: Annotated[str, *tool_field("Problem ID")]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> OrderWork:
+    def apply(self, comms: BusContext, caller: ToolCaller) -> OrderWork:
         todo = comms.goals.todos.get(self.problem)
         since = todo.order.at.recorded_at("An order")
         turns = comms.transcripts.turns(todo.held().owner, TurnsSince(since))
@@ -822,48 +659,14 @@ class EmergencyReleased(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsEmergencyReleaseTool(WorkArea, ThreadToolRequest, declared_name="comms_emergency_release"):
+class CommsEmergencyReleaseTool(ToolRequest[EmergencyReleased], declared_name="comms_emergency_release"):
     """The andon cord: any teammate may pull it, the way anyone on a Toyota line can stop the
     line. The rules stay; only the current pile and the current holds go, and the pull is
     posted under the puller's name, so a cheat is caught in the open."""
 
-    native_call = CommunicationCall
     label = "Emergency release"
     description = (
         "The team's emergency stop, open even while tools are locked: disable your session's "
         "rule gate, lift every chokehold and waive every "
         "unjudged edit as of now. Posts the pull to #comms under your name; waived edits are "
         "neither approved nor struck, and new edits and vibe checks count again afterwards.")
-
-    def apply(self, comms: Comms, caller: ThreadCaller) -> EmergencyReleased:
-        actor = caller.identity(comms)
-        PiThreadGate.of(comms, comms.registry.require(actor.name)).disable()
-        waived: list[WaivedEdits] = []
-        unreadable: list[UnavailableOrderEdits] = []
-        verdicts: list[JudgedCall] = []
-        for read in OrderEditsRead.for_team(comms.goals, caller.name):
-            try:
-                edits = read.read()
-            except (WorkBranchError, OSError) as error:
-                unreadable.append(UnavailableOrderEdits(
-                    ProblemNumber.parse(read.todo.id), read.thread.incarnation, error))
-                continue
-            if not edits:
-                continue
-            waived.append(WaivedEdits(ProblemNumber.parse(read.todo.id),
-                                      tuple(edit.id for edit in edits)))
-            verdicts.extend(JudgedCall(read.todo.id, WaivedVerdict(
-                read.todo.revision, actor, read.todo.held(), edit.id)) for edit in edits)
-        if verdicts:
-            comms.goals.judge_calls(tuple(verdicts), actor)
-        held = tuple(thread.incarnation for thread in comms.registry.snapshot().threads.values()
-                     if any(goal.state.lifts_on_compliance for goal in thread.goal))
-        release = EmergencyRelease(held, tuple(waived), tuple(unreadable))
-        notice = comms.messaging.send(
-            caller.name, CommsTag.channel(),
-            release.text(caller.name) + " The caller's session rule gate is off; saved evidence stays.",
-        ).message
-        for identity in held:
-            comms.goals.update_goal(identity.name, CompliedGoalAction(witness=notice.message_id),
-                                    actor=OwnerInvocable)
-        return EmergencyReleased(notice.message_id, release)

@@ -20,7 +20,7 @@ from agent_comms.registry.threads import ChosenServiceTier, NativeThread, NextTu
 from agent_comms.transport.connector_caller import DirectorCaller
 from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.transport.tool_declaration import NativeRequestTools
-from agent_comms.transport.tools.served import invoke_tool
+from agent_comms.transport.served_tools.served import invoke_tool
 from agent_comms_hooks import ToolRefusedError
 
 

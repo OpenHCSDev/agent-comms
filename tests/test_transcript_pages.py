@@ -37,7 +37,7 @@ from agent_comms.transcript.no_native_transcript_cursor import NoNativeTranscrip
 from agent_comms.transcript.transcript_events import AssistantTranscript
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.reads import TranscriptPageRead
-from agent_comms.transport.tools.served import invoke_tool
+from agent_comms.transport.served_tools.served import invoke_tool
 from agent_comms.ui_model.observation import ReadTranscript
 from conftest import installed_comms, transcript_records
 

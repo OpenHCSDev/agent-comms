@@ -42,7 +42,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tools.served import invoke_tool
+from agent_comms.transport.served_tools.served import invoke_tool
 
 # Every case in this module exercises the explicitly declared owner.
 invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))

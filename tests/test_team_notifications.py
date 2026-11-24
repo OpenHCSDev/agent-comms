@@ -58,7 +58,7 @@ from agent_comms.registry.heartbeat_delivery import (
     OnHeartbeatDelivery,
 )
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-from agent_comms.registry.thread_management import GivenTags
+from agent_comms.registry.tag_choice import GivenTags
 from agent_comms.registry.thread_status import ArchivedThreadStatus
 from agent_comms.registry.threads import ForkThread, NativeThread, Thread
 from agent_comms.storage.recorded_time import RecordedEventTime
@@ -88,7 +88,7 @@ from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.transcript.transcript_events import IncomingTranscript
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.reads import TeammateRead
-from agent_comms.transport.tools.served import invoke_tool
+from agent_comms.transport.served_tools.served import invoke_tool
 from agent_comms.ui_model import observation
 from agent_comms.ui_model.hud_groups import IdleGroup, PhasesDoneByPlanGroup
 from agent_comms.ui_model.message_category import HeartbeatCategory, InboundCategory, all_categories

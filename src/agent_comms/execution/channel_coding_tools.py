@@ -50,7 +50,7 @@ from agent_comms.transport.native_tool_transport import (
 from agent_comms.transport.native_tools import NativeToolDeclaration
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tool_denial import SelectedToolDenied, StorageDenied
-from agent_comms.transport.tools.served import invoke_tool
+from agent_comms.transport.served_tools.served import invoke_tool
 
 
 @dataclass(frozen=True, kw_only=True)

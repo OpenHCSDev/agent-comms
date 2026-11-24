@@ -8,7 +8,7 @@ from agent_comms.cli_support.exact_tag import ExactTagCliCommand
 from agent_comms.cli_verbs.cli_command import MultipleTargets, TargetActionCommand
 from agent_comms.cli_verbs.target_fields import ChoiceTargetField
 from agent_comms.comms import Comms
-from agent_comms.messaging.channel_management import (
+from agent_comms.messaging.tag_edits import (
     KeepThreadsTagDisposition,
     TagChangeResult,
     TagDisposition,

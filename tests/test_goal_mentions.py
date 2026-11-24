@@ -32,7 +32,7 @@ from agent_comms.registry.relationships import CollaboratingRelationshipGroup, R
 from agent_comms.registry.thread_identity import UserThreadRole
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tools.served import invoke_tool
+from agent_comms.transport.served_tools.served import invoke_tool
 from conftest import installed_comms
 from agent_comms.registry.relationships import AddRelationshipEdit, RemoveRelationshipEdit
 

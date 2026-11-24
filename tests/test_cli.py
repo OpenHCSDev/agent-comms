@@ -44,7 +44,7 @@ from agent_comms.execution.turn_lease import (
     TurnRowWriter,
 )
 from agent_comms.messaging.bus import Bus
-from agent_comms.messaging.channel_management import ArchiveThreadsTagDisposition, TagDisposition
+from agent_comms.messaging.tag_edits import ArchiveThreadsTagDisposition, TagDisposition
 from agent_comms.messaging.channel_targets import (
     ChannelTarget,
     CommandTarget,

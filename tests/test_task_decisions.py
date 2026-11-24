@@ -38,7 +38,7 @@ from agent_comms.planning.task_scope import ExplicitTaskScopeSelection, GoalTask
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tools.served import invoke_tool
+from agent_comms.transport.served_tools.served import invoke_tool
 from bus_history import read_history
 from conftest import declare_test_bus
 

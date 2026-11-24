@@ -71,7 +71,7 @@ from agent_comms.transport.tools.reads import (
     TeammateRead,
     TranscriptPageRead,
 )
-from agent_comms.transport.tools.served import CommsMessageOutcomesTool
+from agent_comms.transport.served_tools.served import ServedCommsMessageOutcomesTool as CommsMessageOutcomesTool
 from agent_comms.ui_model.observation import (
     NotificationsObserved,
     ObserveNotifications,

@@ -25,7 +25,7 @@ from agent_comms.execution.child_process import (
 from agent_comms.execution.cli_inbox_backend import CliInboxBackend
 from agent_comms.execution.imported_conversation import ImportedConversation
 from agent_comms.execution.imported_messages import ImportLimits
-from agent_comms.execution.launch_runtime import LaunchRuntime, TagListText
+from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_arguments import ConfiguredBinary, NativeArguments
 from agent_comms.execution.native_entries import ImportedSessionWriter
 from agent_comms.execution.native_session_reopen import PiSessionId
@@ -43,14 +43,7 @@ from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.read_basis import ReadAuthority
-from agent_comms.nominal.field_codec import (
-    DeclaredWireType,
-    FieldCodec,
-    NullMember,
-    RecordMember,
-    SingleFieldValue,
-    SubclassUnion,
-)
+from agent_comms.nominal.field_codec import FieldCodec, SingleFieldValue
 from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.projects.checkouts import Checkout, LaunchCheckout
 from agent_comms.registry.agent_activity import AgentActivity
@@ -62,6 +55,7 @@ from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_names import RegistryNames
 from agent_comms.registry.registry_store import RegistryEdit
 from agent_comms.registry.relationship_store import RelationshipStore
+from agent_comms.registry.tag_choice import GivenTags, InheritedTags, TagChoice
 from agent_comms.registry.thread_catalog import ThreadCatalog
 from agent_comms.registry.thread_identity import (
     AgentThreadRole,
@@ -98,49 +92,6 @@ from agent_comms.storage.locked_store import PatternFile, RuntimeFile
 from agent_comms.transport.tool_declaration import NativeRequestTools
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks.process_claim import ClaimHeldError, ProcessSingleton
-
-
-class TagChoice(SubclassUnion, affix="Tags"):
-    """Select explicit, inherited or changed tags from an existing set."""
-
-    def for_new(self) -> frozenset[str]:
-        return self.for_child(frozenset())
-
-    @abstractmethod
-    def for_child(self, parent: frozenset[str]) -> frozenset[str]: ...
-
-
-@dataclass(frozen=True, slots=True)
-class GivenTags(DeclaredWireType, TagChoice):
-    """Tags spelled as comma-separated text on the command line, in the editor and in tools."""
-
-    wire_type = str
-    tags: frozenset[str]
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        return cls(TagListText.from_text(FieldCodec.decode(cls.wire_type, data)))
-
-    def to_wire(self) -> str:
-        return TagListText.encode(self.tags)
-
-    def for_child(self, parent: frozenset[str]) -> frozenset[str]:
-        return self.tags
-
-
-@dataclass(frozen=True, slots=True)
-class InheritedTags(NullMember, TagChoice):
-    def for_child(self, parent: frozenset[str]) -> frozenset[str]:
-        return parent
-
-
-@dataclass(frozen=True, slots=True)
-class ChangedTags(RecordMember, TagChoice):
-    add: frozenset[str]
-    remove: frozenset[str]
-
-    def for_child(self, parent: frozenset[str]) -> frozenset[str]:
-        return (parent | self.add) - self.remove
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

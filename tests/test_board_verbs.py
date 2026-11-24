@@ -69,7 +69,7 @@ from agent_comms.team.standing_rules import (
     StandingRule,
 )
 from agent_comms.transport.tool_caller import ForkCaller, HumanCaller, PeerCaller, ThreadCaller
-from agent_comms.transport.tools.orders import ServedCommsBoardActionTool
+from agent_comms.transport.served_tools.orders import ServedCommsBoardActionTool
 from agent_comms_hooks import ToolRefusedError
 from github_fixture import GitHubFixture
 from team_heartbeat_fixture import capture_frame

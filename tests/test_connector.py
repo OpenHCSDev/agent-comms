@@ -145,8 +145,8 @@ from agent_comms.transport.tools.channels import ChannelListing, CommsChannelsTo
 from agent_comms.transport.tools.inbox import CommsInboxTool
 from agent_comms.transport.tools.reads import TranscriptPageRead
 from agent_comms.transport.tools.send import CommsSendTool
-from agent_comms.transport.tools.served import (
-    CommsPinChannelTool,
+from agent_comms.transport.served_tools.served import (
+    ServedCommsPinChannelTool as CommsPinChannelTool,
     ServedCommsUserSendTool,
     invoke_tool,
 )
