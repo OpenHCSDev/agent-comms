@@ -5,7 +5,7 @@ from typing import ClassVar
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.planning.order_phase import OrderPhase
 from agent_comms.planning.orders import Todo
-from agent_comms.planning.phase_evidence import PhaseEvidence
+from agent_comms.planning.phase_evidence import PatternEvidence, PhaseEvidence
 from agent_comms.planning.phase_tasks import PhaseTask, UnspecifiedPhaseTask
 from agent_comms.planning.plan_reading import PlanReading
 
@@ -64,6 +64,10 @@ class PlanPhase(OrderPhase, declared_name=None):
     evidence: ClassVar[PhaseEvidence]
     task: ClassVar[PhaseTask] = UnspecifiedPhaseTask()
 
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        PatternEvidence.declaration_modules.add(cls.__module__)
+
     @classmethod
     def phase_evidence(cls) -> PhaseEvidence:
         return cls.evidence
@@ -94,3 +98,6 @@ class PlanPhase(OrderPhase, declared_name=None):
     @classmethod
     def ready(cls, reading: PlanReading) -> bool:
         return all(phase.done(reading) for phase in cls.after) and not cls.done(reading)
+
+
+PatternEvidence.declaration_modules.add(PlanPhase.__module__)

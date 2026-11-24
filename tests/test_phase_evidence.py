@@ -37,12 +37,15 @@ from agent_comms.planning.phase_evidence import (
 )
 from agent_comms.planning.plan_phases import (
     FLAG,
+    BoardLineLockTextPhase,
     BusDeletionPhase,
     ExternalBoundariesPhase,
     MessagingOwnersPhase,
     ModuleMapPhase,
+    OwnedDispatchPhase,
     PlanPhase,
     RostersPhase,
+    UnflattenModulesPhase,
 )
 from agent_comms.planning.plan_reading import PlanReading
 from agent_comms.projects.repo import Repo
@@ -110,6 +113,18 @@ def test_boundary_evidence_ignores_its_declaration_and_exception_groups(tmp_path
     source.write_text("try:\n    pass\nexcept Exception:\n    raise\n")
     changed = advanced(tmp_path, "broad", reading)
     assert not changed.holds(ExternalBoundariesPhase.evidence)
+
+
+def test_pattern_evidence_excludes_declared_phase_modules_not_only_base(tmp_path):
+    source = Path(__file__).parents[1] / "src/agent_comms/planning"
+    reading = main_of(tmp_path, {
+        "src/agent_comms/planning/plan_phase_base.py": (source / "plan_phase_base.py").read_text(),
+        "src/agent_comms/planning/plan_phases.py": (source / "plan_phases.py").read_text(),
+        "src/agent_comms/nominal/field_codec.py": "class FieldCodec:\n    def compact(self):\n        pass\n",
+    })
+    assert reading.holds(BoardLineLockTextPhase.evidence)
+    assert reading.holds(OwnedDispatchPhase.evidence)
+    assert reading.holds(UnflattenModulesPhase.evidence)
 
 
 def test_every_plan_phase_declares_its_plan_and_evidence():

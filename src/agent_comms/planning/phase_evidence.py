@@ -369,6 +369,7 @@ class PathsAbsent(MainEvidence):
 class PatternEvidence(MainEvidence):
     """A ``git grep -E`` count on main, judged by the member."""
 
+    declaration_modules: ClassVar[set[str]] = set()
     pattern: str
     paths: tuple[str, ...] = ("src",)
 
@@ -377,10 +378,11 @@ class PatternEvidence(MainEvidence):
 
     def searched(self, main: MainTree) -> tuple[str, ...]:
         """``paths`` without the phase declarations, which spell every pattern they ban."""
-        from agent_comms.planning.plan_phase_base import PlanPhase
-
-        declaration = main.repo.module_file(PlanPhase.__module__)
-        return (*self.paths, f":!{declaration.as_posix()}")
+        exclusions = tuple(
+            f":!{main.repo.module_file(module).as_posix()}"
+            for module in sorted(self.declaration_modules)
+        )
+        return (*self.paths, *exclusions)
 
     @abstractmethod
     def satisfied(self, count: int) -> bool: ...
