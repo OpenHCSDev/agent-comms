@@ -170,7 +170,12 @@ from agent_comms.transport.tools.orders import CommsHeadVerdictTool, HeadVerdict
 from agent_comms.transport.tools.send import CommsSendTool, SendTool
 from agent_comms.transport.tools.served import SearchToolLookup
 from agent_comms.ui_model.observation import serve_encoded
-from agent_comms.ui_model.observation_wire import RelayConnection, relay_frames
+from agent_comms.ui_model.observation_wire import (
+    WEBSOCKET_HEARTBEAT_SECONDS,
+    WEBSOCKET_MAX_MESSAGE_BYTES,
+    RelayConnection,
+    relay_frames,
+)
 
 """A JSON-RPC request id, as the client chose it."""
 
@@ -839,8 +844,8 @@ class ApprovalSender(ServiceSender):
 class Connector(ConnectorService, McpServer):
     """The MCP endpoint and the OAuth authorization server in front of it."""
 
-    heartbeat_seconds: ClassVar[float] = 25.0
-    """How often a watch socket is pinged; a client that misses the pong is dropped."""
+    heartbeat_seconds: ClassVar[float] = WEBSOCKET_HEARTBEAT_SECONDS
+    """How often a connector WebSocket is pinged; a peer that misses the pong is dropped."""
     stack_frames: ClassVar[int] = 6
     """How deep a still-running task's stack is reported; the innermost frames name its phase."""
     helper_start: ClassVar[HelperStart] = SpawnedHelper()
@@ -917,7 +922,7 @@ class Connector(ConnectorService, McpServer):
         offer = await asyncio.to_thread(self.watch_tickets.reconnect, thread, URL(self.issuer))
         logging.info("Watch for %s opened on %s", thread, ticket.opened_on)
         # A transcript line holds whatever a tool returned, far past aiohttp's 4 MiB default.
-        viewer = web.WebSocketResponse(heartbeat=self.heartbeat_seconds, max_msg_size=64 * 1024 * 1024)
+        viewer = web.WebSocketResponse(heartbeat=self.heartbeat_seconds, max_msg_size=WEBSOCKET_MAX_MESSAGE_BYTES)
         await viewer.prepare(request)
         watch = OpenWatch(thread=thread, viewer=viewer, handler=request.task)
         replaced = tuple(held for held in self.open_viewers if held.watching(thread))
@@ -1376,7 +1381,9 @@ class Connector(ConnectorService, McpServer):
             caller.require_observation()
         except GrantRefusedError as error:
             raise web.HTTPForbidden(text=str(error))
-        viewer = web.WebSocketResponse()
+        viewer = web.WebSocketResponse(
+            heartbeat=self.heartbeat_seconds, max_msg_size=WEBSOCKET_MAX_MESSAGE_BYTES,
+        )
         await viewer.prepare(request)
         observation = OpenObservation(viewer=viewer, handler=request.task)
         self.open_viewers.append(observation)

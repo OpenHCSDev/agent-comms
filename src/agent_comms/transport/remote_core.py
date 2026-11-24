@@ -13,6 +13,7 @@ import urllib.error
 from dataclasses import dataclass, replace
 from functools import cached_property
 from multiprocessing.connection import Connection
+from typing import ClassVar
 
 import aiohttp
 from pydantic import JsonValue
@@ -48,6 +49,8 @@ from agent_comms.transport.request import (
 )
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.ui_model.observation_wire import (
+    WEBSOCKET_HEARTBEAT_SECONDS,
+    WEBSOCKET_MAX_MESSAGE_BYTES,
     EncodedConnection,
     ObservationPeer,
     ObservationSource,
@@ -107,6 +110,8 @@ class ConnectorObservationPeer(ObservationPeer):
     UI's ViewerEnd and the connector's /observe socket from a thread with its own event
     loop, so the UI's loop is never borrowed; the frames are declared records both ways."""
 
+    heartbeat_seconds: ClassVar[float] = WEBSOCKET_HEARTBEAT_SECONDS
+
     def __init__(self, access: ConnectorClient, codec: type[EncodedConnection]) -> None:
         self.url = access.endpoint.url.with_path(OBSERVE_PATH)
         # The profile's route owns how its endpoint is reached, for this socket as
@@ -142,7 +147,8 @@ class ConnectorObservationPeer(ObservationPeer):
         try:
             async with self.route.socket_session() as session, session.ws_connect(
                 self.url, headers={"Authorization": f"Bearer {access.credential.token}"},
-                ssl=access.tls,
+                ssl=access.tls, heartbeat=self.heartbeat_seconds,
+                max_msg_size=WEBSOCKET_MAX_MESSAGE_BYTES,
             ) as remote:
                 self.ending = await relay_frames(local, remote)
         except (OSError, aiohttp.ClientError) as error:

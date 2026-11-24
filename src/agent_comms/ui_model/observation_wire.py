@@ -25,6 +25,11 @@ from agent_comms.coordination.errors import CoordinationError, ReadAgain
 from agent_comms.execution.child_process import RelayEnding
 from agent_comms.nominal.field_codec import FieldCodec
 
+WEBSOCKET_HEARTBEAT_SECONDS: float = 25.0
+"""How often a connector WebSocket pings its peer; a dead half-open socket closes when pong misses."""
+WEBSOCKET_MAX_MESSAGE_BYTES: int = 64 * 1024 * 1024
+"""Frame size ceiling for connector WebSockets (sidebars and transcripts exceed aiohttp's 4 MiB default)."""
+
 
 class WebSocketFrame(Protocol):
     @property

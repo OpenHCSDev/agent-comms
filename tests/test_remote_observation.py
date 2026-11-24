@@ -5,6 +5,7 @@ import socket
 import time
 from dataclasses import dataclass
 
+from aiohttp import web
 from aiohttp.test_utils import TestServer
 from yarl import URL
 
@@ -13,7 +14,11 @@ from agent_comms.transport.connector import Connector
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.transport.connector_profile import EndpointRoute, ResolvedRoute
 from agent_comms.transport.connector_store import ConnectorStore, UiReadAccess
-from agent_comms.transport.remote_core import ConnectorClient, ObservationRetired
+from agent_comms.transport.remote_core import (
+    ConnectorClient,
+    ConnectorObservationPeer,
+    ObservationRetired,
+)
 from agent_comms.ui_model.observation import (
     ObservationProcess,
     ObserveSidebar,
@@ -101,3 +106,32 @@ def test_an_ended_observation_reports_its_own_cause() -> None:
         assert peer.ending.describe() in closed and "Traceback" not in closed
     finally:
         peer.retire()
+
+
+async def test_a_silent_observation_socket_ends_on_its_heartbeat(monkeypatch) -> None:
+    """A half-open socket (e.g. phone backgrounded without TCP FIN) misses its heartbeat pong
+    and ends the relay instead of wedging the observation forever."""
+    monkeypatch.setattr(ConnectorObservationPeer, "heartbeat_seconds", 0.2)
+    release = asyncio.Event()
+
+    async def silent_observe(request: web.Request) -> web.WebSocketResponse:
+        socket_response = web.WebSocketResponse(autoping=False)
+        await socket_response.prepare(request)
+        await release.wait()
+        return socket_response
+
+    app = web.Application()
+    app.router.add_get("/observe", silent_observe)
+    async with TestServer(app) as server:
+        peer = TestConnectorSource(Endpoint(server.make_url("/mcp")), Credential("t")).observation_peer(ViewerEnd)
+        try:
+            started = time.monotonic()
+            await asyncio.to_thread(peer.join)
+            elapsed = time.monotonic() - started
+            assert not peer.thread.is_alive()
+            assert elapsed < 5.0
+            assert peer.ending != ObservationRetired()
+        finally:
+            release.set()
+            peer.connection.close()
+            peer.retire()
