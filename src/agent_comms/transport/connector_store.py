@@ -14,9 +14,10 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self
 
+from metaclass_registry.mro_dispatch import MroDispatch, handles
 from yarl import URL
 
-from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
@@ -51,6 +52,7 @@ from agent_comms.transport.connector_profile import (
     UrlText,
 )
 from agent_comms.transport.held_ui_profiles import connector_state_directory
+from agent_comms.transport.served_endpoints import HttpScheme, HttpsScheme, HttpUrlScheme
 
 ACCESS_SECONDS = 3600
 
@@ -82,12 +84,11 @@ class OAuthRedirectAuthority(DeclaredFamily, affix="RedirectAuthority"):
             raise MalformedRecord(cls.refusal)
         if url.query or url.fragment:
             raise MalformedRecord(cls.refusal)
-        match url.scheme:
-            case "https":
-                return HttpsRedirectAuthority()
-            case "http":
-                return LoopbackRedirectAuthority.for_url(url)
-        raise MalformedRecord(cls.refusal)
+        try:
+            scheme = HttpUrlScheme.for_url_scheme(url.scheme)
+        except UnknownFamilyMember as error:
+            raise MalformedRecord(cls.refusal) from error
+        return _OAuthSchemeAuthority.handler_for(scheme)(_OAUTH_SCHEME_AUTHORITY, scheme(), url)
 
     @abstractmethod
     def matches(self, requested: URL, registered: URL) -> bool:
@@ -122,6 +123,19 @@ class LoopbackRedirectAuthority(OAuthRedirectAuthority):
         """A native client may choose its port; the raw remaining URL stays exact."""
 
         return requested.with_port(None) == registered.with_port(None)
+
+
+class _OAuthSchemeAuthority(MroDispatch):
+    @handles(HttpsScheme)
+    def https(self, scheme: HttpsScheme, url: URL) -> OAuthRedirectAuthority:
+        return HttpsRedirectAuthority()
+
+    @handles(HttpScheme)
+    def http(self, scheme: HttpScheme, url: URL) -> OAuthRedirectAuthority:
+        return LoopbackRedirectAuthority.for_url(url)
+
+
+_OAUTH_SCHEME_AUTHORITY = _OAuthSchemeAuthority()
 
 
 @dataclass(frozen=True)

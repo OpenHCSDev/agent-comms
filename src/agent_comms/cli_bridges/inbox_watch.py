@@ -65,6 +65,7 @@ from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.transport.connector_profile import BearerSecret
 from agent_comms.transport.connector_store import ConnectorStore, ExpiresAt, digest
+from agent_comms.transport.served_endpoints import HttpUrlScheme
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools.inbox import CommsInboxTool
 
@@ -189,7 +190,7 @@ class WatchTickets:
 
     @staticmethod
     def url(token: BearerSecret, issuer: URL) -> str:
-        scheme = {"http": "ws", "https": "wss"}[issuer.scheme]
+        scheme = HttpUrlScheme.for_url_scheme(issuer.scheme).websocket_scheme
         return str(issuer.with_scheme(scheme) / "watch" / token)
 
     def taken(self, token: BearerSecret) -> WatchTicket:

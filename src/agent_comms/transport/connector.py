@@ -149,7 +149,7 @@ from agent_comms.transport.mcp_wire import (
 )
 from agent_comms.transport.progress import CancellableWireExport, WireExportObserver
 from agent_comms.transport.request import tool_field
-from agent_comms.transport.served_endpoints import ServedEndpoints
+from agent_comms.transport.served_endpoints import HttpUrlScheme, ServedEndpoints
 from agent_comms.transport.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.transport.tool_request import (
     ChannelsArea,
@@ -470,8 +470,12 @@ class ConnectorServeModelTool(ThreadsArea, ConnectorTool, declared_name="comms_s
     state_directory: ClassVar[str] = "model-agents"
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
-        if URL(self.endpoint).scheme not in {"http", "https"}:
-            raise ToolRefusedError(f"endpoint must be an http(s) URL, not {self.endpoint!r}")
+        try:
+            HttpUrlScheme.for_url_scheme(URL(self.endpoint).scheme)
+        except UnknownFamilyMember as error:
+            raise ToolRefusedError(
+                f"endpoint must be an http(s) URL, not {self.endpoint!r}"
+            ) from error
         directory = comms.root / self.state_directory
         directory.mkdir(mode=0o700, exist_ok=True)
         record, log = directory / f"{self.name}.json", directory / f"{self.name}.log"

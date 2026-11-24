@@ -20,7 +20,29 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 from urllib.parse import urlparse
 
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.transport.probed_command import ProbedCommand
+
+
+class HttpUrlScheme(DeclaredFamily, affix="Scheme"):
+    """An HTTP or HTTPS URL scheme, decoded once at the boundary."""
+
+    default_port: ClassVar[int]
+    websocket_scheme: ClassVar[str]
+
+    @classmethod
+    def for_url_scheme(cls, scheme: str) -> type[HttpUrlScheme]:
+        return cls.member_named(scheme)
+
+
+class HttpScheme(HttpUrlScheme):
+    default_port = 80
+    websocket_scheme = "ws"
+
+
+class HttpsScheme(HttpUrlScheme):
+    default_port = 443
+    websocket_scheme = "wss"
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,8 +155,8 @@ class NothingTailnetOnly(ProfileOffer):
             parsed = urlparse(endpoint.target.url)
             if parsed.port is not None:
                 taken.add(parsed.port)
-            elif parsed.scheme == "https":
-                taken.add(443)
+            else:
+                taken.add(HttpUrlScheme.for_url_scheme(parsed.scheme).default_port)
         port = self.DEFAULT_SERVE_PORT
         while port in taken:
             port += 1000
