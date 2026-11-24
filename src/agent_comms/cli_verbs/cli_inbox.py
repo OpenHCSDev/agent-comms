@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from agent_comms.agent_backend import NewThreadBackend
-from agent_comms.cli_support.thread_lifecycle import ThreadLifecycleCliCommand
+from agent_comms.cli_support.named_thread import NamedThreadCliCommand
 from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.cli_verbs.cli_result import TargetEditResult
 from agent_comms.comms import Comms
@@ -22,7 +22,7 @@ class ThreadExecutionResult(RecordMember, TargetEditResult):
 class CliInboxCliCommand(
     NativeOwnerCommand,
     OwnerLifecycleControl,
-    ThreadLifecycleCliCommand,
+    NamedThreadCliCommand,
     CliCommand[ThreadExecutionResult],
     declared_name="cli-inbox",
 ):

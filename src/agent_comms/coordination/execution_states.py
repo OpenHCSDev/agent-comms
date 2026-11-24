@@ -137,7 +137,7 @@ class UnstartedExecution(EngagedExecution, ExecutionState):
 
 
 class QueuedExecution(UnstartedExecution):
-    def prepare_start(self, store, snapshot):
+    def prepare_start(self, store, snapshot: RecoverySnapshot):
         return store.mark_pending(
             snapshot.execution.execution_id,
             expected_revision=snapshot.execution.revision,

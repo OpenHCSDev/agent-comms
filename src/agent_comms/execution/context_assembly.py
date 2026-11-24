@@ -23,13 +23,13 @@ class ContextAssembly:
     def context_for(self, owner: ContextOwner) -> TurnContext:
         """Preview the next Core context, without recording or authorizing a native request."""
         registry = self.views.registry.snapshot()
-        owner = registry.require(owner.name)
-        relations = self.relationships.context_relations_at(registry, owner)
+        current = registry.require(owner.name)
+        relations = self.relationships.context_relations_at(registry, current)
         context = TurnContext.for_owner(
-            owner, NextContextTurn(), "",
+            current, NextContextTurn(), "",
             tuple(registry.visible_threads(DEFAULT_ROSTER)), relations, self.goals,
-        ).with_goal(owner, self.goals)
-        return self.context_with_awareness(context, owner, relations)
+        ).with_goal(current, self.goals)
+        return self.context_with_awareness(context, current, relations)
 
     def context_with_awareness(
         self, context: TurnContext, owner: ContextOwner, relations: tuple[PeerRelation, ...],
