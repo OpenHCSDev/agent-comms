@@ -332,7 +332,7 @@ class TeamHud(TeamHudRecord):
     @cached_property
     def publication_identity(self) -> tuple[object, ...]:
         """Every semantic value and exact occurrence supplying the stored recipient frame."""
-        return self.display,
+        return self, self.alarm_source, self.display
 
     @cached_property
     def alarm_displays(self) -> tuple[AlarmDisplay, ...]:
