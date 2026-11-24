@@ -12,7 +12,7 @@ from typing import ClassVar, NoReturn, Self, cast
 
 from pydantic import JsonValue
 
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.execution.child_process import AsyncWork, ReadWork
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, ToolCallId
 from agent_comms.nominal.served_declaration import ServesDeclaration
@@ -129,7 +129,7 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
 
     @classmethod
     def invoke(
-        cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller
+        cls, comms: BusContext, arguments: Mapping[str, object], *, caller: ToolCaller
     ) -> dict[str, JsonValue]:
         """The reply every adapter receives: the encoding of the tool's declared result."""
         return cls.decoded(comms, arguments).replied(comms, caller)
@@ -157,7 +157,7 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
         return cls, arguments
 
     @classmethod
-    def decoded(cls, comms: Comms, arguments: Mapping[str, object]) -> Self:
+    def decoded(cls, comms: BusContext, arguments: Mapping[str, object]) -> Self:
         """This tool's request as the wire's arguments declare it."""
         if cls.family_discriminator in arguments:
             raise ToolArgumentsRefusedError(f"Unknown tool argument: {cls.family_discriminator}")
@@ -181,7 +181,7 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
         """A request that asks nothing of the grant it arrived under runs the same under any."""
         return self
 
-    def replied(self, comms: Comms, caller: ToolCaller) -> dict[str, JsonValue]:
+    def replied(self, comms: BusContext, caller: ToolCaller) -> dict[str, JsonValue]:
         # A request decoded from the wire meets whichever caller arrived; the caller's own
         # invoke checks at runtime that it may apply this request (thread-only refusals).
         if self.background:
@@ -190,7 +190,7 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
         applied = caller.invoke(cast(ServedRequest, self), comms)
         return self.reply(FieldCodec.encode(applied.to_wire()), caller)
 
-    def started_in_background(self, comms: Comms, caller: ToolCaller) -> BackgroundRunStarted:
+    def started_in_background(self, comms: BusContext, caller: ToolCaller) -> BackgroundRunStarted:
         """Detach the apply as a background run: its result is the run's output, and the
         caller hears how it ended like any other run. The capability is the base's; a leaf
         adds nothing to be backgroundable."""
@@ -203,7 +203,7 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
             store.log_directory, caller.own_incarnation(comms), self.declared_name,
             partial(caller.invoke, cast(ServedRequest, self), comms)))
 
-    def board(self, comms: Comms, caller: ToolCaller) -> tuple[str, ...]:
+    def board(self, comms: BusContext, caller: ToolCaller) -> tuple[str, ...]:
         """The new board rows naming the caller of this verb, carried beside its reply: the
         reply itself stays the tool's declared result, which remote readers decode."""
         return caller.board(comms)
@@ -218,16 +218,16 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
         return read
 
     @classmethod
-    def context_types(cls, comms: Comms, arguments: Mapping[str, object]) -> Mapping[str, type[object]]:
+    def context_types(cls, comms: BusContext, arguments: Mapping[str, object]) -> Mapping[str, type[object]]:
         """Ordinary tools need no contextual narrowing of their declared field types."""
         return {}
 
     @abstractmethod
-    def apply(self, comms: Comms, caller: Caller) -> Result:
+    def apply(self, comms: BusContext, caller: Caller) -> Result:
         """Each tool declares its own result record; invoke alone encodes it."""
 
     def apply_without_thread[R: ToolResult](
-        self: ServedRequest[ToolCaller, R], comms: Comms, caller: NoThreadCaller
+        self: ServedRequest[ToolCaller, R], comms: BusContext, caller: NoThreadCaller
     ) -> R:
         return self.apply(comms, caller)
 
@@ -254,12 +254,12 @@ class HumanToolRequest[Result: ToolResult = ToolResult](
             return False
         return True
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> Result:
+    def apply(self, comms: BusContext, caller: ToolCaller) -> Result:
         caller.require_human()
         return self.answered(comms)
 
     @abstractmethod
-    def answered(self, comms: Comms) -> Result: ...
+    def answered(self, comms: BusContext) -> Result: ...
 
 
 class NativeToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
@@ -285,11 +285,11 @@ class PublishingTool[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolR
     """A publication refuses at its store's write guard during maintenance; waiting here
     would hold the connector's stop."""
 
-    def apply(self, comms: Comms, caller: Caller) -> Result:
+    def apply(self, comms: BusContext, caller: Caller) -> Result:
         return self.publish(comms, caller)
 
     @abstractmethod
-    def publish(self, comms: Comms, caller: Caller) -> Result: ...
+    def publish(self, comms: BusContext, caller: Caller) -> Result: ...
 
 
 class PublishingToolRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
@@ -313,7 +313,7 @@ class ReadTool[Result: ToolResult = ToolResult](ReadWork, ReadRequest[Result], d
     def require_read_only(self) -> None:
         """The declared read capability controls access, independently of MCP hints."""
 
-    def board(self, comms: Comms, caller: ToolCaller) -> tuple[str, ...]:
+    def board(self, comms: BusContext, caller: ToolCaller) -> tuple[str, ...]:
         """A read is not a verb: it carries what it read, and the board stays in comms_board."""
         return ()
 
@@ -337,7 +337,7 @@ class ThreadReadTool[Result: ToolResult = ToolResult](
 class ThreadToolRequest(NativeToolRequest[ThreadCaller]):
     """Self-relative requests declare their required caller at the shared boundary."""
 
-    def apply_without_thread(self, comms: Comms, caller: NoThreadCaller) -> NoReturn:
+    def apply_without_thread(self, comms: BusContext, caller: NoThreadCaller) -> NoReturn:
         return caller.refuse_thread()
 
 

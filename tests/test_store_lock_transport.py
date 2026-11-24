@@ -13,8 +13,12 @@ from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.storage.store_files import StoreGuard, StoreLockBusyError, StoreLockContention
 from agent_comms.transport.tools.sidebar import CommsRegistryTool
 from agent_comms.ui_model.observation import (
-    CoreReadAnswered, CoreReadOperation, ObservationService, ReadBusy, ReadRefused,
+    CoreReadAnswered,
+    CoreReadOperation,
+    ReadBusy,
+    ReadRefused,
 )
+from agent_comms.ui_model.observation_service import ObservationService
 from test_locked_store import _hold_store_write, event, process
 
 

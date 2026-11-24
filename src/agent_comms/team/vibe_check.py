@@ -14,7 +14,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.errors import BirthChangedError
 from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.messages import Message
@@ -94,7 +94,7 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
     unjudged: int
 
     @classmethod
-    def from_frame(cls, comms: Comms, frame: HeartbeatFrame) -> Self:
+    def from_frame(cls, comms: BusContext, frame: HeartbeatFrame) -> Self:
         return cls.from_orders(
             frame.todos,
             len(tuple(ReviewTimerUp.conditions(comms, frame))),
@@ -121,7 +121,7 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
         )
 
     @classmethod
-    def found(cls, comms: Comms, frame: HeartbeatFrame) -> tuple[Sign, ...]:
+    def found(cls, comms: BusContext, frame: HeartbeatFrame) -> tuple[Sign, ...]:
         load = cls.from_frame(comms, frame)
         if not load.overloaded:
             return ()
@@ -138,7 +138,7 @@ class VibeCheck(UndatedStandingRule):
     sign: Sign
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return tuple(
             cls(sign)
@@ -146,7 +146,7 @@ class VibeCheck(UndatedStandingRule):
             for sign in member.found(comms, frame)
         )
 
-    def enforce(self, comms: Comms) -> None:
+    def enforce(self, comms: BusContext) -> None:
         """The degraded team is everyone's: each running teammate gets the burst and owes its
         answer."""
         burst = self.burst()
@@ -219,7 +219,7 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
     after: ClassVar[int] = 10 * 60
 
     @classmethod
-    def violations(cls, comms: Comms, *,
+    def violations(cls, comms: BusContext, *,
                    snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         """One chokehold per teammate who ignored its own vibe check, for its oldest one."""
         snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
@@ -231,7 +231,7 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
                     source, snapshot, teammate.name, time.time() - cls.after)[:1]
             )
 
-    def enforce(self, comms: Comms) -> None:
+    def enforce(self, comms: BusContext) -> None:
         """Only the birth that ignored its check is paused or told: a thread that replaced it
         under the same name is refused at the read and again inside the goal write."""
         births = comms.registry.snapshot().threads_for(self.teammate.require_recorded())
@@ -296,7 +296,7 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
     blocking: tuple[Sign, ...] = field(compare=False)
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         held = tuple(teammate.incarnation
                      for teammate in TeamService.teammates(frame.snapshot, comms.goals)
@@ -316,7 +316,7 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
                blocking: tuple[Sign, ...]) -> tuple[Self, ...]: ...
 
     @staticmethod
-    def newest(comms: Comms, teammate: str, *,
+    def newest(comms: BusContext, teammate: str, *,
                snapshot: RegistrySnapshot | None = None) -> tuple[Message, ...]:
         snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
         with comms.bus.bus.reading() as source:
@@ -327,7 +327,7 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
                 ChokeholdNotice.lines(source, snapshot, teammate, time.time()))
 
     @staticmethod
-    def blocking_signs(comms: Comms, frame: HeartbeatFrame) -> tuple[Sign, ...]:
+    def blocking_signs(comms: BusContext, frame: HeartbeatFrame) -> tuple[Sign, ...]:
         """The signs still degraded that a quote does not clear."""
         return tuple(
             sign
@@ -336,7 +336,7 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
         )
 
     @staticmethod
-    def held(comms: Comms, teammate: str, *,
+    def held(comms: BusContext, teammate: str, *,
              snapshot: RegistrySnapshot | None = None) -> bool:
         """Only the teammate a chokehold paused is resumed by its own answer."""
         snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
@@ -353,7 +353,7 @@ class ChokeholdReleased(ChokeholdAnswer):
         return ((cls(teammate, answer, blocking),)
                 if not blocking and PatternCatalog.quoted(answer.body) else ())
 
-    def enforce(self, comms: Comms) -> None:
+    def enforce(self, comms: BusContext) -> None:
         comms.goals.update_born_goal(
             self.teammate, CompliedGoalAction(witness=self.answer.message_id), actor=OwnerInvocable)
         ChokeholdNotice.burst(
@@ -377,7 +377,7 @@ class ChokeholdHeld(ChokeholdAnswer):
         return ((cls(teammate, answer, blocking),)
                 if blocking and PatternCatalog.quoted(answer.body) else ())
 
-    def enforce(self, comms: Comms) -> None:
+    def enforce(self, comms: BusContext) -> None:
         verdict = f"Quoted, and still degraded: {self.answer.seq}:{self.answer.message_id}."
         ChokeholdNotice.burst_once(
             comms,
@@ -405,7 +405,7 @@ class ChokeholdRefused(ChokeholdAnswer):
                blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
         return () if PatternCatalog.quoted(answer.body) else (cls(teammate, answer, blocking),)
 
-    def enforce(self, comms: Comms) -> None:
+    def enforce(self, comms: BusContext) -> None:
         verdict = f"That's not a quote: {self.answer.seq}:{self.answer.message_id}."
         ChokeholdNotice.burst_once(
             comms,

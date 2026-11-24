@@ -93,11 +93,14 @@ from agent_comms.ui_model import observation
 from agent_comms.ui_model.hud_groups import IdleGroup, PhasesDoneByPlanGroup
 from agent_comms.ui_model.message_category import HeartbeatCategory, InboundCategory, all_categories
 from agent_comms.ui_model.observation import (
-    ObservationService,
     ObserveTeamHud,
     ReadOperation,
     ReadRefused,
     TeamHudObserved,
+)
+from agent_comms.ui_model.observation_service import (
+    ObservationService,
+    TeamHudReading,
 )
 from agent_comms.ui_model.teammate_state import (
     Idle,
@@ -900,7 +903,7 @@ async def test_team_page_reads_each_beats_frame_and_nothing_between(notification
         service = ObservationService(comms, observer)
         try:
             async with service.tasks:
-                service.interest.receive(ObserveTeamHud(), service)
+                service.accept(ObserveTeamHud())
                 first, = await observed()
                 assert first.huds == (expected,)
                 assert len(await observed()) == 1  # the page's own preparation, once
@@ -915,7 +918,7 @@ def test_a_frame_this_reader_cannot_decode_reaches_the_page_not_the_observer(not
     """An installed newer heartbeat writes a field an older Toad does not declare; the page
     shows the unreadable frame and the observer process, and Toad, keep running."""
     comms = notification_bus
-    reading = ObserveTeamHud().observation()
+    reading = TeamHudReading(ObserveTeamHud())
     beat(comms, states=state_cards(comms, TeammateState))
     frame, = TeamBoardPublicationStore.matching_in(comms.root)
     written = json.loads(frame.read_text())
@@ -962,7 +965,7 @@ def test_preparing_the_board_answers_each_read_outcome_through_its_owner(
     shown as broken instead of retried, and a real defect was rendered as a saved-data error.
     It now reads through UnreadableHistory.outcome, the owner read() already uses."""
     comms = notification_bus
-    reading = ObserveTeamHud().observation()
+    reading = TeamHudReading(ObserveTeamHud())
     service = PreparingService(comms, comms.views.revision())
     reading.prepared_revision = service.revision
 

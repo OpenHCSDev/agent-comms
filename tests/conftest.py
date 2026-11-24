@@ -91,7 +91,8 @@ from agent_comms.team.rule_deal import ReadSpan, RuleDeal, SessionAudit, Started
 from agent_comms.transport.native_tool_transport import ToolListener
 from agent_comms.transport.core_access import LocalCoreAccess
 from agent_comms.transport.tool_caller import PeerCaller
-from agent_comms.ui_model.observation import LocalRouteObservation, ObservationProcess
+from agent_comms.ui_model.observation import ObservationProcess
+from agent_comms.ui_model.observation_service import LocalRouteObservation
 from agent_comms.transport.tool_declaration import NoToolRecord, ToolDeclaration
 from agent_comms_hooks.watch import WatchRecord
 from bus_record_fixture import prepare_native_comms
@@ -717,7 +718,7 @@ class UiCoreReads:
 @asynccontextmanager
 async def ui_core_reads(comms: Comms) -> AsyncIterator[UiCoreReads]:
     """For a test that builds its own bus; the fixture below is the shared-bus case."""
-    async with ObservationProcess.awaited(comms.route) as reads:
+    async with LocalRouteObservation.awaited(comms.route) as reads:
         yield UiCoreReads(LocalCoreAccess(comms, reads))
 
 

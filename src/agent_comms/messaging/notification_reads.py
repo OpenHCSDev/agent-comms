@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field
 
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.messaging.bus_read import UiRead
 from agent_comms.messaging.historical_views import HistorySource
 from agent_comms.messaging.message_notification import NotificationPass, NotificationWindow
@@ -28,13 +28,13 @@ class NotificationRead(UiRead[NotificationWindow]):
 
     @abstractmethod
     def changed_since(
-        self, comms: Comms, previous: NotificationsRead, notifications: NotificationPass,
+        self, comms: BusContext, previous: NotificationsRead, notifications: NotificationPass,
     ) -> bool: ...
 
 
 @dataclass(frozen=True)
 class LiveNotificationRead(NotificationRead):
-    def apply(self, comms: Comms, reader: ReadAuthority) -> NotificationWindow:
+    def apply(self, comms: BusContext, reader: ReadAuthority) -> NotificationWindow:
         return comms.views.message_notifications_for_references(
             reader.outcome_viewer(comms.registry),
             self.references,
@@ -43,7 +43,7 @@ class LiveNotificationRead(NotificationRead):
         )
 
     def changed_since(
-        self, comms: Comms, previous: NotificationsRead, notifications: NotificationPass,
+        self, comms: BusContext, previous: NotificationsRead, notifications: NotificationPass,
     ) -> bool:
         return previous.live_changed(comms, notifications)
 
@@ -52,7 +52,7 @@ class LiveNotificationRead(NotificationRead):
 class RecordedNotificationRead(NotificationRead):
     source: HistorySourceKey
 
-    def apply(self, comms: Comms, reader: ReadAuthority) -> NotificationWindow:
+    def apply(self, comms: BusContext, reader: ReadAuthority) -> NotificationWindow:
         with comms.bus.history.read_sources() as sources:
             source = HistorySource.require(sources, self.source)
             return source.notification_references(
@@ -64,6 +64,6 @@ class RecordedNotificationRead(NotificationRead):
             )
 
     def changed_since(
-        self, comms: Comms, previous: NotificationsRead, notifications: NotificationPass,
+        self, comms: BusContext, previous: NotificationsRead, notifications: NotificationPass,
     ) -> bool:
         return notifications.revision.history != previous.revision.history

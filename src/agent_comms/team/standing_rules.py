@@ -14,7 +14,7 @@ from subprocess import TimeoutExpired
 from typing import ClassVar, Self, cast
 
 from agent_comms.cli_verbs.declared_verb import DeclaredVerb
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.coordination.service_passes import (
     FailingPass,
     ServicePasses,
@@ -137,7 +137,7 @@ class Degradation(DeclaredFamily, affix="Degradation"):
 
     @classmethod
     @abstractmethod
-    def found(cls, comms: Comms, frame: HeartbeatFrame) -> tuple[Sign, ...]:
+    def found(cls, comms: BusContext, frame: HeartbeatFrame) -> tuple[Sign, ...]:
         """How the signal shows now, one sign per occurrence; empty while it does not."""
 
     @classmethod
@@ -282,7 +282,7 @@ class ClearingVerb(DeclaredVerb, declared_name=None):
 class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discovery_package="agent_comms.team"):
     @classmethod
     @abstractmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]: ...
 
     @abstractmethod
@@ -384,16 +384,16 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
     def rejected_line(self, error: RejectedEnforcementError) -> str:
         return f"Not applied ({error.explanation()}): {self.line()}"
 
-    def enforce(self, comms: Comms) -> None:
+    def enforce(self, comms: BusContext) -> None:
         """What Core does itself when this rule breaks; a rule that only reports does nothing."""
 
-    def redecided(self, comms: Comms, current: Todo) -> tuple[StandingRule, ...]:
+    def redecided(self, comms: BusContext, current: Todo) -> tuple[StandingRule, ...]:
         """Rules without a Todo decision cannot refresh one."""
         raise StaleTodoDecision(current)
 
     @staticmethod
     def enforce_all(
-        comms: Comms,
+        comms: BusContext,
         rules: Iterable[StandingRule],
     ) -> Mapping[StandingRule, RejectedEnforcementError]:
         rejected: dict[StandingRule, RejectedEnforcementError] = {}
@@ -436,18 +436,18 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
         return tuple(dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls)))
 
     @classmethod
-    def prepare(cls, comms: Comms, holds: HeldOrders,
+    def prepare(cls, comms: BusContext, holds: HeldOrders,
                 pulls: ProgressRead, *, snapshot: RegistrySnapshot | None = None) -> None:
         """Rules acquire nothing unless their scan owner declares an input effect."""
 
     @classmethod
-    def prepare_all(cls, comms: Comms, holds: HeldOrders,
+    def prepare_all(cls, comms: BusContext, holds: HeldOrders,
                     pulls: ProgressRead, *, snapshot: RegistrySnapshot | None = None) -> None:
         for owner in cls.scan_owners():
             owner.prepare(comms, holds, pulls, snapshot=snapshot)
 
     @classmethod
-    def broken(cls, comms: Comms, after: float = 0.0, *,
+    def broken(cls, comms: BusContext, after: float = 0.0, *,
                observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[StandingRule, ...]:
         """Read each owner once against the supplied frame and its one progress reader."""
         return tuple(rule for owner in cls.scan_owners()
@@ -486,7 +486,7 @@ class RetiredStandingRule(NoVerbDisposes, DefaultExternalName, StandingRule):
     on the board. Deleting a rule therefore never makes a stored notice undecodable."""
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return ()
 
@@ -511,11 +511,11 @@ class IndependentStandingRule(StandingRule, declared_name=None):
 
     @classmethod
     @abstractmethod
-    def violations(cls, comms: Comms, *,
+    def violations(cls, comms: BusContext, *,
                    snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]: ...
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return cls.violations(comms, snapshot=frame.snapshot)
 
@@ -534,7 +534,7 @@ class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
     storage: UnitStorage
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         # Storage reads the filesystem, not the git source an unreadable card failed on:
         # a unit whose declared home is gone is that card and a missing home.
@@ -543,7 +543,7 @@ class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
                                  frame.pulls, snapshot=frame.snapshot)
 
     @classmethod
-    def for_teammates(cls, comms: Comms, units: Iterable[ThreadIncarnation],
+    def for_teammates(cls, comms: BusContext, units: Iterable[ThreadIncarnation],
                       reads: ProgressRead, *,
                       snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         registry = comms.registry
@@ -579,7 +579,7 @@ class LostTools(UndatedStandingRule):
     changes: tuple[str, ...]
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         found = []
         for unit in observed:
@@ -683,7 +683,7 @@ class HeldBranchRule(HolderProblemLine, UndatedStandingRule, FamilyScan, declare
     """Branch rules share the heartbeat's existing progress frame and one scan."""
 
     @classmethod
-    def prepare(cls, comms: Comms, holds: HeldOrders,
+    def prepare(cls, comms: BusContext, holds: HeldOrders,
                 pulls: ProgressRead, *, snapshot: RegistrySnapshot | None = None) -> None:
         storage = comms.registry.storage_rule
         prepared: list[PreparedBranch] = []
@@ -713,7 +713,7 @@ class HeldBranchRule(HolderProblemLine, UndatedStandingRule, FamilyScan, declare
         the cut; its scan consumes only what this captured."""
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         storage = comms.registry.storage_rule
         captured = frame.pulls.captured_branch_paths
@@ -762,7 +762,7 @@ class BranchBehindMain(CoreActsStandingRule, RepositoryBranchRule):
 
     behind: int = field(compare=False)
 
-    def enforce(self, comms: Comms) -> None:
+    def enforce(self, comms: BusContext) -> None:
         # Retain the registry's alias/birth decision through publication. A departed
         # holder belongs to HolderGone, never to a new participant reusing its name.
         # The notice is sent after the snapshot's shared lock is released.
@@ -929,7 +929,7 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         return math.inf
 
     @classmethod
-    def violations(cls, comms: Comms, *,
+    def violations(cls, comms: BusContext, *,
                    snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         """Every live teammate's due debts, with shared team debts read once."""
         now = time.time()
@@ -942,17 +942,17 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
                      if rule.due(now))
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         now = time.time()
         return tuple(rule for rule in frame.answers if isinstance(rule, cls) and rule.due(now))
 
     @classmethod
-    def opened(cls, comms: Comms, owner: ThreadIncarnation) -> tuple[Self, ...]:
+    def opened(cls, comms: BusContext, owner: ThreadIncarnation) -> tuple[Self, ...]:
         return cls.read_scan(comms, (owner,), comms.goals.held_orders())
 
     @classmethod
-    def read_scan(cls, comms: Comms, owners: tuple[ThreadIncarnation, ...],
+    def read_scan(cls, comms: BusContext, owners: tuple[ThreadIncarnation, ...],
                   scan: HeldOrders) -> tuple[Self, ...]:
         owners = tuple(dict.fromkeys(owners))
         if not owners:
@@ -1039,7 +1039,7 @@ class TeamInputs(HeldOrders):
     edit_count_readings: OrderEditCountReadings = field(compare=False, repr=False)
 
     @classmethod
-    def prepare(cls, comms: Comms, project: RegisteredTeamProject, pulls: ProgressRead,
+    def prepare(cls, comms: BusContext, project: RegisteredTeamProject, pulls: ProgressRead,
                 plans: PlanReadings, edit_count_readings: OrderEditCountReadings, *,
                 snapshot: RegistrySnapshot | None = None) -> Self:
         snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
@@ -1081,7 +1081,7 @@ class HeartbeatFrame(TeamInputs):
     def _edit_counts(self) -> dict[str, int]:
         return {}
 
-    def turns_for(self, comms: Comms, thread: Thread) -> tuple[TurnDigest, ...]:
+    def turns_for(self, comms: BusContext, thread: Thread) -> tuple[TurnDigest, ...]:
         """Read only the recent window; order edits have their own bounded source queries."""
         identity = thread.incarnation
         if identity not in self._turns:
@@ -1089,10 +1089,10 @@ class HeartbeatFrame(TeamInputs):
                 comms.root, thread, self.recent).read().turns
         return self._turns[identity]
 
-    def recent_turns(self, comms: Comms, thread: Thread) -> tuple[TurnDigest, ...]:
+    def recent_turns(self, comms: BusContext, thread: Thread) -> tuple[TurnDigest, ...]:
         return self.recent.take(self.turns_for(comms, thread))
 
-    def edit_counts(self, comms: Comms) -> Mapping[str, int]:
+    def edit_counts(self, comms: BusContext) -> Mapping[str, int]:
         """Count through each source's own query; retain the answer within this frame."""
         reads = tuple(OrderEditCountRead.judgeable(
                 comms.root,
@@ -1111,7 +1111,7 @@ class HeartbeatFrame(TeamInputs):
     @classmethod
     def capture(
         cls,
-        comms: Comms,
+        comms: BusContext,
         inputs: TeamInputs,
         plans: PlanReadings,
         *,
@@ -1166,15 +1166,15 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
 
     @classmethod
     @abstractmethod
-    def reason(cls, comms: Comms, frame: HeartbeatFrame) -> str | None: ...
+    def reason(cls, comms: BusContext, frame: HeartbeatFrame) -> str | None: ...
 
     @classmethod
-    def found(cls, why: str, comms: Comms,
+    def found(cls, why: str, comms: BusContext,
               observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> Self:
         return cls(why=why)
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         why = cls.reason(comms, frame)
         return (cls.found(why, comms, observed, frame),) if why else ()
@@ -1190,7 +1190,7 @@ class HeldOrderDue(HeldOrderLine, DatedStandingRule, declared_name=None):
     since: EventTime
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         """Conditions read the frame's own progress facts, never a second forge read."""
         return tuple(cls(problem=todo.id, holder=todo.held().owner_identity,
@@ -1200,7 +1200,7 @@ class HeldOrderDue(HeldOrderLine, DatedStandingRule, declared_name=None):
     @classmethod
     @abstractmethod
     def conditions(
-        cls, comms: Comms, frame: HeartbeatFrame,
+        cls, comms: BusContext, frame: HeartbeatFrame,
     ) -> Iterable[tuple[Todo, EventTime]]: ...
 
     def began(self) -> float:
@@ -1253,11 +1253,11 @@ class ReviewTimerUp(HeldOrderDue, FamilyScan):
         return ()
 
     @classmethod
-    def conditions(cls, comms: Comms, frame: HeartbeatFrame) -> Iterable[tuple[Todo, EventTime]]:
+    def conditions(cls, comms: BusContext, frame: HeartbeatFrame) -> Iterable[tuple[Todo, EventTime]]:
         return frame.review_timers
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[ReviewTimerUp, ...]:
         rules: list[ReviewTimerUp] = []
         for todo, due in cls.conditions(comms, frame):
@@ -1306,7 +1306,7 @@ class DeliveredHeadReview(HeldOrderLine, DatedStandingRule):
 
     @classmethod
     def scan_observed(
-        cls, comms: Comms, observed: Sequence[ObservedTeammate], frame: HeartbeatFrame,
+        cls, comms: BusContext, observed: Sequence[ObservedTeammate], frame: HeartbeatFrame,
     ) -> tuple[Self, ...]:
         now = time.time()
         return tuple(
@@ -1338,7 +1338,7 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
     seconds: ClassVar[int] = 10 * 60
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return cls.scan_reviews(
             comms.goals, frame.pulls,
@@ -1402,7 +1402,7 @@ class StuckMerge(HeadLine, DatedStandingRule):
     holders: tuple[ThreadIncarnation, ...] = field(default=(), compare=False)
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return cls.scan_pulls(comms.goals, frame.pulls, snapshot=frame.snapshot)
 
@@ -1448,7 +1448,7 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
     unowned: ClassVar[str] = "land or supersede it"
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return cls.scan_pulls(
             comms.goals, frame.pulls, frame.todos, frame.open_orders,
@@ -1519,7 +1519,7 @@ class OrderlessPullRequest(IdlePullRequest):
         return (self.unowned,)
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return cls.scan_orderless(
             comms.goals, frame.pulls,
@@ -1558,7 +1558,7 @@ class ChurningPullRequest(IdlePullRequest):
     unowned: ClassVar[str] = "land what is green or split it"
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         goals, pulls, now = comms.goals, frame.pulls, time.time()
         found = (
@@ -1589,16 +1589,16 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
     seconds: ClassVar[int] = 900
 
     @classmethod
-    def hunted(cls, comms: Comms) -> float:
+    def hunted(cls, comms: BusContext) -> float:
         return max((hunt.at.recorded_at("A hunt") for hunt in comms.goals.todos.hunts()), default=0)
 
     @classmethod
-    def reason(cls, comms: Comms, frame: HeartbeatFrame) -> str | None:
+    def reason(cls, comms: BusContext, frame: HeartbeatFrame) -> str | None:
         age = time.time() - cls.hunted(comms)
         return f"no hunt in the last {cls.seconds // 60} min" if age > cls.seconds else None
 
     @classmethod
-    def found(cls, why: str, comms: Comms,
+    def found(cls, why: str, comms: BusContext,
               observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> HuntDue:
         since = cls.hunted(comms) + cls.seconds
         readable = {unit for state in observed for unit in state.readable_units()}
@@ -1609,7 +1609,7 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
                     cls(why=why, since=since))
 
     @classmethod
-    def next_hunt(cls, comms: Comms, todos: Iterable[Todo]) -> tuple[str, ...]:
+    def next_hunt(cls, comms: BusContext, todos: Iterable[Todo]) -> tuple[str, ...]:
         """Least recently hunted hot file in the held orders' declared check repositories."""
         hunted: dict[str, float] = {}
         for hunt in comms.goals.todos.hunts():
@@ -1704,7 +1704,7 @@ class ServicePassFailing(FailingPass, IndependentStandingRule, DatedStandingRule
     failed_at: float = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms, *,
+    def violations(cls, comms: BusContext, *,
                    snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         return cls.from_passes(ServicePassStore.at(comms.root).read())
 
@@ -1730,7 +1730,7 @@ class BoardDisagrees(UndatedStandingRule):
     merge: str
 
     @classmethod
-    def scan_observed(cls, comms: Comms,
+    def scan_observed(cls, comms: BusContext,
                       observed: Sequence[ObservedTeammate], frame: HeartbeatFrame) -> tuple[Self, ...]:
         progress = frame.pulls.progress(
             frame.todos, comms.registry, snapshot=frame.snapshot,
@@ -1764,7 +1764,7 @@ class HostMemoryHigh(IndependentStandingRule, UndatedStandingRule):
     fleet_resident: int = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms, *,
+    def violations(cls, comms: BusContext, *,
                    snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         try:
             runtime = RootRuntimeStore.at(comms.root).read()
@@ -1803,7 +1803,7 @@ class MemoryLow(IndependentStandingRule, UndatedStandingRule):
     memory: MemoryUse = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms, *,
+    def violations(cls, comms: BusContext, *,
                    snapshot: RegistrySnapshot | None = None) -> tuple[Self, ...]:
         rule = comms.registry.storage_rule
         memory = rule.memory()
@@ -1825,7 +1825,7 @@ class DiskLow(IndependentStandingRule, UndatedStandingRule, FamilyScan):
     free_gib: float = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms, *,
+    def violations(cls, comms: BusContext, *,
                    snapshot: RegistrySnapshot | None = None) -> tuple[DiskLow, ...]:
         rule = comms.registry.storage_rule
         free = rule.free_gib()

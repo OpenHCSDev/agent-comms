@@ -19,6 +19,7 @@ from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.owner_protocol import OwnerLine
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.registry.registration import RegistryBus
 from agent_comms.registry.registry_document import RegistryEntry
 from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnation
 from agent_comms.registry.threads import NativeThread, Thread
@@ -27,7 +28,6 @@ from agent_comms.storage.private_path import PrivateSocketRole
 from agent_comms.transport.jsonl_stream import JsonlStreamReader
 
 if TYPE_CHECKING:
-    from agent_comms.comms import Comms
     from agent_comms.transport.runtime_request import RuntimeRequest
 
 
@@ -144,7 +144,7 @@ class OwnerConnection:
     def request_payload(self, action: str, parameters: dict[str, object]) -> dict[str, object]:
         return self.wire_request(action, self._identity, parameters)
 
-    def __init__(self, comms: Comms, identity: ThreadIncarnation, path: Path):
+    def __init__(self, comms: RegistryBus, identity: ThreadIncarnation, path: Path):
         self._identity = identity
         self.path = path
         self._comms = comms
@@ -274,7 +274,7 @@ class OwnerReplyConnection(OwnerConnection):
     REPLY_TIMEOUT: ClassVar[float] = 3
 
     @classmethod
-    def held(cls, comms: Comms, owner: ThreadIncarnation, reading: OwnerReading) -> Self:
+    def held(cls, comms: RegistryBus, owner: ThreadIncarnation, reading: OwnerReading) -> Self:
         """A connection to exactly this registered native owner incarnation.
 
         The selected registration must be the held incarnation before its process is
@@ -295,7 +295,7 @@ class OwnerReplyConnection(OwnerConnection):
     @classmethod
     async def answer[Result](
         cls,
-        comms: Comms,
+        comms: RegistryBus,
         owner: ThreadIncarnation,
         reading: OwnerReading[Result],
     ) -> Result:

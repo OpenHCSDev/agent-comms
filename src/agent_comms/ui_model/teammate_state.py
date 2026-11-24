@@ -15,7 +15,7 @@ from functools import cached_property
 from subprocess import TimeoutExpired
 from typing import ClassVar, Self
 
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.heartbeat_subjects import HeartbeatSubject, TeammateSubject
 from agent_comms.messaging.messages import Message
@@ -96,7 +96,7 @@ class UnreadableClock(TeammateClock):
 class TeammateObservation(TeammateEvidence):
     """Original sources shared by candidate states within this one read."""
 
-    comms: Comms
+    comms: BusContext
     thread: Thread
     todos: tuple[Todo, ...]
     frame: HeartbeatFrame
@@ -243,7 +243,7 @@ class TeammateState(UndatedStandingRule, FamilyScan, ObservedTeammate, declared_
 
     @classmethod
     def scan_observed(
-        cls, comms: Comms, observed: Sequence[TeammateState], frame: HeartbeatFrame
+        cls, comms: BusContext, observed: Sequence[TeammateState], frame: HeartbeatFrame
     ) -> tuple[Self, ...]:
         # States are already read; ordinary scans consume them rather than emit them again.
         return ()
@@ -267,7 +267,7 @@ class TeammateState(UndatedStandingRule, FamilyScan, ObservedTeammate, declared_
 
     @classmethod
     def observations(
-        cls, comms: Comms, frame: HeartbeatFrame
+        cls, comms: BusContext, frame: HeartbeatFrame
     ) -> tuple[TeammateObservation, ...]:
         snapshot, now = frame.snapshot, time.time()
         held = frame.holders
@@ -302,7 +302,7 @@ class TeammateState(UndatedStandingRule, FamilyScan, ObservedTeammate, declared_
         return tuple(reading for reading in readings if reading.thread.incarnation in eligible)
 
     @classmethod
-    def current(cls, comms: Comms, frame: HeartbeatFrame) -> tuple[TeammateState, ...]:
+    def current(cls, comms: BusContext, frame: HeartbeatFrame) -> tuple[TeammateState, ...]:
         states = tuple(cls.read(source) for source in cls.observations(comms, frame))
         return tuple(sorted(states, key=lambda state: state.declared_position()))
 

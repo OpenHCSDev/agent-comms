@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from agent_comms.bus_context import BusContext
 from agent_comms.cli_verbs.cli_command import CliBus
 from agent_comms.config_options import ConfigurationCatalogs
 from agent_comms.execution.context_assembly import ContextAssembly
 from agent_comms.execution.input_ingress import InputIngressContext
 from agent_comms.execution.input_lookup import InputLookup
 from agent_comms.execution.input_text_context import InputTextContext
-from agent_comms.messaging.notification_contracts import NotificationEvidenceSource
 from agent_comms.messaging.message_notification import CapturedNotificationEvidence
 
 from collections.abc import AsyncGenerator, Callable
@@ -50,13 +50,13 @@ from agent_comms.transcript.transcripts import Transcripts
 
 
 class Comms(
+    BusContext,
     CliBus,
     ConfigurationCatalogs,
     ActivityClient,
     ContextAssembly,
     InputIngressContext[Thread],
     InputTextContext[InputAttempt],
-    NotificationEvidenceSource[CapturedNotificationEvidence],
 ):
     input_dispositions: ClassVar[Callable[[Path], InputLookup[InputAttempt]]] = InputDispositions
     messaging: Messaging

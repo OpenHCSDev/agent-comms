@@ -10,7 +10,11 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.registry.activity import ActivityState
 from agent_comms.registry.thread_status import StoppedThreadStatus
-from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved, SidebarReadStage
+from agent_comms.ui_model.observation import (
+    ObserveSidebar,
+    SidebarObserved,
+)
+from agent_comms.ui_model.observation_service import SidebarReadStage
 
 
 def test_bus_updates_keep_roster_sources(comms, monkeypatch):

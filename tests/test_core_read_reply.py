@@ -21,11 +21,11 @@ import pytest
 from agent_comms.ui_model.observation import (
     CoreReadAnswered,
     CoreReadOperation,
-    LocalRouteObservation,
     ObservationProcess,
     ObserverUnattached,
     UnencodableReply,
 )
+from agent_comms.ui_model.observation_service import LocalRouteObservation
 
 
 async def test_malformed_reply_releases_actual_waiting_worker(tmp_path, monkeypatch):
@@ -42,7 +42,7 @@ async def test_malformed_reply_releases_actual_waiting_worker(tmp_path, monkeypa
 
     monkeypatch.setattr(CoreReadAnswered, "received", corrupt_reply)
 
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         request = CoreReadOperation(str(comms.root), CommsChannelTool(name="#test-reply"))
 
         def ask():
@@ -114,7 +114,7 @@ async def test_a_thread_presentation_read_decodes_across_the_child(tmp_path):
 
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread("presented", frozenset(), Checkout(tmp_path)))
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         request = CoreReadOperation(str(comms.root), CommsThreadPresentationTool(thread="presented"))
         presentation = await asyncio.to_thread(process.read_from_thread, request)
     assert isinstance(presentation, NotifiedThreadPresentation)
@@ -127,7 +127,7 @@ async def test_an_unencodable_reply_fails_its_own_read_and_the_child_keeps_answe
 
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread("sliced", frozenset(), Checkout(tmp_path)))
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         bad = CoreReadOperation(
             str(comms.root), CommsRegistrySliceTool(threads=(AcpSessionId("sliced"),)))
         with pytest.raises(UnencodableReply, match="CommsRegistrySliceTool answered a RegistrySlice"):
@@ -144,11 +144,11 @@ async def test_a_thread_read_is_served_by_the_child_and_never_kills_it(tmp_path)
     and the UI restarted it on its next read. The child serves ReadTool, the family the UI routes
     on, and keeps answering after the thread read."""
     from agent_comms.transport.tools.reads import TranscriptPageRead
-    from agent_comms.ui_model.observation import ObserverProcessDied
+    from agent_comms.ui_model.observation_wire import ObserverProcessDied
 
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread("paged", frozenset(), Checkout(tmp_path)))
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         page = CoreReadOperation(str(comms.root), TranscriptPageRead(thread="paged"))
         try:
             await asyncio.to_thread(process.read_from_thread, page)
@@ -168,7 +168,7 @@ async def test_saturating_the_default_executor_never_deadlocks_observation_recei
     comms.registry.declare(NativeThread("saturated", frozenset(), Checkout(tmp_path)))
     loop = asyncio.get_running_loop()
     loop.set_default_executor(ThreadPoolExecutor(max_workers=2, thread_name_prefix="bounded-default"))
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         request = CoreReadOperation(str(comms.root), CommsThreadPresentationTool(thread="saturated"))
         replies = await asyncio.wait_for(
             asyncio.gather(*(asyncio.to_thread(process.read_from_thread, request) for _ in range(6))),

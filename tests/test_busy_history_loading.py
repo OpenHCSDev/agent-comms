@@ -17,16 +17,18 @@ from agent_comms.registry.thread_identity import UnrecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tools.reads import OwnerGoalRead, TranscriptPageRead
 from agent_comms.ui_model.observation import (
-    LocalRouteObservation,
     NothingAnswered,
     ObservationProcess,
-    ObservationService,
     ReadBusy,
     ReadNotifications,
     ReadOwnerOperation,
     ReadRefused,
     ReadTranscript,
     RevisionObserved,
+)
+from agent_comms.ui_model.observation_service import (
+    LocalRouteObservation,
+    ObservationService,
 )
 
 
@@ -68,7 +70,7 @@ def held_source(comms):
 async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
     comms, session = saved_history(tmp_path)
     original = session.read_bytes()
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         with held_source(comms):
             answer = ReadTranscript(str(comms.root), TranscriptPageRead(thread="saved"), request_id=19).answer(comms)
             assert isinstance(answer, ReadBusy)
@@ -95,7 +97,7 @@ async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
 
 async def test_cancelled_busy_read_is_removed_without_resubmission(tmp_path):
     comms, _session = saved_history(tmp_path)
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         # The observer is a spawned process that imports Comms cold. Let it answer once before
         # the source is held, so the cancelled read reaches a running service and the 5 s below
         # times a read, not the child's start-up (on loaded CI runners it took longer than that).
@@ -116,7 +118,7 @@ async def test_cancelled_busy_read_is_removed_without_resubmission(tmp_path):
 async def test_awaited_scope_preserves_exit_and_closes_once(comms, monkeypatch, error):
     from multiprocessing.connection import Connection
 
-    process = ObservationProcess.awaited(comms.route)
+    process = LocalRouteObservation.awaited(comms.route)
     original = Connection.close
     closes = []
 
@@ -210,7 +212,7 @@ async def test_owner_reply_uses_the_same_peer_retirement(comms):
             # A real missing-owner refusal still has to be sent through the shared endpoint.
             request = ReadOwnerOperation(str(comms.root), UnrecordedThreadIncarnation("missing"),
                                          request_id=7, operation=OwnerGoalRead())
-            request.receive(service)
+            service.accept(request)
             asking = service.owner_reads[7]
             viewer.close()
             async with asyncio.timeout(5):
@@ -220,7 +222,7 @@ async def test_owner_reply_uses_the_same_peer_retirement(comms):
 
 
 async def test_awaited_notifications_then_immediate_close_retires_successfully(comms):
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         assert (await process.read(ReadNotifications(str(comms.root), LiveNotificationRead(())))).outcomes == {}
     assert process.connection.closed and process.peer.process.exitcode == 0
     assert not process.reads
