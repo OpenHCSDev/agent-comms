@@ -133,6 +133,7 @@ from agent_comms.registry.threads import (
     ArchiveOwnerControl,
     ConfigurableThreadCommand,
     ExternalOwnerCommand,
+    ForkableThreadCommand,
     NativeOwnerCommand,
     NextTurnConfiguration,
     OwnerLifecycleControl,
@@ -1264,9 +1265,9 @@ class CommsCancelRestartTool(HostArea, NativeToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsForkTool(ThreadsArea, LiveOwnerTool, NativeOwnerCommand, ThreadContextAction):
+class CommsForkTool(ThreadsArea, LiveOwnerTool, ForkableThreadCommand, ThreadContextAction):
     label = "Comms Fork"
-    description = "Fork a child agent thread from a registered parent's persistent session."
+    description = "Fork a child agent thread from a registered parent using its backend's fork semantics."
     action_label = "Fork from this thread"
     name: Annotated[str, *tool_field("Child thread name")]
     parent: Annotated[str, *tool_field("Parent thread name", ContextSource(SubjectBinding))]
@@ -1278,7 +1279,7 @@ class CommsForkTool(ThreadsArea, LiveOwnerTool, NativeOwnerCommand, ThreadContex
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadCreatedResult:
         parent = comms.registry.require(self.parent)
         return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
-                              project=parent.worktree, model=parent.model,
+                              project=parent.worktree, model=parent.catalog_model(UndeclaredModel()),
                               thinking_level=parent.thinking_level,
                               tags=self.tags).apply(comms)
 

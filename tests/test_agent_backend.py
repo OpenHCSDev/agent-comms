@@ -15,6 +15,7 @@ import agent_comms.agent_backend as ab
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.acp import CommsAgent
 from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.cli_inbox_backend import CliInboxBackend, CliInboxRuntime
 from agent_comms.execution.native_arguments import GivenArguments, GivenBinary, NativeArguments
 from agent_comms.execution.persistent_pi_session import PersistentPiSession
 from agent_comms.execution.pi_durable_backend import PiDurableBackend
@@ -31,14 +32,15 @@ from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, InputId
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_model import DeclaredModel
-from agent_comms.registry.threads import NativeThread, Thread
+from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
 from agent_comms.transport.serving.owner_launch import ServedReadNativeChildProcessRuntimeRequest
 
 # -- registry ---------------------------------------------------------------
 
 
 def test_registry_holds_the_pi_backends_and_selects_native_for_new_threads():
-    assert ab.AgentBackend.names() == ("pi_native", "pi_durable")
+    assert ab.AgentBackend.names() == ("cli_inbox", "pi_native", "pi_durable")
+    assert ab.AgentBackend.member_named("cli_inbox") is CliInboxBackend
     assert ab.AgentBackend.member_named("pi_native") is PiNativeBackend
     assert ab.AgentBackend.member_named("pi_durable") is PiDurableBackend
     assert ab.NewThreadBackend.selected() is PiNativeBackend
@@ -64,7 +66,7 @@ def test_a_backend_declared_after_sealing_fails_loud():
         class LateBackend(ab.AgentBackend):  # noqa: F841
             pass
 
-    assert ab.AgentBackend.names() == ("pi_native", "pi_durable")
+    assert ab.AgentBackend.names() == ("cli_inbox", "pi_native", "pi_durable")
 
 
 @pytest.mark.parametrize("session_file, location", [
@@ -236,6 +238,17 @@ def test_thread_declares_its_backend_once_and_keeps_it_on_reregistration(*, thre
     with pytest.raises(ValueError):
         FieldCodec.decode(Thread, {**encoded, "runtime": {"backend": "pi_durable", "location": None}})
     assert thread.for_registration("owner", thread).backend is PiNativeBackend
+
+    external = thread_registration.declare(
+        ExternalThread("ext", frozenset(), Checkout(Path("/tmp/ext")))
+    )
+    assert external.backend is CliInboxBackend
+    assert external.runtime == CliInboxRuntime()
+    ext_encoded = FieldCodec.encode(external)
+    assert "backend" not in ext_encoded
+    assert FieldCodec.decode(Thread, ext_encoded) == external
+    assert FieldCodec.decode(Thread, {**ext_encoded, "backend": "cli_inbox"}) == external
+    assert external.for_registration("ext", external).backend is CliInboxBackend
 
 
 def test_cli_registry_reads_do_not_load_the_pi_runtime(tmp_path):
