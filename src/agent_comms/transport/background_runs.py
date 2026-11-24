@@ -40,6 +40,7 @@ from agent_comms.registry.registry_provenance import RegistryProvenance
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.locked_store import (
     DocumentChange,
+    DocumentRetirement,
     LockedStore,
     PatternFile,
     RuntimeFile,
@@ -235,6 +236,11 @@ class StoredBackgroundRun(DeclaredFamily, affix="Run"):
     def forgotten(self, now: float, snapshot: RegistryProvenance) -> bool:
         return False
 
+    def retired(
+        self, now: float, snapshot: RegistryProvenance,
+    ) -> DocumentChange[StoredBackgroundRun, tuple[Path, ...]]:
+        return DocumentChange(self, ())
+
     def files(self) -> tuple[Path, ...]:
         return ()
 
@@ -310,6 +316,13 @@ class BackgroundRun(PresentMember, StoredBackgroundRun, declared_name=None):
 
     def forgotten(self, now: float, snapshot: RegistryProvenance) -> bool:
         return self.state.forgotten(now, has_reader=self.thread.current(snapshot))
+
+    def retired(
+        self, now: float, snapshot: RegistryProvenance,
+    ) -> DocumentChange[StoredBackgroundRun, tuple[Path, ...]]:
+        if not self.forgotten(now, snapshot):
+            return DocumentChange(self, ())
+        return DocumentRetirement(AbsentRun(), self.files())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -466,16 +479,10 @@ class BackgroundRunRecord(
     def forget(self, now: float, snapshot: RegistryProvenance) -> bool:
         if not self.read().forgotten(now, snapshot):
             return False
-        files: tuple[Path, ...] = ()
-        with self.guarded_write():
-            latest = self._read_unlocked()
-            if not latest.forgotten(now, snapshot):
-                return False
-            files = latest.files()
-            self.retire()
+        files = self.update(lambda latest: latest.retired(now, snapshot))
         for path in files:
             path.unlink(missing_ok=True)
-        return True
+        return bool(files)
 
 
 @dataclass(frozen=True, slots=True)

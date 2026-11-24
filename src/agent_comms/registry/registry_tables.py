@@ -642,8 +642,7 @@ class RegistryRowStore(SharedFileTables, DurableStore, RegistryFile, TurnRows):
     ) -> tuple[Result, ...]:
         """A phase change is no registry edit: it takes SQLite's write lock for its own row and
         publishes nothing to the registry's readers."""
-        with self.writer_connection() as db, self.write_transaction(db):
-            self.require_maintenance_open()
+        with self.writer_connection() as db, self.checked_transaction(db):
             TurnSchema.require_schema(db)
             rows = TurnRow.select(db, **TurnRow.key(identity))
             if not rows:

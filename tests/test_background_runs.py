@@ -396,6 +396,6 @@ def test_status_of_an_unknown_run_is_empty(wired: Comms) -> None:
 
 @pytest.mark.parametrize("tool", [CommsRunBackgroundTool, CommsBackgroundStatusTool])
 def test_the_tools_are_served(tool) -> None:
-    from agent_comms.transport.tools import served  # noqa: F401 - registers the tools
+    from agent_comms.transport.served_tools import served  # noqa: F401 - registers the tools
 
     assert tool.schema()["name"] == tool.declared_name
