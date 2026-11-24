@@ -9,7 +9,7 @@ from functools import partial
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, TurnChangedUpdate
 from agent_comms.comms import Comms
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.session_updates import encode_updates
 from agent_comms.execution.turn_lease import TurnState
@@ -60,5 +60,5 @@ class TranscriptReplay:
         snapshot: TranscriptSnapshotUpdate,
         destination: SessionUpdateSink,
     ) -> None:
-        metadata = await Coordination.run_worker(partial(encode_updates, snapshot))
+        metadata = await CoordinationWork.run_worker(partial(encode_updates, snapshot))
         await destination.publish_metadata(session_id=session_id, metadata=metadata)

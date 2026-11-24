@@ -16,7 +16,7 @@ from functools import partial
 from pathlib import Path
 
 from agent_comms.agent_backend import AgentBackend
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.diagnostics import record_drain_failure
 from agent_comms.execution.native_input_owner import RegistryOwner
@@ -253,7 +253,7 @@ class AgentActivity(ActivityAnswers, RuntimeInfoWrites[RuntimeInfoProjection[Age
         """
         if not expected.recorded_by(owner):
             return False
-        return await Coordination.run_worker(partial(self._recover_drain, thread, owner, expected))
+        return await CoordinationWork.run_worker(partial(self._recover_drain, thread, owner, expected))
 
     def _recover_drain(
         self, thread: str, owner: OwnerIdentity, expected: DrainObservation,

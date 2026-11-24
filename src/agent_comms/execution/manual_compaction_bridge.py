@@ -21,7 +21,7 @@ from agent_comms.agent_backend import (
     StaleCompaction,
 )
 from agent_comms.agent_event_updates import TurnEventConsumer
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.pi_vocabulary import ManualCompactionReason
 from agent_comms.execution.session_updates import encode_updates
@@ -73,12 +73,12 @@ async def compact_context(
         return FailedCompaction("Compaction instructions are invalid.")
     thread_name = await runner.sessions.sync_identity(session_id)
     lock = runner.inputs.state(session_id).turn_lock
-    if lock.locked() or await Coordination.run_worker(partial(runner.session_busy, session_id)):
+    if lock.locked() or await CoordinationWork.run_worker(partial(runner.session_busy, session_id)):
         return FailedCompaction("Wait for the current response before compacting.")
     async with lock:
-        if await Coordination.run_worker(partial(runner.session_busy, session_id)):
+        if await CoordinationWork.run_worker(partial(runner.session_busy, session_id)):
             return FailedCompaction("Wait for the current response before compacting.")
-        thread = await Coordination.run_worker(partial(runner.comms.registry.require, thread_name))
+        thread = await CoordinationWork.run_worker(partial(runner.comms.registry.require, thread_name))
         return await thread.writable_runtime.compact(partial(
             _compact_started, runner, session_id, thread_name, instructions,
         ))
@@ -87,7 +87,7 @@ async def compact_context(
 async def _compact_started(runner, session_id, thread_name, instructions):
     async with AsyncExitStack() as resources:
         await resources.enter_async_context(runner.inputs.state(session_id).own_turn_task())
-        owner = await Coordination.run_worker(partial(
+        owner = await CoordinationWork.run_worker(partial(
             runner.acquire_turn, resources, session_id, thread_name,
             TurnId.mint(), "Compacting context",
         ))

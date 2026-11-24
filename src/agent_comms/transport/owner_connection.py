@@ -14,7 +14,7 @@ from functools import partial
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, ClassVar, Self, cast
 
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.owner_protocol import OwnerLine
@@ -193,7 +193,7 @@ class OwnerConnection:
     async def _connect_current(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         # Startup has no elapsed-time expiry. The registered process and lease
         # own its lifetime; caller cancellation also ends this unsent operation.
-        entry = await Coordination.run_worker(self._owner_entry)
+        entry = await CoordinationWork.run_worker(self._owner_entry)
         try:
             entry.status.require_active()
             process = entry.thread.require_process()
@@ -203,7 +203,7 @@ class OwnerConnection:
         path = socket_path(self._comms.root, process.pid)
 
         while True:
-            await Coordination.run_worker(partial(self._require_connect_owner, owner, process))
+            await CoordinationWork.run_worker(partial(self._require_connect_owner, owner, process))
             try:
                 with PrivateSocketRole.address(path) as address:
                     reader, writer = await asyncio.open_unix_connection(address, limit=8 * 1024 * 1024)
@@ -211,7 +211,7 @@ class OwnerConnection:
                 await asyncio.sleep(0.05)
                 continue
             try:
-                await Coordination.run_worker(partial(self._require_connect_owner, owner, process))
+                await CoordinationWork.run_worker(partial(self._require_connect_owner, owner, process))
                 self.path = path
                 return reader, writer
             except BaseException:

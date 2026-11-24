@@ -8,7 +8,7 @@ from functools import partial
 from pathlib import Path
 
 from agent_comms.context_segments.awareness import AwarenessSegment
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.messaging.bus import Bus, BusSnapshot
 from agent_comms.messaging.bus_read_source import BusReadSource
 from agent_comms.messaging.bus_route_counts import HeldUnseenCounts
@@ -151,7 +151,7 @@ class MessageBus[Writes: Publisher](PublishedBus[Writes], BusReadSource):
     async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
         while True:
             try:
-                result = await Coordination.run_worker(operation)
+                result = await CoordinationWork.run_worker(operation)
                 return await result if inspect.isawaitable(result) else result
             except MaintenanceHeldError:
                 await self.resumed()

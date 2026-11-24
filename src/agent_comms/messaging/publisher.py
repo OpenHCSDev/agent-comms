@@ -12,7 +12,6 @@ from functools import partial
 from itertools import groupby
 from pathlib import Path
 
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.execution.input_publication_source import InputPublicationSource
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.response_acknowledgement import canonical_publication_key

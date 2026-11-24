@@ -7,7 +7,7 @@ from functools import partial
 
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.pi_vocabulary import NoThinkingOverride, ThinkingLevelField
 from agent_comms.execution.runtime_info import AgentRuntimeInfo
@@ -27,7 +27,7 @@ class RuntimeInfoObservation(AgentEvent, RuntimeInfoProjection[AgentRuntimeInfo]
     async def record_in[Client: RuntimeInfoSource[RuntimeInfoObservation]](
         self, consumer: AgentEventConsumer[Client],
     ) -> None:
-        await Coordination.run_worker(partial(
+        await CoordinationWork.run_worker(partial(
             consumer.comms.agents.observe_runtime_info, consumer.thread_name, self,
         ))
 

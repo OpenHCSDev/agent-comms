@@ -8,7 +8,7 @@ from functools import partial
 from pathlib import Path
 
 from agent_comms import agent_events as events
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.backend import NativeSession
 from agent_comms.execution.native_child import NativeChildState, PiSessionChild
 from agent_comms.execution.native_failures import NativePiUnavailable
@@ -69,7 +69,7 @@ class NativeSessionPreparation(NativeSession):
         observe: Callable[[StateData, AgentInfo], Awaitable[None]],
     ) -> StateData:
         """Keep the session's child owned through launch, observation and retention."""
-        launch = await Coordination.run_worker(partial(
+        launch = await CoordinationWork.run_worker(partial(
             persistent.child_state.managed_launch,
             agent_bin, tuple(agent_args), worktree=Path(worktree),
             package=package, root=root, owner=owner, directory=session_directory,

@@ -12,7 +12,7 @@ from typing import cast
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
 from agent_comms.comms import Comms
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.messaging.read_basis import NoDisplaySelection, ReadAuthority
@@ -81,7 +81,7 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](
             held=partial(self.retained_answer, self.held, comms, owner, cut),
         )
         result = await read()
-        current = await Coordination.run_worker(comms.registry.snapshot)
+        current = await CoordinationWork.run_worker(comms.registry.snapshot)
         if not ObservedPath.at(comms.root).same_file(root):
             raise OwnerIdentityChangedError("Wire root changed during the read.")
         self.require_recipient(current, owner)
@@ -99,7 +99,7 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](
                     raise StaleFence("Registry changed during the retained read")
                 return result
 
-        return await Coordination.run_worker(retained)
+        return await CoordinationWork.run_worker(retained)
 
     async def live_answer(self, comms: Comms, owner: ThreadIncarnation) -> Result:
         request = OwnerReadRuntimeRequest(thread=owner.name, operation=self)

@@ -8,7 +8,7 @@ from functools import partial
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import InputStartListener
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.session import NativeCapture, NativeCommit
 from agent_comms.execution.channel_coding_tools import CodingToolOwner, OrdinaryContextCheck
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit
@@ -170,7 +170,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
                     boundary, tuple(self.claims.values()), "Released files after an ordinary turn"
                 )
 
-        await Coordination.run_worker(release)
+        await CoordinationWork.run_worker(release)
 
     def original(self, native_id: InputId, text: str) -> bool:
         return self._started(self.original_source, native_id, text)
@@ -179,7 +179,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
         return self._started(self.source(public_id), native_id, text)
 
     async def original_context_committed(self, sent_text: str, context: NativeContextProof) -> None:
-        await Coordination.run_worker(
+        await CoordinationWork.run_worker(
             partial(
                 self._record_context,
                 self.original_source,
@@ -194,7 +194,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
         sent_text: str,
         context: NativeContextProof,
     ) -> None:
-        await Coordination.run_worker(
+        await CoordinationWork.run_worker(
             partial(
                 self._record_context,
                 self.source(public_id),

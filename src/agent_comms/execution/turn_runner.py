@@ -16,7 +16,7 @@ from agent_comms.agent_backend import AgentBackend
 from agent_comms.agent_event_updates import AcpEventConsumer, TurnEventConsumer
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import SelectedExecution
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution import pi_events as pi
 from agent_comms.execution.context_reading import ContextUsage
@@ -205,7 +205,7 @@ class TurnRunner(OwnedTurnRunner):
     async def transition_turn(
         self, session_id: AcpSessionId, lease: TurnLeaseFence, phase: TurnPhase,
     ) -> None:
-        states = await Coordination.run_worker(partial(
+        states = await CoordinationWork.run_worker(partial(
             self.comms.agents.transition_turn, lease, phase
         ))
         for state in states:
@@ -219,7 +219,7 @@ class TurnRunner(OwnedTurnRunner):
         """Hand a published session's thread to `observe`; an unpublished session has none."""
         if session_id not in self.sessions.published:
             return
-        await observe(await Coordination.run_worker(partial(
+        await observe(await CoordinationWork.run_worker(partial(
             self.comms.registry.require, self.sessions.require(session_id))))
 
     async def observe_compaction(
@@ -230,7 +230,7 @@ class TurnRunner(OwnedTurnRunner):
     async def compacted(
         self, session_id: AcpSessionId, event: events.CompactionEvent, thread: Thread,
     ) -> None:
-        await Coordination.run_worker(partial(self.deal_rules, thread, event))
+        await CoordinationWork.run_worker(partial(self.deal_rules, thread, event))
         for lease in thread.turn_lease.held():
             await CompactionObservation(
                 self, session_id, lease, thread.turn_record.read().phase,
@@ -243,7 +243,7 @@ class TurnRunner(OwnedTurnRunner):
         await self.on_published_thread(session_id, partial(self.context_used, usage))
 
     async def context_used(self, usage: ContextUsage, thread: Thread) -> None:
-        await Coordination.run_worker(partial(PiRedeal.of(self.comms, thread).observe_context, usage))
+        await CoordinationWork.run_worker(partial(PiRedeal.of(self.comms, thread).observe_context, usage))
 
     def deal_rules(self, thread: Thread, event: events.CompactionEvent) -> None:
         """Every compaction Core observes, Pi's own or one it asked for, deals the thread the
@@ -302,7 +302,7 @@ class TurnRunner(OwnedTurnRunner):
         async with self.inputs.state(session_id).own_turn_task():
             try:
                 thread_name = await self.sessions.sync_identity(session_id)
-                await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
+                await CoordinationWork.run_worker(partial(self.comms.registry.require, thread_name))
                 agent_task: str | None = None
                 relay_text: str | None = None
                 if text.startswith(AGENT_PREFIX):
@@ -315,7 +315,7 @@ class TurnRunner(OwnedTurnRunner):
                     agent_task = text.strip()
                 if relay_text:
                     target, body = parse_target(relay_text)
-                    sent: SendResult = await Coordination.run_worker(partial(
+                    sent: SendResult = await CoordinationWork.run_worker(partial(
                         self.comms.messaging.send, thread_name, target, body,
                     ))
                     for notice in sent.notices:
@@ -354,12 +354,12 @@ class TurnRunner(OwnedTurnRunner):
             return
         names = (self.sessions.require(session_id),) if session_id in self.sessions.published else ()
         for name in names:
-            thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-            await Coordination.run_worker(partial(self.pause_active_goal, thread))
+            thread = await CoordinationWork.run_worker(partial(self.comms.registry.require, name))
+            await CoordinationWork.run_worker(partial(self.pause_active_goal, thread))
         async def cancelling() -> None:
             leases = ()
             for name in names:
-                current = await Coordination.run_worker(partial(self.comms.registry.require, name))
+                current = await CoordinationWork.run_worker(partial(self.comms.registry.require, name))
                 leases = current.turn_lease.held()
             for lease in leases:
                 await self.transition_turn(session_id, lease, CancellingPhase())
@@ -383,7 +383,7 @@ class TurnRunner(OwnedTurnRunner):
         No ACP response updates package configuration, launch trust or call grants.
         The backend revalidates this result before replying to the same Pi child.
         """
-        if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
+        if not await CoordinationWork.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return CancelledUiChoice()
         permission = request.permission(turn_id)
         if permission is None:
@@ -394,7 +394,7 @@ class TurnRunner(OwnedTurnRunner):
             # A timed-out, departed or explicitly refusing controller grants no permission.
             # Unexpected decoder and transport defects propagate.
             return CancelledUiChoice()
-        if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
+        if not await CoordinationWork.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return CancelledUiChoice()
         if controller.departed(self.runtime, session_id):
             return CancelledUiChoice()
@@ -422,7 +422,7 @@ class TurnRunner(OwnedTurnRunner):
         """Release the original CAS lease and retain its waiter cleanup."""
         terminal_fence = self.comms.agents.finish_turn(lease)
         resources.push_async_callback(
-            Coordination.run_worker,
+            CoordinationWork.run_worker,
             partial(self.comms.goals.release_waits_after_terminal_turn, terminal_fence),
         )
         return self.current_turn_update(session_id)
@@ -438,7 +438,7 @@ class TurnRunner(OwnedTurnRunner):
         lease until Done, durable input retirement and relay publication finish.
         """
         async with AsyncExitStack() as resources:
-            update = await Coordination.run_worker(partial(
+            update = await CoordinationWork.run_worker(partial(
                 self.finish_turn, resources, session_id, lease,
             ))
             await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(update)
@@ -448,14 +448,14 @@ class TurnRunner(OwnedTurnRunner):
 
     async def publish_turn_state(self, consumer: AcpEventConsumer) -> None:
         """Publish the registry owner's current turn to this explicit recipient."""
-        update = await Coordination.run_worker(
+        update = await CoordinationWork.run_worker(
             partial(self.current_turn_update, consumer.session_id)
         )
         await consumer.dispatch(update)
 
     async def active_backend_turn(self, session_id: AcpSessionId) -> BackendTurnSource:
         name = self.sessions.require(session_id)
-        entry = (await Coordination.run_worker(partial(self.comms.registry.entry, name))).entry
+        entry = (await CoordinationWork.run_worker(partial(self.comms.registry.entry, name))).entry
         source_session = self.sessions.require_owned_session(entry)
         return BackendTurnSource(
             source_session,
@@ -477,7 +477,7 @@ class TurnRunner(OwnedTurnRunner):
         if lock.locked():
             return
         async with lock:
-            if not await Coordination.run_worker(partial(self.session_busy, session_id)):
+            if not await CoordinationWork.run_worker(partial(self.session_busy, session_id)):
                 await persistent.close_idle()
 
     def native_child_process(self, session_id: AcpSessionId) -> ProcessState:
@@ -494,7 +494,7 @@ class TurnRunner(OwnedTurnRunner):
         """
         async with self.inputs.state(session_id).turn_lock:
             async with self.inputs.state(session_id).own_turn_task():
-                owner = await Coordination.run_worker(partial(
+                owner = await CoordinationWork.run_worker(partial(
                     self.comms.registry.require, execution.owner_name,
                 ))
                 following = OwnerFollowingInputs(

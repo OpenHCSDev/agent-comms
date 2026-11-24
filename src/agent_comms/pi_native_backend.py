@@ -29,7 +29,7 @@ from agent_comms.agent_backend import (
     PlacedCompaction,
     RuntimeLocation,
 )
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.fresh_private_session import create_fresh_private_session
 from agent_comms.execution.launch_runtime import LaunchRuntime
@@ -185,10 +185,10 @@ class PiNativeBackend(
 
         if open_native is None:
             open_native = NativeSessionPreparation.open
-        thread = await Coordination.run_worker(partial(
+        thread = await CoordinationWork.run_worker(partial(
             self.comms.registry.require, thread.name,
         ))
-        environment = await Coordination.run_worker(lambda: self.configuration.native_environment(
+        environment = await CoordinationWork.run_worker(lambda: self.configuration.native_environment(
             thread, self.comms.registry.snapshot(),
         ))
         package = self.comms.owners.require_private_launch().native_package
@@ -220,7 +220,7 @@ class PiNativeBackend(
         # Model changes are stored for the next turn after its selected snapshot was
         # acquired. Extension selection is a launch-time fact, so build the launch
         # from the current declaration rather than switching providers after spawn.
-        thread = await Coordination.run_worker(partial(
+        thread = await CoordinationWork.run_worker(partial(
             self.comms.registry.require, thread.name,
         ))
         images = {"images": content.images} if content.images else {}
@@ -234,7 +234,7 @@ class PiNativeBackend(
         # The turn recorded its context when it ended, so what the record says is the whole
         # observation: the model that holds its own context compacted it, and that is the
         # protocol's own compaction whatever engine asked for one.
-        recorded = await Coordination.run_worker(partial(provider.context_sizes, session_file))
+        recorded = await CoordinationWork.run_worker(partial(provider.context_sizes, session_file))
         for event in events.ContextChange.recorded(recorded).compaction_events():
             yield event
 
@@ -294,10 +294,10 @@ class PiNativeBackend(
         cls, parent: Thread, launcher: str, runtime: LaunchRuntime, root: Path,
     ) -> PiSessionFile:
         """Copy the parent's whole saved history with Pi's own session manager."""
-        package = await Coordination.run_worker(partial(
+        package = await CoordinationWork.run_worker(partial(
             NativePiRpcLaunch.package_for_command, launcher, runtime,
         ))
-        directory = await Coordination.run_worker(partial(ForkedSession.prepared_directory, root))
+        directory = await CoordinationWork.run_worker(partial(ForkedSession.prepared_directory, root))
         identity = await RuntimeForkHelper.run(
             RuntimeForkRequest(str(package.path), parent.runtime.path, str(parent.worktree),
                                str(directory), runtime=runtime), cwd=parent.worktree.path,

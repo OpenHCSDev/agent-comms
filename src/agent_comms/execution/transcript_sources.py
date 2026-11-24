@@ -18,7 +18,7 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import Annotated, ClassVar, Self
 
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import StaleRevision, TranscriptChanged
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.context_entry_reader import ReadsContextEntries
@@ -1509,7 +1509,7 @@ class ExternalTranscript(TranscriptSource, DurableStore):
             *(FileSource(path) for path in self.source_paths(self.root))
         )) as observations:
             async for _ in observations:
-                current = await Coordination.run_worker(self.requested_frames)
+                current = await CoordinationWork.run_worker(self.requested_frames)
                 for frame in current:
                     if frame not in previous:
                         emit(frame)
@@ -1562,7 +1562,7 @@ class DraftPublication:
 
     @staticmethod
     def append(publication: DraftPublication, parts: Iterable[str]):
-        return Coordination.run_worker(lambda: publication.append_parts(parts))
+        return CoordinationWork.run_worker(lambda: publication.append_parts(parts))
 
     def append_parts(self, parts: Iterable[str]) -> None:
         pass

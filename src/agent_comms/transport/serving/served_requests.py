@@ -22,7 +22,7 @@ from pydantic import BaseModel, JsonValue
 from agent_comms.acp_extension import GoalSnapshotReply
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import Comms
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import Refused
 from agent_comms.coordination.working_memory_annotations import WorkingMemoryAnnotations
 from agent_comms.errors import RelationViolationError
@@ -180,7 +180,7 @@ class ServedProjectRuntimeRequest(
         return super().require_owner(entry)
 
     async def result(self, ctx: AttachedRuntimeRequestContext) -> ProjectReply:
-        entry = (await Coordination.run_worker(partial(
+        entry = (await CoordinationWork.run_worker(partial(
             ctx.server.agent._comms.registry.entry, ctx.name,
         ))).entry
         current = self.require_original(entry)
@@ -327,7 +327,7 @@ class ServedDismissHistoricalInputsRuntimeRequest(
     DismissHistoricalInputsRuntimeRequest,
 ):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> DeliveryOverview:
-        result = await Coordination.run_worker(partial(
+        result = await CoordinationWork.run_worker(partial(
             ctx.server.agent._comms.goals.dismiss_historical_inputs,
             ctx.name, scope=await ctx.server.agent.inputs.delivery_scope(ctx.session),
         ))
@@ -340,7 +340,7 @@ class ServedGoalHistoryRuntimeRequest(
     GoalHistoryRuntimeRequest,
 ):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> RecordedGoalHistory:
-        return await Coordination.run_worker(partial(
+        return await CoordinationWork.run_worker(partial(
             ctx.server.agent._comms.goals.recorded_history, ctx.name, self.goal_id,
         ))
 
@@ -417,7 +417,7 @@ class ServedContextRuntimeRequest(
 ):
     async def inspect(self, ctx: AttachedRuntimeRequestContext) -> NativeContextData:
         agent = ctx.server.agent
-        owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
+        owner = await CoordinationWork.run_worker(partial(agent._comms.registry.require, ctx.name))
         context = await agent.turns.inspect_context(ctx.session, owner)
         return context.require_session_file(owner.runtime.path)
 
@@ -439,7 +439,7 @@ class ServedContextSourceRuntimeRequest(
 
     async def result(self, ctx: AttachedRuntimeRequestContext) -> ContextSourceText:
         context = await self.inspect(ctx)
-        return await Coordination.run_worker(partial(self.read_source, ctx, context))
+        return await CoordinationWork.run_worker(partial(self.read_source, ctx, context))
 
 
 class ServedContextCoreRuntimeRequest(
@@ -452,7 +452,7 @@ class ServedContextCoreRuntimeRequest(
         return comms.context_for(owner)
 
     async def inspect(self, ctx: AttachedRuntimeRequestContext):
-        return await Coordination.run_worker(partial(self.read_context, ctx))
+        return await CoordinationWork.run_worker(partial(self.read_context, ctx))
 
     async def result(self, ctx: AttachedRuntimeRequestContext):
         return await self.inspect(ctx)
@@ -468,7 +468,7 @@ class ServedContextCoreSourceRuntimeRequest(
                                         self.segment, self.manifest, self.source)
 
     async def result(self, ctx: AttachedRuntimeRequestContext):
-        return await Coordination.run_worker(partial(self.read_source, ctx))
+        return await CoordinationWork.run_worker(partial(self.read_source, ctx))
 
 
 class ServedRecordedContextRuntimeRequest(
@@ -481,7 +481,7 @@ class ServedRecordedContextRuntimeRequest(
         return ContextManifest.for_request((manifest,), self.turn, self.request_id)
 
     async def manifest(self, ctx: AttachedRuntimeRequestContext):
-        return await Coordination.run_worker(partial(self.read_manifest, ctx))
+        return await CoordinationWork.run_worker(partial(self.read_manifest, ctx))
 
 
 class ServedContextReferenceRuntimeRequest(
@@ -490,7 +490,7 @@ class ServedContextReferenceRuntimeRequest(
 ):
     async def result(self, ctx: AttachedRuntimeRequestContext):
         manifest = await self.manifest(ctx)
-        text = await Coordination.run_worker(partial(
+        text = await CoordinationWork.run_worker(partial(
             manifest.public_source_text, ctx.server.agent._comms, self.segment, self.source,
         ))
         return text
@@ -507,7 +507,7 @@ class ServedContextRecordedSegmentRuntimeRequest(
     async def result(self, ctx: AttachedRuntimeRequestContext):
         segment = await self.selected_segment(ctx)
         agent = ctx.server.agent
-        owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
+        owner = await CoordinationWork.run_worker(partial(agent._comms.registry.require, ctx.name))
 
         async def read_reference(original):
             return await agent.turns.inspect_context_segment(ctx.session, owner, original)
@@ -522,7 +522,7 @@ class ServedContextAnnotationsRuntimeRequest(
 ):
     async def result(self, ctx: AttachedRuntimeRequestContext):
         segment = await self.selected_segment(ctx)
-        labels = await Coordination.run_worker(partial(WorkingMemoryAnnotations.for_segment,
+        labels = await CoordinationWork.run_worker(partial(WorkingMemoryAnnotations.for_segment,
             ctx.server.agent._comms.registry.store.coordinator_reader,
             segment, self.classifier))
         return AnnotationsReply(labels)
@@ -536,4 +536,4 @@ class ServedContextAnnotationCorrectionRuntimeRequest(
         segment = await self.selected_segment(ctx)
         if not segment.contains_span(self.label.span):
             raise ValueError("Correction belongs to another original context source")
-        return await Coordination.run_worker(partial(self.correct, ctx.server.agent._comms))
+        return await CoordinationWork.run_worker(partial(self.correct, ctx.server.agent._comms))

@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from functools import partial
 
 from agent_comms.comms import Comms
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import DrainDeferred, DrainUnavailable
 from agent_comms.execution.native_failures import NativeRequestFailure
 from agent_comms.registry.activity import (
@@ -34,7 +34,7 @@ async def record_drain_failure(
     kind: type[DrainDiagnostic], error: Exception,
 ) -> None:
     diagnostic = kind.from_error(owner, error)
-    await Coordination.run_worker(partial(
+    await CoordinationWork.run_worker(partial(
         comms.agents.set_drain_diagnostic, thread, owner, diagnostic,
         source_error=error,
     ))
@@ -48,8 +48,8 @@ async def drain_failures(
     unavailable: type[UnavailableDrainDiagnostic] = UnavailableDrainDiagnostic,
 ):
     """Record and propagate failures; the observation owner waits for real change."""
-    snapshot = await Coordination.run_worker(comms.registry.snapshot)
-    observed = await Coordination.run_worker(partial(
+    snapshot = await CoordinationWork.run_worker(comms.registry.snapshot)
+    observed = await CoordinationWork.run_worker(partial(
         comms.agents.drain_observation, thread, snapshot=snapshot,
     ))
 

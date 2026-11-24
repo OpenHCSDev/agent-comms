@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.nominal.lifecycle_capability import Unresolved
 
@@ -29,7 +29,7 @@ class StartedInput:
         return None
 
     async def started(self: TurnInputSource, inputs: InputDrain, session_id: str, scope: QueueScope) -> None:
-        document = await Coordination.run_worker(partial(
+        document = await CoordinationWork.run_worker(partial(
             inputs.dispositions.read, self.keys,
         ))
         key = next(iter(self.keys), None)

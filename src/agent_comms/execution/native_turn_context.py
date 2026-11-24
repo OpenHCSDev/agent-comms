@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import Annotated
 
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.context_prior import UNREAD_CONTEXT, ContextPrior
 from agent_comms.execution.turn_context import (
@@ -65,7 +65,7 @@ class ContextObserved(AgentEvent):
         request its process recorded last, which this one becomes."""
         manifest = self.context.manifest(
             thread.incarnation, RecordedContextTurn(lease.turn_id, lease.identity), self.segments)
-        self.published.prior = await Coordination.run_worker(
+        self.published.prior = await CoordinationWork.run_worker(
             partial(contexts.record_after, self.published.prior, manifest))
         return manifest
 

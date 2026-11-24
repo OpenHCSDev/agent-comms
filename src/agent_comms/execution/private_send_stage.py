@@ -434,7 +434,7 @@ class TriageNativeSend(NativeSendStage):
             row.commit_context(db, context)
             row.settle_verdict(db, DecidedTriageRecord(type(decision)))
             for captured in self.assignments:
-                decision.settle(store, db, store.assignments.get(captured.assignment_id))
+                decision.settle(store.session, db, store.assignments.get(captured.assignment_id))
             # This is the settlement transaction's witness, not a replacement
             # source cache. Engagement must fence this exact proved transition.
             return tuple(store.assignments.get(captured.assignment_id)

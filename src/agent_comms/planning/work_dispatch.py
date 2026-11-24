@@ -115,7 +115,7 @@ class ReusedWorkDispatch(WorkDispatch):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CheckedPhaseTask(FiledProblem, ProblemOrder, PhaseTask):
+class CheckedPhaseTask(FiledProblem, ProblemOrder, PhaseTask[Comms, PlanPhase]):
     """An explicitly authored task; its order owns source, check, edits and run."""
 
     review_seconds: float

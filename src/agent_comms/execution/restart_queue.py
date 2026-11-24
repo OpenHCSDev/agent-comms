@@ -19,7 +19,7 @@ from typing import Annotated, ClassVar, Self, TextIO
 
 from agent_comms.cli_verbs.cli_result import ResultShower, TargetEditResult
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import CoordinationError
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (
@@ -406,8 +406,8 @@ class RestartQueue(DurableStore):
                     changes.prepare()
                     try:
                         barrier.read().require_open()
-                        await Coordination.run_worker(lambda: self.step(comms))
-                        if await Coordination.run_worker(lambda: self.release_if_empty(held)):
+                        await CoordinationWork.run_worker(lambda: self.step(comms))
+                        if await CoordinationWork.run_worker(lambda: self.release_if_empty(held)):
                             return
                     except MaintenanceHeldError:
                         pass  # The same request resumes after the maintenance witness changes.

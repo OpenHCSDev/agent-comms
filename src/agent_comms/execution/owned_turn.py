@@ -29,7 +29,7 @@ from agent_comms import agent_events as events
 from agent_comms.agent_backend import InputStartListener
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.comms import Comms
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import CoordinationError, Refused
 from agent_comms.errors import GoalAttemptError
 from agent_comms.execution.native_arguments import NativeArguments
@@ -226,7 +226,7 @@ class OwnedTurn(ProgressTurn):
 
     async def attach_native_session(self, session_file):
         """Publish through the owner returned by this original begin operation."""
-        self.registry_owner = await Coordination.run_worker(partial(
+        self.registry_owner = await CoordinationWork.run_worker(partial(
             self.runner.comms.registry.attach_native_session,
             self.registry_owner, str(session_file),
         ))
@@ -317,7 +317,7 @@ class OwnedTurn(ProgressTurn):
             pending_origins=self.runner.goals.pending_goal_origins, claims=origin_claims,
         )
         permits.callback(self.finish_goals)
-        self.input_cleanup.push_async_callback(Coordination.run_worker, self.settle_unbound)
+        self.input_cleanup.push_async_callback(CoordinationWork.run_worker, self.settle_unbound)
         self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)
         if self.bus_origins:
             with self.runner.comms.registry.store.current_snapshot() as cut:
@@ -460,13 +460,13 @@ class OwnedTurn(ProgressTurn):
 
     async def close_changed_project(self) -> None:
         name = await self.runner.sessions.sync_identity(self.session_id)
-        current = await Coordination.run_worker(partial(self.runner.comms.registry.require, name))
+        current = await CoordinationWork.run_worker(partial(self.runner.comms.registry.require, name))
         if current.worktree != self.thread.worktree:
             if persistent := self.runner.persistent_backends.get(self.session_id):
                 await persistent.close_idle()
 
     async def prepare_native(self):
-        await self.progress.consumer.dispatch(await Coordination.run_worker(partial(
+        await self.progress.consumer.dispatch(await CoordinationWork.run_worker(partial(
             self.runner.current_turn_update, self.session_id,
         )))
         await self.runner.inputs.emit_input_delivery_changed(self.session_id)
@@ -475,7 +475,7 @@ class OwnedTurn(ProgressTurn):
         # Private delivery sees the registry lease and cannot start another turn.
         await self.runner.inputs.drain_owned_inbox(self.session_id)
 
-        self.context = await Coordination.run_worker(partial(
+        self.context = await CoordinationWork.run_worker(partial(
             self.runner.comms.context_with_awareness, self.context, self.thread, self.relations,
         ))
 
@@ -486,7 +486,7 @@ class OwnedTurn(ProgressTurn):
         sender = OwnedSend(
             comms=self.runner.comms,
             inputs=self.runner.inputs,
-            goal_store=await Coordination.run_worker(self.runner.comms.goals.open_goal_store),
+            goal_store=await CoordinationWork.run_worker(self.runner.comms.goals.open_goal_store),
             session_id=self.session_id,
             thread=self.thread,
             turn=self.turn_id,
@@ -525,11 +525,11 @@ class OwnedTurn(ProgressTurn):
         self.owner_task = asyncio.current_task()
         assert self.owner_task is not None
         permits = ExitStack()
-        permit_cleanup.push_async_callback(Coordination.run_worker, permits.close)
-        if not await Coordination.run_worker(self.authorize):
+        permit_cleanup.push_async_callback(CoordinationWork.run_worker, permits.close)
+        if not await CoordinationWork.run_worker(self.authorize):
             return False
         await self.runner.sessions.sync_identity(self.session_id)
-        if not await Coordination.run_worker(partial(self.begin, resources, permits)):
+        if not await CoordinationWork.run_worker(partial(self.begin, resources, permits)):
             return False
         self.open_stream(resources, permits)
         # Early failures close claims before inbox/lease retirement. Once all
@@ -551,7 +551,7 @@ class OwnedTurn(ProgressTurn):
 
     async def fail(self, failure: Exception, cause: Exception, kind: type[TurnFailure]) -> NoReturn:
         """Settle and report once, retaining the exception that actually failed the turn."""
-        await Coordination.run_worker(self.settle_unbound)
+        await CoordinationWork.run_worker(self.settle_unbound)
         outcome = await self.progress.report_failure(failure, kind)
         outcome.raise_fault(cause)
 
@@ -562,7 +562,7 @@ class OwnedTurn(ProgressTurn):
         except asyncio.CancelledError:
             await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
             await self.backend.abort(self.owner_task)
-            state = await Coordination.run_worker(self.settle_unbound)
+            state = await CoordinationWork.run_worker(self.settle_unbound)
             await self.progress.consumer.dispatch(events.PromptCancelled(state))
             raise
         except NativeRequestFailure as error:

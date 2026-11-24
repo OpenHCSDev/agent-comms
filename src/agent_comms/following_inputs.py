@@ -7,7 +7,7 @@ from functools import partial
 
 from agent_comms.acp_extension import LiveQueueScope
 from agent_comms.agent_events import InputRefused
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.following_input_contracts import (
     FollowingInputRetirement,
     FollowingTurnSource,
@@ -30,7 +30,7 @@ class FollowingInputs:
         """Take accepted work when a running turn opens or frees following capacity."""
         async with inputs.state(session_id).lock:
             inputs.state(session_id).receive(PendingTaken())
-            owner = await Coordination.run_worker(partial(
+            owner = await CoordinationWork.run_worker(partial(
                 inputs.comms.registry.require, inputs.sessions.require(session_id),
             ))
             await DeliveredInput.deliver_pending(
@@ -84,7 +84,7 @@ class OwnerFollowingInputs(FollowingInputs, FollowingInputRetirement):
 
     async def open(self, session: FollowingTurnSource[OwnedSend]) -> None:
         inputs = self.inputs
-        sender = await Coordination.run_worker(partial(
+        sender = await CoordinationWork.run_worker(partial(
             session.prompt_send_boundary.following_sender,
             inputs, inputs.state(self.session_id).owned().identifier, session.command.message,
         ))

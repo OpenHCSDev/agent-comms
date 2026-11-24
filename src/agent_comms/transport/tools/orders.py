@@ -14,7 +14,7 @@ from agent_comms.acp_extension import (
     UpdateMetadata,
 )
 from agent_comms.comms import Comms
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.errors import TodoError
 from agent_comms.execution.turn_bound import LastTurns, TurnBound, TurnsSince
@@ -655,7 +655,7 @@ class ServedInputDeliveryRead(ThreadsArea, OwnedRead, InputDeliveryRead):
 
     async def owned(self, ctx: AttachedRuntimeRequestContext) -> DeliveryOverview:
         scope = await ctx.server.agent.inputs.delivery_scope(ctx.session)
-        return await Coordination.run_worker(
+        return await CoordinationWork.run_worker(
             partial(
                 ctx.server.agent._comms.goals.input_delivery,
                 ctx.name,
@@ -673,13 +673,13 @@ class ServedOwnerGoalRead(GoalsArea, OwnerLiveRead, OwnerGoalRead):
         return GoalSnapshotReply.from_snapshot(comms.goals.goal_snapshot(owner.name), UpdateMetadata.of())
 
     async def owned(self, ctx: AttachedRuntimeRequestContext) -> GoalSnapshotReply:
-        snapshot = await Coordination.run_worker(
+        snapshot = await CoordinationWork.run_worker(
             partial(
                 ctx.server.agent._comms.goals.goal_snapshot,
                 ctx.name,
             )
         )
-        turn = await Coordination.run_worker(
+        turn = await CoordinationWork.run_worker(
             partial(
                 ctx.server.agent.turns.turn_state,
                 ctx.session,

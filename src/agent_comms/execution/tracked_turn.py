@@ -13,7 +13,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 import agent_comms.execution.transcript_sources as transcript_sources
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution import pi_commands as commands
 from agent_comms.execution import pi_events as pi
@@ -279,7 +279,7 @@ class TrackedTurnSession(TurnSession, FollowingTurnSource[OwnedSend]):
                 )
 
         with measurements.operation("native_launch_selection"):
-            launch = await Coordination.run_worker(select_launch)
+            launch = await CoordinationWork.run_worker(select_launch)
         turn = cls(
             launch,
             partial(commands.Prompt,
@@ -307,7 +307,7 @@ class TrackedTurnSession(TurnSession, FollowingTurnSource[OwnedSend]):
             ownership.push(retirement)
             try:
                 drafts = ExitStack()
-                ownership.push_async_callback(Coordination.run_worker, drafts.close)
+                ownership.push_async_callback(CoordinationWork.run_worker, drafts.close)
                 # Transport resources are the turn's innermost lifetime. Stop
                 # closes them before child cleanup can block, so an
                 # interrupted selected turn cannot leave its socket path behind.
@@ -320,7 +320,7 @@ class TrackedTurnSession(TurnSession, FollowingTurnSource[OwnedSend]):
                                 self.startup.root, self.command.input_id))
 
                     with self.startup.measurements.operation("draft_publication_acquisition"):
-                        self.draft_publication = await Coordination.run_worker(acquire_draft)
+                        self.draft_publication = await CoordinationWork.run_worker(acquire_draft)
                     await ownership.enter_async_context(self.native.failures())
                     self.watchdog.reading()
                     try:
@@ -478,7 +478,7 @@ class TrackedTurnSession(TurnSession, FollowingTurnSource[OwnedSend]):
         await super().text_received(text)
 
     async def assistant_ended(self) -> None:
-        await Coordination.run_worker(self.draft_publication.retire_message)
+        await CoordinationWork.run_worker(self.draft_publication.retire_message)
 
     def accept_tool_round(self, message):
         super().accept_tool_round(message)

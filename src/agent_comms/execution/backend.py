@@ -41,7 +41,7 @@ from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import NO_INPUT_START_LISTENER, InputStartListener
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution import pi_commands as commands
 from agent_comms.execution import pi_events as pi
 from agent_comms.execution.acp_failure import ProviderRetryResult
@@ -175,7 +175,7 @@ async def stream_agent_events(
     """
     async with persistent_session.lock:
         try:
-            launch = await Coordination.run_worker(partial(
+            launch = await CoordinationWork.run_worker(partial(
                 persistent_session.child_state.managed_launch,
                 agent_bin,
                 tuple(agent_args),
@@ -644,7 +644,7 @@ class TrackedInputContext:
     async def committed_input(self, turn: TurnSession, event: pi.InputCommitted) -> None:
         self.input_commit = self.input_commit.capture(event)
         async with turn.cursor_delivery.reading() as source_reads:
-            await Coordination.run_worker(
+            await CoordinationWork.run_worker(
                 lambda: source_reads.for_source(
                     turn.launch.session.files(turn.launch.root).session
                 ).observe(event)
@@ -681,7 +681,7 @@ class TrackedInputContext:
     async def committed_context(self, turn: TurnSession, event: pi.ContextCommitted) -> None:
         self.context_commit = ObservedNativeCommit(event)
         async with turn.cursor_delivery.reading() as source_reads:
-            proof = await Coordination.run_worker(
+            proof = await CoordinationWork.run_worker(
                 partial(
                     self.proof,
                     turn.launch.session.files(turn.launch.root),
@@ -758,7 +758,7 @@ class TurnSession(NativeSession, PromptSessionCallbacks):
         if not self.started_input or not self.accepts_output:
             raise SelectedToolDenied("Native tool has no started input")
         async with self.cursor_delivery.reading() as source_reads:
-            return await Coordination.run_worker(
+            return await CoordinationWork.run_worker(
                 partial(
                     self.contexts[self.command.input_id].proof,
                     self.launch.session.files(self.launch.root),
