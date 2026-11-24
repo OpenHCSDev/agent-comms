@@ -28,6 +28,9 @@ class RecipientActivityRead[Notice, Assignment, Progress](ABC):
     @abstractmethod
     def taken_response(self, notification: Notice, progress: Progress) -> Notice: ...
 
+    @abstractmethod
+    def shows_notification(self, notification: Notice, *, displayed: bool) -> bool: ...
+
 
 class RevisionChanges(ABC):
     __slots__ = ()

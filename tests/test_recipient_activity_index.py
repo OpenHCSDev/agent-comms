@@ -104,6 +104,7 @@ def test_a_viewer_follows_frozen_lookups_through_rename_and_never_into_a_rebirth
     assert seen_by("peer-a") == {"peer-a"}
     comms.registry.rename("peer-a", "renamed-a")
     assert seen_by("renamed-a") == {"peer-a"}
+    comms.messaging.send("peer-b", "#ci", "answered before removal", answers=(sent.reference,))
     comms.registry.remove("peer-b")
     comms.registry.declare(NativeThread("peer-b", frozenset({"ci"}), Checkout(tmp_path)))
     assert seen_by("peer-b") == set()

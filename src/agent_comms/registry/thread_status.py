@@ -28,6 +28,11 @@ from agent_comms.nominal.lifecycle_capability import LifecycleCapability
 from agent_comms.planning.goals import OrphansHolds
 from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.presence_reads import PresenceEntry, PresenceSnapshot, PresenceThread
+from agent_comms.registry.recipient_activity import (
+    OnlineRecipientActivity,
+    RecipientActivity,
+    UnavailableRecipientActivity,
+)
 from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import GenerationCounter, OwnerIdentity
 from agent_comms.registry.thread_presentation import (
@@ -99,6 +104,9 @@ class ThreadStatus(
 
     def is_receiving(self) -> bool:
         return False
+
+    def recipient_activity(self, process: ProcessState) -> RecipientActivity:
+        return UnavailableRecipientActivity()
 
     def is_archived(self) -> bool:
         return False
@@ -274,6 +282,9 @@ class ActiveThreadPresence(
 
     def is_receiving(self) -> bool:
         return True
+
+    def recipient_activity(self, process: ProcessState) -> RecipientActivity:
+        return UnavailableRecipientActivity() if process.offline() else OnlineRecipientActivity()
 
     def registered(self, thread: PresenceThread, last_seen: float) -> ThreadStatus:
         return thread.process_identity.thread_status(self, last_seen)
