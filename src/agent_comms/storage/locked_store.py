@@ -76,6 +76,18 @@ class DocumentChange[D, R]:
         """A change whose answer is the successor itself."""
         return cls(document, document)
 
+    def apply_to(self, store: DocumentTransactions[D], original: D) -> None:
+        if self.document is not original:
+            store._publish_unlocked(self.document)
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentRetirement[D, R](DocumentChange[D, R]):
+    """Retire the current document and its writer claim inside the write transaction."""
+
+    def apply_to(self, store: DocumentTransactions[D], original: D) -> None:
+        store._retire_unlocked()
+
 
 class InstallableFile:
     """A bus file with install behavior: either retained across installations (durable)
@@ -1229,14 +1241,6 @@ class DecodedDocument[T](DocumentBytes):
         return self.decode_value(self)
 
     @cached_property
-    def encoded_content(self) -> JsonValue:
-        """The stored JSON value, or the declaration's empty value before first publish."""
-        return self.revision.either(
-            lambda _revision: FieldCodec.parse(self.content),
-            lambda: self.encode_value(self.value),
-        )
-
-    @cached_property
     def persisted_content(self) -> str:
         """Compare all stored fields, independently of the value's logical identity."""
         return FieldCodec.compact(self.encode_value(self.value), sort_keys=True)
@@ -1321,13 +1325,10 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
     def replace_if_changed(self, value: T) -> None:
         """Replace only changed stored content; logical identity does not decide writes."""
         encoded = self._encode(value)
+        persisted_content = FieldCodec.compact(encoded, sort_keys=True)
 
         def apply(current: DecodedDocument[T]) -> None:
-            if current.encoded_content == encoded:
-                return
-            # Structural JSON equality is the hot unchanged path. The canonical fallback
-            # preserves the existing behavior for alternate numeric spellings and NaN.
-            if current.persisted_content != FieldCodec.compact(encoded, sort_keys=True):
+            if current.persisted_content != persisted_content:
                 self._publish_encoded_unlocked(encoded)
 
         self.change_current(
@@ -1347,8 +1348,7 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
         def apply(original: T) -> tuple[R, ...]:
             results = []
             for changed in change(original):
-                if changed.document is not original:
-                    self._publish_unlocked(changed.document)
+                changed.apply_to(self, original)
                 original = changed.document
                 results.append(changed.result)
             return tuple(results)
@@ -1385,12 +1385,15 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
         with self.guarded_write():
             self._publish_unlocked(value)
 
+    def _retire_unlocked(self) -> None:
+        _read_cache.pop(self.path, None)
+        self.path.unlink(missing_ok=True)
+        store_lock_path(self.path).unlink(missing_ok=True)
+
     def retire(self) -> None:
         """Retire an obsolete document and its writer claim in the same transaction."""
         with self.guarded_write():
-            _read_cache.pop(self.path, None)
-            self.path.unlink(missing_ok=True)
-            store_lock_path(self.path).unlink(missing_ok=True)
+            self._retire_unlocked()
 
 
 _read_cache: dict[Path, DecodedDocument[object]] = {}

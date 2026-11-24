@@ -15,7 +15,6 @@ with the next request, so a wrong restore can cost time and never an answer.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import logging
 import urllib.error
@@ -31,6 +30,7 @@ from agent_comms.execution.context_history import ContextHistory, ContextView
 from agent_comms.execution.context_sizes import ContextSizes
 from agent_comms.execution.launch_runtime import RestartEnvironment
 from agent_comms.execution.native_arguments import ClmLocalProvider, TurnHost
+from agent_comms_hooks.process_claim import ProcessSingleton
 
 logger = logging.getLogger(__name__)
 
@@ -152,8 +152,7 @@ class ContextStateStore:
         """One handoff at a time: reading the holder, saving, restoring and recording the
         new holder are one step for every worker process sharing the slot."""
         self.directory.mkdir(parents=True, exist_ok=True)
-        with (self.directory / "slot.lock").open("w") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+        with ProcessSingleton(self.directory / "slot.lock").waited():
             yield
 
     @property
