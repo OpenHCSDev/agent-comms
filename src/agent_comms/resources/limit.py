@@ -32,6 +32,9 @@ class Observation:
     resource: str
     summary: str
 
+    def contribute_report(self, free_gib: dict[str, float], report: dict[str, object]) -> None:
+        """Record any top-level metrics this observation owns in the JSON scan report."""
+
 
 @dataclass(frozen=True)
 class Verdict(DeclaredFamily, affix="Verdict"):
@@ -42,6 +45,10 @@ class Verdict(DeclaredFamily, affix="Verdict"):
     def worse_than(self, other: Verdict) -> bool:
         return self.severity > other.severity
 
+    @property
+    def report_reason(self) -> str:
+        return ""
+
 
 @dataclass(frozen=True)
 class HealthyVerdict(Verdict):
@@ -49,17 +56,25 @@ class HealthyVerdict(Verdict):
 
 
 @dataclass(frozen=True)
-class AttentionVerdict(Verdict):
-    """The resource crossed its warn threshold. Report, right-size, keep working."""
-    severity: ClassVar[int] = 1
+class AlertVerdict(Verdict, declared_name=None):
+    """A verdict outside the healthy band carries why it fired."""
     reason: str = ""
+
+    @property
+    def report_reason(self) -> str:
+        return self.reason
 
 
 @dataclass(frozen=True)
-class ActVerdict(Verdict):
+class AttentionVerdict(AlertVerdict):
+    """The resource crossed its warn threshold. Report, right-size, keep working."""
+    severity: ClassVar[int] = 1
+
+
+@dataclass(frozen=True)
+class ActVerdict(AlertVerdict):
     """The resource crossed its critical threshold. The watcher's action fires."""
     severity: ClassVar[int] = 2
-    reason: str = ""
 
 
 # Shorter names for external callers; the family members keep the ``Verdict`` affix.

@@ -52,6 +52,7 @@ from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_reads import NotificationRead
 from agent_comms.messaging.read_basis import DisplayCut, NoDisplaySelection
 from agent_comms.messaging.revision_views import BusSourceView
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.declared_family import UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     DeclaredError,
@@ -730,34 +731,28 @@ class ReadAnswered(ReadOutcome, declared_name=None):
     """A read's answer. Each member carries one declared answer type, so a remote UI decodes
     the answer as itself."""
 
-    members: ClassVar[list[type[ReadAnswered]]] = []
-    _answers: ClassVar[dict[type, type[ReadAnswered]]] = {}
-
     request_id: int
     value: object
 
-    def __init_subclass__(cls, **kwargs: object) -> None:
-        super().__init_subclass__(**kwargs)
-        ReadAnswered.members.append(cls)
-        ReadAnswered._answers = {}
-
-    @staticmethod
-    def answers() -> dict[type, type[ReadAnswered]]:
+    @ClassFact
+    def _declared_answers(cls) -> dict[type, type[ReadAnswered]]:
         """Each member answers the type its own ``value`` declares.
 
         The annotations are resolved here rather than while the class body runs, because this
         module declares its names after the members and a string is not a type.
         """
-        if not ReadAnswered._answers:
-            declared = {}
-            for member in ReadAnswered.members:
-                answered = get_type_hints(member)["value"]
-                if answered is object:
-                    raise TypeError(
-                        f"{member.__qualname__} must declare the answer its value carries")
-                declared[answered] = member
-            ReadAnswered._answers = declared
-        return ReadAnswered._answers
+        declared: dict[type, type[ReadAnswered]] = {}
+        for member in cls.members_with(cls):
+            answered = get_type_hints(member)["value"]
+            if answered is object:
+                raise TypeError(
+                    f"{member.__qualname__} must declare the answer its value carries")
+            declared[answered] = member
+        return declared
+
+    @classmethod
+    def answers(cls) -> dict[type, type[ReadAnswered]]:
+        return cls._declared_answers
 
     @staticmethod
     def of(request_id: int, value: object) -> ReadAnswered:

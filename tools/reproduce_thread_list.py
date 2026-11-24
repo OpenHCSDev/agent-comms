@@ -20,6 +20,7 @@ from agent_comms.registry.thread_storage import StorageRoots
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved, SidebarUnreadable
+from agent_comms.ui_model.observation_service import SidebarReading
 
 
 def declaration(root: Path, name: str, created_at: float = 1) -> Thread:
@@ -80,7 +81,7 @@ def main() -> None:
                          message=dict(role=kind, content=content))
             print(json.dumps(event), file=stream)
     comms.registry.register(declaration(root, "sentinel"), StoppedThreadStatus())
-    reading = ObserveSidebar(Checkout(root), True, False).observation()
+    reading = SidebarReading(ObserveSidebar(Checkout(root), True, False))
     stop = mp.Event()
     counts: Queue[int] = mp.Queue()
     process = mp.Process(target=writer, args=(root, stop, counts, args.imports))
