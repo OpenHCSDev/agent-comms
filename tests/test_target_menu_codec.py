@@ -27,13 +27,17 @@ from pathlib import Path
 import pytest
 
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
+from agent_comms.cli_verbs.channel_activity import ChannelActivityCliCommand
 from agent_comms.cli_verbs.cli_command import (
     PreparedTargetAction,
     TargetAction,
+    TargetActionCommand,
     TargetBatchResult,
     TargetEdit,
     TargetSelection,
 )
+from agent_comms.cli_verbs.pin_channel import PinChannelCliCommand
+from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.config_options import CatalogChoice
 from agent_comms.messaging.channel_targets import (
@@ -120,3 +124,31 @@ def test_an_opened_action_is_prepared_through_core(tmp_path):
     prepared = ui_core_read(comms, CommsPrepareTargetActionTool(action=action.edited({})))
     assert FieldCodec.decode(PreparedTargetAction, FieldCodec.encode(prepared)) == prepared
     assert tuple(item.name for item in prepared.fields) == tuple(item.name for item in action.editable_fields)
+
+
+def test_every_target_action_command_declares_a_short_menu_label():
+    members = TargetActionCommand.members_with(TargetActionCommand)
+    assert members
+    for member in members:
+        assert member.menu_label, f"{member.__name__} must declare menu_label"
+        assert len(member.menu_label) <= 20, f"{member.__name__}.menu_label is too verbose: {member.menu_label!r}"
+
+    pin_channel = TargetAction((PinChannelCliCommand(name="ops", pinned=True),), ("#ops",), PinChannelCliCommand)
+    unpin_channel = TargetAction((PinChannelCliCommand(name="ops", pinned=False),), ("#ops",), PinChannelCliCommand)
+    pin_thread = TargetAction((PinThreadCliCommand(name="worker", channel="#ops", pinned=True),), ("worker",), PinThreadCliCommand)
+    unpin_thread = TargetAction((PinThreadCliCommand(name="worker", channel="#ops", pinned=False),), ("worker",), PinThreadCliCommand)
+    mixed_pin = TargetAction(
+        (PinChannelCliCommand(name="ops", pinned=True), PinThreadCliCommand(name="worker", channel="#ops", pinned=False)),
+        ("#ops", "worker"),
+        PinThreadCliCommand,
+    )
+    assert pin_channel.label == "Pin"
+    assert unpin_channel.label == "Unpin"
+    assert pin_thread.label == "Pin"
+    assert unpin_thread.label == "Unpin"
+    assert mixed_pin.label == "Pin / Unpin"
+
+    activity_all = TargetAction((ChannelActivityCliCommand(name="ops", enabled=True),), ("#ops",), ChannelActivityCliCommand)
+    activity_mentions = TargetAction((ChannelActivityCliCommand(name="ops", enabled=False),), ("#ops",), ChannelActivityCliCommand)
+    assert activity_all.label == "Activity: all"
+    assert activity_mentions.label == "Activity: mentions"

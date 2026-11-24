@@ -15,6 +15,7 @@ class TeamPackage:
     reading_order: ClassVar[tuple[str, ...]] = (
         "spine",
         "slop",
+        "trace",
         "team",
         "no-waiting",
         "evidence",

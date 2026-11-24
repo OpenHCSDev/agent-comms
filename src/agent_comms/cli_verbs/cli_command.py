@@ -8,6 +8,7 @@ from types import get_original_bases
 from typing import (
     TYPE_CHECKING,
     Annotated,
+    ClassVar,
     Generic,
     Self,
     TextIO,
@@ -96,6 +97,22 @@ class CliCommand(
     affix='CliCommand',
     discovery_package='agent_comms.cli_verbs',
 ):
+    menu_label: ClassVar[str] = ""
+
+    @classmethod
+    def default_menu_label(cls) -> str:
+        """Short, verb-first label for context menus and panels; distinct from CLI --help."""
+        return cls.menu_label or cls.help
+
+    def action_label(self) -> str:
+        """Bound action label; toggle actions override to reflect the target's next state."""
+        return self.default_menu_label()
+
+    @classmethod
+    def selection_label[C: CliCommand](cls: type[C], commands: tuple[C, ...]) -> str:
+        labels = tuple(dict.fromkeys(command.action_label() for command in commands))
+        return labels[0] if len(labels) == 1 else cls.default_menu_label()
+
     def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
         result = TargetCompleted(batch.target, self, self.apply(comms))
         batch.outcomes.append((batch.position, result))
@@ -330,7 +347,7 @@ class TargetAction:
 
     @property
     def label(self) -> str:
-        return self.declaration.help
+        return self.declaration.selection_label(self.bound) if self.bound else self.declaration.default_menu_label()
 
     @property
     def confirmation(self) -> str:
@@ -624,6 +641,21 @@ class TargetActionCommand[Result: TargetEditResult | Channel = TargetEditResult 
 ):
     """A command a thread, channel or project menu offers. Its answer is one a remote UI
     decodes, and the menu's catalog lists exactly these members."""
+
+
+class PinMenuLabel:
+    """Shared short verb-first label for channel and thread pin actions: Pin or Unpin."""
+
+    menu_label: ClassVar[str] = "Pin"
+    pinned: bool
+
+    def action_label(self) -> str:
+        return "Pin" if self.pinned else "Unpin"
+
+    @classmethod
+    def selection_label(cls, commands: tuple[CliCommand, ...]) -> str:
+        labels = tuple(dict.fromkeys(command.action_label() for command in commands))
+        return labels[0] if len(labels) == 1 else "Pin / Unpin"
 
 
 class CreatesThread:

@@ -16,6 +16,7 @@ from agent_comms.registry.registry_document import RegistrySnapshot, ResolvedCha
 class DeleteViewCliCommand(NamedCliCommand, TargetActionCommand[ViewDeletedResult],
                            declared_name="delete-view"):
     help = "Delete saved view"
+    menu_label = "Delete view"
 
     @classmethod
     def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:

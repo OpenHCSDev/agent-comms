@@ -11,6 +11,7 @@ from agent_comms.nominal.field_codec import Argument, TargetBound
 @dataclass(frozen=True, kw_only=True)
 class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name="restore-channel"):
     help = "Restore archived channel"
+    menu_label = "Restore"
     archived: Annotated[
         bool, TargetBound(), Argument(flags=("--archived",))
     ] = False

@@ -18,6 +18,7 @@ from agent_comms.registry.threads import Thread
 class ThreadTagsCliCommand(NamedCliCommand, TargetActionCommand[ThreadTagsResult],
                            declared_name="thread-tags"):
     help = "Edit thread tags"
+    menu_label = "Tags"
     tags: Annotated[
         frozenset[str],
         Normalize(_tags),

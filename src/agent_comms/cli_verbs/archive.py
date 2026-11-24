@@ -13,6 +13,7 @@ from agent_comms.registry.threads import ArchiveOwnerControl
 class ArchiveCliCommand(MultipleTargets, ArchiveOwnerControl, NamedThreadCliCommand,
                         TargetActionCommand[ThreadArchivedResult]):
     help = "Archive a stopped thread"
+    menu_label = "Archive"
 
     def apply(self, ctx: Comms) -> ThreadArchivedResult:
         ctx.threads.archive(self.name)

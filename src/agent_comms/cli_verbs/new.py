@@ -31,6 +31,7 @@ class NewThreadCliCommand(
     declared_name="new",
 ):
     help = "Create a new pi thread"
+    menu_label = "New thread"
     spec_type: ClassVar[type[NewThreadSpec]] = NewThreadSpec
     task: Annotated[
         str, Multiline(), Argument(flags=("--task",))

@@ -26,6 +26,7 @@ from agent_comms.nominal.field_codec import (
 @dataclass(frozen=True, kw_only=True)
 class RestartCliCommand(TargetActionCommand[OwnersRestartedResult]):
     help = "Restart process"
+    menu_label = "Restart"
     name: Annotated[
         RestartTarget,
         TargetBound(),

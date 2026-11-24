@@ -14,6 +14,7 @@ from agent_comms.registry.threads import NativeOwnerCommand, OwnerLifecycleContr
 class StopCliCommand(AppliedTogether[ThreadStoppedResult], NativeOwnerCommand, OwnerLifecycleControl,
                      ThreadLifecycleCliCommand, TargetActionCommand[ThreadStoppedResult]):
     help = "Stop process"
+    menu_label = "Stop"
 
     @classmethod
     def apply_together(cls, ctx: Comms, commands: tuple[Self, ...]) -> tuple[ThreadStoppedResult, ...]:

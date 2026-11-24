@@ -24,6 +24,7 @@ class ConfigureCliCommand(
     its own model, so no menu offers this form for it (comms_model is native-only too)."""
 
     help = "Set a thread's model, thinking level, or service tier for its next turn"
+    menu_label = "Configure"
 
     @classmethod
     def thread_binding(cls, thread: Thread) -> ConfigureCliCommand:
