@@ -144,7 +144,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     row = stored_inputs(inputs.root).lookup(key)
     assert row.origin == origin and row.source_text == command.user_text
     assert len(stored_inputs(inputs.root).rows) == 1 and comms.bus.bus.revision() == before
-    queued = agent.inputs.state('beta').require_inbox().get_nowait()
+    queued = agent.inputs.state('beta').turn.require_inbox().get_nowait()
     assert queued.input_id == command.input_id
     assert queued.content.text == 'User follow-up:\n' + command.user_text
     contribution, = queued.content.contributions

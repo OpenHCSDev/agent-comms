@@ -3166,7 +3166,7 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
         )
 
     @classmethod
-    def producer_members(cls) -> tuple[tuple[type, tuple[str, ...]], ...]:
+    def producer_members(cls) -> tuple[tuple[type[ProjectionOutputs | FieldRepresentation | NominalText], tuple[str, ...]], ...]:
         """Column declarations and implementations of the declared output capabilities.
 
         Tables contribute columns, not adjacent queries. Output capabilities supply the
@@ -3175,19 +3175,22 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
         """
         columns = {column.name for column in cls._columns}
         owners = cls.producer_owners()
-        production = {owner: set(columns) for owner in owners if owner in cls.__mro__}
+        production: dict[type[ProjectionOutputs | FieldRepresentation | NominalText], set[str]] = {
+            declared_owner: set(columns) for declared_owner in owners if declared_owner in cls.__mro__
+        }
         for lineage in cls.producer_lineage():
             names = {
-                name for owner in lineage if owner.produces_whole() for name in vars(owner)
+                name for lineage_owner in lineage if lineage_owner.produces_whole()
+                for name in vars(lineage_owner)
             }
-            for owner in lineage:
-                production.setdefault(owner, set()).update(names)
-        for owner in owners:
-            production.setdefault(owner, set(vars(owner)))
-        members: list[tuple[type, tuple[str, ...]]] = []
-        for owner, names in production.items():
-            declaration = cast(ast.ClassDef, ast.parse(dedent(getsource(owner))).body[0])
-            members.append((owner, tuple(
+            for lineage_owner in lineage:
+                production.setdefault(lineage_owner, set()).update(names)
+        for declared_owner in owners:
+            production.setdefault(declared_owner, set(vars(declared_owner)))
+        members: list[tuple[type[ProjectionOutputs | FieldRepresentation | NominalText], tuple[str, ...]]] = []
+        for member_owner, names in production.items():
+            declaration = cast(ast.ClassDef, ast.parse(dedent(getsource(member_owner))).body[0])
+            members.append((member_owner, tuple(
                 cls.contract_source(statement) for statement in declaration.body
                 if names & cls.bound_names(ast.unparse(statement))
             )))
@@ -3209,17 +3212,17 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
         }
 
     @classmethod
-    def producer_owners(cls) -> tuple[type, ...]:
+    def producer_owners(cls) -> tuple[type[ProjectionOutputs | FieldRepresentation | NominalText], ...]:
         """This table, its output declarations, column values and their inherited implementations.
 
         Inherited producer capabilities follow the writer; unrelated mechanisms do not.
         """
-        owners: set[type] = {
+        owners: set[type[ProjectionOutputs | FieldRepresentation | NominalText]] = {
             parent for parent in cls.__mro__ if issubclass(parent, ProjectionOutputs)
         }
         owners.update(
-            owner for lineage in cls.producer_lineage() for owner in lineage
-            if owner.produces_whole()
+            lineage_owner for lineage in cls.producer_lineage() for lineage_owner in lineage
+            if lineage_owner.produces_whole()
         )
         annotations: list[object] = (
             [column.annotation for column in cls._columns] if is_dataclass(cls) else []
@@ -3233,7 +3236,7 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
                     if issubclass(parent, (FieldRepresentation, NominalText))
                 )
             owners.update(representation.producer_owners())
-        return tuple(sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__)))
+        return tuple(sorted(owners, key=lambda item: (item.__module__, item.__qualname__)))
 
 
 @dataclass(frozen=True)

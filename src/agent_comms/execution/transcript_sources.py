@@ -1330,9 +1330,6 @@ class StoreRead(TranscriptSource):
             for row in rows:
                 yield row.record(self.connection)
 
-    def turns(self, bound: TurnBound) -> tuple[TurnDigest, ...]:
-        return self.capture_turns(bound).turns
-
     def capture_turns(self, bound: TurnBound) -> CapturedTurns:
         with closing(ExternalItemRow.recent_turn_ids(self.connection, self.transcript.lookup)) as ids:
             turns = bound.take(
