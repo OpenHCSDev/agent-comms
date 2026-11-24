@@ -357,7 +357,8 @@ async def test_antigravity_persistent_watch_confirms_pty_double_cr_sync_and_asyn
     transcript.parent.mkdir(parents=True)
     transcript.write_text(_sample_antigravity_lines()[0] + "\n", encoding="utf-8")
 
-    # Event-driven wait_for_log_growth wakes on append and normalizes PTY \r\n -> \n.
+    # Event-driven wait_for_log_growth wakes on append, normalizes PTY \r\n -> \n,
+    # and persists a sidecar cursor so messages written between calls are never dropped.
     watch_log = tmp_path / "watch.log"
     watch_log.write_bytes(b"initial\r\n")
     waiter = asyncio.create_task(wait_for_log_growth(watch_log))
@@ -365,6 +366,15 @@ async def test_antigravity_persistent_watch_confirms_pty_double_cr_sync_and_asyn
     with watch_log.open("ab") as fh:
         fh.write(b"line-one\r\r\nline-two\r\n")
     assert await asyncio.wait_for(waiter, timeout=5) == "line-one\nline-two\n"
+
+    # A burst written while no waiter is armed is returned immediately on the next call.
+    with watch_log.open("ab") as fh:
+        fh.write(b"burst-between-arms\r\n")
+    assert await asyncio.wait_for(wait_for_log_growth(watch_log), timeout=5) == "burst-between-arms\n"
+
+    # Truncating the log (e.g. `: > watch.log` on watch restart) resets the cursor to 0.
+    watch_log.write_bytes(b"after-truncate\r\n")
+    assert await asyncio.wait_for(wait_for_log_growth(watch_log), timeout=5) == "after-truncate\n"
 
     async with TestServer(connector.application(), port=port) as server:
         async with TestClient(server) as client:

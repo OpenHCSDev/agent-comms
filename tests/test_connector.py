@@ -105,30 +105,34 @@ from agent_comms.transport.connector_store import (
     ConnectorCredentialsFile,
     ConnectorGrants,
     ConnectorStore,
-    ExpiredProfile,
-    HeldUiProfiles,
     IssuedCode,
     OAuthClientId,
     OAuthRedirectUri,
-    OpenableProfile,
     ReadServiceAccess,
     TrustedBrowser,
     UiAccess,
     UiGrantAccess,
     UiReadAccess,
-    UnreadableProfile,
     digest,
+)
+from agent_comms.transport.held_ui_profiles import (
+    ExpiredProfile,
+    HeldUiProfiles,
+    OpenableProfile,
+    UnreadableProfile,
 )
 
 CALLBACK = OAuthRedirectUri(URL("https://claude.ai/api/mcp/auth_callback"))
 from agent_comms.transport.mcp import (
-    PROTOCOL_VERSION,
-    CancelledMessage,
-    InitializeResult,
     NoProgress,
     ProgressToken,
-    StreamedLine,
+    ServedCancelledMessage,
     ToolCallMeta,
+)
+from agent_comms.transport.mcp_wire import (
+    PROTOCOL_VERSION,
+    InitializeResult,
+    StreamedLine,
     ToolsCallMessage,
     ToolsCallReply,
     ToolsCallResult,
@@ -1757,7 +1761,7 @@ async def test_a_cancel_reaches_the_running_call_it_names(connector):
     named, other = CancellableWireExport(), CancellableWireExport()
     connector.observed["export-1"] = named
     connector.observed["export-2"] = other
-    message = CancelledMessage(jsonrpc="2.0", params={"requestId": "export-1"})
+    message = ServedCancelledMessage(jsonrpc="2.0", params={"requestId": "export-1"})
     assert (await message.answer(connector, None, None)).status == 202
     assert named.cancelled() and not other.cancelled()
 

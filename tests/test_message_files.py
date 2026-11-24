@@ -31,7 +31,7 @@ from agent_comms.storage.locked_store import DurableFile, SQLiteFile
 from agent_comms.storage.typed_table import ReconciledFile
 from agent_comms.transport.connector import Connector
 from agent_comms.transport.connector_store import ConnectorStore, UiAccess
-from agent_comms.transport.mcp import ToolsCallMessage, ToolsCallReply
+from agent_comms.transport.mcp_wire import ToolsCallMessage, ToolsCallReply
 from agent_comms.transport.request import ToolCall, ToolRequest
 from agent_comms.transport.tool_caller import HumanCaller, ThreadCaller
 from agent_comms.transport.tools.send import CommsSendTool

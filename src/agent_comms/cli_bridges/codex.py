@@ -14,7 +14,7 @@ from typing import AsyncIterator, ClassVar, Self
 
 import aiohttp
 
-from agent_comms.cli_bridges.cli_protocol import EarlierItems
+from agent_comms.cli_bridges.runtime_updates import EarlierItems
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.cli_bridges.codex_protocol import (
     BusInput,

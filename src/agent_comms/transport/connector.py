@@ -133,15 +133,17 @@ from agent_comms.transport.connector_store import (
 )
 from agent_comms.transport.held_ui_profiles import HeldUiProfiles
 from agent_comms.transport.mcp import (
-    AnsweredCall,
     InvalidRequestError,
-    JsonRpcId,
     McpError,
     McpErrorReply,
     McpMessage,
     McpServer,
     MethodNotFoundError,
     ParseError,
+)
+from agent_comms.transport.mcp_wire import (
+    AnsweredCall,
+    JsonRpcId,
     ServerInfo,
     declared,
 )

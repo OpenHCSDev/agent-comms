@@ -75,6 +75,21 @@ def test_a_channel_post_naming_a_live_thread_outside_the_channel_is_refused(tmp_
     assert [item.message_id for item in comms.bus.inbox("outsider").page.messages] == [sent.message_id]
 
 
+def test_mentions_inside_backticks_and_fenced_code_blocks_are_plain_text(tmp_path):
+    comms = installed_comms(tmp_path)
+    comms.registry.declare(NativeThread("member", frozenset({"team"}), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread("outsider", frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(NativeThread("teammate", frozenset({"team"}), Checkout(tmp_path)))
+    body = (
+        "Quoting `@outsider` in inline code and\n"
+        "```python\n@outsider\n@teammate\n```\n"
+        "leaves only @teammate as a real mention."
+    )
+    sent = comms.messaging.send("member", "#team", body).message
+    assert [item.thread for item in sent.mentions] == ["teammate"]
+    assert body[sent.mentions[0].start : sent.mentions[0].end] == "@teammate"
+
+
 def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collective(tmp_path):
     comms = installed_comms(tmp_path)
     for name in ("alpha", "beta"):

@@ -12,7 +12,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.cli_bridges.cli_protocol import EarlierItems
+from agent_comms.cli_bridges.cli_protocol import WatchLine
 from agent_comms.execution.provider_records import ProviderDiagnosticError
 from agent_comms.execution.runtime_observations import RuntimeInfoObservation
 from agent_comms.execution.transcript_sources import ExternalTranscript
@@ -26,7 +26,7 @@ from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.thread_identity import OfferedTools
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.storage.recorded_time import EventTime, UnrecordedEventTime
-from agent_comms.transcript.external_transcript_rows import ExternalPage
+from agent_comms.transcript.external_transcript_rows import ExternalPage, RequestedEarlierPage
 from agent_comms.transcript.transcript_events import (
     LiveTextTranscript,
     NoticeTranscript,
@@ -521,6 +521,20 @@ class PublishedPage(RuntimeUpdate):
     def add_to(self, history: ImportBuffer) -> None:
         for item in self.items:
             item.update.add_to(history)
+
+
+class EarlierItems(WatchLine, TurnItem, declared_name="earlier-items"):
+    """The pager's outstanding continuation, handled only by its socket-owning bridge."""
+
+    turn_id: NativeTurnId
+    request: RequestedEarlierPage
+
+    @classmethod
+    def from_row(cls, row):
+        return cls(turn_id=row.turn_id, item_id=row.item_id, request=row.earlier)
+
+    async def handle(self, bridge) -> None:
+        await bridge.earlier(self)
 
 
 @dataclass(frozen=True)

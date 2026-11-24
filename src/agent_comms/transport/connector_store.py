@@ -50,16 +50,7 @@ from agent_comms.transport.connector_profile import (
     UiGrantSummary,
     UrlText,
 )
-from agent_comms.transport.held_ui_profiles import (
-    ExpiredProfile,
-    HeldProfile,
-    HeldUiProfiles,
-    MisdirectedProfile,
-    OpenableProfile,
-    ReplaceableProfile,
-    UnreadableProfile,
-    connector_state_directory,
-)
+from agent_comms.transport.held_ui_profiles import connector_state_directory
 
 ACCESS_SECONDS = 3600
 

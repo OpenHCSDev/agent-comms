@@ -15,6 +15,7 @@ import argparse
 import asyncio
 import base64
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -684,25 +685,72 @@ class InboxSocket:
 _PTY_CRLF_RE = re.compile(r"\r+\n")
 
 
+def _log_cursor_path(target: Path) -> Path:
+    return target.with_name(f"{target.name}.cursor")
+
+
+def _read_log_cursor(cursor_path: Path) -> tuple[int, int] | None:
+    try:
+        raw = json.loads(cursor_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    inode = raw.get("inode")
+    offset = raw.get("offset")
+    if isinstance(inode, int) and isinstance(offset, int) and offset >= 0:
+        return (inode, offset)
+    return None
+
+
+def _write_log_cursor(cursor_path: Path, inode: int, offset: int) -> None:
+    tmp = cursor_path.with_name(f".{cursor_path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps({"inode": inode, "offset": offset}), encoding="utf-8")
+    os.replace(tmp, cursor_path)
+
+
 async def wait_for_log_growth(path: Path, *, offset: int | None = None) -> str:
     """Wait via Bus.watch_sources for a persistent watch log to grow, then return the
-    newly appended text with PTY CR/LF normalized to LF so downstream monitors decode it."""
+    newly appended text with PTY CR/LF normalized to LF so downstream monitors decode it.
+
+    When `offset` is omitted, a sidecar `<log>.cursor` tracks `(inode, offset)` so messages
+    written between consecutive `--wait-log` invocations are delivered immediately rather than
+    silently skipped (and never stranded as unconfirmed `emitted` deliveries).
+    """
     target = path.expanduser()
+    cursor_path = _log_cursor_path(target)
     async with aclosing(Bus.watch_sources(FileSource(target))) as changes:
         await anext(changes)
         while not target.exists():
             await anext(changes)
-        pos = offset if offset is not None else target.stat().st_size
+        stat = target.stat()
+        cur_inode = stat.st_ino
+        if offset is not None:
+            pos = offset
+        else:
+            saved = _read_log_cursor(cursor_path)
+            if saved is None:
+                pos = stat.st_size
+                _write_log_cursor(cursor_path, cur_inode, pos)
+            elif saved[0] != cur_inode or stat.st_size < saved[1]:
+                pos = 0
+            else:
+                pos = saved[1]
         while True:
-            cur = target.stat().st_size
+            stat = target.stat()
+            cur = stat.st_size
+            if stat.st_ino != cur_inode or cur < pos:
+                cur_inode = stat.st_ino
+                pos = 0
             if cur > pos:
                 with target.open("rb") as fh:
                     fh.seek(pos)
                     raw = fh.read()
+                new_pos = pos + len(raw)
+                if offset is None:
+                    _write_log_cursor(cursor_path, cur_inode, new_pos)
                 text = raw.decode("utf-8", errors="replace")
                 return _PTY_CRLF_RE.sub("\n", text).replace("\r", "\n")
-            if cur < pos:
-                pos = cur
             await anext(changes)
 
 
