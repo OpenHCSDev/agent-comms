@@ -196,6 +196,11 @@ class InitializedMessage(McpNotification, declared_name="notifications/initializ
 
 
 @dataclass(frozen=True, kw_only=True)
+class RootsListChangedMessage(McpNotification, declared_name="notifications/roots/list_changed"):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
 class ServedCancelledMessage(McpNotification, CancelledFields, declared_name="notifications/cancelled"):
     """Serving CancelledMessage."""
 

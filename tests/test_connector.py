@@ -863,6 +863,10 @@ async def test_connector_lists_every_tool(client, store, comms):
         "jsonrpc": "2.0", "method": "notifications/initialized",
     })
     assert ready.status == 202 and await ready.read() == b""
+    roots_changed = await client.post("/mcp", headers=headers, json={
+        "jsonrpc": "2.0", "method": "notifications/roots/list_changed",
+    })
+    assert roots_changed.status == 202 and await roots_changed.read() == b""
     ping = await (await client.post("/mcp", headers=headers, json={
         "jsonrpc": "2.0", "id": "ping", "method": "ping",
     })).json()

@@ -259,9 +259,9 @@ class CommsExportWireTool(ObservedRequest[WireExportProvenance]):
     """A UI exports wire history to a file on Core's host, with progress and cancellation.
     Requires a human caller."""
 
-    label = "Export wire"
+    label = "Export messages"
     description = (
-        "Export wire history to a file on Core's host, reporting progress and stopping "
+        "Export message history to a file on Core's host, reporting progress and stopping "
         "when cancelled; requires a human UI caller."
     )
     destination: Annotated[Path, *tool_field("Destination file on Core's host")]
@@ -351,8 +351,8 @@ class CommsMoveThreadProjectTool(ToolRequest[ProjectChangeResult]):
     is refused, never moved."""
 
     label = "Move thread project"
-    description = "Move a thread incarnation's project directory; requires a human UI caller."
-    owner: Annotated[ThreadIncarnation, *tool_field("The thread incarnation the UI holds")]
+    description = "Move a thread's project directory; requires a human UI caller."
+    owner: Annotated[ThreadIncarnation, *tool_field("The thread the UI holds")]
     path: Annotated[str, *tool_field("New project directory")]
 
 
@@ -361,13 +361,13 @@ class CommsOwnerRequestTool(ToolRequest[OwnerAnswered]):
     """A UI asks one running owner incarnation a declared runtime request, such as its
     context; Core's host reaches the owner's socket. Requires a human caller."""
 
-    label = "Owner request"
+    label = "Thread runtime request"
     description = (
-        "Send a declared runtime request to one running thread incarnation's owner "
-        "and return its reply; requires a human UI caller."
+        "Send a runtime request to a running thread's owner and return its reply; "
+        "requires a human UI caller."
     )
-    owner: Annotated[ThreadIncarnation, *tool_field("The owner incarnation the UI holds")]
-    request: Annotated[RuntimeRequest, *tool_field("The declared runtime request")]
+    owner: Annotated[ThreadIncarnation, *tool_field("The running thread the UI holds")]
+    request: Annotated[RuntimeRequest, *tool_field("The runtime request")]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -424,8 +424,7 @@ class CommsReferenceNamesTool(ReadRequest[ReferenceNames]):
 
     label = "Reference names"
     description = (
-        "Every linkable thread name with its incarnation, and every channel name, without thread"
-        " records."
+        "Every linkable thread name and channel name, without full thread records."
     )
 
 
@@ -468,7 +467,7 @@ class CommsRetiredViewsTool(ReadRequest[RetiredViews]):
 
     label = "Retired views"
     description = (
-        "Which of these thread incarnations and channel views were deleted, replaced or archived."
+        "Which of these open threads and channels were deleted, replaced, or archived."
     )
     threads: Annotated[frozenset[ThreadIncarnation], *tool_field("Open thread views")]
     channels: Annotated[frozenset[str], *tool_field("Open channel views")]
@@ -605,10 +604,9 @@ class CommsThreadRelationshipsTool(ReadRequest[ThreadCommsSnapshot]):
 class CommsUserSendTool(SendsFiles, ToolRequest[MessagePublished]):
     """Local and connector UI input use the existing durable human publication."""
 
-    label = "Send human input"
+    label = "Send message"
     description = (
-        "Publish input typed by the owner to a thread or channel under the owner's "
-        "durable user identity; requires a human UI caller."
+        "Send a message typed by the user to a thread or channel; requires a human UI caller."
     )
     target: Annotated[str, *tool_field("Target thread name or channel", WireName("to"))]
     body: Annotated[str, *tool_field("Human input text")]
@@ -657,5 +655,5 @@ class CommsMessageFileTool(MessageFileRead, ReadRequest[MessageFileContent]):
 class CommsWireRevisionTool(ReadRequest[WireRevision]):
     """What every wire view derives from; an equal revision shows the same thing."""
 
-    label = "Wire revision"
-    description = "The wire revision thread, relationship and conversation views derive from."
+    label = "Bus revision"
+    description = "The bus revision that thread, relationship, and conversation views derive from."
