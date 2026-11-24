@@ -315,21 +315,21 @@ class CommsSetChannelMetadataTool(ToolRequest[Channel]):
 
 @dataclass(frozen=True, kw_only=True)
 class CommsSetViewTool(ToolRequest[SavedView]):
-    label = "Set non-routable view"
+    label = "Save view"
     description = (
-        "Create/update a typed participant or activity projection. Views cannot receive"
+        "Create or update a saved view filtered by tags. Views cannot receive"
         " messages and never own channel history."
     )
     name: Annotated[str, *tool_field("View name without #")]
-    kind: Annotated[type[SavedView], *tool_field("Projection kind")]
-    match: Annotated[type[ViewMatch], *tool_field("Tag predicate")]
+    kind: Annotated[type[SavedView], *tool_field("View kind")]
+    match: Annotated[type[ViewMatch], *tool_field("Tag match rule")]
     tags: Annotated[str, *tool_field("One or more comma-separated tags")]
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsDeleteViewTool(ToolRequest[ChannelListing]):
-    label = "Delete non-routable view"
-    description = "Delete a saved projection without changing tags, channels, messages, or threads."
+    label = "Delete view"
+    description = "Delete a saved view without changing tags, channels, messages, or threads."
     name: Annotated[str, *tool_field("Saved view name")]
 
 
@@ -501,14 +501,13 @@ class AuthoredTaskRequest(ToolRequest[TaskPublished], declared_name=None):
 class CommsDecisionTool(AuthoredTaskRequest):
     label = "Record Decision"
     description = (
-        "Record a chosen alternative and valid rejected alternatives on its original "
-        "wire message. Author and source turn come from your authorized execution. "
-        "Defaults to current project/goal revision or current turn; corrections name "
-        "the original reference and grant no execution."
+        "Record a chosen option and its rejected alternatives on the original "
+        "message. Defaults to the current project/goal or turn; corrections name "
+        "the original decision and grant no execution."
     )
-    chosen: Annotated[str, *tool_field("Chosen alternative, preserving exact wording")]
+    chosen: Annotated[str, *tool_field("Chosen option, preserving exact wording")]
     rejected: Annotated[
-        tuple[str, ...], *tool_field("Nonempty unique valid rejected alternatives")
+        tuple[str, ...], *tool_field("Nonempty unique rejected alternatives")
     ]
 
 
@@ -516,14 +515,12 @@ class CommsDecisionTool(AuthoredTaskRequest):
 class CommsConstraintTool(AuthoredTaskRequest):
     label = "Record Constraint"
     description = (
-        "Declare an exact authored restriction on its original wire message; wording "
-        "is retained verbatim. This records your authorized authorship, not inferred "
-        "human authority. Defaults to current project/goal revision or current turn. "
-        "Corrections name the original constraint reference; no execution or replay "
-        "is authorized."
+        "Record a restriction verbatim on the original message, under your own "
+        "authorship rather than inferred human authority. Defaults to the current "
+        "project/goal or turn; corrections name the original constraint."
     )
     text: Annotated[
-        str, *tool_field("Exact authored restriction, never a paraphrase of another source")
+        str, *tool_field("Exact restriction wording, never a paraphrase of another source")
     ]
 
 
@@ -645,11 +642,11 @@ class CommsStartTool(ToolRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class CommsQueueRestartTool(ToolRequest):
-    label = "Queue Idle Owner Restart"
+    label = "Queue Restart When Idle"
     description = (
-        "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "
-        "turn. A changed owner or uncertain attempt is never retried automatically. "
-        "Restarts in the calling process's runtime; does not deploy another runtime."
+        "Queue a running thread to restart once it is idle. Never interrupts an active "
+        "turn, never retries automatically if the process changed, and restarts in the "
+        "current runtime without deploying a new build."
     )
     name: Annotated[str, *tool_field("Live agent thread", ContextSource(SubjectBinding))]
 
