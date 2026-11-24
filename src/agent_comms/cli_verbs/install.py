@@ -4,7 +4,7 @@ import dataclasses
 from dataclasses import dataclass
 from typing import Annotated, Literal, TextIO
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_command import BusOpener, CliCommand
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.active_route import CommsRoute, RouteFile, active_route_path
 from agent_comms.installer.interpreter_operation import ProcessLauncherPhase
@@ -26,7 +26,7 @@ class InstallCliCommand(InstallRequest, CliCommand, declared_name=InstallRequest
         still selects it, otherwise the default root, where install creates one."""
         return LaunchRoot.from_path(RouteFile.read(active_route_path()).launch_root())
 
-    def execute(self, route: CommsRoute, output: TextIO) -> int:
+    def execute(self, route: CommsRoute, output: TextIO, open_bus: BusOpener) -> int:
         """The bus may be unreadable by this runtime, or absent, until the target's own
         source has carried or created it, so nothing opens it here."""
         with InstallLogs(route.root).launching():

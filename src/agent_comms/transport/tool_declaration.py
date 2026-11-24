@@ -114,17 +114,6 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     label: ClassVar[str]
 
     @classmethod
-    def serving(cls, request: ToolDeclaration) -> Self:
-        """This capability's member for the request's wire name, carrying the request's
-        fields: what the wire round trip decodes, without the wire. Looking the name up
-        acquires the family's members, so a process meets the served module only when it
-        first serves a request itself."""
-        member = cls.member_named(request.selection_key())
-        return member(**{
-            field.name: getattr(request, field.name) for field in fields(request) if field.init
-        })
-
-    @classmethod
     def declared_action(cls) -> type[ToolAction]:
         """The first action capability in the tool's C3 MRO."""
         return next(

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_command import BusOpener, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.installer.active_route import CommsRoute
@@ -23,6 +23,6 @@ class StoreReconcileCliCommand[Answer: CliResult](CliCommand[Answer]):
     def apply(self, ctx: Comms) -> Answer:
         return self.answer(ctx.root)
 
-    def execute(self, route: CommsRoute, output: TextIO) -> int:
+    def execute(self, route: CommsRoute, output: TextIO, open_bus: BusOpener) -> int:
         """Reconciliation reads its declared files before opening runtime consumers."""
         return self.answer(route.root).write(output)

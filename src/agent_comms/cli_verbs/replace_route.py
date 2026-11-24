@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_command import BusOpener, CliCommand
 from agent_comms.cli_verbs.cli_commands import RouteReplacedResult
 from agent_comms.comms import Comms
 from agent_comms.installer.active_route import (
@@ -31,7 +31,7 @@ class ReplaceRouteCliCommand(CliCommand[RouteReplacedResult],
     def apply(self, ctx: Comms) -> RouteReplacedResult:
         return self.answer(ctx.root)
 
-    def execute(self, route: CommsRoute, output: TextIO) -> int:
+    def execute(self, route: CommsRoute, output: TextIO, open_bus: BusOpener) -> int:
         """Every client borrows the published route, and a route that selects no bus refuses
         each borrower, so the repair of that route borrows none."""
         return self.answer(route.root).write(output)

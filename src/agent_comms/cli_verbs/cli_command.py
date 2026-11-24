@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field, replace
 from inspect import iscoroutinefunction, signature
 from types import get_original_bases
 from typing import (
-    TYPE_CHECKING,
     Annotated,
     ClassVar,
     Generic,
@@ -25,7 +25,6 @@ from agent_comms.cli_verbs.cli_result import CliResult, ResultShower, TargetEdit
 from agent_comms.cli_verbs.declared_verb import DeclaredCommand
 from agent_comms.cli_verbs.target_command_bindings import TargetCommandBindings
 from agent_comms.cli_verbs.target_fields import TargetField
-from agent_comms.comms import Comms
 from agent_comms.config_options import CatalogChoice, ConfigOptions
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.active_route import ActiveRoute, CommsRoute
@@ -60,15 +59,22 @@ from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
 
+class CliBus(ABC):
+    """The bus context CLI commands run against; Comms supplies the live composition root."""
+
+
+type BusOpener = Callable[[CommsRoute], AbstractContextManager[CliBus]]
+
+
 class ChannelBound(TargetBound):
     """A target-bound field supplies the surrounding channel scope."""
 
 
-class CliExecution[Answer: CliResult = CliResult](Command[Comms, Answer]):
+class CliExecution[Answer: CliResult = CliResult](Command[CliBus, Answer]):
     """The dispatcher contract, including methods selected through multiple inheritance."""
 
     @abstractmethod
-    def execute(self, route: CommsRoute, output: TextIO) -> int:
+    def execute(self, route: CliBusRoute, output: TextIO, open_bus: BusOpener) -> int:
         """Execute against the selected route and write to the caller's stream."""
 
     def __init_subclass__(cls) -> None:
@@ -92,7 +98,7 @@ class CliCommand(
     ModuleMembers,
     DeclaredCommand,
     CliExecution[Answer],
-    TargetCommandBindings[Comms, Thread, ThreadStatus, SurroundingChannel, Checkout, RegistrySnapshot, CatalogAccess, ResolvedChannel],
+    TargetCommandBindings[CliBus, Thread, ThreadStatus, SurroundingChannel, Checkout, RegistrySnapshot, CatalogAccess, ResolvedChannel],
     Generic[Answer],
     affix='CliCommand',
     discovery_package='agent_comms.cli_verbs',
@@ -113,7 +119,7 @@ class CliCommand(
         labels = tuple(dict.fromkeys(command.action_label() for command in commands))
         return labels[0] if len(labels) == 1 else cls.default_menu_label()
 
-    def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
+    def schedule(self, batch: TargetBatchSchedule, comms: CliBus) -> None:
         result = TargetCompleted(batch.target, self, self.apply(comms))
         batch.outcomes.append((batch.position, result))
 
@@ -171,20 +177,20 @@ class CliCommand(
         return channel.channels_for(target)
 
     @classmethod
-    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel, *, catalog: CatalogAccess) -> tuple[Self, ...]:
+    def thread_bindings(cls, comms: CliBus, thread: Thread, status: ThreadStatus, channel: SurroundingChannel, *, catalog: CatalogAccess) -> tuple[Self, ...]:
         return ()
 
     @classmethod
-    def project_bindings(cls, comms: Comms, project: Checkout) -> tuple[Self, ...]:
+    def project_bindings(cls, comms: CliBus, project: Checkout) -> tuple[Self, ...]:
         return ()
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
+    def channel_bindings(cls, comms: CliBus, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
         return ()
 
     @classmethod
     def bindings(
-        cls, resolved: ResolvedTarget, comms: Comms, channel: SurroundingChannel,
+        cls, resolved: ResolvedTarget, comms: CliBus, channel: SurroundingChannel,
         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
     ) -> tuple[Self, ...]:
         return resolved.bindings(
@@ -192,7 +198,7 @@ class CliCommand(
         )
 
     @classmethod
-    def target_catalog(cls, comms: Comms, target: TargetSelection,
+    def target_catalog(cls, comms: CliBus, target: TargetSelection,
                        channel: ChannelSelection = NoChannel(),
                        *, project: Checkout) -> tuple[TargetAction, ...]:
 
@@ -224,7 +230,7 @@ class CliCommand(
                                   channel if declaration.channel_fields() else NoChannel())
                      for declaration, commands in grouped.items())
 
-    def for_editor(self, comms: Comms, target: str, project: Checkout) -> Self:
+    def for_editor(self, comms: CliBus, target: str, project: Checkout) -> Self:
         return self
 
     @property
@@ -245,14 +251,14 @@ class CliCommand(
         selection = self.catalog_selection(catalogs)
         return tuple([await item.prepare(catalogs, selection) for item in self.editable_fields])
 
-    def describe(self, comms: Comms, target: CommandTarget, project: Checkout) -> TargetAction:
+    def describe(self, comms: CliBus, target: CommandTarget, project: Checkout) -> TargetAction:
 
         bound = self.for_editor(comms, target.name, project)
         channels = next((OneChannel(getattr(bound, item.name))
                          for item in bound.channel_fields()), NoChannel())
         return TargetAction((bound,), target.destination_names, type(bound), channels)
 
-    def run(self, ctx: Comms, output: TextIO) -> int:
+    def run(self, ctx: CliBus, output: TextIO) -> int:
         """Run this command and write its declared result."""
         return self.apply(ctx).write(output)
 
@@ -262,11 +268,11 @@ class CliCommand(
 
         return ActiveRoute.published_launch()
 
-    def execute(self, route: CommsRoute, output: TextIO) -> int:
+    def execute(self, route: CliBusRoute, output: TextIO, open_bus: BusOpener) -> int:
         """Open the bus this command reads, then run it; a command that must act before
         the bus opens overrides this."""
 
-        with Comms.client(route) as comms:
+        with open_bus(route) as comms:
             return self.run(comms, output)
 
     @classmethod
@@ -304,7 +310,7 @@ class CliCommand(
         })
 
     @classmethod
-    def execute_target(cls, comms: Comms, target: TargetSelection, arguments: Mapping[str, object],
+    def execute_target(cls, comms: CliBus, target: TargetSelection, arguments: Mapping[str, object],
                        *, confirmed: bool = False,
                        channel: ChannelSelection = NoChannel(),
                        project: Checkout) -> Answer | TargetBatchResult:
@@ -500,7 +506,7 @@ class TargetSelection(TaggedUnion, affix="Target"):
         return member
 
     @abstractmethod
-    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: Comms, arguments: Mapping[str, object],
+    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: CliBus, arguments: Mapping[str, object],
             *, confirmed: bool, channel: ChannelSelection, project: Checkout,
             snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
         """Bind, authorize and apply the declaration on this selection."""
@@ -515,7 +521,7 @@ class OneTarget(TaggedRecordMember, TargetSelection):
         if len(self.targets) != 1:
             raise ValueError('This action requires a single target')
 
-    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: Comms, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
+    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: CliBus, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
         name, = self.targets
         resolved = name.resolve(snapshot, comms.bus.require_channel)
         bindings = tuple(bound for context in name.contexts(declaration, channel)
@@ -552,7 +558,7 @@ class TargetBatch(TaggedRecordMember, TargetSelection):
     def listed_declaration(self, member: type[CliCommand]) -> type[CliCommand]:
         return member.catalog_declaration()
 
-    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: Comms, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
+    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: CliBus, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
         declaration.require_batch()
         declarations = (tuple(member for member in CliCommand.members_with(CliCommand)
                               if member.catalog_declaration() is declaration)
@@ -608,19 +614,19 @@ class TargetBatch(TaggedRecordMember, TargetSelection):
 class AppliedTogether(CliCommand[Answer]):
     """A command whose bindings in one target batch are applied as one operation."""
 
-    def apply(self, ctx: Comms) -> Answer:
+    def apply(self, ctx: CliBus) -> Answer:
         return self.apply_together(ctx, (self,))[0]
 
-    def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
+    def schedule(self, batch: TargetBatchSchedule, comms: CliBus) -> None:
         batch.together.setdefault(type(self), []).append((batch.position, batch.target, self))
 
     @classmethod
     @abstractmethod
-    def apply_together(cls, ctx: Comms, commands: tuple[Self, ...]) -> tuple[Answer, ...]: ...
+    def apply_together(cls, ctx: CliBus, commands: tuple[Self, ...]) -> tuple[Answer, ...]: ...
 
 
 @dataclass(frozen=True)
-class TargetEdit(Command[Comms, TargetEditResult | Channel]):
+class TargetEdit(Command[CliBus, TargetEditResult | Channel]):
     """Accepted editor values use the declared field and current bound command."""
     declaration: type[TargetActionCommand]
     target: TargetSelection
@@ -629,7 +635,7 @@ class TargetEdit(Command[Comms, TargetEditResult | Channel]):
     channel: ChannelSelection = NoChannel()
     project: Checkout = field(kw_only=True)
 
-    def apply(self, ctx: Comms) -> TargetEditResult | Channel:
+    def apply(self, ctx: CliBus) -> TargetEditResult | Channel:
         arguments = self.declaration.editor_arguments(self.arguments)
         return self.declaration.execute_target(ctx, self.target, arguments,
                                               confirmed=self.confirmed, channel=self.channel, project=self.project)
