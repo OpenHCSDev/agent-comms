@@ -149,7 +149,7 @@ from agent_comms.transport.mcp_wire import (
 )
 from agent_comms.transport.progress import CancellableWireExport, WireExportObserver
 from agent_comms.transport.request import tool_field
-from agent_comms.transport.served_endpoints import OfferedByTailnet, ServedEndpoints
+from agent_comms.transport.served_endpoints import ServedEndpoints
 from agent_comms.transport.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.transport.tool_request import (
     ChannelsArea,
@@ -1636,18 +1636,15 @@ class OfferUiVerb(ConnectorVerb, declared_name="offer-ui"):
         public endpoint refuses here (`ProfileOffer`), because reaching one proves nothing
         about who asked.
         """
-        offer = ServedEndpoints.offered(self.port)
-        if refusal := offer.refusal():
-            return refusal
-        match offer:
-            case OfferedByTailnet(endpoint=served):
-                namespace = RegistryStore.at(CommsRoute.current().root).privacy().namespace
-                resource = URL(served.target.url).with_path(MCP_PATH)
-                profile = ctx.offer_ui_profile(
-                    namespace, HttpsMcpEndpoint(resource), self.seconds, self.access)
-                print(FieldCodec.compact(FieldCodec.encode(profile), allow_nan=False))
-                return 0
-        return offer.refusal()
+        def emit(served):
+            namespace = RegistryStore.at(CommsRoute.current().root).privacy().namespace
+            resource = URL(served.target.url).with_path(MCP_PATH)
+            profile = ctx.offer_ui_profile(
+                namespace, HttpsMcpEndpoint(resource), self.seconds, self.access)
+            print(FieldCodec.compact(FieldCodec.encode(profile), allow_nan=False))
+            return 0
+
+        return ServedEndpoints.offered(self.port).apply_offer(emit)
 
 
 @dataclass(frozen=True, kw_only=True)

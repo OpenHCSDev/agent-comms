@@ -1649,6 +1649,10 @@ class MonitorFrame(TaggedWire, ABC, affix=""):
         """This frame and the next line of its event; only a frame with a body takes the line."""
         return self, decode(line)
 
+    def observed_frames(self) -> tuple[MonitorFrame, ...]:
+        """Protocol frames from our monitor; foreign lines drop themselves."""
+        return (self,)
+
 
 class MonitorProtocolFrame(MonitorFrame, declared_name=None):
     """A line the monitor writes itself; the transcript scan knows it by its protocol prefix."""
@@ -1795,6 +1799,9 @@ class MonitorPart(MonitorFrame, declared_name='part'):
 
 class ForeignMonitorFrame(MonitorFrame, declared_name='foreign'):
     text: str
+
+    def observed_frames(self) -> tuple[MonitorFrame, ...]:
+        return ()
 
 
 MONITOR_FRAME = WireModel.adapter(MonitorFrame.declared_union())

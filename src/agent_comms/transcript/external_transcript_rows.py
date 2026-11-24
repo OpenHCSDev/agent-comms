@@ -382,9 +382,10 @@ class ExternalCut(RecordsCut, TypedRow):
 
     def appended_by(self, current: RecordsCut) -> bool:
         # An earlier page changes the answer below the old upper bound.
-        return isinstance(current, ExternalCut) and (
-            current.start == self.start and super().appended_by(current)
-        )
+        return current.appends_external(self)
+
+    def appends_external(self, prior: ExternalCut) -> bool:
+        return self.start == prior.start and RecordsCut.appended_by(prior, self)
 
     def draft_current(self, current: RecordsCut) -> bool:
         # Finishing a CLI item retires its draft atomically. Its current draft

@@ -26,7 +26,6 @@ from agent_comms.cli_bridges.runtime_updates import (
     TurnStarted,
 )
 from agent_comms.cli_bridges.shared import (
-    ForeignMonitorFrame,
     MonitorObservation,
     ObservedMonitor,
 )
@@ -342,9 +341,9 @@ def _monitor_observations(
     if not output:
         return ()
     frames = tuple(
-        frame
+        observed
         for frame in ClaudeMonitorFrame.decode_event(output)
-        if not isinstance(frame, ForeignMonitorFrame)
+        for observed in frame.observed_frames()
     )
     if not frames:
         return ()

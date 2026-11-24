@@ -1262,12 +1262,18 @@ class DraftFold(TranscriptDraft):
             raise MalformedRecord("A draft update rewrote committed draft events")
         prior = before[shared]
         current = events[shared]
-        if not isinstance(prior, AssistantTranscript) or not isinstance(current, AssistantTranscript):
-            raise MalformedRecord("A draft update replaced a non-text event")
-        if not current.text.startswith(prior.text) or replace(current, text=prior.text) != prior:
-            raise MalformedRecord("A draft update replaced assistant text")
-        suffix = replace(current, text=current.text[len(prior.text):])
+        suffix = prior.draft_suffix_to(current)
         return (suffix, *events[shared + 1:])
+
+    def next_appends(
+        self, connection: Connection, thread: ThreadLookup,
+        turn_id: NativeTurnId, item_id: NativeItemId,
+        events: tuple[TranscriptEvent, ...],
+    ) -> tuple[TranscriptEvent, ...]:
+        if (self.turn_id, self.item_id) == (turn_id, item_id):
+            return self.appended(events)
+        DraftAppendRow.delete(connection, thread=thread)
+        return events
 
     def end_turn(self, transcript: StoreWriter) -> None:
         with transcript.writing() as connection:
@@ -1524,13 +1530,7 @@ class ExternalTranscript(TranscriptSource, DurableStore):
         with self.writing() as connection:
             self.observe_output(connection, turn_id, events)
             current = DraftFold.current(connection, self.lookup)
-            if isinstance(current, NoDraft):
-                appended = events
-            elif (current.turn_id, current.item_id) == (turn_id, item_id):
-                appended = current.appended(events)
-            else:
-                DraftAppendRow.delete(connection, thread=self.lookup)
-                appended = events
+            appended = current.next_appends(connection, self.lookup, turn_id, item_id, events)
             DraftAppendRow.append(
                 connection, self.lookup, turn_id, item_id, appended)
 

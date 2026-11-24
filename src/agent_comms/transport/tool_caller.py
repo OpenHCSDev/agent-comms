@@ -88,6 +88,10 @@ class ToolCaller(ReadAuthority):
         """Only a caller acting for the owner may publish human input; a sender name never can."""
         raise ToolRefusedError("Only a human UI caller can publish user messages.")
 
+    def background_owner(self, comms: BusContext, tool_name: str) -> ThreadIncarnation:
+        """Only a thread caller can receive a detached background run's completion notice."""
+        raise ToolRefusedError(f"{tool_name}: background runs need a thread caller to notify.")
+
     def origin(self) -> AgentOrigin:
         """Who this caller's sends speak for; an agent speaks only for itself."""
         return AgentOrigin()
@@ -144,6 +148,9 @@ class ThreadCaller(ToolCaller):
 
     def identity(self, comms: BusContext) -> ThreadIncarnation:
         return comms.registry.require(self.name).acting_identity
+
+    def background_owner(self, comms: BusContext, tool_name: str) -> ThreadIncarnation:
+        return self.own_incarnation(comms)
 
     def head_review_actor(self, comms: BusContext, request: PullRequestHead,
                           order: HeadReviewOrder) -> ThreadIncarnation:

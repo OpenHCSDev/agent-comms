@@ -575,10 +575,9 @@ async def test_comms_ack_and_answered_send_settle_cloud_delivery_without_transcr
                 monitor=observed,
             ).record(store.assignments, db)
 
-    before_first, = comms.views.message_notifications_for_references(
+    assert comms.views.message_notifications_for_references(
         AllOutcomes(), (first.reference,)
-    ).outcomes[first.seq, first.message_id]
-    assert not before_first.state.is_consumed()
+    ).outcomes[first.seq, first.message_id] == ()
 
     store = ConnectorStore.at(tmp_path / "auth")
     port = unused_port()
