@@ -29,7 +29,7 @@ from agent_comms.transport.connector_profile import (
     UiConnectionProfile,
     UiCredential,
 )
-from agent_comms.transport.mcp import (
+from agent_comms.transport.mcp_wire import (
     CancelledMessage,
     JsonRpcId,
     StreamedLine,

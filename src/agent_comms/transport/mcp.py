@@ -1,24 +1,21 @@
-"""The MCP protocol Core's connector speaks: JSON-RPC envelopes and errors, the message family,
-results, progress and streamed events.
+"""Server-side MCP JSON-RPC dispatch over `agent_comms.transport.mcp_wire`.
 
-Each message answers for itself against ``McpServer``, the server's half of the protocol, so a
-client such as ``remote_core`` imports the protocol without importing the server.
+Client-only callers (such as `remote_core` and Toad Qt/Android) import the wire records
+directly from `agent_comms.transport.mcp_wire` so they never pull `aiohttp.web`,
+`ConnectorCaller`, `ServedRequest`, or `agent_comms.comms`.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, Literal, Self
 
 from aiohttp import web
-from pydantic import JsonValue
 
-from agent_comms.cli_bridges.cli_protocol import CoreError
 from agent_comms.coordination.errors import CommandFailure, Refused
 from agent_comms.errors import UnexposedToolError
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -30,28 +27,37 @@ from agent_comms.nominal.field_codec import (
     SubclassUnion,
     WireExclude,
     WireName,
-    WireOmitDefault,
-    boundary_decoder,
     projected,
 )
 from agent_comms.transport.connector_caller import ConnectorCaller, ConnectorTool
+from agent_comms.transport.mcp_wire import (
+    AnsweredCall,
+    CancelledFields,
+    CancelledParams,
+    InitializeResult,
+    JsonRpcId,
+    McpEnvelope,
+    McpReply,
+    McpResult,
+    ProgressNotice,
+    ServerInfo,
+    StreamedEvent,
+    ToolAnnotations,
+    ToolDescription,
+    ToolsCallFields,
+    ToolsCallReply,
+    ToolsCallResult,
+    ToolsListFields,
+    ToolsListResult,
+)
 from agent_comms.transport.progress import (
     CancellableWireExport,
     WireExportCancelled,
     WireExportObserver,
     WireExportProgress,
 )
-from agent_comms.transport.request import ToolCall, ToolRequest
+from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tool_request import ServedRequest
-
-JsonRpcId = int | str
-PROTOCOL_VERSION = "2025-06-18"
-
-
-def declared(record: type, values: Mapping[str, object]) -> dict[str, object]:
-    """The values a record declares; an OAuth peer may send parameters it does not read."""
-    names = {plan.key for plan in FieldCodec.field_plans(record)}
-    return {key: value for key, value in values.items() if key in names}
 
 
 class McpServer(ABC):
@@ -60,6 +66,7 @@ class McpServer(ABC):
 
     observed: dict[JsonRpcId, CancellableWireExport]
     """The running calls a cancel can name, by request id."""
+
     @abstractmethod
     def announces(self) -> str:
         """Which bus is behind this endpoint, in the words its own identity gives.
@@ -74,28 +81,15 @@ class McpServer(ABC):
 
     @abstractmethod
     async def call(
-        self, tool: type[ServedRequest] | type[ConnectorTool],
-        arguments: Mapping[str, object], caller: ConnectorCaller, observer: WireExportObserver,
+        self,
+        tool: type[ServedRequest] | type[ConnectorTool],
+        arguments: Mapping[str, object],
+        caller: ConnectorCaller,
+        observer: WireExportObserver,
     ) -> AnsweredCall: ...
 
     @abstractmethod
     def cancel_call(self, request_id: JsonRpcId) -> None: ...
-
-
-@dataclass(frozen=True)
-class McpResult(RecordMember):
-    """An untagged JSON-RPC result. Ping has no additional fields."""
-
-
-@dataclass(frozen=True, kw_only=True)
-class McpEnvelope:
-    jsonrpc: Literal["2.0"] = "2.0"
-
-
-@dataclass(frozen=True)
-class McpReply(McpEnvelope):
-    id: JsonRpcId
-    result: McpResult
 
 
 @dataclass(frozen=True)
@@ -146,92 +140,26 @@ class AddressedErrorReply(McpEnvelope):
     id: JsonRpcId
 
 
-@dataclass(frozen=True)
-class ToolCapabilities:
-    list_changed: Annotated[bool, WireName("listChanged")] = False
-
-
-@dataclass(frozen=True)
-class ServerCapabilities:
-    tools: ToolCapabilities = ToolCapabilities()
-
-
-@dataclass(frozen=True)
-class ServerInfo:
-    name: str = "agent-comms"
-    version: str = "1"
-
-
-@dataclass(frozen=True)
-class InitializeResult(McpResult):
-    protocol_version: Annotated[str, WireName("protocolVersion")] = (
-        PROTOCOL_VERSION
+def tool_description_of(
+    name: str, tool: type[ToolRequest], caller: ConnectorCaller
+) -> ToolDescription:
+    """The name is the key tools/call dispatches on, so listing and calling share it."""
+    return ToolDescription(
+        name,
+        tool.label,
+        tool.listed_description(caller),
+        caller.input_schema(tool),
+        ToolAnnotations(tool.is_read_only()),
     )
-    capabilities: ServerCapabilities = ServerCapabilities()
-    server_info: Annotated[ServerInfo, WireName("serverInfo")] = ServerInfo()
-    instructions: str = ""
-
-    shared_grant: ClassVar[str] = (
-        "Several sessions can share one connector grant. When a tool offers the fork "
-        "argument, choose one distinct name for this session and pass {\"name\": \"...\"} on "
-        "every call, so teammates can tell you apart: your sends come from that name and your "
-        "inbox (comms_inbox with thread set to it) holds only what is sent to it. To take over "
-        "an existing thread while keeping its identity, switch it with comms_cli_inbox if it "
-        "runs on Native Pi, then pass that thread's name in fork."
-    )
-
-    @classmethod
-    def announcing(
-        cls,
-        bus: str,
-        listed: Iterable[type[ToolRequest]] = (),
-        server_info: ServerInfo = ServerInfo(),
-    ) -> Self:
-        """The handshake a server answers: which bus it is, how to share it, and then what
-        each listed tool has to say before its first call, so a client is never told to
-        call a tool its list does not name.
-
-        Which bus comes first because a session holding several connectors reads this as
-        the one thing that distinguishes them; everything else here is the same on all of
-        them, which was exactly the trouble.
-        """
-        said = dict.fromkeys(tool.handshake for tool in listed if tool.handshake)
-        return cls(server_info=server_info, instructions="\n\n".join((bus, cls.shared_grant, *said)))
-
-
-@dataclass(frozen=True)
-class ToolAnnotations:
-    read_only_hint: Annotated[bool, WireName("readOnlyHint")]
-
-
-@dataclass(frozen=True)
-class ToolDescription:
-    name: str
-    title: str
-    description: str
-    input_schema: Annotated[dict[str, JsonValue], WireName("inputSchema")]
-    annotations: ToolAnnotations
-
-    @classmethod
-    def of(
-        cls, name: str, tool: type[ToolRequest], caller: ConnectorCaller
-    ) -> ToolDescription:
-        """The name is the key tools/call dispatches on, so listing and calling share it."""
-        return cls(name, tool.label, tool.listed_description(caller),
-                   caller.input_schema(tool), ToolAnnotations(tool.is_read_only()))
-
-
-@dataclass(frozen=True)
-class ToolsListResult(McpResult):
-    tools: tuple[ToolDescription, ...]
 
 
 @dataclass(frozen=True, kw_only=True)
 class McpMessage(DeclaredFamily, affix="Message"):
-    """A JSON-RPC message from the client; each method answers for itself."""
+    """A JSON-RPC message served by the connector; each method answers for itself."""
 
     family_discriminator: ClassVar[str] = "method"
     jsonrpc: Literal["2.0"]
+
     @classmethod
     def received(cls, data: object) -> Self:
         """An undeclared method is refused by its name before its record is read."""
@@ -267,14 +195,9 @@ class InitializedMessage(McpNotification, declared_name="notifications/initializ
     pass
 
 
-@dataclass(frozen=True)
-class CancelledParams:
-    request_id: Annotated[JsonRpcId, WireName("requestId")]
-
-
 @dataclass(frozen=True, kw_only=True)
-class CancelledMessage(McpNotification, declared_name="notifications/cancelled"):
-    """The client stops one of its running calls; a call that cannot stop finishes as usual."""
+class ServedCancelledMessage(McpNotification, CancelledFields, declared_name="notifications/cancelled"):
+    """Serving CancelledMessage."""
 
     async def answer(
         self, connector: McpServer, caller: ConnectorCaller, http: web.Request,
@@ -284,7 +207,7 @@ class CancelledMessage(McpNotification, declared_name="notifications/cancelled")
 
 
 @dataclass(frozen=True, kw_only=True)
-class McpRequest(McpMessage):
+class McpRequest(McpMessage, declared_name=None):
     id: JsonRpcId
 
     async def answer(
@@ -317,13 +240,16 @@ class PingMessage(McpRequest, declared_name="ping"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolsListMessage(McpRequest, declared_name="tools/list"):
-    params: dict[str, object] = field(default_factory=dict)
+class ServedToolsListMessage(McpRequest, ToolsListFields, declared_name="tools/list"):
+    """Serving ToolsListMessage."""
 
     async def result(self, connector: McpServer, caller: ConnectorCaller) -> ToolsListResult:
-        return ToolsListResult(tuple(
-            ToolDescription.of(name, tool, caller) for name, tool in caller.listed().items()
-        ))
+        return ToolsListResult(
+            tuple(
+                tool_description_of(name, tool, caller)
+                for name, tool in caller.listed().items()
+            )
+        )
 
 
 class ProgressRequest(SubclassUnion, affix="Progress"):
@@ -331,7 +257,10 @@ class ProgressRequest(SubclassUnion, affix="Progress"):
 
     @abstractmethod
     async def answered(
-        self, message: ToolsCallMessage, connector: McpServer, caller: ConnectorCaller,
+        self,
+        message: ServedToolsCallMessage,
+        connector: McpServer,
+        caller: ConnectorCaller,
         http: web.Request,
     ) -> web.StreamResponse: ...
 
@@ -339,11 +268,20 @@ class ProgressRequest(SubclassUnion, affix="Progress"):
 @dataclass(frozen=True)
 class NoProgress(NullMember, ProgressRequest):
     async def answered(
-        self, message: ToolsCallMessage, connector: McpServer, caller: ConnectorCaller,
+        self,
+        message: ServedToolsCallMessage,
+        connector: McpServer,
+        caller: ConnectorCaller,
         http: web.Request,
     ) -> web.StreamResponse:
-        return web.json_response(FieldCodec.encode(
-            ToolsCallReply(message.id, await message.result(connector, caller, WireExportObserver()))))
+        return web.json_response(
+            FieldCodec.encode(
+                ToolsCallReply(
+                    message.id,
+                    await message.result(connector, caller, WireExportObserver()),
+                )
+            )
+        )
 
 
 @dataclass(frozen=True)
@@ -353,11 +291,16 @@ class ProgressToken(SingleFieldValue, ProgressRequest):
     token: JsonRpcId
 
     async def answered(
-        self, message: ToolsCallMessage, connector: McpServer, caller: ConnectorCaller,
+        self,
+        message: ServedToolsCallMessage,
+        connector: McpServer,
+        caller: ConnectorCaller,
         http: web.Request,
     ) -> web.StreamResponse:
         """Stream progress events while the call runs, then its reply, as server-sent events."""
-        stream = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache"})
+        stream = web.StreamResponse(
+            headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache"}
+        )
         await stream.prepare(http)
         observer = StreamedProgress(asyncio.get_running_loop())
         connector.observed[message.id] = observer
@@ -372,7 +315,9 @@ class ProgressToken(SingleFieldValue, ProgressRequest):
                 await stream.write(ProgressNotice.sent(self.token, progressed.result()))
             while not observer.events.empty():
                 await stream.write(ProgressNotice.sent(self.token, observer.events.get_nowait()))
-            await stream.write(StreamedEvent.framed(FieldCodec.encode(ToolsCallReply(message.id, call.result()))))
+            await stream.write(
+                StreamedEvent.framed(FieldCodec.encode(ToolsCallReply(message.id, call.result())))
+            )
         finally:
             connector.observed.pop(message.id, None)
         await stream.write_eof()
@@ -400,53 +345,13 @@ class ToolCallMeta:
 
     @classmethod
     def of(cls, meta: Mapping[str, object]) -> ToolCallMeta:
-        declared = {entry.key for entry in FieldCodec.argument_fields(cls)}
-        return FieldCodec.decode(cls, {key: meta[key] for key in declared & meta.keys()})
-
-
-class StreamedEvent(ABC):
-    """One server-sent event of a streamed call: a progress notice or the final reply."""
-
-    @abstractmethod
-    def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None: ...
-
-    @staticmethod
-    def framed(encoded: object) -> bytes:
-        return f"data: {FieldCodec.compact(encoded)}\n\n".encode()
-
-
-@dataclass(frozen=True)
-class ExportProgressMeta:
-    export: Annotated[WireExportProgress, WireName("agent_comms/export")]
-
-
-@dataclass(frozen=True)
-class ProgressParams:
-    token: Annotated[JsonRpcId, WireName("progressToken")]
-    progress: int
-    meta: Annotated[ExportProgressMeta, WireName("_meta")]
-
-
-@dataclass(frozen=True)
-class ProgressNotice(StreamedEvent):
-    jsonrpc: Literal["2.0"]
-    method: Literal["notifications/progress"]
-    params: ProgressParams
-
-    def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None:
-        observer.advanced(self.params.meta.export)
-
-    @classmethod
-    def sent(cls, token: JsonRpcId, progress: WireExportProgress) -> bytes:
-        notice = cls("2.0", "notifications/progress",
-                     ProgressParams(token, progress.messages_written, ExportProgressMeta(progress)))
-        return cls.framed(FieldCodec.encode(notice))
+        declared_keys = {entry.key for entry in FieldCodec.argument_fields(cls)}
+        return FieldCodec.decode(cls, {key: meta[key] for key in declared_keys & meta.keys()})
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolsCallMessage(McpMessage, declared_name="tools/call"):
-    id: JsonRpcId
-    params: ToolCall
+class ServedToolsCallMessage(McpMessage, ToolsCallFields, declared_name="tools/call"):
+    """Serving ToolsCallMessage."""
 
     @property
     def log_name(self) -> str:
@@ -475,80 +380,11 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
             # Invalid input (ToolRefusedError, MalformedRecord, an unrecorded time) and any
             # declared CommandFailure (git, Refused, coordination) are the caller's refusal;
             # escaping here answers HTTP 500, which the client sees as a lost connection.
-            ValueError, CommandFailure, ConnectionError, TimeoutError, WireExportCancelled,
+            ValueError,
+            CommandFailure,
+            ConnectionError,
+            TimeoutError,
+            WireExportCancelled,
         ) as error:
             logging.exception("Connector tool %s failed", self.params.name)
             return ToolsCallResult.failed(error)
-
-
-@dataclass(frozen=True)
-class TextContent:
-    text: str
-    type: Literal["text"] = "text"
-
-
-@dataclass(frozen=True)
-class AnsweredCall:
-    """A tool's declared reply and the new board rows naming the caller who made it."""
-
-    reply: dict[str, JsonValue]
-    board: tuple[str, ...]
-
-    def result(self) -> ToolsCallResult:
-        """The rows ride as their own text after the reply, never inside it: structured
-        content stays exactly the declared result that remote cores decode."""
-        return ToolsCallResult((TextContent(json.dumps(self.reply)),
-                                *(TextContent(line) for line in self.board)), False, self.reply)
-
-
-@dataclass(frozen=True)
-class ToolsCallResult(McpResult):
-    """A tool's encoded reply, or its failed call encoded as an MCP error result."""
-
-    content: tuple[TextContent, ...]
-    is_error: Annotated[bool, WireName("isError")]
-    structured_content: Annotated[
-        dict[str, JsonValue],
-        WireName("structuredContent"),
-        WireOmitDefault(),
-    ] = field(default_factory=dict)
-
-    @classmethod
-    def failed(cls, error: Exception) -> ToolsCallResult:
-        return cls((TextContent(CoreError.from_exception(error).model_dump_json()),), True)
-
-
-@dataclass(frozen=True)
-class ToolsListReply(McpReply):
-    """The tools/list answer: the tools this connector exposes to the caller who asked."""
-
-    result: ToolsListResult
-
-
-@dataclass(frozen=True)
-class ToolsCallReply(McpReply, StreamedEvent):
-    result: ToolsCallResult
-
-    def structured(self) -> dict[str, JsonValue]:
-        """The tool's declared reply, or its declared failure raised."""
-        if self.result.is_error:
-            error, = self.result.content
-            CoreError.decoded(error.text).raise_error()
-        return self.result.structured_content
-
-    def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None:
-        replies.append(self)
-
-
-@dataclass(frozen=True)
-class StreamedLine:
-    """One line of a streamed call; only server-sent `data:` lines carry an event."""
-
-    line: bytes
-
-    @boundary_decoder
-    def delivered(self, observer: WireExportObserver, replies: list[ToolsCallReply]) -> None:
-        text = self.line.decode().strip()
-        if text.startswith("data: "):
-            event = FieldCodec.decode(ProgressNotice | ToolsCallReply, json.loads(text[len("data: "):]))
-            event.delivered(observer, replies)

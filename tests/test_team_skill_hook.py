@@ -91,7 +91,7 @@ from agent_comms.team.standing_rules import (
     RetiredStandingRule,
     ReviewTimerUp,
 )
-from agent_comms.transport.mcp import AnsweredCall
+from agent_comms.transport.mcp_wire import AnsweredCall
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tools.orders import CommsTodoListTool
 from agent_comms.transport.tools.send import CommsSendTool

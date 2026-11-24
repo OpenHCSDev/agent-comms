@@ -13,10 +13,17 @@ _NAME = r"[A-Za-z0-9_-]"
 _MENTION = re.compile(r"(?<![\w@/\\])@(" + _NAME + r"+)")
 
 
+_CODE_SPAN = re.compile(r"```.*?```|`[^`\n]+`", re.DOTALL)
+
+
 _PENDING = re.compile(r"(?<![\w@/\\])@(" + _NAME + r"*)$")
 
 
 _SUFFIX = re.compile(_NAME + "*")
+
+
+def _inside_code_span(index: int, spans: tuple[tuple[int, int], ...]) -> bool:
+    return any(start <= index < end for start, end in spans)
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,10 +46,12 @@ class ThreadMention(ProjectionSource):
 
     @classmethod
     def find(cls, body: str, resolve: Callable[[str], str | None]) -> tuple[ThreadMention, ...]:
+        code_spans = tuple(match.span() for match in _CODE_SPAN.finditer(body))
         return tuple(
             cls(name, match.start(), match.end())
             for match in _MENTION.finditer(body)
-            if (name := resolve(match.group(1))) is not None
+            if not _inside_code_span(match.start(), code_spans)
+            and (name := resolve(match.group(1))) is not None
         )
 
 

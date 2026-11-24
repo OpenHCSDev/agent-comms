@@ -23,12 +23,10 @@ from typing_extensions import TypeForm
 from agent_comms.cli_bridges.wire_models import DeclaredWireFamily, WireModel
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.errors import RelationViolationError, UnexposedToolError
-from agent_comms.execution.turn_item import NativeTurnId, TurnItem
 from agent_comms.nominal.declared_family import UnknownFamilyMember
 from agent_comms.nominal.field_codec import TimestampText
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.storage.recorded_time import UnrecordedTimeError
-from agent_comms.transcript.external_transcript_rows import RequestedEarlierPage
 
 
 class HistoryRecord(ABC):
@@ -207,23 +205,6 @@ class FailedCoreError(CoreError, declared_name="failed"):
     def raise_error(self) -> Never:
         """An unspecified Core failure remains a failed call, never a deferral."""
         raise RelationViolationError(self.error)
-
-
-class EarlierItems(WatchLine, TurnItem, declared_name="earlier-items"):
-    """The pager's outstanding continuation, handled only by its socket-owning bridge."""
-
-    turn_id: NativeTurnId
-    request: RequestedEarlierPage
-
-    @classmethod
-    def from_row(cls, row):
-        return cls(turn_id=row.turn_id, item_id=row.item_id, request=row.earlier)
-
-    async def handle(self, bridge) -> None:
-        await bridge.earlier(self)
-
-
-WATCH_LINE = WireModel.adapter(WatchLine.declared_union())
 
 
 type Declared[Family: TaggedWire] = Annotated[Family, DeclaredMembers()]

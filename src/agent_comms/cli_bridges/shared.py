@@ -39,7 +39,8 @@ from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_v
 
 from agent_comms.agent_runtime import ExternalRuntime
 from agent_comms.cli_bridges.cli_arguments import CliArguments
-from agent_comms.cli_bridges.cli_protocol import CoreError, EarlierItems, TaggedWire
+from agent_comms.cli_bridges.cli_protocol import CoreError, TaggedWire
+from agent_comms.cli_bridges.runtime_updates import EarlierItems
 from agent_comms.cli_bridges.harness_delivery_states import (
     DeliveredOutcome,
     EmittedOutcome,

@@ -19,7 +19,7 @@ from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.field_codec import Argument, FieldCodec, MalformedRecord, PathText
 from agent_comms.transport.connector_store import ConnectorStore, ReadServiceAccess
-from agent_comms.transport.mcp import ToolsCallMessage, ToolsCallReply
+from agent_comms.transport.mcp_wire import ToolsCallMessage, ToolsCallReply
 from agent_comms.transport.tools.channels import CommsChannelsTool
 from agent_comms_hooks import ToolRefusedError
 
