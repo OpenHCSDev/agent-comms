@@ -8,11 +8,11 @@ from dataclasses import dataclass, replace
 from typing import Annotated, ClassVar
 
 from agent_comms.coordination.contracts import POLICY_VERSION, RESOLVER_VERSION
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict, SchemaVersionError
 from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.coordination.response_acknowledgement import _canonical
 from agent_comms.coordination.schema import CoordinationFileTable, CoordinatorTable
+from agent_comms.coordination.session import CoordinationSessionOwner
 from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.participants import OwnerGenerations, OwnerRecord, Participants
@@ -406,7 +406,7 @@ class PrivateCoordinatorSchema(
     """
 
     @classmethod
-    def install(cls, store: Coordination) -> None:
+    def install(cls, store: CoordinationSessionOwner) -> None:
         """Create absent file families; reject existing drift without repairing it."""
         PrivateCoordinatorTable.declarations()
         with store.session.writing() as db:

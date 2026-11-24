@@ -12,9 +12,9 @@ from agent_comms.cli_bridges.harness_delivery_states import (
     DeliveredOutcome,
     UnconfirmedOutcome,
 )
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.assignment_store import AssignmentStore
 from agent_comms.coordination.database import CoordinationStore
-from agent_comms.coordination.session import NativeCapture
+from agent_comms.coordination.session import NativeCapture, NativeCoordinationSession
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.errors import (
@@ -248,20 +248,21 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         lookup = owner.incarnation.require_recorded().lookup
         evidence = AcknowledgedReceipt(timestamp)
         path = str(CoordinationStore.path_in(self.root))
-        with Coordination(path) as store, store.session.writing() as db:
+        with NativeCoordinationSession(path) as session, session.writing() as db:
+            assignments = AssignmentStore(session)
             for ref in references:
                 existing = HarnessDelivery.for_recipients(db, ((lookup, ref),))
                 if existing:
                     for row in existing:
                         row.apply(
                             partial(replace, outcome=DeliveredOutcome, monitor=evidence),
-                            store.assignments, db,
+                            assignments, db,
                         )
                 else:
                     HarnessDelivery(
                         bridge, lookup, ref.message_id, ref.seq,
                         DeliveredOutcome, monitor=evidence,
-                    ).record(store.assignments, db)
+                    ).record(assignments, db)
 
     def _answered_by(self, owner: Thread, target: str,
                      source_turn: SourceTurn) -> tuple[MessageReference, ...]:

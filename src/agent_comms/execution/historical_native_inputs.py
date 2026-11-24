@@ -14,10 +14,9 @@ from pathlib import Path
 from typing import Annotated
 
 from agent_comms.coordination.cohort_schema import CohortTable
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import IdentityConflict
-from agent_comms.coordination.session import ReadNativeCoordinationSession
+from agent_comms.coordination.session import CoordinationSessionOwner, ReadNativeCoordinationSession
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_input_record import (
@@ -112,8 +111,7 @@ class HistoricalNativeAnswers(NativeAnswerRead[MessageReference]):
     privacy: RegistryPrivacy
 
     def answered_inputs(self, references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
-        with Coordination(str(CoordinationStore.path_in(self.root)),
-                          session_type=ReadNativeCoordinationSession) as store, NativeEvidenceScope() as reads:
+        with ReadNativeCoordinationSession(str(CoordinationStore.path_in(self.root))) as store, NativeEvidenceScope() as reads:
             sources: dict[MessageReference, tuple[HistoricalNativeInput, ...]] = {}
             for reference in references:
                 proofs = read_historical_native_inputs(
@@ -140,7 +138,7 @@ class _HistoricalSource(TypedRow):
 
 
 def read_historical_native_inputs(
-    store: Coordination,
+    store: CoordinationSessionOwner,
     *,
     wire_root_id: RootId,
     recipient_lookup: ThreadLookup,

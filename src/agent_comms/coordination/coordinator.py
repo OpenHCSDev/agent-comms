@@ -16,9 +16,10 @@ from typing import TYPE_CHECKING, ClassVar, Final, Self, TypeVar
 from agent_comms.attempt_store import AttemptStore
 from agent_comms.coordination.assignment_store import AssignmentStore
 from agent_comms.coordination.execution_store import ExecutionStore
-from agent_comms.coordination.participant_store import ParticipantStore
+from agent_comms.coordination.participant_store import ParticipantStore, ParticipantStoreOwner
 from agent_comms.coordination.session import (
     CoordinationSession,
+    CoordinationSessionOwner,
     NativeCoordinationSession,
     ReadNativeCoordinationSession,
     system_clock,
@@ -100,8 +101,9 @@ class StandaloneRoute(CoordinationRoute):
 STANDALONE_ROUTE: Final = StandaloneRoute()
 
 
-class Coordination(CoordinationWork, ExecutionStore, AttemptStore):
-    watch_period: ClassVar[float] = 60
+class Coordination(
+    CoordinationWork, ExecutionStore, AttemptStore, CoordinationSessionOwner, ParticipantStoreOwner
+):
     session_type = NativeCoordinationSession
     _worker: ContextVar[CoordinationRoute] = ContextVar(
         "coordination_worker",

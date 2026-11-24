@@ -19,6 +19,7 @@ from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import PublicationActivationBlocked
 from agent_comms.coordination.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.coordination.schema import CoordinatorTable
+from agent_comms.coordination.session import NativeCoordinationSession
 from agent_comms.coordination.tables.participants import Participants
 from agent_comms.coordination.tables.response_schema import ResponseTable
 from agent_comms.errors import RelationViolationError
@@ -175,7 +176,7 @@ class PublicRegistry(RegistryPrivacy):
         # still owns opening this file, before publishing the private guard.
         # Participants registered while public declared no acceptance; the new
         # root declares it for each, as registration does for later ones.
-        with coordinator.Coordination(str(CoordinationStore.path_in(registry_path.parent))) as store:
+        with NativeCoordinationSession(str(CoordinationStore.path_in(registry_path.parent))) as store:
             PrivateCoordinatorSchema.install(store)
             with store.session.writing() as db:
                 for participant in Participants.select(db):
@@ -213,7 +214,7 @@ class PrivateRegistry(RegistryPrivacy):
 
     def prepare_runtime(self) -> None:
         PrivateCoordinatorTable.declarations()
-        with coordinator.Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
+        with NativeCoordinationSession(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
             PrivateCoordinatorSchema.install(store)
 
     def notification_context_sql(self, connection: sqlite3.Connection) -> str:
@@ -300,6 +301,3 @@ class PrivateRegistry(RegistryPrivacy):
             if cursor == cursor.parent:
                 return
             cursor = cursor.parent
-
-
-import agent_comms.coordination.coordinator as coordinator
