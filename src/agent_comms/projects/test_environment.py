@@ -7,16 +7,20 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
-from uuid import uuid4
 
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.runtime_processes import RuntimeProcesses
 from agent_comms.execution.test_lease import LeaseStart, TestLease
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.nominal.field_codec import Id128
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_environment import RepositoryEnvironment
 from agent_comms.storage.store_files import AtomicFile
+
+
+class RetainedEnvironmentId(Id128):
+    """One retained test-environment snapshot."""
 
 
 @dataclass(frozen=True)
@@ -92,7 +96,7 @@ class DeclaredTestEnvironment:
                                 "--format", "json", cwd=self.checkout.path)
         receipt = (environment.declaration_record.read_text()
                    if environment.declaration_record.exists() else "")
-        retained = environment.history / f"{uuid4().hex}.json"
+        retained = environment.history / f"{RetainedEnvironmentId.mint()}.json"
         AtomicFile(retained).write_text(json.dumps({"prefix": str(runtime.prefix),
             "sources": sources, "packages": json.loads(packages), "receipt": receipt}, indent=2) + "\n")
         return str(retained)
