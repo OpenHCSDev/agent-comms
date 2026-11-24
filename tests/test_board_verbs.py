@@ -53,6 +53,14 @@ from agent_comms.task_attachments.team_pings import (
 from agent_comms.team import judge, order
 from agent_comms.team.board_actions import BoardActionApplied, BoardActionOffer
 from agent_comms.team.standing import DeliveryAwaitingJudgement
+from agent_comms.team.team_hud import (
+    CodexUsage,
+    TeamBoardPublicationStore,
+    TeamHud,
+    TeamPlan,
+    UnreadableUsage,
+)
+from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.team.standing_rules import (
     HeadReviewTimerUp,
     LinkedUnreviewedHead,
@@ -247,7 +255,7 @@ def test_orderless_board_commands_do_not_invent_a_problem(board_review):
         now=time.time(), history=TeamHistory.of_team(comms),
     ).delivery(recipient, published=())
     carried, = delivery.packet.handled
-    assert isinstance(carried, RulePing) and carried.offers == offers
+    assert isinstance(carried, RulePing) and carried.board_actions(recipient) == offers
     assert FieldCodec.decode(RulePing, FieldCodec.encode(carried)) == carried
     rendered = "\n".join(FoldedRule.of(carried.alarm_kind, (carried,)).lines(time.time()))
     assert all(offer.text() in rendered for offer in offers)
@@ -280,7 +288,19 @@ def test_board_action_refuses_stale_source_and_dispatches_current_offer_once(boa
     try:
         current = ProbeOffer(rule.observation_key(), recipient)
         ping = replace(RulePing.capture(rule), offers=(current,))
-        TeamUpdateStore.record(comms.root, TeamUpdateNotice(recipient, (ping,)))
+        TeamBoardPublicationStore.replace_all(
+            comms.root,
+            TeamPlan(),
+            (TeamHud(
+                teammate=recipient,
+                load=OverloadDegradation.from_orders((), 0, 0),
+                units=(),
+                forks=(),
+                usage=CodexUsage(UnreadableUsage("test")),
+                packets=(TeamUpdateNotice(recipient, (ping,)),),
+                open_pings=(),
+            ),),
+        )
         stale = ProbeOffer(TextDigest.of("older board source"), recipient)
         with pytest.raises(ToolRefusedError, match="human UI"):
             CommsBoardActionTool(offer=current).apply(comms, PeerCaller("colleague"))
