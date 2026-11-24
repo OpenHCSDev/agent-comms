@@ -1812,7 +1812,7 @@ class SingleValueEncoding(WireValue):
     """Encode one declared field as the whole wire value."""
 
     @classmethod
-    def wire_field(cls):
+    def wire_field(cls) -> DeclaredFieldPlan:
         entry, = FieldCodec._record_plan(cls).fields
         return entry
 

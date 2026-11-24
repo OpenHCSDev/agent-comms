@@ -67,10 +67,6 @@ class TargetField:
         """A field prepared elsewhere keeps the choices it was offered there."""
         return self
 
-    @property
-    def required(self) -> bool:
-        return self.plan.constructor_required
-
     def value_schema(self) -> dict[str, JsonValue]:
         return FieldCodec.value_schema(self.annotation)
 
