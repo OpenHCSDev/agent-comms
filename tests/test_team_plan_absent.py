@@ -4,7 +4,8 @@ import pytest
 
 from agent_comms.coordination.service_passes import BoardUnavailable
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
-from agent_comms.team.team_hud import NamedTeamBoards, TeamBoardPublicationStore
+from agent_comms.team.team_board_selection import NamedTeamBoards
+from agent_comms.team.team_hud import TeamBoardPublicationStore
 
 
 def test_a_missing_team_plan_reads_as_no_ready_phase(tmp_path):

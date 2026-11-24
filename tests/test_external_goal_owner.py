@@ -13,7 +13,7 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.goal_actions import ActiveGoalAction, ClearGoalAction, PausedGoalAction, SetGoalAction
 from agent_comms.planning.goal_history import RecordedGoalHistory
 from agent_comms.planning.goal_scope import AllGoals
-from agent_comms.planning.goals import NoGoal
+from agent_comms.planning.goals import GoalReply, NoGoal
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_presentation import (
     BusHeldThreadOwnerBinding,
@@ -24,7 +24,6 @@ from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.transport.runtime_requests import (
     EditGoalRuntimeRequest,
     GoalHistoryRuntimeRequest,
-    GoalReply,
     RetryGoalRuntimeRequest,
     SetGoalRuntimeRequest,
     UpdateGoalRuntimeRequest,

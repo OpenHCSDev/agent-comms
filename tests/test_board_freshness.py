@@ -39,10 +39,9 @@ from agent_comms.team.team_heartbeat import (
     TeamHeartbeat,
     TeamObservation,
 )
+from agent_comms.team.team_board_selection import AllTeamBoards, NamedTeamBoards
 from agent_comms.team.team_hud import (
-    AllTeamBoards,
     CodexUsage,
-    NamedTeamBoards,
     TeamBoardPublicationStore,
     TeamHud,
     TeamPlan,

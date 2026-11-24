@@ -16,7 +16,8 @@ from agent_comms.execution.acp import AcpSelectedWriteAuthority
 from agent_comms.execution.acp import CommsAgent
 from agent_comms.execution.acp import SdkSessionConnection
 from agent_comms.acp_extension import LiveQueueScope, PromptRequest, QueueScope
-from agent_comms.agent_event_updates import AcpEventConsumer, AcpToolAction
+from agent_comms.acp_tool_action import AcpToolAction
+from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.agent_runtime import PublishesTranscript, ReadsHistory
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.cli_bridges.history import History

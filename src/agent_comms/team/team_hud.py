@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
@@ -25,11 +24,8 @@ from agent_comms.nominal.field_codec import (
     FieldCodec,
     HudExclude,
     MalformedRecord,
-    NullMember,
     PublicationExclude,
     RecordProblems,
-    TaggedRecordMember,
-    TaggedUnion,
     WireExclude,
     WireTransient,
     projected,
@@ -49,6 +45,7 @@ from agent_comms.task_attachments.team_pings import (
     TeamUpdate,
 )
 from agent_comms.team.standing_rules import HeartbeatFrame
+from agent_comms.team.team_board_selection import AllTeamBoards, TeamBoardSelection
 from agent_comms.team.team_frame_file import TeamBoardFile
 from agent_comms.team.team_hud_records import (
     FinishedPhases,
@@ -62,50 +59,6 @@ from agent_comms.team.team_service import TeamService
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.ui_model.teammate_state import TeammateState
 from agent_comms_hooks.board import BoardEntry
-
-
-class TeamBoardSelection(TaggedUnion, affix="TeamBoards"):
-    """The recipients requested by visible board pages, shared by reader and view."""
-
-    @classmethod
-    def named(cls, name: str) -> TeamBoardSelection:
-        """An empty user filter requests the whole board."""
-        return NamedTeamBoards(frozenset((name,))) if name else AllTeamBoards()
-
-    @abstractmethod
-    def includes(self, recipient: ThreadIncarnation) -> bool: ...
-
-    @abstractmethod
-    def combined(self, other: TeamBoardSelection) -> TeamBoardSelection: ...
-
-    @abstractmethod
-    def with_names(self, names: frozenset[str]) -> TeamBoardSelection: ...
-
-
-@dataclass(frozen=True)
-class AllTeamBoards(NullMember, TeamBoardSelection):
-    def includes(self, recipient: ThreadIncarnation) -> bool:
-        return True
-
-    def combined(self, other: TeamBoardSelection) -> TeamBoardSelection:
-        return self
-
-    def with_names(self, names: frozenset[str]) -> TeamBoardSelection:
-        return self
-
-
-@dataclass(frozen=True)
-class NamedTeamBoards(TaggedRecordMember, TeamBoardSelection):
-    names: frozenset[str]
-
-    def includes(self, recipient: ThreadIncarnation) -> bool:
-        return recipient.name in self.names
-
-    def combined(self, other: TeamBoardSelection) -> TeamBoardSelection:
-        return other.with_names(self.names)
-
-    def with_names(self, names: frozenset[str]) -> TeamBoardSelection:
-        return type(self)(self.names | names)
 
 
 @dataclass(frozen=True)

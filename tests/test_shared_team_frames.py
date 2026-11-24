@@ -29,13 +29,15 @@ from agent_comms.task_attachments.team_pings import (
     TeamUpdateStore,
 )
 from agent_comms.team.standing_rules import ReviewTimerUp
-from agent_comms.team.team_hud import (
+from agent_comms.team.team_board_selection import (
     AllTeamBoards,
-    CodexUsage,
     NamedTeamBoards,
+    TeamBoardSelection,
+)
+from agent_comms.team.team_hud import (
+    CodexUsage,
     TeamBoardPublication,
     TeamBoardPublicationStore,
-    TeamBoardSelection,
     TeamHud,
     TeamHudRecord,
     TeamPlan,
