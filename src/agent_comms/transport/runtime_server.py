@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Self
 
 from pydantic import BaseModel
 
+from agent_comms.comms import Comms
 from agent_comms.transport import serving
 from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import CoordinationError, IdentityConflict, Refused
@@ -419,6 +420,12 @@ class ServedRuntimeRequest[Ctx: RuntimeRequestContext](
     async def bind(
         self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
     ) -> Ctx: ...
+
+    def held_by_bus(self, comms: Comms, thread: Thread) -> object:
+        """The bus's own answer, for an owner whose state the bus holds (an external CLI; see
+        `BusHeldThreadOwnerBinding`). Only a request about that state has one."""
+        raise RelationViolationError(
+            "This request needs a native owner runtime; the thread's CLI has none.")
 
 
 class ServedAttachedRuntimeRequest(

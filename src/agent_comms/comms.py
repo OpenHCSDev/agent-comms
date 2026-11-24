@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.cli_verbs.cli_command import CliBus
 from agent_comms.config_options import ConfigurationCatalogs
 from agent_comms.execution.context_assembly import ContextAssembly
 from agent_comms.execution.input_ingress import InputIngressContext
@@ -49,6 +50,7 @@ from agent_comms.transcript.transcripts import Transcripts
 
 
 class Comms(
+    CliBus,
     ConfigurationCatalogs,
     ActivityClient,
     ContextAssembly,

@@ -19,9 +19,10 @@ from acp.exceptions import RequestError
 from acp.schema import PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
 
-from agent_comms.acp_extension import GoalSnapshotReply
+from agent_comms.acp_extension import GoalSnapshotReply, UpdateMetadata
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import Comms
+from agent_comms.coordination.annotation_correction import CorrectsAnnotation
 from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import Refused
 from agent_comms.coordination.working_memory_annotations import WorkingMemoryAnnotations
@@ -39,11 +40,20 @@ from agent_comms.execution.turn_context import ContextManifest, ContextSourceTex
 from agent_comms.messaging.bus_read import OwnerReadRuntimeRequest, OwnerScopedRead
 from agent_comms.nominal.field_codec import FieldCodec, WireValue
 from agent_comms.pi_payloads import NativeContextData
+from agent_comms.planning.goal_actions import (
+    EditGoalAction,
+    GoalAction,
+    GoalPrecondition,
+    OwnerInvocable,
+    SetGoalAction,
+)
 from agent_comms.planning.goal_history import RecordedGoalHistory
-from agent_comms.planning.goals import GoalReply
+from agent_comms.planning.goal_scope import OneGoal
+from agent_comms.planning.goals import GoalDeclaration, GoalReply, GoalRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
+from agent_comms.task_attachments.owner_notices import GoalWakeNotice
 from agent_comms.transport.owner_connection import NoControllerToken, OwnerConnection
 from agent_comms.transport.project_request import ProjectRuntimeRequest
 from agent_comms.transport.runtime_requests import (
@@ -344,9 +354,30 @@ class ServedGoalHistoryRuntimeRequest(
             ctx.server.agent._comms.goals.recorded_history, ctx.name, self.goal_id,
         ))
 
+    def held_by_bus(self, comms: Comms, thread: Thread) -> object:
+        return FieldCodec.encode(comms.goals.recorded_history(thread.name, self.goal_id))
+
+
+class ServedHeldGoalChange(ServedAttachedResultRuntimeRequest):
+    """An owner's UI change to the goal the bus holds for a CLI: Core writes it as the owner,
+    fenced to the incarnation the UI read, then wakes the CLI through its inbox while the goal
+    is active, as a nudge does."""
+
+    @abstractmethod
+    def held_action(self, thread: Thread) -> GoalAction: ...
+
+    @abstractmethod
+    def held_reply(self, comms: Comms, goal: GoalDeclaration) -> DeclaredReply: ...
+
+    def held_by_bus(self, comms: Comms, thread: Thread) -> object:
+        goal = comms.goals.update_born_goal(
+            thread.incarnation, self.held_action(thread), actor=OwnerInvocable)
+        GoalWakeNotice.wake(comms.messaging, comms.registry.require(thread.name))
+        return self.held_reply(comms, goal).to_wire()
+
 
 class ServedGoalSnapshotResultRuntimeRequest(
-    ServedAttachedResultRuntimeRequest,
+    ServedHeldGoalChange,
     GoalSnapshotResultRuntimeRequest,
 ):
     @abstractmethod
@@ -356,12 +387,19 @@ class ServedGoalSnapshotResultRuntimeRequest(
         await self.change(ctx)
         return await OwnedRead[GoalSnapshotReply].serving(OwnerGoalRead()).owned(ctx)
 
+    def held_reply(self, comms: Comms, goal: GoalDeclaration) -> DeclaredReply:
+        return GoalSnapshotReply.from_snapshot(
+            comms.goals.goal_snapshot(self.thread), UpdateMetadata.of())
+
 
 class ServedGoalRevisionRuntimeRequest(
     ServedAttachedResultRuntimeRequest,
     GoalRevisionRuntimeRequest,
 ):
-    pass
+    def held_precondition(self, thread: Thread) -> GoalPrecondition:
+        """The goal revision the UI saw, as the native owner fences it."""
+        goal = thread.goal.require_checkpoint(GoalRevision(self.goal_id, self.expected_revision))
+        return GoalPrecondition(goal_id=OneGoal(self.goal_id), expected_checkpoint=goal.captured)
 
 
 class ServedGoalTextRuntimeRequest(
@@ -382,6 +420,9 @@ class ServedEditGoalRuntimeRequest(
             ctx.session, self.goal_id, self.expected_revision, self.text
         )
 
+    def held_action(self, thread: Thread) -> GoalAction:
+        return EditGoalAction(text=self.text, expect=self.held_precondition(thread))
+
 
 class ServedUpdateGoalRuntimeRequest(
     ServedGoalRevisionRuntimeRequest,
@@ -392,6 +433,10 @@ class ServedUpdateGoalRuntimeRequest(
         await ctx.server.agent.turns.goals.update_goal(
             ctx.session, self.status, self.goal_id, self.expected_revision
         )
+
+    def held_action(self, thread: Thread) -> GoalAction:
+        self.status.require_owner_control()
+        return self.status(expect=self.held_precondition(thread))
 
 
 class ServedRetryGoalRuntimeRequest(
@@ -405,10 +450,20 @@ class ServedRetryGoalRuntimeRequest(
         return GoalReply(goal)
 
 
-class ServedSetGoalRuntimeRequest(ServedGoalTextRuntimeRequest, SetGoalRuntimeRequest):
+class ServedSetGoalRuntimeRequest(
+    ServedGoalTextRuntimeRequest,
+    ServedHeldGoalChange,
+    SetGoalRuntimeRequest,
+):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> GoalReply:
         goal = await ctx.server.agent.turns.goals.set_goal(ctx.session, self.text)
         return GoalReply(goal)
+
+    def held_action(self, thread: Thread) -> GoalAction:
+        return SetGoalAction(text=self.text)
+
+    def held_reply(self, comms: Comms, goal: GoalDeclaration) -> DeclaredReply:
+        return GoalReply(goal.require())
 
 
 class ServedContextRuntimeRequest(
@@ -529,6 +584,7 @@ class ServedContextAnnotationsRuntimeRequest(
 
 
 class ServedContextAnnotationCorrectionRuntimeRequest(
+    CorrectsAnnotation,
     ServedContextRecordedSegmentRuntimeRequest,
     ContextAnnotationCorrectionRuntimeRequest,
 ):

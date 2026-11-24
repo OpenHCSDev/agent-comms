@@ -17,6 +17,7 @@ from typing import TextIO
 from agent_comms.cli_bridges.cli_arguments import CliArgumentParser, CliArguments, CliParserExit
 from agent_comms.cli_bridges.cli_protocol import CoreError
 from agent_comms.cli_support.cli_failures import CLI_FAILURES
+from agent_comms.comms import Comms
 from agent_comms.execution.launch_root import LaunchRoot, started
 from agent_comms.installer.active_route import resolve_comms_route
 
@@ -55,7 +56,7 @@ class CliInvocation:
         route = resolve_comms_route(args.root.resolve(lambda: launch_root).path)
         with LaunchRoot.from_path(route.root).selected():
             command = declaration.from_arguments(args)
-            return command.execute(route, output)
+            return command.execute(route, output, Comms.client)
 
     def invoke(self, arguments: Sequence[str], output: TextIO) -> int:
         """A call borrows its root; success, refusal and parser exit all restore it."""

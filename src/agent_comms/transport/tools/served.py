@@ -147,6 +147,7 @@ from agent_comms.transport.native_tools import CommunicationCall
 from agent_comms.transport.owner_connection import OwnerConnection
 from agent_comms.transport.request import SubjectBinding, tool_field
 from agent_comms.transport.runtime_requests import QueueActionRuntimeRequest
+from agent_comms.transport.runtime_server import ServedRuntimeRequest
 from agent_comms.transport.serving.owner_launch import HostResources
 from agent_comms.transport.tool_caller import ThreadCaller, ThreadListing, ToolCaller
 from agent_comms.transport.tool_declaration import NativeRequestTools
@@ -473,7 +474,7 @@ class ServedCommsOwnerRequestTool(ScreensArea, HumanToolRequest[OwnerAnswered], 
         exchange = partial(OwnerConnection.exchange_at, comms.root, thread, self.request)
         answer = thread.answering_binding(thread.owner_binding(snapshot)).select_answer(
             unowned=exchange, native=exchange,
-            held=partial(self.request.held_by_bus, comms, thread))
+            held=partial(ServedRuntimeRequest.serving(self.request).held_by_bus, comms, thread))
         return OwnerAnswered(FieldCodec.decode(JsonValue, answer()))
 
 

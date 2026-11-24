@@ -6,6 +6,7 @@ import pkgutil
 import re
 from abc import ABC, ABCMeta, abstractmethod
 from collections.abc import Hashable, Iterable
+from dataclasses import fields
 from functools import cache
 from types import ModuleType
 from typing import ClassVar, Self, cast
@@ -257,6 +258,17 @@ class DeclaredFamily(FamilyMember, metaclass=FamilyMeta):
         if not issubclass(member, cls):
             raise UnknownFamilyMember(f"{name!r} is not a member of {cls.__name__}")
         return cast(type[Self], member)
+
+    @classmethod
+    def serving(cls, request: DeclaredFamily) -> Self:
+        """This capability's member for the request's wire name, carrying the request's
+        fields: what the wire round trip decodes, without the wire. Looking the name up
+        acquires the family's members, so a process meets the served module only when it
+        first serves a request itself."""
+        member = cls.member_named(request.selection_key())
+        return member(**{
+            entry.name: getattr(request, entry.name) for entry in fields(request) if entry.init
+        })
 
     @classmethod
     def member_or_default(cls, name: object, capability: type) -> type[Self]:
