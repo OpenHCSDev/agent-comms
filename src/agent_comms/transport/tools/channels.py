@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.display_order import ChannelSort
 from agent_comms.messaging.channels import SavedView
 from agent_comms.presentation import ChannelView
@@ -33,7 +33,7 @@ class CommsChannelsTool(ChannelsArea, ShortListed, ReadTool, NativeToolRequest):
     label = "List channels"
     description = "List named tag views and their current member threads; #any includes everyone."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> ChannelListing:
+    def apply(self, comms: BusContext, caller: ToolCaller) -> ChannelListing:
         catalog = comms.channels.catalog.read()
         return ChannelListing(comms.views.channel_views(), tuple(catalog.saved_views.values()),
                               catalog.list_order)

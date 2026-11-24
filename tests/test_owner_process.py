@@ -49,7 +49,7 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.owner_connection import socket_path
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.tool_caller import NoThreadCaller
-from agent_comms.transport.tools.served import CommsResourcesTool
+from agent_comms.transport.served_tools.served import ServedCommsResourcesTool as CommsResourcesTool
 from delivery_owner_fixture import FakeClient, canonical_agent
 from native_backend_fixture import NativeBackendFixture, native_backend_fixture
 

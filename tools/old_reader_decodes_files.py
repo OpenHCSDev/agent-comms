@@ -36,8 +36,8 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tool_caller import HumanCaller, ThreadCaller
 from agent_comms.transport.tools.inbox import CommsInboxTool
 from agent_comms.transport.tools.send import CommsSendTool
-from agent_comms.transport.tools.served import (
-    CommsHistoryTool,
+from agent_comms.transport.served_tools.served import (
+    ServedCommsHistoryTool as CommsHistoryTool,
     ServedCommsConversationPageTool,
     ServedCommsUserSendTool,
 )

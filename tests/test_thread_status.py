@@ -42,7 +42,10 @@ from agent_comms.registry.threads import NativeThread, OwnerLifecycleControl
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.transport.request import ToolRequest
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tools.served import CommsStartTool, invoke_tool
+from agent_comms.transport.served_tools.served import (
+    ServedCommsStartTool as CommsStartTool,
+    invoke_tool,
+)
 from agent_comms.ui_model.status import ThreadStatusModel
 from conftest import installed_comms
 

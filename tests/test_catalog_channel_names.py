@@ -6,7 +6,7 @@ from agent_comms.messaging.display_references import ReferenceNames
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tools.served import ServedCommsReferenceNamesTool
+from agent_comms.transport.served_tools.served import ServedCommsReferenceNamesTool
 
 
 def test_channel_names_are_exactly_the_channels_views_builds(comms: Comms) -> None:

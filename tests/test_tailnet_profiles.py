@@ -33,7 +33,7 @@ from agent_comms.transport.tailnet_profiles import (
     PeerRefusedProfile,
     TailnetProfiles,
 )
-from agent_comms.transport.tools.served_tailnet import HostTailnetProfiles
+from agent_comms.transport.served_tools.served_tailnet import HostTailnetProfiles
 
 GAMING = PeerHoldsBus(TailnetPeer("ts-gaming", "100.119.57.99", True), 43)
 

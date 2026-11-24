@@ -168,7 +168,7 @@ from agent_comms.transport.tool_request import (
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools.orders import CommsHeadVerdictTool, HeadVerdictTool
 from agent_comms.transport.tools.send import CommsSendTool, SendTool
-from agent_comms.transport.tools.served import SearchToolLookup
+from agent_comms.transport.tools.commands import SearchToolLookup
 from agent_comms.ui_model.observation_service import serve_encoded
 from agent_comms.ui_model.observation_wire import (
     WEBSOCKET_HEARTBEAT_SECONDS,

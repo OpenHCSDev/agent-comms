@@ -49,7 +49,7 @@ from agent_comms.transcript.transcripts import (
     TranscriptSourceWindow,
 )
 from agent_comms.transport.tool_caller import ThreadCaller
-from agent_comms.transport.tools.served import invoke_tool
+from agent_comms.transport.served_tools.served import invoke_tool
 from conftest import accept_initial, publish_initial
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 

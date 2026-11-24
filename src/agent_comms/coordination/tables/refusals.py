@@ -8,10 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.schema import CoordinatorRow
-from agent_comms.coordination.session import CoordinationSession
+from agent_comms.coordination.session import CoordinationSession, CoordinationSessionOwner
 from agent_comms.errors import RelationViolationError
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
@@ -30,7 +29,7 @@ class SendRefusal(CoordinatorRow):
     indexes = (Index(("sender", "id")), Index(("target", "id")))
 
     @classmethod
-    def install(cls, store: Coordination) -> None:
+    def install(cls, store: CoordinationSessionOwner) -> None:
         """Explicit upgrade operation; ordinary reads and writes never repair schema."""
         with store.session.writing() as db:
             if cls.stored_schema(db):

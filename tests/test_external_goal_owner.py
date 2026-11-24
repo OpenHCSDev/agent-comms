@@ -29,9 +29,9 @@ from agent_comms.transport.runtime_requests import (
     UpdateGoalRuntimeRequest,
 )
 from agent_comms.transport.tool_caller import ToolCaller
-from agent_comms.transport.tools.orders import ServedOwnerGoalRead
+from agent_comms.transport.served_tools.orders import ServedOwnerGoalRead
 from agent_comms.transport.tools.reads import OwnerGoalRead
-from agent_comms.transport.tools.served import ServedCommsOwnerRequestTool
+from agent_comms.transport.served_tools.served import ServedCommsOwnerRequestTool
 from agent_comms.ui_model.observation import ReadAnswered, ReadOwnerOperation
 
 

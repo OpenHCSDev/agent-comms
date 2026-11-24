@@ -40,10 +40,10 @@ from agent_comms.registry.threads import (
 from agent_comms.transcript.transcript_events import AssistantTranscript
 from agent_comms.transport.connector_caller import DirectorCaller
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
-from agent_comms.transport.tools.served import (
-    CommsCliInboxTool,
-    CommsForkTool,
-    CommsNativeThreadTool,
+from agent_comms.transport.served_tools.served import (
+    ServedCommsCliInboxTool as CommsCliInboxTool,
+    ServedCommsForkTool as CommsForkTool,
+    ServedCommsNativeThreadTool as CommsNativeThreadTool,
     invoke_tool,
 )
 from agent_comms_hooks import ToolRefusedError

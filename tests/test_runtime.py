@@ -57,7 +57,7 @@ from agent_comms.transport.runtime_request import RuntimeRequest
 from agent_comms.transport.runtime_requests import QueueActionRuntimeRequest
 from agent_comms.transport.serving.served_requests import QueueActionReply
 from agent_comms.transport.tool_caller import ToolCaller
-from agent_comms.transport.tools.orders import ServedInputDeliveryRead
+from agent_comms.transport.served_tools.orders import ServedInputDeliveryRead
 from agent_comms.transport.tools.reads import InputDeliveryRead
 from delivery_owner_fixture import canonical_agent
 from owner_socket_fixture import declare_owner, silent_socket

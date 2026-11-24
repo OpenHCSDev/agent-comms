@@ -15,7 +15,7 @@ from agent_comms.projects.storage_rules import CheckoutAllocation, StorageRule, 
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
 from agent_comms.transport.native_tool_call import CodingCall
-from agent_comms.transport.tool_declaration import ToolDeclaration
+from agent_comms.transport.tool_request import ServedRequest
 
 
 @dataclass
@@ -78,7 +78,7 @@ class StorageProjection(StorageAdmission):
     def deny_repository_operation(self, reason: str) -> None:
         examples = tuple(
             reader.example(self.comms.root)
-            for reader in ToolDeclaration.members_with(RepositoryReader)
+            for reader in ServedRequest.members_with(RepositoryReader)
         )
         self.deny(f"{reason}. Read without an editable allocation: " + '; '.join(examples))
 

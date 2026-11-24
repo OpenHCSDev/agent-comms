@@ -19,7 +19,8 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.projects.checkouts import Checkout, LaunchCheckout
 from agent_comms.registry.native_settings import NativeThreadDefaults
-from agent_comms.registry.thread_management import InheritedTags, NewThreadSpec, TagChoice
+from agent_comms.registry.tag_choice import InheritedTags, TagChoice
+from agent_comms.registry.thread_management import NewThreadSpec
 from agent_comms.registry.thread_model import CatalogSelection
 from agent_comms.registry.thread_settings import ThreadSettings
 

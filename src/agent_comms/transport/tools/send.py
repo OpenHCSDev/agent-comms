@@ -1,7 +1,7 @@
 """The send declaration: how a caller addresses a thread or channel and what it publishes.
 
 `SendTool` is the whole behaviour; `CommsSendTool` adds only the native call, so the pair is one
-owner. Serving it for external callers stays in ``agent_comms.transport.tools.served``.
+owner. Serving it for external callers stays in ``agent_comms.transport.served_tools.served``.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import threading
 from dataclasses import dataclass
 from typing import Annotated, Type
 
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.coordination.tables.refusals import SendRefusal
 from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.messaging.message_files import SendsFiles
@@ -54,7 +54,7 @@ class SendTool(SendsFiles, PublishingTool[ThreadCaller, MessagePublished]):
         *tool_field("Original received messages explicitly answered; external sends without a named source turn must name these to link answers"),
     ] = ()
 
-    def publish(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
+    def publish(self, comms: BusContext, caller: ThreadCaller) -> MessagePublished:
         sender = caller.own_thread()
         target = CommandTarget.named(self.target)
         try:
@@ -71,7 +71,7 @@ class SendTool(SendsFiles, PublishingTool[ThreadCaller, MessagePublished]):
             raise
         return MessagePublished.from_send(result)
 
-    def attachment(self, comms: Comms, target: NamedTarget) -> TaskAttachment:
+    def attachment(self, comms: BusContext, target: NamedTarget) -> TaskAttachment:
         """An ordinary send carries no authored task or selected request."""
         return NoTaskAttachment()
 

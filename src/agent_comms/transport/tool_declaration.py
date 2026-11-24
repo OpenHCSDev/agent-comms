@@ -20,7 +20,7 @@ from agent_comms.nominal.field_codec import (
     WireName,
 )
 from agent_comms.storage.recorded_time import EventTime
-from agent_comms.transport import tools as tool_declarations
+from agent_comms.transport import served_tools, tools as tool_declarations
 from agent_comms.transport.tool_denial import SelectedToolDenied
 
 
@@ -196,6 +196,11 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 
 class NativeRequestTools(GlobalCommsExtension, ToolDeclaration, declared_name=None):
     """Schema-bearing request declarations form the native catalog."""
+
+    @classmethod
+    def _member_declarations(cls):
+        cls.discover_package(served_tools)
+        return super()._member_declarations()
 
     @classmethod
     def loads_tools(cls) -> bool:

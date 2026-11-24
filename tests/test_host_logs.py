@@ -10,7 +10,7 @@ from agent_comms.transport.host_logs import (
     InstallHostLog,
     ProcessesHostLog,
 )
-from agent_comms.transport.tools.served import CommsHostLogTool
+from agent_comms.transport.served_tools.served import ServedCommsHostLogTool as CommsHostLogTool
 
 GITHUB = "ghp_" + "a1b2c3d4" * 4
 ANTHROPIC = "sk-ant-" + "a1b2c3d4" * 4

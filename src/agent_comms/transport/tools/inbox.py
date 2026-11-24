@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from agent_comms.cli_bridges.history import RemoteWatchHistory
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.input_attempt import UnresolvedInputReference
 from agent_comms.messaging.agent_inbox import InboxWait, NoWait, TakenInputPosition, TakenInputStart
 from agent_comms.messaging.channel_targets import CommandTarget
@@ -53,7 +53,7 @@ class StandbyRequest:
         tuple[str, ...], *tool_field("Declared dependencies for standby review")
     ]
 
-    def review(self, comms: Comms, thread: str) -> StandbyReview:
+    def review(self, comms: BusContext, thread: str) -> StandbyReview:
         return comms.goals.goal_input_review(thread, self.goal_id, self.wait_for)
 
 
@@ -61,7 +61,7 @@ class StandbyRequest:
 class NoStandby(NullMember):
     """The inbox read asked for no standby review."""
 
-    def review(self, comms: Comms, thread: str) -> NoStandbyReview:
+    def review(self, comms: BusContext, thread: str) -> NoStandbyReview:
         return NoStandbyReview()
 
 
@@ -96,7 +96,7 @@ class CommsInboxTool(MessagesArea, ShortListed, NativeToolRequest):
         InboxWait, *tool_field("Seconds to wait for a first message; default answer now")
     ] = NoWait()
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> InboxPageRead:
+    def apply(self, comms: BusContext, caller: ToolCaller) -> InboxPageRead:
         thread = self.thread
         review = self.standby.review(comms, thread)
         page = self.page(comms)
@@ -105,15 +105,15 @@ class CommsInboxTool(MessagesArea, ShortListed, NativeToolRequest):
             standby_review=review,
         )
 
-    def page(self, comms: Comms) -> InboxPage:
+    def page(self, comms: BusContext) -> InboxPage:
         return self.waited(comms, comms.bus.inbox_at)
 
-    def messages(self, comms: Comms) -> tuple[Message, ...]:
+    def messages(self, comms: BusContext) -> tuple[Message, ...]:
         """The messages alone: a reader that shows no unresolved inputs and no remainder need
         not project them."""
         return self.waited(comms, comms.bus.untaken_at).page.messages
 
-    def waited[Page: DisplayedMessagePage](self, comms: Comms, read: Callable[..., Page]) -> Page:
+    def waited[Page: DisplayedMessagePage](self, comms: BusContext, read: Callable[..., Page]) -> Page:
         if not (target := self.target.strip()):
             raise ToolRefusedError("An inbox target cannot be empty.")
         return self.wait.read(comms.bus.bus, lambda: read(
@@ -143,7 +143,7 @@ class CommsAckTool(MessagesArea, ThreadToolRequest, declared_name="comms_ack"):
         *tool_field("Received message references ({seq, message_id}) to acknowledge"),
     ]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> DeliveryAcknowledged:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> DeliveryAcknowledged:
         thread = caller.own_thread()
         acknowledged = comms.messaging.acknowledge_deliveries(
             thread, self.messages, bridge=RemoteWatchHistory,

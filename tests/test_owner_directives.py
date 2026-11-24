@@ -11,7 +11,7 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.typed_table import RowNotFoundError
 from agent_comms.transport.connector_caller import DirectorCaller
-from agent_comms.transport.tools.served import invoke_tool
+from agent_comms.transport.served_tools.served import invoke_tool
 from goal_owner_fixture import canonical_goal_wire
 
 

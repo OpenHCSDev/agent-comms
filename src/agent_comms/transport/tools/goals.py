@@ -1,6 +1,6 @@
 """The goal tools: what a caller publishes about a goal, and the verbs that change one.
 
-Separate from ``agent_comms.transport.tools.served`` because every consumer of these classes is a goal writer or
+Separate from ``agent_comms.transport.served_tools.served`` because every consumer of these classes is a goal writer or
 the goal snapshot a heartbeat publishes; the served wiring for the other tools stays there.
 """
 
@@ -11,7 +11,7 @@ from typing import Annotated, ClassVar
 
 from pydantic import JsonValue
 
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.execution.input_key import InputKeyText
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -127,11 +127,11 @@ class GoalChangeTool(ThreadToolRequest):
         OwnGoal | TeammateGoal, *tool_field("Teammate whose goal to change; omit for your own")
     ] = OwnGoal()
 
-    def update(self, comms: Comms, caller: ThreadCaller, action: GoalAction) -> GoalDeclaration:
+    def update(self, comms: BusContext, caller: ThreadCaller, action: GoalAction) -> GoalDeclaration:
         return comms.goals.update_goal(
             self.thread.thread_name(caller), action, actor=self.thread.actor)
 
-    def current(self, comms: Comms, caller: ThreadCaller, goal_id: GoalId):
+    def current(self, comms: BusContext, caller: ThreadCaller, goal_id: GoalId):
         return comms.registry.require(self.thread.thread_name(caller)).goal.require().require_id(goal_id)
 
 
@@ -144,7 +144,7 @@ class CommsSetGoalTool(GoalsArea, GoalChangeTool):
     )
     text: Annotated[str, *tool_field("Persistent objective to pursue")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> ToolResult:
         goal = self.update(comms, caller, SetGoalAction(text=self.text))
         return self.thread.published(GoalSet(
             goal, "Persistent goal activated. Work toward it and report progress with comms_goal."),
@@ -189,7 +189,7 @@ class CommsGoalTool(GoalsArea, ThreadToolRequest):
         ),
     ] = ()
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> GoalProgress:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> GoalProgress:
         name = caller.name
         self.status.require_claims(self.claims)
         ProgressClaim.require_all(self.claims, comms, caller.authority(comms))
@@ -216,7 +216,7 @@ class CommsResumeGoalTool(GoalsArea, GoalChangeTool):
     goal_id: Annotated[GoalId, *tool_field("Identity of the paused goal to resume")]
     progress: Annotated[str, *tool_field("Progress summary for the resumed goal")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> ToolResult:
         goal_id = self.goal_id
         current = self.current(comms, caller, goal_id)
         current.state.require_model_resume()
@@ -248,7 +248,7 @@ class CommsEditGoalTool(GoalsArea, GoalChangeTool):
     goal_id: Annotated[GoalId, *tool_field("Identity of the existing goal to edit")]
     text: Annotated[str, *tool_field("Revised objective text, including any @mentions")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> ToolResult:
         goal_id = self.goal_id
         current = self.current(comms, caller, goal_id)
         goal = self.update(
@@ -270,7 +270,7 @@ class CommsClearGoalTool(GoalsArea, GoalChangeTool):
     )
     goal_id: Annotated[GoalId, *tool_field("Identity of the goal to clear")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> ToolResult:
         current = self.current(comms, caller, self.goal_id)
         goal = self.update(
             comms, caller,
@@ -290,7 +290,7 @@ class CommsPauseGoalTool(GoalsArea, GoalChangeTool):
     goal_id: Annotated[GoalId, *tool_field("Identity of the goal to pause")]
     progress: Annotated[str, *tool_field("Why the goal is paused")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
+    def apply(self, comms: BusContext, caller: ThreadCaller) -> ToolResult:
         current = self.current(comms, caller, self.goal_id)
         goal = self.update(
             comms, caller,
@@ -310,5 +310,5 @@ class CommsGoalHistoryTool(GoalsArea, ThreadReadTool):
         OneGoal | AllGoals, *tool_field("Optional goal ID; omit for this thread's full history")
     ] = AllGoals()
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> RecordedGoalHistory:
+    def apply(self, comms: BusContext, caller: ToolCaller) -> RecordedGoalHistory:
         return comms.goals.recorded_history(caller.subject(self.thread), self.goal_id)

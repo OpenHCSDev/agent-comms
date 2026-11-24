@@ -26,7 +26,7 @@ from agent_comms.messaging.notification_evidence import (
 )
 from agent_comms.messaging.sending import Messaging
 from agent_comms.planning.goal_management import Goals
-from agent_comms.presentation import WireRevision
+from agent_comms.presentation import ChannelView, WireRevision
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.registration import Registration, RegistryBus
@@ -79,6 +79,9 @@ class BusViews(ABC):
     def thread_presentations(
         self, names: Iterable[str], *, sent_source_limit: int = 5,
     ) -> ThreadPresentationBatch: ...
+
+    @abstractmethod
+    def channel_views(self) -> tuple[ChannelView, ...]: ...
 
 
 class BusThreads(ABC):

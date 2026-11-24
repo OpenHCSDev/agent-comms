@@ -25,7 +25,7 @@ from agent_comms.execution.pi_vocabulary import HighThinkingLevel
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.installer.harness_install import OpenCodeHarness
 from agent_comms.messaging.bus import Bus, PublicRecord
-from agent_comms.messaging.channel_management import (
+from agent_comms.messaging.tag_edits import (
     ArchiveThreadsTagDisposition,
     DeleteExclusiveInactiveThreadsTagDisposition,
     DeleteThreadsTagDisposition,
@@ -64,7 +64,8 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.transport.tool_declaration import NativeRequestTools
-from agent_comms.transport.tools.served import CommsTagsTool, invoke_tool
+from agent_comms.transport.served_tools.served import invoke_tool
+from agent_comms.transport.tools.commands import CommsTagsTool
 from conftest import installed_comms
 
 

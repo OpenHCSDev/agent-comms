@@ -9,7 +9,8 @@ from agent_comms.cli_verbs.new import NewThreadCliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, TargetBound
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_management import ForkSpec, GivenTags
+from agent_comms.registry.tag_choice import GivenTags
+from agent_comms.registry.thread_management import ForkSpec
 from agent_comms.registry.thread_model import UndeclaredModel
 from agent_comms.registry.thread_settings import ThreadSettings
 from agent_comms.registry.threads import ForkableThreadCommand, Thread

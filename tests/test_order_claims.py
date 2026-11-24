@@ -85,7 +85,7 @@ from agent_comms.transport.tools.orders import (
     CommsVerdictTool,
     TodoChanged,
 )
-from agent_comms.transport.tools.served import CommsHistoryTool
+from agent_comms.transport.served_tools.served import ServedCommsHistoryTool as CommsHistoryTool
 from agent_comms_hooks import ToolRefusedError
 from test_held_problem_orders import merge_two_commit_fix
 from test_holder_standing_rules import publish

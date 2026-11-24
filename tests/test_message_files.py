@@ -35,7 +35,7 @@ from agent_comms.transport.mcp_wire import ToolsCallMessage, ToolsCallReply
 from agent_comms.transport.request import ToolCall, ToolRequest
 from agent_comms.transport.tool_caller import HumanCaller, ThreadCaller
 from agent_comms.transport.tools.send import CommsSendTool
-from agent_comms.transport.tools.served import (
+from agent_comms.transport.served_tools.served import (
     ServedCommsConversationPageTool,
     ServedCommsMessageFilesTool,
     ServedCommsMessageFileTool,

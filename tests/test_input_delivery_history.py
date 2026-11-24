@@ -45,7 +45,7 @@ from agent_comms.registry.thread_status import (
 from agent_comms.registry.threads import ExternalThread, NativeThread, Thread
 from agent_comms.transport.owner_connection import OwnerIdentityChangedError
 from agent_comms.transport.tool_caller import ToolCaller
-from agent_comms.transport.tools.orders import (
+from agent_comms.transport.served_tools.orders import (
     ServedInputDeliveryRead,
     ServedOwnerGoalRead,
 )
