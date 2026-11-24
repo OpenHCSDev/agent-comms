@@ -29,7 +29,7 @@ DEFAULT_REDIRECT_URI = "http://127.0.0.1:8765/callback"
 DEFAULT_STATE_PATH = Path(os.environ.get("COMMS_MCP_STATE", "/tmp/comms-mcp-auth.json"))
 PROTOCOL_VERSION = "2025-03-26"
 
-RULE_ORDER = ("spine", "slop", "team", "no-waiting", "evidence", "talk")
+RULE_ORDER = ("spine", "slop", "trace", "team", "no-waiting", "evidence", "talk")
 PAPER_ORDER = ("semantic-completeness", "less-is-harder")
 
 
