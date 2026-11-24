@@ -15,7 +15,6 @@ from agent_comms.registry.thread_presentation import NoThreadPresentation, Threa
 from agent_comms.registry.thread_text import GivenThreadText
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.ui_model.observation import (
-    LocalRouteObservation,
     ObservationProcess,
     ObserveThreads,
     ObserveViews,
@@ -23,6 +22,10 @@ from agent_comms.ui_model.observation import (
     ThreadPresented,
     ThreadsObserved,
     ViewsRetired,
+)
+from agent_comms.ui_model.observation_service import (
+    LocalRouteObservation,
+    ThreadReading,
 )
 from agent_comms.ui_model.status import OpenThreadStatus
 from observed_queue import ObservedQueue
@@ -41,7 +44,7 @@ def observe(reading, comms):
 def test_observer_reports_a_deleted_thread(comms):
     declare(comms, 'surviving', 'deleted')
     names = frozenset({'surviving', 'deleted'})
-    reading = ObserveThreads(names).observation()
+    reading = ThreadReading(ObserveThreads(names))
     status = OpenThreadStatus(lambda callback: callback())
     status.observed(observe(reading, comms))
     comms.registry.remove('deleted')

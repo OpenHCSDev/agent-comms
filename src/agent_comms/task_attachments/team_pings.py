@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
 from agent_comms.cli_bridges.harness_delivery_states import DeliveredOutcome, Outcome
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.delivers_input import DeliversInput
 from agent_comms.heartbeat_subjects import HeartbeatSubject, TeamHistory
@@ -468,11 +468,11 @@ class TeamUpdate(OwnerNotice, TeamObservation, PingLines, declared_name=None):
             "Full evidence: comms_hud board/open_pings, or Toad /team",
         ))
 
-    def board(self, comms: Comms) -> tuple[BoardEntry, ...]:
+    def board(self, comms: BusContext) -> tuple[BoardEntry, ...]:
         """Any teammate's recorded action disposes of its subject on the shared board."""
         return tuple(ping.board_entry() for ping in self.open_pings(TeamHistory.of_team(comms)))
 
-    def reader_board(self, comms: Comms, reader: str) -> tuple[BoardEntry, ...]:
+    def reader_board(self, comms: BusContext, reader: str) -> tuple[BoardEntry, ...]:
         """The open lines addressing ``reader`` that wait on no stopped thread: a tool call
         carries what is that session's own, and the whole board stays in comms_hud."""
         history = TeamHistory.of_team(comms)
@@ -495,7 +495,7 @@ class TeamUpdate(OwnerNotice, TeamObservation, PingLines, declared_name=None):
             raise RelationViolationError("Team observations changed recipient incarnation")
 
     @classmethod
-    def latest(cls, comms: Comms, recipient: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
+    def latest(cls, comms: BusContext, recipient: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
         """The recipient packet from the heartbeat's one atomic retained publication."""
         # Local import breaks the declaration cycle: TeamHud owns the stored frame and
         # contains TeamUpdate, while TeamUpdate exposes the reader-facing projection.
@@ -505,7 +505,7 @@ class TeamUpdate(OwnerNotice, TeamObservation, PingLines, declared_name=None):
         return store.packet_map(store.read()).get(recipient, ())
 
     @classmethod
-    def published(cls, comms: Comms, recipient: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
+    def published(cls, comms: BusContext, recipient: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
         """The last actual publication: what was announced, not just observed."""
         lookup = recipient.require_recorded().lookup
         with comms.bus.bus.observing() as db:
@@ -516,7 +516,7 @@ class TeamUpdate(OwnerNotice, TeamObservation, PingLines, declared_name=None):
     @classmethod
     def published_among(
         cls,
-        comms: Comms,
+        comms: BusContext,
         recipients: tuple[ThreadIncarnation, ...],
     ) -> dict[ThreadIncarnation, tuple[TeamUpdate, ...]]:
         """The last actual publication for each selected recipient from one bus cut."""
@@ -536,7 +536,7 @@ class TeamUpdate(OwnerNotice, TeamObservation, PingLines, declared_name=None):
         }
 
     @classmethod
-    def current_board(cls, comms: Comms, reader: ThreadIncarnation) -> tuple[BoardEntry, ...]:
+    def current_board(cls, comms: BusContext, reader: ThreadIncarnation) -> tuple[BoardEntry, ...]:
         """The retained observation's rows for ``reader``'s tool calls, derived when asked."""
         return tuple(entry for latest in cls.latest(comms, reader)
                      for entry in latest.reader_board(comms, reader.name))
@@ -560,7 +560,7 @@ class TeamUpdate(OwnerNotice, TeamObservation, PingLines, declared_name=None):
             not_applied=tuple(line for packet in previous for line in packet.not_applied),
         )
 
-    def send(self, comms: Comms, hud: tuple[str, ...], *,
+    def send(self, comms: BusContext, hud: tuple[str, ...], *,
              publication: PublicationFacts = UnpublishedFacts()) -> tuple[Message, ...]:
         recipient = comms.registry.require(self.teammate.name)
         packet = replace(self, publication=publication)

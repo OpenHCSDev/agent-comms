@@ -8,7 +8,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import CoordinationBeginUnavailable
 from agent_comms.coordination.schema import CoordinatorRow
@@ -96,7 +96,7 @@ class ReaderBoardDelivery(CoordinatorRow, WithoutRowid):
         return SessionBoard.presented(due, now)
 
     @classmethod
-    def lines(cls, comms: Comms, reader: ThreadIncarnation, now: float) -> tuple[str, ...]:
+    def lines(cls, comms: BusContext, reader: ThreadIncarnation, now: float) -> tuple[str, ...]:
         """The rows to print on this reader's tool call at ``now``, stamped in the same call
         that returns them: a row is never marked delivered to a reader that did not get it."""
         return cls.deliver(comms.root, reader, TeamUpdate.current_board(comms, reader), now).lines

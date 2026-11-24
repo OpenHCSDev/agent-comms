@@ -2,7 +2,7 @@
 
 import asyncio
 
-from agent_comms.ui_model.observation import ObservationService
+from agent_comms.ui_model.observation_service import ObservationService
 
 
 async def watched_pass(service: ObservationService) -> None:

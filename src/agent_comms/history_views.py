@@ -12,6 +12,7 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import Annotated
 
+from agent_comms.bus_context import BusViews, ThreadPresentationBatch
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.coordination.errors import StaleRevision
@@ -182,7 +183,9 @@ class ThreadViewRead(ConversationPreparation):
 
 
 @dataclass(frozen=True)
-class ThreadPresentations(NotificationSource, ThreadSourceReader[ThreadPresentation]):
+class ThreadPresentations(
+    ThreadPresentationBatch, NotificationSource, ThreadSourceReader[ThreadPresentation],
+):
     """One status acquisition shared by a reader's thread presentations.
 
     These rows and their shared assignment acquisition belong to this cut,
@@ -316,7 +319,7 @@ class SidebarCut:
         return replace(snapshot, thread_unread={**snapshot.thread_unread, **self.thread_unread})
 
 
-class HistoryViews(HistoryReadSource):
+class HistoryViews(HistoryReadSource, BusViews):
     def __init__(
         self,
         root: Path,

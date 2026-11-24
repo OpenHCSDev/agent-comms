@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.messaging.message_notification import (
     NoNotificationWindow,
     NotificationPass,
@@ -33,7 +33,7 @@ class NotificationsRead:
     def of(
         cls,
         revision: WireRevision,
-        comms: Comms,
+        comms: BusContext,
         known: Mapping[str, ObservedActivity | DeletedThread],
         window: NotificationWindow,
     ) -> NotificationsRead:
@@ -41,7 +41,7 @@ class NotificationsRead:
         known = {**comms.views.observed_activity(revision, names - known.keys()), **known}
         return cls(revision, {name: known[name] for name in names if name in known}, window)
 
-    def live_changed(self, comms: Comms, notifications: NotificationPass) -> bool:
+    def live_changed(self, comms: BusContext, notifications: NotificationPass) -> bool:
         """Read marks, participant activity or retained assignment evidence changed."""
         revision = notifications.revision
         return (
@@ -55,12 +55,12 @@ class StaleNotificationsRead(NotificationsRead):
     """The request's own display cut is stale: rereading it never answers, so only the UI's
     fresh request, a different family, reads again."""
 
-    def live_changed(self, comms: Comms, notifications: NotificationPass) -> bool:
+    def live_changed(self, comms: BusContext, notifications: NotificationPass) -> bool:
         return False
 
 
 class UnreadableNotificationsRead(NotificationsRead):
     """An unreadable read names no participants, so any later revision reads again."""
 
-    def live_changed(self, comms: Comms, notifications: NotificationPass) -> bool:
+    def live_changed(self, comms: BusContext, notifications: NotificationPass) -> bool:
         return notifications.revision != self.revision

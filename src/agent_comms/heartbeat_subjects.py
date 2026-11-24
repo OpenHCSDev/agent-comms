@@ -12,7 +12,7 @@ from functools import cached_property
 from types import MappingProxyType
 from typing import Mapping, Self
 
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.coordination.service_passes import ServicePasses, ServicePassStore
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import MessageId
@@ -32,7 +32,7 @@ class TeamHistory:
     """One reader's actors, shared by every subject it evaluates; each subject reads only the
     record that disposes of it."""
 
-    comms: Comms
+    comms: BusContext
     snapshot: RegistrySnapshot
     identities: frozenset[ThreadIncarnation]
     _actions: dict[HeartbeatSubject, EventTime] = field(default_factory=dict, init=False, compare=False)
@@ -63,18 +63,18 @@ class TeamHistory:
         return ServicePassStore.at(self.comms.root).read()
 
     @classmethod
-    def read(cls, comms: Comms, actors: frozenset[str]) -> Self:
+    def read(cls, comms: BusContext, actors: frozenset[str]) -> Self:
         return cls.of(comms, comms.registry.snapshot(), actors)
 
     @classmethod
-    def of_team(cls, comms: Comms) -> Self:
+    def of_team(cls, comms: BusContext) -> Self:
         """The team's executable collaborators, read from the same snapshot this history holds:
         one registry read, where computing the actors first read it twice."""
         snapshot = comms.registry.snapshot()
         return cls.of(comms, snapshot, TeamService.actors(snapshot))
 
     @classmethod
-    def of(cls, comms: Comms, snapshot: RegistrySnapshot, actors: frozenset[str]) -> Self:
+    def of(cls, comms: BusContext, snapshot: RegistrySnapshot, actors: frozenset[str]) -> Self:
         return cls(comms, snapshot, frozenset(snapshot.require(actor).incarnation for actor in actors))
 
     @cached_property

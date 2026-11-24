@@ -27,14 +27,16 @@ from agent_comms.transcript.transcripts import (
     NotifiedThreadPresentation,
 )
 from agent_comms.ui_model.observation import (
-    ObservationLifetime,
     ObserveThreads,
     ThreadBusy,
-    ThreadReading,
     ThreadPresented,
     ThreadsObserved,
     ThreadUnavailable,
     UnreadableHistory,
+)
+from agent_comms.ui_model.observation_service import (
+    ObservationLifetime,
+    ThreadReading,
 )
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
 from conftest import accept_initial, publish_initial
@@ -77,12 +79,12 @@ def test_status_projection_and_busy_retains_the_canonical_row():
 
 
 def test_changed_interest_retains_one_results_mapping_and_starts_empty():
-    first = ObserveThreads(frozenset({'one'})).observation()
+    first = ThreadReading(ObserveThreads(frozenset({'one'})))
     assert first.observed.results == {}
     first.observed = observed({'one': ThreadBusy()})
     assert ObservationLifetime().for_interest(first) is first
-    assert first.for_interest(ObserveThreads(frozenset({'one'})).observation()) is first
-    next_read = first.for_interest(ObserveThreads(frozenset({'one', 'two'})).observation())
+    assert first.for_interest(ThreadReading(ObserveThreads(frozenset({'one'})))) is first
+    next_read = first.for_interest(ThreadReading(ObserveThreads(frozenset({'one', 'two'}))))
     assert next_read.observed is first.observed
     assert next_read.initial == {'two'}
 
@@ -246,7 +248,7 @@ def test_thread_reading_keeps_acquired_evidence_and_publishes_its_projection(
 
     _path, _root_id, comms, initial, _people = _root(private_directory, direct=True)
     comms.goals.update_goal('beta', SetGoalAction(text='Initial painted goal'))
-    reading = ObserveThreads(frozenset({'beta'})).observation()
+    reading = ThreadReading(ObserveThreads(frozenset({'beta'})))
     status = OpenThreadStatus(lambda flush: None)
     status.open('beta')
 

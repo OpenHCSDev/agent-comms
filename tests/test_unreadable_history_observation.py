@@ -34,7 +34,6 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.owner_connection import OwnerIdentityChangedError, OwnerReplyLostError
 from agent_comms.ui_model.observation import (
-    LocalRouteObservation,
     ObservationProcess,
     ObserveSidebar,
     ObserveThreads,
@@ -47,11 +46,14 @@ from agent_comms.ui_model.observation import (
     ReadValue,
     SidebarObserved,
     SidebarPreparing,
-    SidebarReading,
-    SidebarReadStage,
     ThreadsObserved,
     ThreadUnavailable,
     UnreadableHistory,
+)
+from agent_comms.ui_model.observation_service import (
+    LocalRouteObservation,
+    SidebarReadStage,
+    SidebarReading,
 )
 from agent_comms.ui_model.status import OpenThreadStatus
 from agent_comms_hooks import ToolRefusedError

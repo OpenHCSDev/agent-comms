@@ -73,7 +73,6 @@ from agent_comms.transport.tools.reads import (
 )
 from agent_comms.transport.tools.served import CommsMessageOutcomesTool
 from agent_comms.ui_model.observation import (
-    NotificationBatch,
     NotificationsObserved,
     ObserveNotifications,
     ReadNotifications,
@@ -83,6 +82,10 @@ from agent_comms.ui_model.observation import (
     ReadTranscriptUpdate,
     RefreshTranscript,
     SubscribeTranscript,
+)
+from agent_comms.ui_model.observation_service import (
+    NotificationBatch,
+    NotificationReading,
 )
 
 
@@ -202,9 +205,9 @@ def test_changed_notification_interest_keeps_only_batches_a_request_still_shows(
     shown, scrolled_away, revealed = (MessageReference(seq, MessageId.mint(f"m{seq}")) for seq in (1, 2, 3))
     view = ReadNotifications("root", LiveNotificationRead((shown, scrolled_away)))
     kept, dropped = batch_of(view.showing((shown,))), batch_of(view.showing((scrolled_away,)))
-    previous = ObserveNotifications(frozenset((view,))).observation()
+    previous = NotificationReading(ObserveNotifications(frozenset((view,))))
     previous.batches = (kept, dropped)
-    requested = ObserveNotifications(frozenset((view.showing((shown, revealed)),))).observation()
+    requested = NotificationReading(ObserveNotifications(frozenset((view.showing((shown, revealed)),))))
 
     assert previous.for_interest(requested) is requested
     assert requested.batches == (kept,)
@@ -216,13 +219,13 @@ def test_a_scrolled_view_reads_only_the_messages_no_batch_covers(comms, tmp_path
     second, third = (comms.messaging.send("sender", "#team", text).message.reference
                      for text in ("Second?", "Third?"))
     view = ReadNotifications(str(comms.root), LiveNotificationRead((first, second)))
-    reading = ObserveNotifications(frozenset((view,))).observation()
+    reading = NotificationReading(ObserveNotifications(frozenset((view,))))
     answers = list(reading.read(comms, comms.views.revision()))
     assert [answer.request for answer in answers] == [view]
     assert answers[0].outcomes.keys() == {(first.seq, first.message_id), (second.seq, second.message_id)}
 
     scrolled = view.showing((second, third))
-    moved = ObserveNotifications(frozenset((scrolled,))).observation()
+    moved = NotificationReading(ObserveNotifications(frozenset((scrolled,))))
     assert reading.for_interest(moved) is moved
     answers = list(moved.read(comms, comms.views.revision()))
 
@@ -268,12 +271,12 @@ def test_equal_requests_keep_their_batches_and_a_new_archive_drops_them():
     kept = ReadNotifications("root", RecordedNotificationRead(REFERENCES, HistorySourceKey("archive")))
     replaced = ReadNotifications("root", RecordedNotificationRead(REFERENCES, HistorySourceKey("detached")))
     reattached = ReadNotifications("root", RecordedNotificationRead(REFERENCES, HistorySourceKey("attached")))
-    previous = ObserveNotifications(frozenset((kept, replaced))).observation()
+    previous = NotificationReading(ObserveNotifications(frozenset((kept, replaced))))
     batch = batch_of(kept)
     previous.batches = (batch, batch_of(replaced))
-    requested = ObserveNotifications(frozenset((
+    requested = NotificationReading(ObserveNotifications(frozenset((
         ReadNotifications("root", RecordedNotificationRead(REFERENCES, HistorySourceKey("archive"))), reattached,
-    ))).observation()
+    ))))
 
     assert previous.for_interest(requested) is requested
     assert requested.batches == (batch,)

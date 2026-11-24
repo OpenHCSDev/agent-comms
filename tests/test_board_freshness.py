@@ -49,7 +49,6 @@ from agent_comms.team.team_hud import (
 )
 from agent_comms.team.vibe_check import VibeCheckUnanswered
 from agent_comms.ui_model.observation import (
-    ObservationService,
     ObserveTeamHud,
     ObserveThreads,
     StopTeamHud,
@@ -57,6 +56,7 @@ from agent_comms.ui_model.observation import (
     TeamHudUnreadable,
     ThreadsObserved,
 )
+from agent_comms.ui_model.observation_service import ObservationService
 from test_holder_standing_rules import held_bus  # noqa: F401
 
 

@@ -12,12 +12,12 @@ from agent_comms.execution.controller import NO_CONTROLLER
 from agent_comms.execution.native_arguments import GivenBinary
 from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import (
-    LocalRouteObservation,
     ObservationProcess,
     ObserverDied,
     ReadNotifications,
     StopObserving,
 )
+from agent_comms.ui_model.observation_service import LocalRouteObservation
 from delivery_owner_fixture import canonical_agent, start_headless_owner
 from test_runtime import until
 

@@ -8,12 +8,14 @@ from agent_comms.messaging.message_notification import (
 )
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.ui_model.observation import (
-    ObservationService,
     ObserveSidebar,
     ReadAnswered,
-    ServiceEnd,
     SidebarResult,
     ViewerEnd,
+)
+from agent_comms.ui_model.observation_service import (
+    ObservationService,
+    ServiceEnd,
 )
 from observation_pass_fixture import watched_pass
 

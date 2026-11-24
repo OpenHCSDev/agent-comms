@@ -11,7 +11,7 @@ from functools import partial
 from typing import cast
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import StaleFence
 from agent_comms.errors import UnregisteredThreadError
@@ -40,11 +40,11 @@ class BusRead[Result](ToolDeclaration):
     """One operation owns its arguments and its read; the boundary supplies authority."""
 
     @abstractmethod
-    def apply(self, comms: Comms, caller: ReadAuthority) -> Result: ...
+    def apply(self, comms: BusContext, caller: ReadAuthority) -> Result: ...
 
 
 class UiRead[Result](BusRead[Result]):
-    def read(self, comms: Comms) -> Result:
+    def read(self, comms: BusContext) -> Result:
         return self.apply(comms, NoDisplaySelection())
 
 
@@ -53,9 +53,9 @@ class CapturesTranscriptPage(UiRead):
     and the snapshot the wire carries is derived from it."""
 
     @abstractmethod
-    def capture_as(self, comms: Comms, reader: ReadAuthority) -> TranscriptRead: ...
+    def capture_as(self, comms: BusContext, reader: ReadAuthority) -> TranscriptRead: ...
 
-    def apply(self, comms: Comms, caller: ReadAuthority) -> TranscriptSnapshotUpdate:
+    def apply(self, comms: BusContext, caller: ReadAuthority) -> TranscriptSnapshotUpdate:
         return TranscriptSnapshotUpdate.from_read(self.capture_as(comms, caller))
 
 
@@ -64,12 +64,12 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](
 ):
     """The captured registration selects live evidence or the declared unavailable answer."""
 
-    def apply(self, comms: Comms, caller: ReadAuthority) -> Result:
+    def apply(self, comms: BusContext, caller: ReadAuthority) -> Result:
         cut = comms.registry.store.snapshot_with_authority()
         owner = cut.snapshot.require(caller.subject(self.thread)).incarnation
         return asyncio.run(self.answer(comms, owner, cut))
 
-    async def answer(self, comms: Comms, owner: ThreadIncarnation, cut: RegistryCut) -> Result:
+    async def answer(self, comms: BusContext, owner: ThreadIncarnation, cut: RegistryCut) -> Result:
         root = FileRevision.capture(comms.root).require(
             OwnerIdentityChangedError("Wire root disappeared before the read.")
         ).identity
@@ -88,7 +88,7 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](
         return result
 
     async def retained_answer(
-        self, answer: Callable[[Comms, ThreadIncarnation], Result], comms: Comms,
+        self, answer: Callable[[BusContext, ThreadIncarnation], Result], comms: BusContext,
         owner: ThreadIncarnation, cut: RegistryCut,
     ) -> Result:
         """Keep blocking retained reads inside the captured registry cut's worker."""
@@ -101,7 +101,7 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](
 
         return await CoordinationWork.run_worker(retained)
 
-    async def live_answer(self, comms: Comms, owner: ThreadIncarnation) -> Result:
+    async def live_answer(self, comms: BusContext, owner: ThreadIncarnation) -> Result:
         request = OwnerReadRuntimeRequest(thread=owner.name, operation=self)
         return self.decode_reply(await OwnerReplyConnection.answer(comms, owner, request))
 
@@ -117,9 +117,9 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](
         return thread
 
     @abstractmethod
-    def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> Result: ...
+    def unavailable(self, comms: BusContext, owner: ThreadIncarnation) -> Result: ...
 
-    def held(self, comms: Comms, owner: ThreadIncarnation) -> Result:
+    def held(self, comms: BusContext, owner: ThreadIncarnation) -> Result:
         """The answer for an owner whose state the bus holds (an external CLI). A read with
         no bus-held answer of its own answers as it does for a native owner not running."""
         return self.unavailable(comms, owner)

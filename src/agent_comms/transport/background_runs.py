@@ -23,7 +23,7 @@ from functools import partial
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.execution.child_process import (
     OutlivesLauncherLifetime,
     Platform,
@@ -483,12 +483,12 @@ class BackgroundRunStore:
     """The detached runs on one bus, each in its own BackgroundRunRecord, and the watcher
     that settles them and tells their threads."""
 
-    comms: Comms
+    comms: BusContext
     watching: ClassVar[set[str]] = set()
     watching_lock: ClassVar[threading.Lock] = threading.Lock()
 
     @classmethod
-    def of(cls, comms: Comms) -> BackgroundRunStore:
+    def of(cls, comms: BusContext) -> BackgroundRunStore:
         return cls(comms)
 
     @property

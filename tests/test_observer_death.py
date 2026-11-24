@@ -35,6 +35,7 @@ from agent_comms.ui_model.observation import (
     ReadOwnerOperation,
     StopSidebar,
 )
+from agent_comms.ui_model.observation_service import LocalRouteObservation
 from owner_socket_fixture import declare_owner
 
 
@@ -51,7 +52,7 @@ def empty_window(root) -> ReadNotifications:
 
 
 async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awaited_reads(comms, durable_home):
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         async with asyncio.timeout(30):
             assert (await process.read(empty_window(comms.root))).outcomes == {}  # the service runs
         child = process.peer.process.pid
@@ -82,7 +83,7 @@ async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awai
 
 
 async def test_a_mismatched_notification_reference_is_left_out_and_the_observer_lives(comms, durable_home):
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         # A reference whose record is another message is left out of the read (376ef3457).
         mismatched = await process.read(ReadNotifications(str(comms.root), LiveNotificationRead(
             (MessageReference(1, MessageId.mint("not-the-original")),)
@@ -95,7 +96,7 @@ async def test_a_mismatched_notification_reference_is_left_out_and_the_observer_
 async def test_unavailable_live_owner_reads_preserve_the_observer(comms, durable_home, read_type):
     owner = NativeThread("read-subject", frozenset(), Checkout(comms.root.parent))
     comms.registry.declare(owner)
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         with pytest.raises(RelationViolationError):
             await process.read(read_type(str(comms.root), owner.incarnation))
         assert (await process.read(empty_window(comms.root))).outcomes == {}
@@ -106,7 +107,7 @@ async def test_unavailable_live_owner_reads_preserve_the_observer(comms, durable
 @pytest.mark.parametrize("read_type", owner_reads())
 async def test_an_unregistered_owner_cannot_supply_a_held_read_incarnation(comms, durable_home, read_type):
     owner = NativeThread("read-subject", frozenset(), Checkout(comms.root.parent))
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         with pytest.raises(OwnerIdentityChangedError):
             await process.read(read_type(str(comms.root), owner.incarnation))
         assert (await process.read(empty_window(comms.root))).outcomes == {}
@@ -124,7 +125,7 @@ async def test_retained_delivery_reads_preserve_the_observer_without_a_native_qu
     key = BusInputKey(1)
     ledger.record(key, seq=1, owner=owner.name, claim_scope=1, target=owner.name, text="Unconfirmed")
     original = ledger.path.read_bytes()
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         result = await process.read(ReadOwnerOperation(
             str(comms.root), owner.incarnation, InputDeliveryRead(),
         ))
@@ -143,7 +144,7 @@ async def test_stale_owner_reads_preserve_the_observer(comms, durable_home, read
     comms.registry.declare(owner)
     root = str(comms.root.parent / "another-wire") if other_root else str(comms.root)
     identity = owner.incarnation if other_root else RecordedThreadIncarnation(owner.name, 1.0)
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         with pytest.raises(ReloadRequired if other_root else OwnerIdentityChangedError):
             await process.read(read_type(root, identity))
         assert (await process.read(empty_window(comms.root))).outcomes == {}
@@ -157,7 +158,7 @@ async def test_external_owner_goal_read_answers_from_bus_without_waiting_for_a_s
     """An external bridge has a live process and no runtime socket: OwnerGoalRead answers
     the bus-held goal snapshot immediately instead of waiting for a native runtime socket."""
     owner = declare_owner(comms, "external-owner", runtime_processes[0].identity, ExternalThread)
-    async with ObservationProcess.awaited(comms.route) as process:
+    async with LocalRouteObservation.awaited(comms.route) as process:
         async with asyncio.timeout(30):
             reply = await process.read(ReadOwnerOperation(
                 str(comms.root), owner.incarnation, OwnerGoalRead(),
@@ -172,7 +173,7 @@ async def test_external_owner_goal_read_answers_from_bus_without_waiting_for_a_s
 async def test_an_observer_that_failed_is_reported_with_its_own_traceback_and_exit_status(tmp_path, durable_home):
     not_a_wire = tmp_path / "not-a-wire"
     not_a_wire.write_text("")
-    async with ObservationProcess.awaited(LocalRoute(not_a_wire)) as process:
+    async with LocalRouteObservation.awaited(LocalRoute(not_a_wire)) as process:
         with pytest.raises(ObserverDied) as died:
             async with asyncio.timeout(30):
                 await process.read(empty_window(not_a_wire))

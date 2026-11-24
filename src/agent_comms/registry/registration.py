@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABC
 from collections.abc import Callable, Container, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
@@ -560,6 +561,15 @@ class Registration(
 
     def __contains__(self, name: str) -> bool:
         return name in self.store.read()
+
+
+class RegistryBus(ABC):
+    """A bus attachment exposing its root path and thread registry."""
+
+    __slots__ = ()
+    root: Path
+    registry: Registration
+
 
 from agent_comms import agent_backend
 from agent_comms.planning import goals

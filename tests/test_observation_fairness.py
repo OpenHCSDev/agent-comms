@@ -12,13 +12,15 @@ from agent_comms.presentation import WireRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.storage.file_observation import FileRevision
 from agent_comms.ui_model.observation import (
-    NotificationReading,
     ObservationStep,
-    ObservationService,
     ObserveNotifications,
     ObserveSidebar,
     ObserveTeamHud,
     ObserveThreads,
+)
+from agent_comms.ui_model.observation_service import (
+    NotificationReading,
+    ObservationService,
     ReadingObservation,
     SidebarReading,
     TeamHudReading,

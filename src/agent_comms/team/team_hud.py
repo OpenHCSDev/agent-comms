@@ -11,7 +11,7 @@ from typing import Annotated, Self
 from pydantic import JsonValue
 
 from agent_comms.cli_bridges.usage_reading import RateLimitReading
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.coordination.service_passes import (
     BoardUnavailable,
     ServiceFailures,
@@ -214,7 +214,7 @@ class TeamHud(TeamHudRecord):
         return self if self.phases == plan.phases else replace(self, phases=plan.phases)
 
     @classmethod
-    def of(cls, comms: Comms, frame: HeartbeatFrame,
+    def of(cls, comms: BusContext, frame: HeartbeatFrame,
            states: tuple[TeammateState, ...], *, delivery: TeamDelivery,
            usage: CodexUsage) -> TeamHud:
         """The one team board, prepared with its first teammate's delivery; for_delivery gives
@@ -684,7 +684,7 @@ class TeamBoardPublicationStore(
         return cls.read_cut(root, selection).huds
 
     @classmethod
-    def read_for(cls, comms: Comms, recipient: str) -> TeamHud:
+    def read_for(cls, comms: BusContext, recipient: str) -> TeamHud:
         thread = comms.registry.require(recipient)
         owner = comms.registry.require(
             thread.teammate()

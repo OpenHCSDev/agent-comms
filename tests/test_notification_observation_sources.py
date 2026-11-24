@@ -16,11 +16,11 @@ from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.storage.file_observation import FileObservation, FileRevision
 from agent_comms.ui_model.observation import (
     NotificationsObserved,
-    ObservationService,
     ObserveNotifications,
     ReadNotifications,
     RevisionObserved,
 )
+from agent_comms.ui_model.observation_service import ObservationService
 from observation_pass_fixture import watched_pass
 from test_coordinated_runtime import tmp_path  # noqa: F401
 from test_following_context_notifications import following_input, following_session
@@ -37,7 +37,7 @@ def observing_notifications(
         request = ReadNotifications(
             str(comms.root), LiveNotificationRead(references, limit=RecipientLimit(1)),
         )
-        ObserveNotifications(frozenset((request,))).receive(service)
+        service.accept(ObserveNotifications(frozenset((request,))))
         try:
             yield service, client
         finally:

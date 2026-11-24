@@ -15,8 +15,14 @@ from agent_comms.registry.thread_model import CliInboxThreadModel, DeclaredModel
 from agent_comms.registry.threads import ChosenModel, CliInboxModelChoice, ExternalThread, ForkThread, NativeThread
 from agent_comms.transport.tools.sidebar import CommsPrepareTargetActionTool, CommsTargetActionsTool
 from agent_comms.ui_model.observation import (
-    CoreReadAnswered, CoreReadOperation, ObservationService, ReadNotifications,
-    ServiceEnd, ViewerEnd,
+    CoreReadAnswered,
+    CoreReadOperation,
+    ReadNotifications,
+    ViewerEnd,
+)
+from agent_comms.ui_model.observation_service import (
+    ObservationService,
+    ServiceEnd,
 )
 from agent_comms.messaging.notification_reads import LiveNotificationRead
 from conftest import ui_core_read
