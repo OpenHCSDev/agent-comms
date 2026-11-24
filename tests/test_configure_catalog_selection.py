@@ -11,8 +11,8 @@ from agent_comms.execution.runtime_observations import NativeMetadataObservation
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_model import DeclaredModel, UndeclaredModel
-from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.registry.thread_model import CliInboxThreadModel, DeclaredModel, UndeclaredModel
+from agent_comms.registry.threads import ChosenModel, CliInboxModelChoice, ExternalThread, ForkThread, NativeThread
 from agent_comms.transport.tools.sidebar import CommsPrepareTargetActionTool, CommsTargetActionsTool
 from agent_comms.ui_model.observation import (
     CoreReadAnswered, CoreReadOperation, ObservationService, ReadNotifications,
@@ -80,20 +80,84 @@ async def test_configure_form_keeps_its_thread_context_and_observer(comms, tmp_p
             comms.views.transcript_reads.close()
 
 
-def test_only_a_native_owner_is_offered_next_turn_settings(comms, tmp_path, monkeypatch):
-    """Configure writes a NativeThread and discovers its native runtime's catalogs. An external
-    CLI (a bridged Claude Code reporting "claude-opus-5-5", which no native provider/model
-    spelling decodes) is not offered the form whose choices could only fail to load."""
+def test_configure_merges_cli_inbox_into_model_picker_and_removes_standalone_menu_verbs(
+    comms, tmp_path, monkeypatch,
+):
+    """Both native Pi and independent CLI-inbox threads use Configure's model picker to switch
+    between Pi models and CLI inbox; subagents do not, and cli-inbox/native-thread are no longer
+    separate right-click menu actions."""
     project = Checkout(tmp_path)
     native = comms.registry.declare(NativeThread(
         "native-subject", frozenset(), project, model=DeclaredModel("test/old")))
     cli = comms.registry.declare(ExternalThread("cli-subject", frozenset(), project))
     comms.agents.observe_runtime_info(cli.name, NativeMetadataObservation(model=DeclaredModel("claude-opus-5-5")))
+    comms.registry.register_child("cli-child", cli.name, ForkThread, comms.goals)
+    child = comms.registry.require("cli-child")
 
     def offered(thread) -> list[str]:
         menu = ui_core_read(comms, CommsTargetActionsTool(
             project=project, targets=CommandTarget.arguments((thread.name,), project)))
         return [action.declaration.declared_name for action in menu.actions]
 
-    assert "configure" in offered(native)
-    assert "configure" not in offered(cli)
+    native_menu = offered(native)
+    cli_menu = offered(cli)
+    assert "configure" in native_menu
+    assert "configure" in cli_menu
+    assert "cli-inbox" not in native_menu
+    assert "native-thread" not in cli_menu
+    assert "configure" not in offered(child)
+
+    # Opening Configure on an external CLI reporting a non-Pi model sees CliInboxThreadModel
+    # and skips Pi thinking-level discovery instead of failing.
+    assert comms.threads.running_selection(cli.name).model == CliInboxThreadModel()
+
+    async def fake_models(option, selection):
+        return [
+            CatalogChoice("Old", "test/old"),
+            CatalogChoice("New", "test/new"),
+            CatalogChoice("CLI inbox", "cli-inbox", "External CLI or MCP session on this thread's inbox"),
+        ]
+
+    thinking_calls = 0
+
+    async def fake_thinking(option, selection):
+        nonlocal thinking_calls
+        if not selection.model.discovers_thinking_levels:
+            return []
+        thinking_calls += 1
+        return [CatalogChoice("Default", None)]
+
+    monkeypatch.setattr(ModelConfigOption, "discover", fake_models)
+    monkeypatch.setattr(ThinkingLevelConfigOption, "discover", fake_thinking)
+
+    # Switch Native Pi -> CLI inbox through Configure's model picker.
+    to_cli = ConfigureCliCommand(name=native.name, model=CliInboxModelChoice()).apply(comms)
+    assert to_cli.model == CliInboxThreadModel()
+    assert isinstance(comms.registry.require(native.name), ExternalThread)
+    assert thinking_calls == 0
+
+    # Switch CLI inbox -> Native Pi with a chosen model through Configure's model picker.
+    to_native = ConfigureCliCommand(name=cli.name, model=ChosenModel("test/new")).apply(comms)
+    assert to_native.model == DeclaredModel("test/new")
+    restored = comms.registry.require(cli.name)
+    assert isinstance(restored, NativeThread)
+    assert restored.model == DeclaredModel("test/new")
+
+    # Round-trip FieldCodec decoding for "cli-inbox" in both ThreadModel and ModelChoice.
+    assert FieldCodec.decode(CliInboxThreadModel, "cli-inbox") == CliInboxThreadModel()
+    assert FieldCodec.decode(CliInboxModelChoice, "cli-inbox") == CliInboxModelChoice()
+    assert FieldCodec.encode(CliInboxThreadModel()) == "cli-inbox"
+    assert FieldCodec.encode(CliInboxModelChoice()) == "cli-inbox"
+
+    # Creating a new thread with model=CliInboxThreadModel() declares an ExternalThread directly.
+    from agent_comms.projects.checkouts import LaunchCheckout
+    from agent_comms.registry.thread_management import NewThreadSpec
+    from agent_comms.registry.thread_status import NoBridgeThreadStatus
+    created = comms.threads.create(NewThreadSpec(
+        name="fresh-cli",
+        project=LaunchCheckout(tmp_path),
+        model=CliInboxThreadModel(),
+        thinking_level=native.thinking_level,
+    ))
+    assert isinstance(created, ExternalThread)
+    assert isinstance(comms.registry.status("fresh-cli"), NoBridgeThreadStatus)

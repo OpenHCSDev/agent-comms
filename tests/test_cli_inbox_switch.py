@@ -224,6 +224,11 @@ def test_models_json_invalidates_catalog_and_surfaces_labels(tmp_path: Path, mon
             value="openai-codex/gpt-5.6-sol",
             description=None,
         ),
+        CatalogChoice(
+            name="CLI inbox",
+            value="cli-inbox",
+            description="External CLI or MCP session on this thread's inbox",
+        ),
     ]
     # Cached on repeat call when neither auth.json nor models.json changed.
     assert asyncio.run(catalog.choices(thread)) == first

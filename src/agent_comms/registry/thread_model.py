@@ -4,25 +4,77 @@ from abc import (
     ABC,
     abstractmethod,
 )
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import ClassVar, Self
+
+from pydantic import JsonValue
 
 from agent_comms.execution.native_arguments import NativeArguments, ProviderChoice, SelectedModel
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.pi_vocabulary import ServiceTier, ThinkingChoice
-from agent_comms.nominal.field_codec import SubclassUnion, boundary_decoder
+from agent_comms.nominal.field_codec import (
+    DecoderPlan,
+    ExternalField,
+    SubclassUnion,
+    WireValue,
+    boundary_decoder,
+    compile_decoder,
+)
 from agent_comms.registry.thread_text import AbsentText, GivenText, TextChoice
-
-if TYPE_CHECKING:
-    from agent_comms.execution.pi_commands import SetModel
 
 
 class ModelSelection(TextChoice):
     """A model's spelling and native arguments, shared by saved values and requests."""
 
+    discovers_thinking_levels: ClassVar[bool] = True
+
     @abstractmethod
     def native(self, arguments: NativeArguments) -> NativeArguments: ...
+
+
+class CliInboxSelection(ExternalField, WireValue, ModelSelection):
+    """Selects external CLI-inbox execution instead of a native Pi provider/model."""
+
+    __slots__ = ()
+    wire_value: ClassVar[str] = "cli-inbox"
+    choice_label: ClassVar[str] = "CLI inbox"
+    choice_description: ClassVar[str] = "External CLI or MCP session on this thread's inbox"
+    discovers_thinking_levels: ClassVar[bool] = False
+
+    def otherwise[Default](self, default: Default) -> str:
+        return self.wire_value
+
+    def require(self, missing: str) -> str:
+        return self.wire_value
+
+    def texts(self) -> tuple[str, ...]:
+        return (self.wire_value,)
+
+    def native(self, arguments: NativeArguments) -> NativeArguments:
+        return arguments
+
+    @classmethod
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
+        return compile_decoder(str)
+
+    @classmethod
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
+        return cls.from_wire(value)
+
+    @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        return {"const": cls.wire_value}
+
+    def to_wire(self) -> str:
+        return self.wire_value
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        if data == cls.wire_value:
+            return cls()
+        raise ValueError(f"Expected {cls.wire_value!r}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +119,7 @@ class ThreadModel(SubclassUnion, ModelSelection, affix="Model"):
         """An undeclared model takes the previous or observed one; a declared one keeps itself."""
 
     @abstractmethod
-    def set_model(self, command: type[SetModel]) -> SetModel: ...
+    def set_model[Command](self, command: Callable[..., Command]) -> Command: ...
 
     @abstractmethod
     def require_reported(self) -> DeclaredModel:
@@ -76,13 +128,25 @@ class ThreadModel(SubclassUnion, ModelSelection, affix="Model"):
     @abstractmethod
     def qualified_by(self, provider: ProviderChoice) -> ThreadModel: ...
 
+    def create_thread[Spec, Management, Created](
+        self, spec: Spec, management: Management,
+        native_create: Callable[[Spec], Created],
+        cli_inbox_create: Callable[[Spec], Created],
+    ) -> Created:
+        return native_create(spec)
+
 
 @dataclass(frozen=True, slots=True)
 class DeclaredModel(NamedModel, ThreadModel):
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.text == CliInboxSelection.wire_value:
+            raise ValueError(f"{CliInboxSelection.wire_value!r} selects CLI inbox, not a native model.")
+
     def applied(self, previous: ThreadModel) -> DeclaredModel:
         return self
 
-    def set_model(self, command: type[SetModel]) -> SetModel:
+    def set_model[Command](self, command: Callable[..., Command]) -> Command:
         selected = SelectedModel.decode(self.text)
         return command(provider=selected.provider, model_id=selected.model)
 
@@ -94,11 +158,35 @@ class DeclaredModel(NamedModel, ThreadModel):
 
 
 @dataclass(frozen=True, slots=True)
+class CliInboxThreadModel(CliInboxSelection, ThreadModel):
+    """Explicit CLI-inbox selection in a thread model slot (e.g. + New Session or Configure)."""
+
+    def applied(self, previous: ThreadModel) -> CliInboxThreadModel:
+        return self
+
+    def set_model[Command](self, command: Callable[..., Command]) -> Command:
+        return command()
+
+    def require_reported(self) -> DeclaredModel:
+        raise NativePiUnavailable("CLI inbox thread has no native Pi model")
+
+    def qualified_by(self, provider: ProviderChoice) -> CliInboxThreadModel:
+        return self
+
+    def create_thread[Spec, Management, Created](
+        self, spec: Spec, management: Management,
+        native_create: Callable[[Spec], Created],
+        cli_inbox_create: Callable[[Spec], Created],
+    ) -> Created:
+        return cli_inbox_create(spec)
+
+
+@dataclass(frozen=True, slots=True)
 class UndeclaredModel(UnselectedModel, ThreadModel):
     def applied(self, previous: ThreadModel) -> ThreadModel:
         return previous
 
-    def set_model(self, command: type[SetModel]) -> SetModel:
+    def set_model[Command](self, command: Callable[..., Command]) -> Command:
         return command()
 
     def require_reported(self) -> DeclaredModel:

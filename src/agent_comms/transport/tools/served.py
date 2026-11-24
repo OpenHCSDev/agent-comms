@@ -127,10 +127,11 @@ from agent_comms.registry.thread_management import (
     TagChoice,
     ThreadTitleResult,
 )
-from agent_comms.registry.thread_model import ThreadModel
+from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.transcript.transcripts import NotifiedThreadPresentation
 from agent_comms.registry.threads import (
     ArchiveOwnerControl,
+    ConfigurableThreadCommand,
     ExternalOwnerCommand,
     NativeOwnerCommand,
     NextTurnConfiguration,
@@ -655,10 +656,11 @@ class CallerSubject(NullMember, ToolSubject):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsModelTool(ThreadsArea, NextTurnConfiguration, NativeOwnerCommand, NativeToolRequest):
+class CommsModelTool(ThreadsArea, NextTurnConfiguration, ConfigurableThreadCommand, NativeToolRequest):
     label = "Change Thread Model"
     description = (
-        "Change this thread's model, or another thread's model, for its future turns. "
+        "Change this thread's model, or another thread's model, for its future turns, "
+        "or switch between a native Pi model and CLI inbox (`cli-inbox`). "
         "Optionally change its thinking level and provider service tier too. Applies "
         "from that thread's next turn."
     )
@@ -668,11 +670,16 @@ class CommsModelTool(ThreadsArea, NextTurnConfiguration, NativeOwnerCommand, Nat
     ] = CallerSubject()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ModelChanged:
-        """Change this thread's model or another thread's model for future turns."""
+        """Change this thread's model or switch execution mode for future turns."""
         thread_name = self.thread.name(caller)
         original = comms.registry.require(thread_name)
-        thread = comms.threads.set_thread_configuration(original, self)
-        return ModelChanged(thread=thread.name, model=thread.model, thinking_level=thread.thinking_level, service_tier=thread.service_tier)
+        thread = self.model.apply_to_thread(comms.threads, original, self)
+        return ModelChanged(
+            thread=thread.name,
+            model=thread.catalog_model(UndeclaredModel()),
+            thinking_level=thread.thinking_level,
+            service_tier=thread.service_tier,
+        )
 
 
 class ServedCommsSortChannelsTool(ChannelsArea, NativeToolRequest, CommsSortChannelsTool):
@@ -1309,14 +1316,13 @@ class CommsStopTool(ThreadsArea, NativeOwnerCommand, OwnerLifecycleControl, Thre
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsCliInboxTool(ThreadsArea, NativeOwnerCommand, OwnerLifecycleControl, ThreadContextAction):
+class CommsCliInboxTool(ThreadsArea, NativeOwnerCommand, OwnerLifecycleControl, NativeToolRequest):
     label = "Switch to CLI Inbox"
     description = (
         "Switch a native Pi thread onto a CLI inbox without changing its identity, "
         "aliases, tags, goal, orders, inbox cursor, or saved Pi session. Stops any "
         "running native Pi process first so an external CLI or MCP session can take over."
     )
-    action_label = "Switch to CLI inbox"
     name: Annotated[str, *tool_field("Thread name", ContextSource(SubjectBinding))]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadExecutionResult:
@@ -1324,14 +1330,13 @@ class CommsCliInboxTool(ThreadsArea, NativeOwnerCommand, OwnerLifecycleControl, 
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsNativeThreadTool(ThreadsArea, ExternalOwnerCommand, OwnerLifecycleControl, ThreadContextAction):
+class CommsNativeThreadTool(ThreadsArea, ExternalOwnerCommand, OwnerLifecycleControl, NativeToolRequest):
     label = "Switch to Native Pi"
     description = (
         "Switch an independent CLI-inbox thread onto native Pi without changing its identity, "
         "aliases, tags, goal, orders, or inbox cursor. Reuses its preserved Pi session when "
         "present, or allocates a fresh session otherwise."
     )
-    action_label = "Switch to Native Pi"
     name: Annotated[str, *tool_field("Thread name", ContextSource(SubjectBinding))]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadExecutionResult:
