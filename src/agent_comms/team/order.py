@@ -1226,10 +1226,6 @@ class TeamVerbActionOffer(BoardActionOffer):
     observation: TextDigest
     recipient: ThreadIncarnation | None = None
 
-    def bind(self, recipient: ThreadIncarnation) -> Self:
-        """The packet owns one generic action; its board owner supplies the recipient."""
-        return self if self.recipient == recipient else replace(self, recipient=recipient)
-
     @property
     def label(self) -> str:
         return self.verb.help

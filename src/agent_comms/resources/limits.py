@@ -34,6 +34,9 @@ class DiskObservation(Observation):
     path: str = ""
     free_bytes: int = 0
 
+    def contribute_report(self, free_gib: dict[str, float], report: dict[str, object]) -> None:
+        free_gib[self.path] = round(self.free_bytes / GIB, 1)
+
 
 @dataclass(frozen=True)
 class DiskLimit(ResourceLimit, declared_name=None):
@@ -63,9 +66,7 @@ class DiskLimit(ResourceLimit, declared_name=None):
 
 
 class RootDiskLimit(DiskLimit):
-    path = Path("/")
-    warn_bytes = 8 * GIB
-    critical_bytes = 4 * GIB
+    """Root filesystem headroom; inherits DiskLimit's defaults directly."""
 
 
 class TmpDiskLimit(DiskLimit):
@@ -86,7 +87,8 @@ class HomeDiskLimit(DiskLimit):
     :class:`StorageRule` instead of a literal; its warn band stays declared."""
     path: ClassVar[Path] = Path("/home")
     warn_bytes: ClassVar[int] = 20 * GIB
-    root: Path = field(default_factory=lambda: Path("/var/tmp/agent-comms-live-20260927-wzjtqhza"))
+    default_root: ClassVar[Path] = Path.home() / ".agent-comms"
+    root: Path = field(default_factory=lambda: HomeDiskLimit.default_root)
 
     @property
     def critical_bytes(self) -> int:
@@ -96,6 +98,9 @@ class HomeDiskLimit(DiskLimit):
 @dataclass(frozen=True)
 class MemoryObservation(Observation):
     available_bytes: int = 0
+
+    def contribute_report(self, free_gib: dict[str, float], report: dict[str, object]) -> None:
+        report["ram_available_gib"] = round(self.available_bytes / GIB, 1)
 
 
 class MemoryLimit(ResourceLimit):
@@ -121,6 +126,9 @@ class MemoryLimit(ResourceLimit):
 @dataclass(frozen=True)
 class SwapObservation(Observation):
     used_bytes: int = 0
+
+    def contribute_report(self, free_gib: dict[str, float], report: dict[str, object]) -> None:
+        report["swap_used_gib"] = round(self.used_bytes / GIB, 1)
 
 
 class SwapLimit(ResourceLimit):

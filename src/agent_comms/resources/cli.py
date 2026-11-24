@@ -25,7 +25,6 @@ from agent_comms.resources.limit import Act, ResourceLimit, Scan, scan
 from agent_comms.resources.limits import (
     BranchLimit,
     CPULimit,
-    GIB,
     HomeDiskLimit,
     MemoryLimit,
     MemoryStallLimit,
@@ -57,37 +56,29 @@ def scan_limits(root: Path) -> tuple[ResourceLimit, ...]:
 
 
 def scan_report(result: Scan) -> dict:
-    """Shape the scan into the JSON the old script emitted, plus a verdicts
-    list. Keys match the predecessor so downstream readers don't re-learn."""
-    free_gib = {}
-    ram_available_gib = None
-    swap_used_gib = None
-    for verdict in result.verdicts:
-        obs = verdict.observation
-        if hasattr(obs, "free_bytes"):
-            free_gib[obs.path] = round(obs.free_bytes / GIB, 1)
-        if hasattr(obs, "available_bytes"):
-            ram_available_gib = round(obs.available_bytes / GIB, 1)
-        if hasattr(obs, "used_bytes"):
-            swap_used_gib = round(obs.used_bytes / GIB, 1)
-    return {
+    """Shape the scan into JSON: each observation contributes its own summary fields."""
+    free_gib: dict[str, float] = {}
+    report: dict[str, object] = {
         "level": result.level,
         "reasons": list(result.reasons),
         "free_gib": free_gib,
-        "ram_available_gib": ram_available_gib,
-        "swap_used_gib": swap_used_gib,
+        "ram_available_gib": None,
+        "swap_used_gib": None,
         "verdicts": [
             {
                 "resource": verdict.observation.resource,
                 "severity": verdict.declared_name,
                 "summary": verdict.observation.summary,
-                "reason": getattr(verdict, "reason", ""),
+                "reason": verdict.report_reason,
             }
             for verdict in result.verdicts
         ],
         "failures": [{"resource": name, "error": error}
                      for name, error in result.failures],
     }
+    for verdict in result.verdicts:
+        verdict.observation.contribute_report(free_gib, report)
+    return report
 
 
 def monitor_notify(level: str, reasons: tuple[str, ...]) -> None:
@@ -135,7 +126,7 @@ def main() -> None:
     scan_parser = subparsers.add_parser("scan", help="run every resource limit and print JSON")
     scan_parser.add_argument(
         "--root", type=Path,
-        default=Path("/var/tmp/agent-comms-live-20260927-wzjtqhza"),
+        default=HomeDiskLimit.default_root,
         help="project root for HomeDiskLimit's StorageRule lookup",
     )
     scan_parser.add_argument("--assert-healthy", action="store_true",

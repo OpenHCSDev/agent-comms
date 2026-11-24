@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Self
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FrozenRecordMember, TaggedRecordMember
@@ -30,11 +31,11 @@ class BoardActionOffer(
     def text(self) -> str:
         return " ".join(self.words)
 
-    def bind(self, recipient: ThreadIncarnation) -> BoardActionOffer:
+    recipient: ThreadIncarnation | None
+
+    def bind(self, recipient: ThreadIncarnation) -> Self:
         """Bind this recipient-neutral action to the board incarnation executing it."""
-        return self if getattr(self, "recipient", None) == recipient else replace(
-            self, recipient=recipient,
-        )
+        return self if self.recipient == recipient else replace(self, recipient=recipient)
 
     @abstractmethod
     def execute(self, root: Path, actor: str) -> BoardActionApplied:
