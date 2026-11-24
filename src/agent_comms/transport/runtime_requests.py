@@ -30,7 +30,7 @@ from agent_comms.planning.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.planning.goal_scope import AllGoals, OneGoal
-from agent_comms.planning.goals import Goal, GoalDeclaration, GoalRevision
+from agent_comms.planning.goals import Goal, GoalDeclaration, GoalReply, GoalRevision
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import Thread
@@ -136,11 +136,6 @@ class GoalHistoryRuntimeRequest(AttachedResultRuntimeRequest):
 
     def held_by_bus(self, comms: Comms, thread: Thread) -> object:
         return FieldCodec.encode(comms.goals.recorded_history(thread.name, self.goal_id))
-
-
-@dataclass(frozen=True)
-class GoalReply(DeclaredReply):
-    goal: Goal
 
 
 class HeldGoalChange(AttachedResultRuntimeRequest, declared_name=None):

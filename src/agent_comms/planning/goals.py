@@ -72,6 +72,7 @@ from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.shell_effects import shell_storage_effects
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.transport.tool_result import DeclaredReply
 from agent_comms.ui_model.goal import GoalDisplay, GoalExecutionDisplay
 from agent_comms_hooks.shell_commands import ShellCommand
 
@@ -957,3 +958,8 @@ class Goal(RecordMember, GoalDeclaration):
     @property
     def summary(self) -> str:
         return f"Goal · {self.state.display_label()}: {self.text}"
+
+
+@dataclass(frozen=True)
+class GoalReply(DeclaredReply):
+    goal: Goal

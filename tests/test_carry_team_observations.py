@@ -24,9 +24,9 @@ from agent_comms.task_attachments.team_pings import (
     TeamUpdateStore,
 )
 from agent_comms.team.standing_rules import ServicePassFailing
+from agent_comms.team.team_board_selection import NamedTeamBoards
 from agent_comms.team.team_hud import (
     CodexUsage,
-    NamedTeamBoards,
     TeamBoardPublicationStore,
     TeamHud,
     TeamPlan,
