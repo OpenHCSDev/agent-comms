@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from contextvars import Context
 from functools import partial
+from typing import ClassVar
 
 from agent_comms.execution.child_process import AsyncWork
 from agent_comms.execution.publication_measurements import WorkCpu
@@ -13,6 +14,8 @@ from agent_comms.storage.store_files import StoreLock
 
 class CoordinationWork:
     """The shared resource context for blocking store and registry operations."""
+
+    watch_period: ClassVar[float] = 60
 
     @staticmethod
     def worker_context() -> Context:

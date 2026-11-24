@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from typing import Annotated, ClassVar, Self
 
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.messaging.watched import Watched
 from agent_comms.nominal.field_codec import WireExclude, WireTransient, projected
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -28,7 +28,7 @@ class CompletedWatch:
     def completion_ceiling(cls) -> float:
         """How long a new runtime may take to record its first completion: one cadence (a pass,
         then the service loop's sleep) plus one pass of slack."""
-        return 2 * cls.pass_duration + Coordination.watch_period
+        return 2 * cls.pass_duration + CoordinationWork.watch_period
 
 
 class TeamPass(CompletedWatch):

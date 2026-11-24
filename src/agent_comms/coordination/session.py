@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from abc import ABC
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from functools import cached_property, partial
@@ -124,7 +125,17 @@ class NativeCommit(NativeCapture):
         return self.bus._registry.store.current_snapshot()
 
 
-class CoordinationSession(CoordinationStore):
+class CoordinationSessionOwner(ABC):
+    """Any holder exposing an open coordination session."""
+
+    session: CoordinationSession
+
+
+class CoordinationSession(CoordinationStore, CoordinationSessionOwner):
+    @property
+    def session(self) -> CoordinationSession:
+        return self
+
     def __init__(
         self, path: str, *, clock_ms: Callable[[], int] = system_clock,
         contention: StoreContention = DEFAULT_STORE_CONTENTION,

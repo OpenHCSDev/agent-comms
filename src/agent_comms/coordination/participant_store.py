@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from abc import ABC
 from dataclasses import dataclass
 
 from agent_comms.coordination.errors import (
@@ -45,6 +46,12 @@ class ParticipantSnapshot:
         """The generation and pointer are both required parts of this recorded answer."""
         return (self.owner_identity.retain_original(original)
                 + self.pointer.retain_original(original))
+
+
+class ParticipantStoreOwner(ABC):
+    """Any holder exposing the coordinator's participant store."""
+
+    participants: ParticipantStore
 
 
 class ParticipantStore:

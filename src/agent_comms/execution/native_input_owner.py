@@ -11,8 +11,8 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import StaleFence
+from agent_comms.coordination.participant_store import ParticipantStoreOwner
 from agent_comms.coordination.tables.participants import OwnerGenerations
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
@@ -195,7 +195,7 @@ class ParticipantOwner:
             owner_lookup=lookup, generation=self.generation
         )
 
-    def require(self, store: Coordination, lookup: ThreadLookup) -> None:
+    def require(self, store: ParticipantStoreOwner, lookup: ThreadLookup) -> None:
         participant = store.participants.get(lookup)
         if not participant.committed or participant.owner_identity != self.coordinator_identity(lookup):
             raise StaleFence("cohort participant generation changed")
