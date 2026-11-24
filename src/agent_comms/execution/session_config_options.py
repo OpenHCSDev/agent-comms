@@ -151,6 +151,17 @@ class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
             self.comms.threads.set_thread_configuration, thread, change,
         ))
 
+    async def switch_to_cli_inbox(self, thread: Thread) -> None:
+        """Switch this running native Pi thread onto a CLI inbox, then close its own runtime."""
+        await Coordination.run_worker(partial(
+            self.comms.threads.switch_to_cli_inbox, thread.name, stop_owner=False,
+        ))
+        self.runtime.background(self._retire_after_switch())
+
+    async def _retire_after_switch(self) -> None:
+        await asyncio.sleep(0)
+        await self.runtime.close()
+
     @staticmethod
     def stored_settings(thread: Thread) -> UseSettings:
         return UseSettings(thread.model, thread.thinking_level)

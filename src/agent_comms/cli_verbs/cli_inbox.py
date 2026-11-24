@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from agent_comms.cli_support.thread_lifecycle import ThreadLifecycleCliCommand
-from agent_comms.cli_verbs.cli_command import TargetActionCommand
+from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.cli_verbs.cli_result import TargetEditResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import FieldCodec, RecordMember
@@ -22,11 +22,10 @@ class CliInboxCliCommand(
     NativeOwnerCommand,
     OwnerLifecycleControl,
     ThreadLifecycleCliCommand,
-    TargetActionCommand[ThreadExecutionResult],
+    CliCommand[ThreadExecutionResult],
     declared_name="cli-inbox",
 ):
     help = "Switch a native Pi thread onto a CLI inbox without changing its identity"
-    menu_label = "CLI inbox"
 
     def apply(self, ctx: Comms) -> ThreadExecutionResult:
         switched = ctx.threads.switch_to_cli_inbox(self.name)

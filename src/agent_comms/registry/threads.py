@@ -5,11 +5,11 @@ from __future__ import annotations
 import os
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Protocol
 
 from agent_comms.agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
 from agent_comms.context_segments.wake_values import WakeWorkContext, WakeWorkSource
@@ -89,6 +89,8 @@ from agent_comms.registry.thread_identity import (
 )
 from agent_comms.registry.thread_model import (
     CatalogSelection,
+    CliInboxSelection,
+    CliInboxThreadModel,
     DeclaredModel,
     ModelSelection,
     NamedModel,
@@ -145,6 +147,14 @@ class ExternalOwnerCommand(ThreadCommandAvailability):
     @classmethod
     def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
         return thread.external_command_available(cls, status)
+
+
+class ConfigurableThreadCommand(ThreadCommandAvailability):
+    """A configuration command available to native Pi threads and independent CLI-inbox threads."""
+
+    @classmethod
+    def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
+        return thread.configurable_command_available(cls, status)
 
 
 class OwnerLifecycleControl(ThreadCommandAvailability):
@@ -230,8 +240,38 @@ class KeptSetting(NextTurnSetting):
         return thread
 
 
+class ThreadConfigurationTarget(Protocol):
+    def set_thread_configuration(
+        self, original: Thread, configuration: NextTurnConfiguration,
+    ) -> Thread: ...
+
+    def switch_to_cli_inbox(self, name: str) -> ExternalThread: ...
+
+    def switch_to_native(self, name: str) -> NativeThread: ...
+
+
+class AcpModelChanges[Configuration, Command](Protocol):
+    def configure_thread(
+        self, configuration: Configuration, thread: Thread, command: Command,
+    ) -> Awaitable[None]: ...
+
+    def switch_to_cli_inbox(self, thread: Thread) -> Awaitable[None]: ...
+
+
 class ModelChoice(NextTurnSetting, SubclassUnion, ModelSelection, affix="Model"):
-    pass
+    @abstractmethod
+    def apply_to_thread(
+        self, threads: ThreadConfigurationTarget, original: Thread, configuration: NextTurnConfiguration,
+    ) -> Thread: ...
+
+    @abstractmethod
+    async def apply_acp[Configuration, Command](
+        self,
+        owner: AcpModelChanges[Configuration, Command],
+        configuration: Configuration,
+        thread: Thread,
+        set_model: Callable[..., Command],
+    ) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,10 +284,61 @@ class ChosenModel(NamedModel, ModelChoice):
     def configured(self, thread: Thread) -> Thread:
         return replace(thread, model=DeclaredModel(self.text))
 
+    def apply_to_thread(
+        self, threads: ThreadConfigurationTarget, original: Thread, configuration: NextTurnConfiguration,
+    ) -> Thread:
+        return original.apply_chosen_model(threads, configuration)
+
+    async def apply_acp[Configuration, Command](
+        self,
+        owner: AcpModelChanges[Configuration, Command],
+        configuration: Configuration,
+        thread: Thread,
+        set_model: Callable[..., Command],
+    ) -> None:
+        selected = SelectedModel.decode(self.text)
+        await owner.configure_thread(
+            configuration, thread, set_model(provider=selected.provider, model_id=selected.model),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CliInboxModelChoice(CliInboxSelection, ModelChoice):
+    """Selecting CLI inbox switches a native Pi thread onto a CLI inbox without losing identity."""
+
+    def configured(self, thread: Thread) -> Thread:
+        return replace(thread, model=CliInboxThreadModel())
+
+    def apply_to_thread(
+        self, threads: ThreadConfigurationTarget, original: Thread, configuration: NextTurnConfiguration,
+    ) -> Thread:
+        return original.apply_cli_inbox(threads)
+
+    async def apply_acp[Configuration, Command](
+        self,
+        owner: AcpModelChanges[Configuration, Command],
+        configuration: Configuration,
+        thread: Thread,
+        set_model: Callable[..., Command],
+    ) -> None:
+        await owner.switch_to_cli_inbox(thread)
+
 
 @dataclass(frozen=True, slots=True)
 class KeptModel(UnselectedModel, KeptSetting, ModelChoice):
-    pass
+    def apply_to_thread(
+        self, threads: ThreadConfigurationTarget, original: Thread, configuration: NextTurnConfiguration,
+    ) -> Thread:
+        return original.apply_kept_model(threads, configuration)
+
+    async def apply_acp[Configuration, Command](
+        self,
+        owner: AcpModelChanges[Configuration, Command],
+        configuration: Configuration,
+        thread: Thread,
+        set_model: Callable[..., Command],
+    ) -> None:
+        return None
 
 
 class ServiceTierChoice(NextTurnSetting, SubclassUnion, affix="ServiceTier"):
@@ -901,6 +992,27 @@ class Thread(
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
         return FieldCodec.encode(self)
 
+    def configurable_command_available(
+        self, command: type[ThreadCommandAvailability], status: ThreadStatus,
+    ) -> bool:
+        return False
+
+    def catalog_model(self, observed: ThreadModel) -> ThreadModel:
+        return self.model.applied(observed)
+
+    def apply_chosen_model(
+        self, threads: ThreadConfigurationTarget, configuration: NextTurnConfiguration,
+    ) -> Thread:
+        return threads.set_thread_configuration(self, configuration)
+
+    def apply_kept_model(
+        self, threads: ThreadConfigurationTarget, configuration: NextTurnConfiguration,
+    ) -> Thread:
+        return threads.set_thread_configuration(self, configuration)
+
+    def apply_cli_inbox(self, threads: ThreadConfigurationTarget) -> Thread:
+        return threads.switch_to_cli_inbox(self.name)
+
 
 class NativeThread(Thread):
     __slots__ = ()
@@ -909,6 +1021,11 @@ class NativeThread(Thread):
     def native_command_available(self, command: type[ThreadCommandAvailability],
                                  status: ThreadStatus) -> bool:
         return command.available_for(status, process=self.process_identity)
+
+    def configurable_command_available(
+        self, command: type[ThreadCommandAvailability], status: ThreadStatus,
+    ) -> bool:
+        return self.native_command_available(command, status)
 
     def restart_candidates(self, status: ThreadStatus) -> tuple[Thread, ...]:
         if self.process_identity.runs_here():
@@ -939,6 +1056,28 @@ class ExternalThread(Thread):
                                    status: ThreadStatus) -> bool:
         return bool(self.independent_threads()) and command.available_for(
             status, process=self.process_identity)
+
+    def configurable_command_available(
+        self, command: type[ThreadCommandAvailability], status: ThreadStatus,
+    ) -> bool:
+        return self.external_command_available(command, status)
+
+    def catalog_model(self, observed: ThreadModel) -> ThreadModel:
+        return CliInboxThreadModel()
+
+    def apply_chosen_model(
+        self, threads: ThreadConfigurationTarget, configuration: NextTurnConfiguration,
+    ) -> Thread:
+        native = threads.switch_to_native(self.name)
+        return threads.set_thread_configuration(native, configuration)
+
+    def apply_kept_model(
+        self, threads: ThreadConfigurationTarget, configuration: NextTurnConfiguration,
+    ) -> Thread:
+        return self
+
+    def apply_cli_inbox(self, threads: ThreadConfigurationTarget) -> Thread:
+        return self
 
     @cached_property
     def runtime(self) -> RuntimeLocation:

@@ -348,7 +348,7 @@ class ThreadManagement:
                     raise
         return ThreadImported.of(name, session_path, snapshot)
 
-    def switch_to_cli_inbox(self, name: str) -> ExternalThread:
+    def switch_to_cli_inbox(self, name: str, *, stop_owner: bool = True) -> ExternalThread:
         """Switch a native Pi thread onto a CLI inbox without changing its identity.
 
         The birth (``created_at``), aliases, tags, goal, orders, storage roots, inbox
@@ -360,10 +360,11 @@ class ThreadManagement:
         selected.status(original.name).require_visible(
             f"Thread {original.name!r} is not visible; restore it before switching execution."
         )
-        self.owners.stop(original.name)
+        if stop_owner:
+            self.owners.stop(original.name)
         with self.registry.store.editing() as edit:
             current = edit.document.require(original.name)
-            if not edit.original.snapshot.same_thread(current, selected, original):
+            if current.incarnation != original.incarnation:
                 raise RelationViolationError("Thread changed while switching to CLI inbox.")
             NativeThread.stored(current)
             switched = current.without_turn().as_member(
@@ -392,7 +393,7 @@ class ThreadManagement:
         self.owners.stop(original.name)
         with self.registry.store.editing() as edit:
             current = edit.document.require(original.name)
-            if not edit.original.snapshot.same_thread(current, selected, original):
+            if current.incarnation != original.incarnation:
                 raise RelationViolationError("Thread changed while switching to native Pi.")
             ExternalThread.stored(current)
             prior = current.session_file.location(current.backend)
@@ -619,7 +620,7 @@ class ThreadManagement:
         thread = self.registry.require(name)
         return RunningSelection(
             thread,
-            thread.model.applied(self.agents.agent_info_of(thread.name).model),
+            thread.catalog_model(self.agents.agent_info_of(thread.name).model),
         )
 
     def resolve_thread_model(
@@ -718,7 +719,12 @@ class ThreadManagement:
             )
 
     def create(self, spec: NewThreadSpec) -> Thread:
-        """Prepare the session, then register and launch the thread with its task as first input."""
+        """Prepare and register the thread: native Pi launches its owner, CLI inbox waits for a bridge."""
+        return spec.model.create_thread(
+            spec, self, self._create_native, self._create_cli_inbox,
+        )
+
+    def _create_native(self, spec: NewThreadSpec) -> Thread:
         resolved_bin = ConfiguredBinary().configured()
         runtime = LaunchRuntime.running()
         child = spec.declare(self, resolved_bin, runtime)
@@ -728,3 +734,13 @@ class ThreadManagement:
             child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
         ) as owner:
             return owner
+
+    def _create_cli_inbox(self, spec: NewThreadSpec) -> ExternalThread:
+        thread = ExternalThread(
+            name=spec.name,
+            tags=spec.tags.for_new(),
+            worktree=spec.project,
+            task=spec.task.thread_text(),
+        )
+        self.registry.require_declaration_available(thread, NoBridgeThreadStatus())
+        return ExternalThread.stored(self.registry.declare(thread, NoBridgeThreadStatus()))

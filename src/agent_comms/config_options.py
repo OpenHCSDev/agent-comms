@@ -31,7 +31,7 @@ from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AcpSessionId, Description, FieldCodec, FieldPlan
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.registry.thread_model import CatalogSelection, ThreadModel
+from agent_comms.registry.thread_model import CatalogSelection, CliInboxSelection, ThreadModel
 from agent_comms.registry.thread_settings import (
     ConfigurationSlot,
     ContextEditPolicy,
@@ -44,6 +44,7 @@ from agent_comms.registry.thread_settings import (
 from agent_comms.registry.threads import (
     ChosenContextEdit,
     ChosenServiceTier,
+    ModelChoice,
     NextTurnConfiguration,
     Thread,
 )
@@ -102,6 +103,9 @@ class ConfigurationChanges[Configuration](ABC):
     async def store_configuration(
         self, thread: Thread, change: NextTurnConfiguration,
     ) -> None: ...
+
+    @abstractmethod
+    async def switch_to_cli_inbox(self, thread: Thread) -> None: ...
 
 
 class ConfigOption(DeclaredFamily, affix="ConfigOption"):
@@ -237,15 +241,20 @@ class ModelConfigOption(ModelSetting, CatalogConfigOption):
         return (thread.project_path, self.owner.agent_args.argv)
 
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
-        return await self.owner.models.choices(self.owner, thread.project_path)
+        return [
+            *(await self.owner.models.choices(self.owner, thread.project_path)),
+            CatalogChoice(
+                name=CliInboxSelection.choice_label,
+                value=CliInboxSelection.wire_value,
+                description=CliInboxSelection.choice_description,
+            ),
+        ]
 
     async def apply(
         self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
     ) -> None:
-        provider, model = value.split("/", 1)
-        await owner.configure_thread(
-            self.owner, thread, SetModel(provider=provider, model_id=model),
-        )
+        choice = FieldCodec.decode(ModelChoice, value)
+        await choice.apply_acp(owner, self.owner, thread, SetModel)
 
 
 class ThinkingLevelConfigOption(ThinkingSetting, CatalogConfigOption):
@@ -256,6 +265,8 @@ class ThinkingLevelConfigOption(ThinkingSetting, CatalogConfigOption):
 
 
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
+        if not thread.model.discovers_thinking_levels:
+            return []
         data = await GetAvailableThinkingLevels().discover(
             self.owner.launch.binary,
             thread.model.native(self.owner.agent_args).argv,

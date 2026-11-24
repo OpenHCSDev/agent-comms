@@ -163,6 +163,7 @@ async def test_menu_offers_the_catalog_when_the_running_model_left_it(tmp_path, 
             ("gone/model (unavailable)", "gone/model"),
             ("test/one", "test/one"),
             ("test/two", "test/two"),
+            ("CLI inbox", "cli-inbox"),
         ]
     finally:
         await owner.shutdown()
