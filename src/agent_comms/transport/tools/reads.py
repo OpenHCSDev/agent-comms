@@ -55,16 +55,16 @@ class TeammateRead(ReadRequest[TeammateDetail], declared_name="comms_team_unit")
     instructions, stories, commits and activity. The held incarnations and orders select the
     exact card and witness it; they are never whose authority the read runs under."""
 
-    label = "Team teammate"
+    label = "Teammate details"
     description = (
-        "Expand one teammate's card on a teammate's published frame: its orders' "
-        "bounded instructions, stories and commits, and its recent activity. "
-        "Refuses when either incarnation or the teammate's assignment changed."
+        "Expand one teammate's card on a published board frame: its orders' "
+        "instructions, stories, commits, and recent activity. "
+        "Refuses when either thread or the teammate's assignment changed."
     )
     frame_owner: Annotated[
-        ThreadIncarnation, *tool_field("Teammate incarnation whose published frame shows the card")
+        ThreadIncarnation, *tool_field("Teammate whose published frame shows the card")
     ]
-    unit: Annotated[ThreadIncarnation, *tool_field("Teammate incarnation on that card")]
+    unit: Annotated[ThreadIncarnation, *tool_field("Teammate shown on that card")]
     orders: Annotated[tuple[OrderId, ...], *tool_field("The card's orders, exactly as published")]
 
 

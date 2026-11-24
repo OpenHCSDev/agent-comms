@@ -324,8 +324,8 @@ class CommsMarkPageReadTool(ToolRequest[PageMarked]):
 
     label = "Mark page read"
     description = (
-        "Acknowledge the read evidence of exactly one painted conversation page, as "
-        "the project's human user; requires a human UI caller."
+        "Mark one shown conversation page as read for the project's human user; "
+        "requires a human UI caller."
     )
     page: Annotated[MessagePage, *tool_field("The painted page")]
     worktree: Annotated[Checkout, *tool_field("The project whose human user read it")]
@@ -456,7 +456,7 @@ class CommsRenameManagedThreadTool(ToolRequest[RenameThreadResult]):
     description = (
         "Rename a running managed thread after proving its process; requires a human UI caller."
     )
-    thread: Annotated[ThreadIncarnation, *tool_field("The thread incarnation the UI holds")]
+    thread: Annotated[ThreadIncarnation, *tool_field("The thread shown in the UI")]
     display_name: Annotated[str, *tool_field("The new display name")]
     owner: Annotated[ProcessIdentity, *tool_field("The process that manages the thread")]
 

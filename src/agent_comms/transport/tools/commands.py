@@ -211,7 +211,7 @@ class CommsSetThreadTitleTool(ToolRequest[ThreadTitleResult]):
         "Correct a managed thread's display title while its name and routing aliases stay"
         " unchanged; requires a human UI caller."
     )
-    thread: Annotated[ThreadIncarnation, *tool_field("The thread incarnation the UI holds")]
+    thread: Annotated[ThreadIncarnation, *tool_field("The thread shown in the UI")]
     title: Annotated[str, *tool_field("The new display title")]
     owner: Annotated[ProcessIdentity, *tool_field("The process that manages the thread")]
 
@@ -442,8 +442,7 @@ class CommsCollaborationTool(ToolRequest[CollaborationEdited]):
 class CommsCollaborationsTool(ThreadReadRequest[CollaborationList]):
     label = "List collaborations"
     description = (
-        "Read explicit contacts and goal-derived awareness with provenance, without "
-        "changing delivery, work acceptance or owners."
+        "Read contacts and goal-linked collaborators without changing delivery or owners."
     )
 
 
@@ -515,9 +514,9 @@ class CommsDecisionTool(AuthoredTaskRequest):
 class CommsConstraintTool(AuthoredTaskRequest):
     label = "Record Constraint"
     description = (
-        "Record a restriction verbatim on the original message, under your own "
-        "authorship rather than inferred human authority. Defaults to the current "
-        "project/goal or turn; corrections name the original constraint."
+        "Record a constraint verbatim on the original message under your own name, "
+        "never speaking for a human. Defaults to the current project/goal or turn; "
+        "corrections name the original constraint."
     )
     text: Annotated[
         str, *tool_field("Exact restriction wording, never a paraphrase of another source")
