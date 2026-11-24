@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from importlib.metadata import Distribution, distributions
+from importlib.metadata import Distribution
 from pathlib import Path, PurePosixPath
 from typing import ClassVar, Self
 from urllib.parse import unquote, urlsplit
 from zipfile import ZipExtFile, ZipFile
 
-from packaging.utils import canonicalize_name
 from pydantic import BaseModel, Field, JsonValue, RootModel
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 
@@ -191,22 +190,3 @@ class PackageRecord(BaseModel, WireValue):
         cls, by_alias: bool = True, ref_template: str = DEFAULT_REF_TEMPLATE
     ) -> dict[str, JsonValue]:
         return cls.model_json_schema(by_alias=by_alias, ref_template=ref_template)
-
-
-class DistributionProbe(TargetProbe):
-    """The selected interpreter's distribution inventory, rejecting duplicate identities."""
-
-    @staticmethod
-    def distributions() -> dict[str, Distribution]:
-        installed = tuple(distributions())
-        selected: dict[str, Distribution] = {
-            canonicalize_name(dist.name): dist for dist in installed
-        }
-        if len(selected) != len(installed):
-            raise ValueError("The runtime contains duplicate distribution identities")
-        return selected
-
-
-class DistributionVersionsProbe(DistributionProbe, RuntimeProbe[dict[str, str]]):
-    def run(self) -> dict[str, str]:
-        return {name: dist.version for name, dist in self.distributions().items()}

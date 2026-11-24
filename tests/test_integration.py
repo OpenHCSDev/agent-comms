@@ -45,11 +45,10 @@ from agent_comms.projects.head_review import (
     HeadReview,
     HeadSide,
     IntegrationInput,
-    MergeHeadReview,
-    PromotedHeadReview,
     PullRequestHead,
     ResolvedIntegrationSource,
 )
+from agent_comms.projects.merge_review import MergeHeadReview, PromotedHeadReview
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.storage.recorded_time import RecordedEventTime

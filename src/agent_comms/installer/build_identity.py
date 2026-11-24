@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.probes.interpreter import InterpreterBuild, RecordedInterpreterBuild
-from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
+from agent_comms.installer.runtime_record import RecordedResolution, RuntimePackage
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import GitCommitText, WireOmitDefault
 from agent_comms.planning.order_runs import OrderRun
@@ -179,7 +179,7 @@ class RecordedBuildIdentity(BuildIdentity, InstalledBuild):
     def at(cls, runtime: LaunchRuntime) -> RecordedBuildIdentity:
         """Read the selected build, never borrow the current pointer for a candidate."""
         runtime.require_available()
-        resolution = RuntimeResolution.at(runtime.prefix)
+        resolution = RecordedResolution.at(runtime.prefix)
         return cls(
             tuple(
                 RepositoryCommit(member.repository, GitCommitText.decode(member.commit(resolution)))

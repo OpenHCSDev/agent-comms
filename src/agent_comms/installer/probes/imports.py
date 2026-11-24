@@ -5,7 +5,7 @@ from pkgutil import walk_packages
 from typing import NoReturn
 
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
-from agent_comms.installer.runtime_resolution import ToadPackage
+from agent_comms.installer.runtime_record import ToadPackage
 
 
 class ClientImportsProbe(TargetProbe, RuntimeProbe[None]):

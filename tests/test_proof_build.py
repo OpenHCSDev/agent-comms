@@ -27,7 +27,8 @@ from agent_comms.installer.probes.packages import (
     GitRecord,
     PackageRecord,
 )
-from agent_comms.installer.runtime_resolution import CorePackage, RuntimePackage, RuntimeResolution
+from agent_comms.installer.runtime_record import CorePackage, RuntimePackage
+from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.planning.delivery_evidence import FileDeliveryEvidence
 from agent_comms.planning.goal_actions import CreateProblemGoalAction

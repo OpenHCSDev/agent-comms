@@ -27,7 +27,7 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.probes.native import PrepareProducerDigestsProbe
 from agent_comms.installer.runtime_home import TestHome
-from agent_comms.installer.runtime_resolution import CorePackage
+from agent_comms.installer.runtime_record import CorePackage
 from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.installer.upgrade import (
     CarriedRehearsal,

@@ -31,24 +31,21 @@ from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import RuntimeProbe
-from agent_comms.installer.probes.interpreter import (
-    InterpreterBuild,
-    InterpreterBuildProbe,
-    RecordedInterpreterBuild,
-)
-from agent_comms.installer.probes.packages import (
-    DistributionVersionsProbe,
-    GitPin,
-    PackagePin,
-    PackageRecord,
-    PreparePackageProbe,
-)
+from agent_comms.installer.probes.distributions import DistributionVersionsProbe
+from agent_comms.installer.probes.interpreter import InterpreterBuildProbe
+from agent_comms.installer.probes.packages import GitPin, PackagePin
 from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.runtime_record import (
+    CorePackage,
+    RecordedResolution,
+    RuntimePackage,
+)
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, GitCommitText, boundary_decoder
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.work_branches import WorkBranches
+from agent_comms_hooks import ToolRefusedError
 
 if TYPE_CHECKING:
     from agent_comms.installer.runtime_stack import RuntimeStack
@@ -657,58 +654,53 @@ class StackSources:
                 found[identity] = location
         return found
 
-
-class RuntimePackage(DeclaredFamily, affix="Package"):
-    distribution: ClassVar[str]
-    repository: ClassVar[RepositoryName]
+    @classmethod
+    def source_urls(cls, core: Repo, baseline: str, candidate: str) -> dict[RepositoryName, str]:
+        urls: dict[RepositoryName, str] = {}
+        for commit in (baseline, candidate):
+            declared = cls.declared_sources(
+                PrivateUvProject.decode(
+                    Repo.git(core.checkout, "show", f"{commit}:stack/pyproject.toml")
+                )
+            )
+            identities = tuple(Repo.repository_url(url) for url, branch in declared.values())
+            if len(set(identities)) != len(identities):
+                raise ToolRefusedError("One stack cut declares a Git repository more than once")
+            for url, _branch in declared.values():
+                identity = Repo.repository_url(url)
+                if identity == core.github:
+                    raise ToolRefusedError("The stack repeats Core as a Git companion source")
+                urls[identity] = url
+        return urls
 
     @classmethod
-    def commit(cls, resolution: RuntimeResolution) -> str:
-        return resolution.packages[cls.distribution].source.revision()
+    def declared_repositories(
+        cls, core: Repo, baseline: str, candidate: str
+    ) -> tuple[RepositoryName, ...]:
+        """Actual declarations on both sides own the universe, including added/removed clients."""
+        return tuple(
+            sorted(
+                {core.github, *cls.source_urls(core, baseline, candidate)},
+                key=lambda name: name.key,
+            )
+        )
 
     @classmethod
-    def pin(cls, resolution: RuntimeResolution) -> PackagePin:
-        """Package origin owns its pin; an archive is not a repository revision."""
-        return resolution.packages[cls.distribution].pin()
-
-    @classmethod
-    def preparations(cls) -> tuple[RuntimeProbe[None], ...]:
-        """Only packages declaring requirements add target-runtime operations."""
-        return ()
-
-
-class ConsoleScriptPackage:
-    """A runtime package whose console scripts the installer publishes."""
-
-
-class CorePackage(RuntimePackage, ConsoleScriptPackage):
-    distribution = "agent-comms"
-    repository = RepositoryName("OpenHCSDev", "agent-comms")
-
-    @classmethod
-    def commit(cls, resolution: RuntimeResolution) -> str:
-        return resolution.core_commit
-
-    @classmethod
-    def pin(cls, resolution: RuntimeResolution) -> PackagePin:
-        """Core's built wheel carries its source stamp separately from its URL."""
-        return GitPin(resolution.packages[cls.distribution].version, cls.commit(resolution))
-
-
-class ToadPackage(RuntimePackage, ConsoleScriptPackage):
-    distribution = "batrachian-toad"
-    repository = RepositoryName("OpenHCSDev", "toad")
-    # The module tree the distribution installs, which the client import probe walks.
-    import_root = "toad"
-
-    @classmethod
-    def preparations(cls) -> tuple[RuntimeProbe[None], ...]:
-        return (PreparePackageProbe(cls.distribution),)
-
-
-class TextualPackage(RuntimePackage):
-    distribution = "textual"
-    repository = RepositoryName("OpenHCSDev", "textual")
+    def require_carrier_contract(
+        cls, core: Repo, baseline: str, candidate: str, repositories: set[RepositoryName]
+    ) -> None:
+        if repositories != set(cls.declared_repositories(core, baseline, candidate)):
+            raise ToolRefusedError(
+                "Integration inputs omit a declared stack source or name an unknown one."
+            )
+        cls.require_compatible(
+            PrivateUvProject.decode(
+                Repo.git(core.checkout, "show", f"{baseline}:stack/pyproject.toml")
+            ),
+            PrivateUvProject.decode(
+                Repo.git(core.checkout, "show", f"{candidate}:stack/pyproject.toml")
+            ),
+        )
 
 
 class LockSource(BaseModel):
@@ -986,33 +978,7 @@ class UnbuiltRuntime:
         BuildingRuntime.release(self.prefix)
 
 
-class RuntimeResolution(BaseModel):
-    core_commit: str
-    packages: dict[str, PackageRecord]
-    interpreter: RecordedInterpreterBuild | InterpreterBuild = Field(
-        default_factory=InterpreterBuild
-    )
-
-    def reclaimable(self) -> bool:
-        """A completed build is reproducible from the commit and lock recorded here, so
-        nothing is lost by taking it once no holder names it."""
-        return True
-
-    def require_runtime(self, actual: RuntimeResolution) -> None:
-        """Require recorded interpreter evidence on both sides before comparing inputs."""
-        self.interpreter.require_recorded()
-        actual.interpreter.require_recorded()
-        if self != actual:
-            raise UpgradeRefused("Observed runtime differs from its recorded build inputs")
-
-    @classmethod
-    def record_path(cls) -> Path:
-        return LaunchRuntime.current_pointer() / "build.json"
-
-    @classmethod
-    def at(cls, prefix: Path) -> RuntimeResolution:
-        return cls.model_validate_json((prefix / cls.record_path().name).read_bytes())
-
+class RuntimeResolution(RecordedResolution):
     @classmethod
     def installed(cls) -> RuntimeResolution | UnbuiltRuntime:
         return cls.recorded(LaunchRuntime.installed().prefix)
@@ -1033,19 +999,6 @@ class RuntimeResolution(BaseModel):
         self.require_runtime(stack.observe_resolution(core))
         stack.stage_native()
         stack.prepare_runtime()
-
-    def wheel_inputs(self) -> tuple[Path, ...]:
-        """Only content-qualified archive records request another wheel observation."""
-        return tuple(
-            wheel
-            for package in self.packages.values()
-            for wheel in package.source.wheel_inputs()
-        )
-
-    def save(self, prefix: Path) -> None:
-        path = prefix / self.record_path().name
-        path.write_text(self.model_dump_json(indent=2) + "\n")
-        path.chmod(0o600)
 
     def pins(self) -> dict[str, PackagePin]:
         result: dict[str, PackagePin] = {

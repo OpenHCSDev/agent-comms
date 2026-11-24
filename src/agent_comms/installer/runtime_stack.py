@@ -41,14 +41,16 @@ from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProdu
 from agent_comms.installer.probes.resolution import RuntimeResolutionProbe
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_home import RuntimeHome
-from agent_comms.installer.runtime_resolution import (
+from agent_comms.installer.runtime_record import (
     ConsoleScriptPackage,
     CorePackage,
+    RuntimePackage,
+    ToadPackage,
+)
+from agent_comms.installer.runtime_resolution import (
     ProjectMetadata,
     ResolvedLock,
-    RuntimePackage,
     RuntimeResolution,
-    ToadPackage,
 )
 from agent_comms.installer.target_tree import STEPS
 from agent_comms.projects.checkouts import Checkout

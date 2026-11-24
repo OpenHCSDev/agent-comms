@@ -21,7 +21,7 @@ from agent_comms.installer.interpreter_operation import (
 from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.logs import InstallLogs
 from agent_comms.installer.request import InstallRequest
-from agent_comms.installer.runtime_resolution import CorePackage
+from agent_comms.installer.runtime_record import CorePackage
 from agent_comms.installer.upgrade import FreshRehearsal, RehearsedUpgrade
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation

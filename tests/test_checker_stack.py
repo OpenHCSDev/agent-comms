@@ -15,8 +15,8 @@ from packaging.requirements import Requirement
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.runtime_record import CorePackage
 from agent_comms.installer.runtime_resolution import (
-    CorePackage,
     GitSource,
     PrivateUvProject,
     ResolvedLock,

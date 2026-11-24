@@ -12,7 +12,7 @@ from agent_comms.installer.building_runtime import BuildingRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.packages import GitRecord, SourceRecord
 from agent_comms.installer.runtime_home import RuntimeHome
-from agent_comms.installer.runtime_resolution import CorePackage
+from agent_comms.installer.runtime_record import CorePackage
 from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.repo import Repo

@@ -26,13 +26,12 @@ from agent_comms.installer.probes.packages import (
 )
 from agent_comms.installer.probes.resolution import InstalledPackagesProbe
 from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.runtime_record import CorePackage, ToadPackage
 from agent_comms.installer.runtime_resolution import (
-    CorePackage,
     PrivateUvProject,
     ResolvedLock,
     RuntimeResolution,
     StackSources,
-    ToadPackage,
 )
 from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.nominal.field_codec import FieldCodec
