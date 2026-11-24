@@ -46,7 +46,6 @@ class Verdict(DeclaredFamily, affix="Verdict"):
 @dataclass(frozen=True)
 class HealthyVerdict(Verdict):
     """The resource is within its declared band. No action."""
-    severity: ClassVar[int] = 0
 
 
 @dataclass(frozen=True)

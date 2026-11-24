@@ -28,9 +28,11 @@ bullshit content still passes. Semantic grading remains with the model-judge lay
 from __future__ import annotations
 
 import re
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
+
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 
 # Phrase lists — canonical in one place, consumed by ChatbotPreambleVerifier and
@@ -102,10 +104,8 @@ class SlopVerdict:
         }
 
 
-class SlopVerifier(ABC):
+class SlopVerifier(DeclaredFamily, affix="Verifier"):
     """One structural slop check. Each subclass owns one declared pattern."""
-
-    declared_name: ClassVar[str]
 
     @classmethod
     @abstractmethod
@@ -114,8 +114,6 @@ class SlopVerifier(ABC):
 
 
 class ChatbotPreambleVerifier(SlopVerifier):
-    declared_name = "chatbot_preamble"
-
     @classmethod
     def check(cls, response: str, context: ResponseContext) -> VerifierResult:
         head = response.lstrip()[:200]
@@ -136,7 +134,6 @@ class HallucinatedToolCallVerifier(SlopVerifier):
     pass unconditionally — a real tool-use eval judges tool calls elsewhere.
     """
 
-    declared_name = "hallucinated_tool_call"
     PATTERN: ClassVar[re.Pattern] = re.compile(r"<tool_call\b[^>]*>", re.IGNORECASE)
 
     @classmethod
@@ -158,7 +155,6 @@ class TerminalRepetitionVerifier(SlopVerifier):
     full-sentence repetition.
     """
 
-    declared_name = "terminal_repetition"
     SENTENCE_SPLIT: ClassVar[re.Pattern] = re.compile(r"(?<=[.!?])\s+")
 
     @classmethod
@@ -197,7 +193,6 @@ class LengthRunawayVerifier(SlopVerifier):
     not worth the import.
     """
 
-    declared_name = "length_runaway"
     CHARS_PER_TOKEN: ClassVar[float] = 4.0
 
     @classmethod
@@ -224,7 +219,6 @@ class MissingCertaintyBlockVerifier(SlopVerifier):
     is a separate judge pass.
     """
 
-    declared_name = "missing_certainty_block"
     STANCE_PATTERN: ClassVar[re.Pattern] = re.compile(
         r"(?m)^[\s\-*]*\b(VERIFIED|DEDUCED|EXCLUDED|ASSUMED)\b\s*:"
     )
@@ -258,8 +252,6 @@ class HallucinatedTheoremVerifier(SlopVerifier):
     Lemma N.M. The known-good set is extracted from both papers in
     agent_comms/team/paper/; any citation outside that set triggers.
     """
-
-    declared_name = "hallucinated_theorem"
 
     # Catalog extracted from paper/semantic-completeness/*.md and paper/less-is-harder/*.md
     # 2026-11-17. Regenerate with:
@@ -331,8 +323,6 @@ class HallucinatedSectionVerifier(SlopVerifier):
     wrong thing about it. Content hallucination needs a gold-statement lookup.
     """
 
-    declared_name = "hallucinated_section"
-
     # Real sections per paper, extracted from
     #   grep -oE '^## [0-9]+(\.[0-9]+)?' */semantic-completeness-*.md */less-is-harder-*.md
     # paper1 (semantic-completeness) has top-level sections 1-7; paper4
@@ -376,8 +366,6 @@ class ForbiddenPhraseVerifier(SlopVerifier):
     comes from the forbid list the scenario carries.
     """
 
-    declared_name = "forbidden_phrase"
-
     @classmethod
     def check(cls, response: str, context: ResponseContext) -> VerifierResult:
         hits = [phrase for phrase in context.forbid_phrases if phrase in response]
@@ -386,20 +374,10 @@ class ForbiddenPhraseVerifier(SlopVerifier):
         return VerifierResult(passed=True)
 
 
-# The family, ordered cheapest-first so an early-exit consumer bails quickly.
-VERIFIERS: tuple[type[SlopVerifier], ...] = (
-    ChatbotPreambleVerifier,
-    HallucinatedToolCallVerifier,
-    HallucinatedTheoremVerifier,
-    HallucinatedSectionVerifier,
-    ForbiddenPhraseVerifier,
-    LengthRunawayVerifier,
-    MissingCertaintyBlockVerifier,
-    TerminalRepetitionVerifier,
-)
-
-
 def verify_all(response: str, context: ResponseContext) -> SlopVerdict:
     """Run every verifier and return the aggregate verdict."""
-    results = {v.declared_name: v.check(response, context) for v in VERIFIERS}
+    results = {
+        v.declared_name: v.check(response, context)
+        for v in SlopVerifier.members_with(SlopVerifier)
+    }
     return SlopVerdict(results=results)
