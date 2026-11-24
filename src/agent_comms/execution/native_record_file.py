@@ -78,6 +78,10 @@ class RecordsCut(DeclaredFamily, affix="Cut"):
         """Whether ``current`` differs from this cut only by a forward suffix."""
         return self.holds(current, self.offset)
 
+    def appends_external(self, prior: RecordsCut) -> bool:
+        """Only an external cut with the same lower bound appends another external cut."""
+        return False
+
     @abstractmethod
     def contains(self, current, through: int) -> bool: ...
 

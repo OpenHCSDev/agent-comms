@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
@@ -87,6 +87,9 @@ class ProfileOffer(ABC):
     def refusal(self) -> str:
         """Why not, or nothing when it may."""
 
+    def apply_offer(self, emit: Callable[[ServedEndpoint], int]) -> int | str:
+        return self.refusal()
+
 
 @dataclass(frozen=True, slots=True)
 class OfferedByTailnet(ProfileOffer):
@@ -96,6 +99,9 @@ class OfferedByTailnet(ProfileOffer):
 
     def refusal(self) -> str:
         return ""
+
+    def apply_offer(self, emit: Callable[[ServedEndpoint], int]) -> int | str:
+        return emit(self.endpoint)
 
 
 @dataclass(frozen=True, slots=True)

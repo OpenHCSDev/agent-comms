@@ -200,13 +200,11 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
         """Detach the apply as a background run: its result is the run's output, and the
         caller hears how it ended like any other run. The capability is the base's; a leaf
         adds nothing to be backgroundable."""
-        if not isinstance(caller, ThreadCaller):
-            raise ToolRefusedError(
-                f"{self.declared_name}: background runs need a thread caller to notify.")
+        owner = caller.background_owner(comms, self.declared_name)
         store = BackgroundRunStore.of(comms)
         store.recover()
         return store.start(ToolCallRun.hosted(
-            store.log_directory, caller.own_incarnation(comms), self.declared_name,
+            store.log_directory, owner, self.declared_name,
             partial(caller.invoke, cast(ServedRequest, self), comms)))
 
     def board(self, comms: BusContext, caller: ToolCaller) -> tuple[str, ...]:

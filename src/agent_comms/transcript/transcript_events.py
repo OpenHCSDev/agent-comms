@@ -41,6 +41,7 @@ from agent_comms.nominal.field_codec import (
     ActivityExclude,
     FieldCodec,
     InputId,
+    MalformedRecord,
     ToolCallId,
     WireBind,
     WireOmitDefault,
@@ -86,6 +87,13 @@ class TranscriptEvent(EventMerge, Dated, DeclaredFamily, affix="Transcript"):
     def take_assistant(self, events: list[TranscriptEvent], text: AssistantTranscript) -> None:
         """Assistant text after this event starts its own event."""
         events.append(text)
+
+    def draft_suffix_to(self, current: TranscriptEvent) -> TranscriptEvent:
+        """Only assistant text can grow in place across a draft update."""
+        raise MalformedRecord("A draft update replaced a non-text event")
+
+    def draft_suffix_from_assistant(self, prior: AssistantTranscript) -> TranscriptEvent:
+        raise MalformedRecord("A draft update replaced a non-text event")
 
     def for_assigned_source(self, source, published: bool) -> TranscriptEvent | None:
         return self
@@ -348,6 +356,14 @@ class AssistantTranscript(ModelOutput, AgentTextTranscript):
 
     def take_assistant(self, events: list[TranscriptEvent], text: AssistantTranscript) -> None:
         events[-1] = replace(self, text=self.text + text.text)
+
+    def draft_suffix_to(self, current: TranscriptEvent) -> TranscriptEvent:
+        return current.draft_suffix_from_assistant(self)
+
+    def draft_suffix_from_assistant(self, prior: AssistantTranscript) -> AssistantTranscript:
+        if not self.text.startswith(prior.text) or replace(self, text=prior.text) != prior:
+            raise MalformedRecord("A draft update replaced assistant text")
+        return replace(self, text=self.text[len(prior.text):])
 
     def for_assigned_source(self, source, published: bool) -> TranscriptEvent | None:
         return None if published else self

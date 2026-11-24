@@ -22,14 +22,13 @@ from source_revision_fixture import SourceRepository
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.cli_protocol import EarlierItems
 from agent_comms.cli_bridges.hook_forks import SessionSubagents
 from agent_comms.cli_bridges.hook_requests import (
     ReadGateRequest,
     SubagentStartRequest,
     SubagentStopRequest,
 )
-from agent_comms.cli_bridges.runtime_updates import FinishedItem
+from agent_comms.cli_bridges.runtime_updates import EarlierItems, FinishedItem
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.errors import CoordinationReadUnavailable

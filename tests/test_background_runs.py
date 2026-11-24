@@ -217,6 +217,7 @@ def test_a_run_whose_process_vanished_without_an_exit_code_is_gone(wired: Comms)
     Platform.current().force_group(run.process)
     with suppress(ChildProcessError):
         os.waitpid(run.process.pid, 0)
+    Platform.current().wait_any_exited((run.process,), 5.0)
 
     (row,) = status(wired).runs
 

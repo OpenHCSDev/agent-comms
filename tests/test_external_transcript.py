@@ -3,8 +3,7 @@ import asyncio
 import pytest
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
-from agent_comms.cli_bridges.cli_protocol import EarlierItems
-from agent_comms.cli_bridges.runtime_updates import FinishedItem
+from agent_comms.cli_bridges.runtime_updates import EarlierItems, FinishedItem
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import StaleRevision
 from agent_comms.errors import RelationViolationError
@@ -132,7 +131,7 @@ async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
             publication = TurnDraftPublication(transcript, connection, turn_turn_id)
             publication.begin_message(1.0)
             waiting = asyncio.create_task(watcher.wait())
-            publication.publish(('Streaming',))
+            publication.append_parts(('Streaming',))
             await asyncio.wait_for(waiting, 2)
             with transcript.reading() as reader:
                 draft = reader.current_draft(transcript.root, transcript.incarnation)
@@ -161,10 +160,6 @@ def test_next_assistant_message_atomically_replaces_the_prior_draft(tmp_path):
 
 
 def test_turn_owned_draft_refuses_maintenance_without_changing_the_saved_draft(tmp_path):
-    from agent_comms.storage.maintenance_barrier import (
-        MaintenanceBarrier,
-        MaintenanceOperator,
-    )
     from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
     comms = wire(tmp_path / 'wire')
@@ -173,12 +168,12 @@ def test_turn_owned_draft_refuses_maintenance_without_changing_the_saved_draft(t
     with transcript.writer_connection() as connection:
         publication = TurnDraftPublication(transcript, connection, NativeTurnId('turn'))
         publication.begin_message(1.0)
-        publication.publish(('before',))
+        publication.append_parts(('before',))
         barrier = MaintenanceBarrier(comms.registry.store.path)
         hold = barrier.begin(MaintenanceOperator.current())
         try:
             with pytest.raises(RelationViolationError):
-                publication.publish(('held',))
+                publication.append_parts(('held',))
             with pytest.raises(RelationViolationError):
                 publication.retire_message()
             with transcript.reading() as reader:
@@ -186,9 +181,9 @@ def test_turn_owned_draft_refuses_maintenance_without_changing_the_saved_draft(t
                 assert draft.events[0].text == 'before'
         finally:
             barrier.clear(hold)
-        publication.publish(('after',))
+        publication.append_parts(('after',))
         with transcript.reading() as reader:
-            assert reader.current_draft(transcript.root, transcript.incarnation).events[0].text == 'after'
+            assert reader.current_draft(transcript.root, transcript.incarnation).events[0].text == 'beforeafter'
 
 
 @pytest.mark.asyncio

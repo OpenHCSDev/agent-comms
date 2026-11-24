@@ -13,6 +13,13 @@ class TranscriptDraft:
     def publish(self, transcript: StoreWriter) -> None:
         """An absent draft needs no publication."""
 
+    def next_appends[Event](
+        self, connection: object, thread: object, turn_id: object, item_id: object,
+        events: tuple[Event, ...],
+    ) -> tuple[Event, ...]:
+        """An absent draft appends every incoming event directly."""
+        return events
+
 
 @dataclass(frozen=True, slots=True)
 class NoDraft(NullMember, TranscriptDraft):
