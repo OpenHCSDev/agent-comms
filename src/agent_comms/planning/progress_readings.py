@@ -10,7 +10,9 @@ from typing import (
     ClassVar,
 )
 
-from agent_comms.execution.child_process import CheckPrinted, NoIntegerPrinted
+from metaclass_registry.mro_dispatch import MroDispatch, handles
+
+from agent_comms.execution.child_process import CheckPrinted, CountPrinted, NoIntegerPrinted
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import DisclosedRecord, DisclosureIdentity
 from agent_comms.storage.recorded_time import RecordedEventTime
@@ -36,6 +38,37 @@ class DistanceReading(DisclosedRecord):
     command: str = ""
 
 
+class _LatestReadingTrend(MroDispatch):
+    @handles(CountPrinted)
+    def counted(self, printed: CountPrinted, readings: DistanceReadings) -> DistanceTrend:
+        return readings.counted_trend(printed.count)
+
+    @handles(NoIntegerPrinted)
+    def uncounted(self, printed: NoIntegerPrinted, readings: DistanceReadings) -> DistanceTrend:
+        return UncountedTrend(printed, readings.readings[-1].command)
+
+
+class _PreviousReadingTrend(MroDispatch):
+    @handles(CountPrinted)
+    def counted(
+        self, printed: CountPrinted, final: int, first_at: float, latest_at: float,
+    ) -> DistanceTrend:
+        if final >= printed.count:
+            return FlatTrend(final, latest_at)
+        rate = (printed.count - final) / max(latest_at - first_at, 1.0)
+        return MovingTrend(final, latest_at + final / rate)
+
+    @handles(NoIntegerPrinted)
+    def uncounted(
+        self, printed: NoIntegerPrinted, final: int, first_at: float, latest_at: float,
+    ) -> DistanceTrend:
+        return UnreadTrend()
+
+
+_LATEST_READING_TREND = _LatestReadingTrend()
+_PREVIOUS_READING_TREND = _PreviousReadingTrend()
+
+
 @dataclass(frozen=True)
 class DistanceReadings(DisclosedRecord):
     """The order's last two distance readings, oldest first: its base at the order, then its
@@ -48,22 +81,17 @@ class DistanceReadings(DisclosedRecord):
         """A missing count diagnoses the check; only measured counts project a finish."""
         if not self.readings:
             return UnreadTrend()
-        return self.readings[-1].distance.project(
-            self.counted_trend, lambda printed: UncountedTrend(printed, self.readings[-1].command))
+        latest = self.readings[-1].distance
+        return _LatestReadingTrend.handler_for(type(latest))(_LATEST_READING_TREND, latest, self)
 
     def counted_trend(self, final: int) -> DistanceTrend:
         last = self.readings[-self.window:]
         if len(last) < self.window or not final:
             return UnreadTrend()
         first, latest = last
-
-        def compared(previous: int) -> DistanceTrend:
-            if final >= previous:
-                return FlatTrend(final, latest.at)
-            rate = (previous - final) / max(latest.at - first.at, 1.0)
-            return MovingTrend(final, latest.at + final / rate)
-
-        return first.distance.project(compared, lambda printed: UnreadTrend())
+        return _PreviousReadingTrend.handler_for(type(first.distance))(
+            _PREVIOUS_READING_TREND, first.distance, final, first.at, latest.at,
+        )
 
 
 class DistanceTrend(DeclaredFamily, affix="Trend"):

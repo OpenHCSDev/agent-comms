@@ -23,6 +23,7 @@ from threading import local
 from typing import Annotated, ClassVar, Generic, Self, TypeVar, cast
 from weakref import finalize
 
+from metaclass_registry.mro_dispatch import MroDispatch, handles
 from pydantic import JsonValue
 
 import agent_comms
@@ -39,6 +40,7 @@ from agent_comms.storage.file_observation import (
     DocumentBytes,
     FileObservation,
     FileRevision,
+    MissingFile,
 )
 from agent_comms.storage.private_path import (
     PrivateDirectoryRole,
@@ -62,6 +64,58 @@ from agent_comms.storage.store_files import (
 )
 
 T = TypeVar("T")
+
+
+class _DocumentBytesDecode(MroDispatch):
+    @handles(FileRevision)
+    def present[T](
+        self, revision: FileRevision, store: LockedStore[T], source: DocumentBytes,
+        decode: Callable[[JsonValue], T],
+    ) -> T:
+        return decode(FieldCodec.parse(source.content))
+
+    @handles(MissingFile)
+    def missing[T](
+        self, revision: MissingFile, store: LockedStore[T], source: DocumentBytes,
+        decode: Callable[[JsonValue], T],
+    ) -> T:
+        return store.empty()
+
+
+class _RetainedDocumentDecode(MroDispatch):
+    @handles(FileRevision)
+    def present[T](
+        self, revision: FileRevision, store: CopyingStore[T], source: DocumentBytes,
+    ) -> DecodedDocument[T]:
+        return store._cached_value(revision, partial(store._decode_source, source))
+
+    @handles(MissingFile)
+    def missing[T](
+        self, revision: MissingFile, store: CopyingStore[T], source: DocumentBytes,
+    ) -> DecodedDocument[T]:
+        return DecodedDocument(source.revision, source.content, store.read_copied, store._encode)
+
+
+class _InitializeDocument(MroDispatch):
+    @handles(FileRevision)
+    def present[T](
+        self, revision: FileRevision, store: CopyingStore[T], source: DocumentBytes,
+        create_and_publish: Callable[[], T],
+    ) -> Callable[[], T]:
+        value = store.read_copied(source)
+        return lambda: value
+
+    @handles(MissingFile)
+    def missing[T](
+        self, revision: MissingFile, store: CopyingStore[T], source: DocumentBytes,
+        create_and_publish: Callable[[], T],
+    ) -> Callable[[], T]:
+        return create_and_publish
+
+
+_DOCUMENT_BYTES_DECODE = _DocumentBytesDecode()
+_RETAINED_DOCUMENT_DECODE = _RetainedDocumentDecode()
+_INITIALIZE_DOCUMENT = _InitializeDocument()
 
 
 @dataclass(frozen=True, slots=True)
@@ -378,8 +432,8 @@ class JsonDocument(RootFile, ABC, Generic[T]):
         )
 
     def _decode_bytes(self, source: DocumentBytes, decode: Callable[[JsonValue], T]) -> T:
-        return source.revision.either(
-            lambda present: decode(FieldCodec.parse(source.content)), self.empty,
+        return _DocumentBytesDecode.handler_for(type(source.revision))(
+            _DOCUMENT_BYTES_DECODE, source.revision, self, source, decode,
         )
 
     def _read_captured[Captured](
@@ -1137,6 +1191,13 @@ class SQLiteFile(SQLiteStorage):
             yield
 
     @classmethod
+    def file_matches(cls, path: Path, name: Path, saved: Mapping[Path, str]) -> bool:
+        try:
+            return super().file_matches(path, name, saved)
+        except sqlite3.DatabaseError:
+            return False
+
+    @classmethod
     def digest(cls, path: Path) -> str:
         with closing(cls.read_snapshot(path)) as database:
             content = hashlib.sha256()
@@ -1295,9 +1356,8 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
         return decoded
 
     def _decode_retained(self, source: DocumentBytes) -> DecodedDocument[T]:
-        return source.revision.either(
-            lambda revision: self._cached_value(revision, partial(self._decode_source, source)),
-            lambda: DecodedDocument(source.revision, source.content, self.read_copied, self._encode),
+        return _RetainedDocumentDecode.handler_for(type(source.revision))(
+            _RETAINED_DOCUMENT_DECODE, source.revision, self, source,
         )
 
     def _read_current(self) -> DecodedDocument[T]:
@@ -1364,11 +1424,9 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
             return document
 
         def prepare(source: DocumentBytes) -> AbstractContextManager[Callable[[], T]]:
-            def existing(present: FileRevision) -> Callable[[], T]:
-                value = self.read_copied(source)
-                return lambda: value
-
-            return nullcontext(source.revision.either(existing, lambda: initialize))
+            return nullcontext(_InitializeDocument.handler_for(type(source.revision))(
+                _INITIALIZE_DOCUMENT, source.revision, self, source, initialize,
+            ))
 
         def apply(ready: Callable[[], T]) -> T:
             return ready()

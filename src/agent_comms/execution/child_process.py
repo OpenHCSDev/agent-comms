@@ -1687,14 +1687,18 @@ class CheckPrinted(DisclosedRecord, DeclaredFamily, affix="Printed"):
     @abstractmethod
     def require(self, expected: object) -> None: ...
 
-    @abstractmethod
-    def project[T](self, counted: Callable[[int], T],
-                   uncounted: Callable[[NoIntegerPrinted], T]) -> T: ...
+    @property
+    def is_zero(self) -> bool:
+        return False
 
 
 @dataclass(frozen=True)
 class CountPrinted(CheckPrinted):
     count: int
+
+    @property
+    def is_zero(self) -> bool:
+        return self.count == 0
 
     def distance(self, expected: int) -> CheckPrinted:
         return CountPrinted(abs(self.count - expected))
@@ -1705,10 +1709,6 @@ class CountPrinted(CheckPrinted):
     def require(self, expected: object) -> None:
         if self.count:
             raise OrderCheckFailedError(f"The order check is {self.count} away from {expected}.")
-
-    def project[T](self, counted: Callable[[int], T],
-                   uncounted: Callable[[NoIntegerPrinted], T]) -> T:
-        return counted(self.count)
 
     def unproven(self, command: str, expected: int) -> tuple[str, ...]:
         return ((f"Check already prints {self.count} before any work: `{command}` proves nothing; "
@@ -1726,10 +1726,6 @@ class NoIntegerPrinted(CheckPrinted):
     def require(self, expected: object) -> None:
         raise OrderCheckFailedError(
             f"The order check cannot prove {expected}: it printed no integer.")
-
-    def project[T](self, counted: Callable[[int], T],
-                   uncounted: Callable[[NoIntegerPrinted], T]) -> T:
-        return uncounted(self)
 
     def progress(self, command: str) -> str:
         return f"; check prints no integer: {command}"
@@ -1840,8 +1836,75 @@ class TimedOutOutcome(InterruptedForkOutcome):
         return False
 
 
-def _graceful_outcome(termination: ChildOutcome) -> ChildOutcome:
-    return termination
+class _StopStage(ABC):
+    """One phase of retiring a process group: graceful termination, then forced kill."""
+
+    @abstractmethod
+    def outcome(self, termination: ChildOutcome) -> ChildOutcome: ...
+
+    @abstractmethod
+    def deadline(self, grace_deadline: float, final_deadline: float) -> float: ...
+
+    @abstractmethod
+    def advance(
+        self,
+        process: ChildProcess,
+        guard: Callable[[], AbstractContextManager[None]],
+        now: float,
+        grace_deadline: float,
+        final_deadline: float,
+        members: tuple[ProcessIdentity, ...],
+    ) -> tuple[_StopStage, bool]: ...
+
+
+class _GracefulStop(_StopStage):
+    def outcome(self, termination: ChildOutcome) -> ChildOutcome:
+        return termination
+
+    def deadline(self, grace_deadline: float, final_deadline: float) -> float:
+        return grace_deadline
+
+    def advance(
+        self,
+        process: ChildProcess,
+        guard: Callable[[], AbstractContextManager[None]],
+        now: float,
+        grace_deadline: float,
+        final_deadline: float,
+        members: tuple[ProcessIdentity, ...],
+    ) -> tuple[_StopStage, bool]:
+        if now >= grace_deadline:
+            with guard():
+                process.platform.force_group(process.identity)
+            return _FORCED_STOP, True
+        return self, False
+
+
+class _ForcedStop(_StopStage):
+    def outcome(self, termination: ChildOutcome) -> ChildOutcome:
+        return ForcedStopOutcome(termination)
+
+    def deadline(self, grace_deadline: float, final_deadline: float) -> float:
+        return final_deadline
+
+    def advance(
+        self,
+        process: ChildProcess,
+        guard: Callable[[], AbstractContextManager[None]],
+        now: float,
+        grace_deadline: float,
+        final_deadline: float,
+        members: tuple[ProcessIdentity, ...],
+    ) -> tuple[_StopStage, bool]:
+        if now >= final_deadline:
+            raise ChildRetirementFailed(f"Process group still alive: {members}")
+        with guard():
+            process.platform.force_group(process.identity)
+        return self, False
+
+
+_GRACEFUL_STOP = _GracefulStop()
+_FORCED_STOP = _ForcedStop()
 
 
 @dataclass(frozen=True)
@@ -2127,22 +2190,14 @@ class ChildProcess(Sealed, ABC):
         with guard():
             self.platform.terminate_group(self.identity)
         grace_deadline = min(time.monotonic() + STOP_GRACE_SECONDS, deadline)
-        stage: Callable[[ChildOutcome], ChildOutcome] = _graceful_outcome
+        stage: _StopStage = _GRACEFUL_STOP
         while members := self.platform.group_members(self.identity):
             now = time.monotonic()
-            if stage is _graceful_outcome and now >= grace_deadline:
-                stage = ForcedStopOutcome
-                with guard():
-                    self.platform.force_group(self.identity)
+            stage, recheck = stage.advance(self, guard, now, grace_deadline, deadline, members)
+            if recheck:
                 continue
-            if stage is ForcedStopOutcome:
-                if now >= deadline:
-                    raise ChildRetirementFailed(f"Process group still alive: {members}")
-                with guard():
-                    self.platform.force_group(self.identity)
-            until = grace_deadline if stage is _graceful_outcome else deadline
-            yield members, max(0, until - now)
-        return stage
+            yield members, max(0, stage.deadline(grace_deadline, deadline) - now)
+        return stage.outcome
 
     def _retire_group(self, guard, deadline=math.inf):
         """Use the same guarded stop plan for synchronous and asynchronous cleanup."""

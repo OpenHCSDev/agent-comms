@@ -754,6 +754,20 @@ class MessageRoleWire(RoleActivitySource):
         return WireName.read(declared.type, declared.name)
 
 
+class NoNotifications:
+    """Roles that create no notification references."""
+
+    def notification_references(self, message):
+        return ()
+
+
+class InformationalResponse:
+    """Roles that carry the informational response policy."""
+
+    def response_policy(self, message: MessageInput) -> ResponsePolicy:
+        return InformationalPolicy.instance()
+
+
 class MessageRole(InlineRecord, RoleActivitySource):
 
     category: ClassVar[type[MessageCategory]]
@@ -774,6 +788,9 @@ class MessageRole(InlineRecord, RoleActivitySource):
     def response_policy(self, message: MessageInput) -> ResponsePolicy: ...
 
     @abstractmethod
+    def notification_references(self, message): ...
+
+    @abstractmethod
     def as_historical(self) -> MessageRole: ...
 
     @classmethod
@@ -786,9 +803,6 @@ class MessageRole(InlineRecord, RoleActivitySource):
 
     def to_wire(self):
         return FieldCodec.encode_record(self.wire_fields())
-
-    def notification_references(self, message):
-        return ()
 
     def response_wake_mode(self):
         return BoundedTriageWake()
@@ -807,10 +821,7 @@ class SendableRole(MessageRole, DeclaredFamily, affix="Role"):
     pass
 
 
-class InformationalMessage(RoleActivitySource):
-
-    def response_policy(self, message: MessageInput) -> ResponsePolicy:
-        return InformationalPolicy.instance()
+class InformationalMessage(InformationalResponse, NoNotifications, RoleActivitySource):
 
     def counts_as_conversation(self):
         return False
@@ -911,14 +922,8 @@ class MembershipNoticeRole(Membership, NoticeRole, declared_name=None):
         return HistoricalMembershipNoticeRole(self.change)
 
 
-class HistoricalRole:
+class HistoricalRole(InformationalResponse, NoNotifications):
     """Historical rows cannot create current reply or notification work."""
-
-    def notification_references(self, message):
-        return ()
-
-    def response_policy(self, message: MessageInput) -> ResponsePolicy:
-        return InformationalPolicy.instance()
 
     def as_historical(self):
         return self

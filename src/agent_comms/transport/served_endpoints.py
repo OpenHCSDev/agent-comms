@@ -18,6 +18,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
+from urllib.parse import urlparse
 
 from agent_comms.transport.probed_command import ProbedCommand
 
@@ -127,7 +128,6 @@ class NothingTailnetOnly(ProfileOffer):
     def _free_suggest_port(self) -> int:
         """`DEFAULT_SERVE_PORT` when it is free, otherwise the next whole thousand that is.
         Avoids suggesting a port that already hosts a public Funnel entry."""
-        from urllib.parse import urlparse
         taken: set[int] = set()
         for endpoint in self.served:
             parsed = urlparse(endpoint.target.url)

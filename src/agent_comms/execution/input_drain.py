@@ -488,17 +488,24 @@ class InboxDebt(ABC):
         await inputs.drain_inbox(session_id)
 
 
+class HeldInboxDebt(InboxDebt):
+    """An inbox debt carrying the last observed private state."""
+
+    __slots__ = ()
+    held: PrivateObservationState
+
+    @property
+    def note(self) -> PrivateObservationState:
+        return self.held
+
+
 @dataclass(frozen=True, slots=True)
-class DrainOwed(InboxDebt):
+class DrainOwed(HeldInboxDebt):
     """A drain is owed. ``held`` is what the last settled one saw: an observation that finds
     exactly that again settles without draining."""
 
     held: PrivateObservationState = field(default_factory=NoPrivateObservation)
     asks_again = True
-
-    @property
-    def note(self) -> PrivateObservationState:
-        return self.held
 
     def changed(self) -> InboxDebt:
         return self
@@ -511,17 +518,13 @@ class DrainOwed(InboxDebt):
 
 
 @dataclass(frozen=True, slots=True)
-class InboxSettled(InboxDebt):
+class InboxSettled(HeldInboxDebt):
     """A drain left nothing owed at ``held``. Only news can change that; what has been heard
     and not yet weighed is ``unweighed``. A new note has never asked the bus."""
 
     held: PrivateObservationState
     unweighed: frozenset[WeighedNews] = frozenset({BusCommitted()})
     quiet = True
-
-    @property
-    def note(self) -> PrivateObservationState:
-        return self.held
 
     def hearing(self, news: WeighedNews) -> InboxDebt:
         return replace(self, unweighed=self.unweighed | {news})
