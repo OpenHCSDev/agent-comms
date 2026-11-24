@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
+from agent_comms.coordination.assignment_store import AssignmentStore
 from agent_comms.coordination.cohort_schema import CohortTable
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import IdentityConflict
@@ -201,6 +202,7 @@ def read_historical_native_inputs(
             raise IdentityConflict("historical source has ambiguous native input evidence")
         source_reads.observe_inputs(tuple(row.require_context_proof() for _source, row in rows))
         rows.sort(key=lambda item: type(item[1].execution).declared_position())
+        assignments = AssignmentStore(store.session)
         evidence: list[HistoricalNativeInput] = []
         for source, row in rows:
             original_session = row.require_session_identity()
@@ -226,7 +228,7 @@ def read_historical_native_inputs(
             evidence.append(
                 row.execution.historical_proof(
                     row,
-                    lifecycle=store.assignments.get(source.assignment_id).lifecycle,
+                    lifecycle=assignments.get(source.assignment_id).lifecycle,
                     wire_root_id=wire_root_id,
                     source_seq=source.wire_seq,
                     source_message_id=source.message_id,
