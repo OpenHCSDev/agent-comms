@@ -74,7 +74,7 @@ from agent_comms.projects.change_report import NoChangeReport, ReportEvidence
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.registry.threads import ExternalThread, Thread
+from agent_comms.registry.threads import Thread
 
 
 class AnswerAuthority(ABC):
@@ -176,8 +176,8 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         )
         committed = self._publish(
             message, origin, destination=CommandTarget.named(target), files=files)
-        if answers and isinstance(owner, ExternalThread):
-            self._settle_answered_remote_deliveries(owner, answers, committed.timestamp)
+        if answers:
+            owner.settle_answered_remote_deliveries(answers, self, committed)
         correction: CorrectionResult
         try:
             todos.correct(owner.incarnation, committed.message_id, body)

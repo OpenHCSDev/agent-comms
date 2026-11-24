@@ -60,7 +60,6 @@ from agent_comms.nominal.field_codec import (
     PathText,
     SingleFieldValue,
     SubclassUnion,
-    TextRepresentation,
     ValueDecoder,
     WireName,
     WireValue,
@@ -174,7 +173,7 @@ class TextStorage(SqlStorage):
         if annotation is str:
             return True
         _, representation = FieldCodec.representation(annotation)
-        return issubclass(representation, TextRepresentation)
+        return representation.stored_as_text()
 
 
 class IntegerStorage(SqlStorage):

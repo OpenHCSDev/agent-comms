@@ -1037,6 +1037,10 @@ class Thread(
     def apply_cli_inbox(self, threads: ThreadConfigurationTarget) -> Thread:
         return threads.switch_to_cli_inbox(self.name)
 
+    def settle_answered_remote_deliveries(self, answers, caller, committed):
+        """Settle answered remote deliveries when an external thread replies."""
+        pass
+
 
 class NativeThread(Thread):
     __slots__ = ()
@@ -1156,6 +1160,9 @@ class ExternalThread(Thread):
     def holds_activity(self, status: ThreadStatus) -> bool:
         """A reading bridge reports when work ends; elapsed time cannot declare it idle."""
         return status.is_receiving()
+
+    def settle_answered_remote_deliveries(self, answers, caller, committed):
+        caller._settle_answered_remote_deliveries(self, answers, committed.timestamp)
 
 
 class ServiceThread(NoChannelInbox, Thread):
