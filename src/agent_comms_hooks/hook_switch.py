@@ -16,6 +16,7 @@ from typing import Annotated, ClassVar
 from agent_comms.cli_verbs.declared_verb import DeclaredVerb
 from agent_comms.installer.harness_install import merge_json
 from agent_comms.nominal.field_codec import Argument
+from agent_comms_hooks.antigravity import ANTIGRAVITY_HOOK_NAME
 from agent_comms_hooks.shell_commands import EmergencyHookStop
 
 
@@ -36,11 +37,18 @@ class HooksVerb(DeclaredVerb, affix="Verb"):
         """Leave the setting as this verb means it."""
 
     @abstractmethod
+    def switched_antigravity(self, document: dict) -> None:
+        """Leave the Antigravity rule-gate hook entry as this verb means it."""
+
+    @abstractmethod
     def report(self) -> str:
         """What happened, as the person running it should read it."""
 
     def run(self, home: Path) -> str:
         merge_json(home / ".claude/settings.json", self.switched)
+        agy_hooks = home / ".gemini/config/hooks.json"
+        if agy_hooks.is_file():
+            merge_json(agy_hooks, self.switched_antigravity)
         return self.report()
 
 
@@ -53,9 +61,14 @@ class StopVerb(HooksVerb, declared_name=EmergencyHookStop.verb):
     def switched(self, document: dict) -> None:
         document[self.setting] = True
 
+    def switched_antigravity(self, document: dict) -> None:
+        entry = document.get(ANTIGRAVITY_HOOK_NAME)
+        if isinstance(entry, dict):
+            entry["enabled"] = False
+
     def report(self) -> str:
-        body = (f"Emergency hook stop pulled by {self.sender}: every Claude Code hook on this host "
-                f"is off. Why: {self.why}. `{self.tool()} start` turns them back on.")
+        body = (f"Emergency hook stop pulled by {self.sender}: every Claude Code and Antigravity "
+                f"hook on this host is off. Why: {self.why}. `{self.tool()} start` turns them back on.")
         try:
             posted = subprocess.run(
                 ("agent-comms", "send", "--from", self.sender, "--to", "#comms", "--type", "alert",
@@ -74,6 +87,11 @@ class StartVerb(HooksVerb, declared_name="start"):
 
     def switched(self, document: dict) -> None:
         document.pop(self.setting, None)
+
+    def switched_antigravity(self, document: dict) -> None:
+        entry = document.get(ANTIGRAVITY_HOOK_NAME)
+        if isinstance(entry, dict):
+            entry.pop("enabled", None)
 
     def report(self) -> str:
         return "Hooks are on."

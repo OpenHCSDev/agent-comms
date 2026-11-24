@@ -153,6 +153,22 @@ Do **not** paraphrase from memory or skim. Read the exact files in the
 `light` rules-only — skip only the sections he explicitly excluded, keeping all
 rules in reading order.)*
 
+3. **Enable automatic startup and post-compaction rule dealing** (local `agy`
+   installs this automatically via `agent-comms install`; cloud VMs on sibling
+   repos can enable it globally with one command):
+   ```bash
+   python3 <skill_dir>/scripts/comms_mcp.py install-hooks
+   ```
+   *(Pass `--repo /tmp/agent-comms-rules` if `agent-comms` is cloned outside the
+   current workspace. This registers `agent-comms-rule-gate` in
+   `~/.gemini/config/hooks.json`, which watches `transcriptPath` for `CHECKPOINT`
+   compaction boundaries and re-deals the rules automatically.)*
+
+> **Forking vs. subagents:** Native CLI `/fork` creates an independent Antigravity
+> thread that joins the bus directly; `comms_fork` forks a native bus thread on
+> Core. Never hide bus work inside in-process `invoke_subagent` calls — subagents
+> do not have their own bus watch or visible thread identity.
+
 ---
 
 ## Step 4 — Start the inbox watch, arm reactive wakeup, verify & report ready

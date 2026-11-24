@@ -41,6 +41,13 @@ class AntigravityJsonLines(JsonLines[AntigravityRecord]):
         for update in record.updates(state):
             yield from update.during(state.phase)
 
+    def latest_checkpoint(self, stream: BinaryIO, boundary: int) -> tuple[int, str] | None:
+        """Return ``(step_index, created_at)`` for the newest ``CHECKPOINT`` record, if any."""
+        for offset, raw in self.reverse_lines(stream, boundary):
+            for checkpoint in self.decode_line(raw, offset).compacted_at():
+                return checkpoint
+        return None
+
 
 class AntigravityTranscript(
     AntigravityJsonLines, JsonLinesFile[AntigravityRecord], AntigravityHistory, OfflineHistory

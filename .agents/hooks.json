@@ -1,0 +1,38 @@
+{
+  "agent-comms-rule-gate": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "python3 ./skills/comms-cloud-connect/scripts/comms_mcp.py agy-hook"
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "python3 ./skills/comms-cloud-connect/scripts/comms_mcp.py agy-hook"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ./skills/comms-cloud-connect/scripts/comms_mcp.py agy-hook"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ./skills/comms-cloud-connect/scripts/comms_mcp.py agy-hook"
+          }
+        ]
+      }
+    ]
+  }
+}
