@@ -1208,7 +1208,9 @@ class IncomingFrame(ABC):
     def tail(self) -> str:
         """What a shown message carries under its body: the files it names, then how to
         answer it. One statement, for a message shown inline and for one read from a file."""
-        files = "".join(f"\n{file.mention}" for file in self.files)
+        files = "".join(
+            f"\n{file.mention_in(self.message.exact_reply_target)}" for file in self.files
+        )
         return (f"\n{files}" if files else "") + self.route
 
     @property

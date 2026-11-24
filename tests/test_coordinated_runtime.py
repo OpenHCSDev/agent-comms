@@ -121,8 +121,14 @@ def test_delivered_frame_names_each_file_with_the_read_that_returns_it(tmp_path:
         ((initial, assignment),), people[1], comms.goals,
     ).input_segments(files)).text
     (file,) = files
-    assert json.dumps(file.mention)[1:-1] in frame
-    assert f"message={initial.message.reference.name} position=0" in file.mention
+    expected = file.mention_in(initial.message.exact_reply_target)
+    assert json.dumps(expected)[1:-1] in frame
+    payload = json.loads(expected.split("comms_message_file ", 1)[1])
+    assert payload == {
+        "conversation": initial.message.exact_reply_target,
+        "message": {"seq": initial.message.seq, "message_id": str(initial.message.message_id)},
+        "position": 0,
+    }
     unrelated = TurnContext.render_segments(SelectedWakeSegment.capture(
         ((initial, assignment),), people[1], comms.goals,
     ).input_segments(())).text

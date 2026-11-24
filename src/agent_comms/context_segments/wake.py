@@ -137,7 +137,11 @@ class DeliveredMessageSegment(WireSources, InstructionSegment):
     def values(self):
         message = self.delivery.source.message
         own_files = self.delivery.own_files
-        files = {"files": [file.mention for file in own_files]} if own_files else {}
+        files = (
+            {"files": [file.mention_in(message.exact_reply_target) for file in own_files]}
+            if own_files
+            else {}
+        )
         return dict(
             message=FieldCodec.compact(
                 {

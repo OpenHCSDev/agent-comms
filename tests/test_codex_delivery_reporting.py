@@ -66,7 +66,7 @@ async def test_a_bridge_frames_a_message_with_its_files_and_refuses_an_echo_with
         frame = bridge.incoming_frame(message, await bridge.files_of(message))
         (file,) = comms.messaging.files.of((message.reference,))
         assert frame.text == IncomingFrame(message, (file,)).text
-        assert frame.text.endswith('\n\n' + file.mention)
+        assert frame.text.endswith('\n\n' + file.mention_in(message.exact_reply_target))
         original = bridge.attempt(message, UnconfirmedOutcome)
         assert await bridge.coordinator_write(original.begin)
         stream = ItemStream('codex-thread')
