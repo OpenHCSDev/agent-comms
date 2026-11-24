@@ -15,6 +15,7 @@ class RestoreOwnerCliCommand(AppliedTogether[OwnerStartResult], NativeOwnerComma
                              ThreadLifecycleCliCommand, TargetActionCommand[OwnerStartResult],
                              declared_name="restore-owner"):
     help = "Restore owner process without changing its goal"
+    menu_label = "Restore"
 
     @classmethod
     def apply_together(cls, ctx: Comms, commands: tuple[Self, ...]) -> tuple[OwnerStartResult, ...]:

@@ -17,6 +17,7 @@ from agent_comms.registry.threads import NativeOwnerCommand, Thread
 @dataclass(frozen=True, kw_only=True)
 class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliCommand):
     help = "Fork a child pi thread"
+    menu_label = "Fork"
     spec_type = ForkSpec
     parent: Annotated[
         str, TargetBound(), Argument(flags=("--parent",))

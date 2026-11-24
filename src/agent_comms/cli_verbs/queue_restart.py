@@ -17,6 +17,7 @@ class QueueRestartCliCommand(ThreadLifecycleCliCommand, TargetActionCommand[Rest
     """A selected owner restarts at its next idle point: at once when idle, never mid-turn."""
 
     help = "Restart process"
+    menu_label = "Restart"
 
     @classmethod
     def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:

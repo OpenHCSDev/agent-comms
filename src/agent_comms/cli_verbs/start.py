@@ -9,3 +9,4 @@ from agent_comms.registry.threads import StartOwnerControl
 @dataclass(frozen=True, kw_only=True)
 class StartCliCommand(StartOwnerControl, RestoreOwnerCliCommand):
     help = 'Start thread'
+    menu_label = "Start"

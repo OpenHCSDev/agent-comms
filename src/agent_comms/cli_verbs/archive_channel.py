@@ -18,6 +18,7 @@ from agent_comms.registry.registry_document import RegistrySnapshot, ResolvedCha
 class ArchiveChannelCliCommand(MultipleTargets, NamedCliCommand, TargetActionCommand[Channel],
                                declared_name="archive-channel"):
     help = "Archive channel"
+    menu_label = "Archive"
     archived: Annotated[
         bool, TargetBound(), Argument(flags=("--archived",))
     ] = True

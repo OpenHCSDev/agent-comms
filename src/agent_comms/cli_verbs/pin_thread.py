@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Annotated, Self
 
 from agent_comms.cli_support.named import NamedCliCommand
-from agent_comms.cli_verbs.cli_command import ChannelBound, MultipleTargets, TargetActionCommand
+from agent_comms.cli_verbs.cli_command import ChannelBound, MultipleTargets, PinMenuLabel, TargetActionCommand
 from agent_comms.cli_verbs.cli_commands import ThreadPinnedResult
 from agent_comms.comms import Comms
 from agent_comms.messaging.channel_targets import SurroundingChannel
@@ -15,7 +15,7 @@ from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True, kw_only=True)
-class PinThreadCliCommand(MultipleTargets, NamedCliCommand, TargetActionCommand[ThreadPinnedResult],
+class PinThreadCliCommand(PinMenuLabel, MultipleTargets, NamedCliCommand, TargetActionCommand[ThreadPinnedResult],
                           declared_name="pin-thread"):
     help = "Toggle thread pin in channel"
     channel: Annotated[

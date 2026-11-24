@@ -107,6 +107,9 @@ class DeliveryProgress(ThreadPresentationStatus):
     def is_consumed(self) -> bool:
         return False
 
+    def is_queued(self) -> bool:
+        return False
+
     @property
     def answer(self) -> AssignmentResponse:
         return UnansweredResponse()
@@ -217,6 +220,9 @@ class ContextualProgress(WaitingDelivery, DeliveryProgress):
 class PendingProgress(ContextualProgress):
     """A pending claim adds no label of its own: once entry is proven, the proof is
     the whole state."""
+
+    def is_queued(self) -> bool:
+        return self.proof.is_queued()
 
     def model_consumed(self, proof: ShownToModelProgress) -> DeliveryProgress:
         return self.proof.model_consumed(proof)
@@ -334,6 +340,9 @@ class SendingProgress(ActiveDelivery, SentProgress, WorkingThreadPresentationSta
 @dataclass(frozen=True)
 class QueuedProgress(ActiveDelivery, SentProgress):
     label = "Queued"
+
+    def is_queued(self) -> bool:
+        return True
 
 
 @dataclass(frozen=True)

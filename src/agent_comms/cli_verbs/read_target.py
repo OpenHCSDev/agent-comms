@@ -19,6 +19,7 @@ from agent_comms.registry.threads import Thread
 class ReadTargetCliCommand(MultipleTargets, TargetActionCommand[TargetReadResult],
                            declared_name="read-target"):
     help = "Mark view read"
+    menu_label = "Mark read"
     target: Annotated[
         str, TargetBound(), Argument(flags=("--target",))
     ]

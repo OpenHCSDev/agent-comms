@@ -19,6 +19,7 @@ from agent_comms.team.rule_deal import RuleDeal, RuleGateSettings
 class ThreadRuleGateCliCommand(NamedCliCommand, RuleGateCommand,
                               TargetActionCommand[RuleGateConfiguredResult],
                               declared_name="configure-rule-gate"):
+    menu_label = "Rule gate"
     @classmethod
     def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus,
                         channel: SurroundingChannel, *, catalog: CatalogAccess) -> tuple[Self, ...]:

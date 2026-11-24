@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Annotated, Self
 
 from agent_comms.cli_support.named import NamedCliCommand
-from agent_comms.cli_verbs.cli_command import CliCommand, MultipleTargets, TargetActionCommand
+from agent_comms.cli_verbs.cli_command import CliCommand, MultipleTargets, PinMenuLabel, TargetActionCommand
 from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
 from agent_comms.comms import Comms
 from agent_comms.messaging.channels import Channel
@@ -15,7 +15,7 @@ from agent_comms.registry.registry_document import RegistrySnapshot, ResolvedCha
 
 
 @dataclass(frozen=True, kw_only=True)
-class PinChannelCliCommand(MultipleTargets, NamedCliCommand, TargetActionCommand[Channel],
+class PinChannelCliCommand(PinMenuLabel, MultipleTargets, NamedCliCommand, TargetActionCommand[Channel],
                            declared_name="pin-channel"):
     help = "Set channel pin"
     pinned: Annotated[

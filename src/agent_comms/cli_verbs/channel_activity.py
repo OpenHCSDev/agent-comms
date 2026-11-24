@@ -17,9 +17,13 @@ from agent_comms.registry.registry_document import RegistrySnapshot, ResolvedCha
 class ChannelActivityCliCommand(NamedCliCommand, TargetActionCommand[Channel],
                                 declared_name="channel-activity"):
     help = "Toggle member activity"
+    menu_label = "Activity"
     enabled: Annotated[
         bool, TargetBound(), Argument(flags=("--enabled",))
     ] = False
+
+    def action_label(self) -> str:
+        return "Activity: all" if self.enabled else "Activity: mentions"
 
     @classmethod
     def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:

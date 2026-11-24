@@ -20,6 +20,7 @@ from agent_comms.nominal.field_codec import Argument, Editor, TargetBound
 class DeleteTagCliCommand(MultipleTargets, ExactTagCliCommand, TargetActionCommand[TagChangeResult],
                           declared_name="delete-tag"):
     help = "Remove tag, archive tagged threads, or delete tagged threads"
+    menu_label = "Delete tag"
     disposition: Annotated[
         TagDisposition,
         Editor(ChoiceTargetField),

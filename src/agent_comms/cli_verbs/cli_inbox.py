@@ -26,6 +26,7 @@ class CliInboxCliCommand(
     declared_name="cli-inbox",
 ):
     help = "Switch a native Pi thread onto a CLI inbox without changing its identity"
+    menu_label = "CLI inbox"
 
     def apply(self, ctx: Comms) -> ThreadExecutionResult:
         switched = ctx.threads.switch_to_cli_inbox(self.name)

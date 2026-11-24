@@ -14,6 +14,7 @@ from agent_comms.nominal.field_codec import Argument
 class RenameTagCliCommand(ExactTagCliCommand, TargetActionCommand[TagRenamedResult],
                           declared_name="rename-tag"):
     help = "Rename channel tag"
+    menu_label = "Rename"
     new_name: Annotated[
         str, Argument(flags=("--to",), options={"help": "New tag name"})
     ]

@@ -19,6 +19,7 @@ class NativeThreadCliCommand(
     declared_name="native-thread",
 ):
     help = "Switch an independent CLI-inbox thread onto native Pi without changing its identity"
+    menu_label = "Native Pi"
 
     def apply(self, ctx: Comms) -> ThreadExecutionResult:
         switched = ctx.threads.switch_to_native(self.name)
