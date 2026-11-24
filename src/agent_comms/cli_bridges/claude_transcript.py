@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, ClassVar, Literal, Self
+from typing import BinaryIO, ClassVar, Literal, Self
 
 from agent_comms.cli_bridges.claude_protocol import (
     CLAUDE_RECORD,
@@ -30,16 +30,13 @@ from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.cli_bridges.session_ledger import SessionLedger
 from agent_comms.cli_bridges.shared import WireReference
 from agent_comms.cli_bridges.wire_models import WireModel
+from agent_comms.comms import Comms
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.message_files import MessageFile, MessageFileContent
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import FieldCodec, StoredSessionId
 from agent_comms.registry.thread_text import NamedSession, NoThreadText, ThreadText
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-
 
 class SubagentMeta(WireModel):
     description: str

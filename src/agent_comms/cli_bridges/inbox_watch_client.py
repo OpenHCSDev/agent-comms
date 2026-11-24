@@ -124,7 +124,7 @@ class TranscriptRoute(ABC):
 
 
 @dataclass(frozen=True)
-class LocalFileTranscriptRoute(TranscriptRoute, ABC):
+class LocalFileTranscriptRoute(TranscriptRoute):
     """A local JSONL transcript tailed from its recent window onward, with watch URLs redacted."""
 
     source: Path

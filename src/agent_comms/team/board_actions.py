@@ -5,15 +5,11 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FrozenRecordMember, TaggedRecordMember
+from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.transport.tool_result import ToolResult
-
-if TYPE_CHECKING:
-    from agent_comms.registry.thread_identity import ThreadIncarnation
-
 
 class BoardActionOffer(
     FrozenRecordMember,

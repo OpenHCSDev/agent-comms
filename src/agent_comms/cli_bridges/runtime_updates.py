@@ -19,6 +19,7 @@ from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId, NoSourceTurn, TurnItem
 from agent_comms.execution.turn_phase import FailedPhase, IdlePhase, ModelWaitPhase, TurnPhase
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.messaging.sending import Messaging
 from agent_comms.registry import activity
 from agent_comms.registry.agent_activity import AgentActivity
@@ -37,7 +38,6 @@ if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import TranscriptBridge
     from agent_comms.comms import Comms
     from agent_comms.importing import ImportBuffer
-    from agent_comms.messaging.messages import Message
 
 
 @dataclass

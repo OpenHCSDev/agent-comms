@@ -46,6 +46,7 @@ from agent_comms.execution.turn_failure import RetryableProviderFailure
 from agent_comms.following_inputs import FollowingInputs
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import RootId
+from agent_comms.team.pi_rule_gate import PiRuleGate
 
 
 class SessionSetupFailed(ValueError):
@@ -84,7 +85,6 @@ class SelectedExecution(ExecutionRoot, PackagedNativeExecution, ConsidersSelecte
         """Every stage derives its complete launch from the original acquired artifact."""
         if package != self.native_package:
             raise IdentityConflict("Selected launch differs from its execution package")
-        from agent_comms.team.pi_rule_gate import PiRuleGate
 
         comms = wire(self.root)
         delivery = PiRuleGate.of(comms, comms.registry.require(self.owner_name)).delivery()

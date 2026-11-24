@@ -4,13 +4,13 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import (
-    TYPE_CHECKING,
     Annotated,
     ClassVar,
 )
 
 from acp.schema import PromptRequest
 
+from agent_comms.comms import Comms
 from agent_comms.context_store import ContextManifestReference
 from agent_comms.coordination.annotation_correction import CorrectsAnnotation
 from agent_comms.execution.turn_context import (
@@ -48,10 +48,6 @@ from agent_comms.task_attachments.owner_notices import GoalWakeNotice
 from agent_comms.transport.tool_result import DeclaredReply
 from agent_comms.working_memory.working_memory_labels import ClassifierVersion, ModelLabel
 from agent_comms.working_memory.working_memory_questions import SpanAnswer
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-
 
 @dataclass(frozen=True, kw_only=True)
 class SubscribeRuntimeRequest(AttachedRuntimeRequest):
