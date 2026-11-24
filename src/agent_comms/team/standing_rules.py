@@ -1659,6 +1659,9 @@ class DirectiveUnacted(OwnerFlaggedStandingRule, OwedAnswer, DatedStandingRule):
     def session_readers(self) -> tuple[ThreadIncarnation, ...]:
         return (self.answerer,)
 
+    def named_threads(self) -> tuple[ThreadIncarnation, ...]:
+        return tuple(dict.fromkeys((*super().named_threads(), self.answerer)))
+
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], debtors: tuple[Thread, ...],
