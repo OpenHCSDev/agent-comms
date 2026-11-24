@@ -1,6 +1,13 @@
 """Read real persisted notification assignments without scheduling a model."""
+import os
 from dataclasses import replace
 
+from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.harness_delivery_states import DeliveredOutcome, ObservedMonitor
+from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.database import CoordinationStore
+from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.human_read_cut import HumanReadCut
 from agent_comms.messaging.message_notification import MessageNotification
@@ -11,9 +18,15 @@ from agent_comms.notification_assignment import NotificationAssignment, Notifica
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.activity import ActivityState
-from agent_comms.registry.threads import NativeThread
+from agent_comms.registry.thread_status import (
+    ConnectedThreadStatus,
+    NoBridgeThreadStatus,
+    StoppedThreadStatus,
+)
+from agent_comms.registry.threads import ExternalThread, NativeThread
 from conftest import installed_comms
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+from transcript_record_fixture import transcript_record
 
 
 def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F811
@@ -110,3 +123,55 @@ def test_a_live_batch_beyond_one_window_chunk_keeps_every_message(tmp_path):  # 
         alone = LiveNotificationRead((message.reference,)).read(comms)
         key = (message.seq, message.message_id)
         assert window.outcomes[key] == alone.outcomes[key] and window.outcomes[key]
+
+
+def test_offline_unseen_recipients_are_omitted_while_online_and_seen_or_answered_stay(tmp_path):  # noqa: F811
+    comms = installed_comms(tmp_path / "wire")
+    project = Checkout(tmp_path)
+    comms.registry.declare(NativeThread("sender", frozenset({"team"}), project))
+    comms.registry.declare(
+        ExternalThread(
+            "online-unread",
+            frozenset({"team"}),
+            project,
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ),
+        ConnectedThreadStatus(),
+    )
+    comms.registry.declare(
+        NativeThread("stopped-unread", frozenset({"team"}), project), StoppedThreadStatus(),
+    )
+    comms.registry.declare(
+        ExternalThread("nobridge-unread", frozenset({"team"}), project), NoBridgeThreadStatus(),
+    )
+    comms.registry.declare(
+        ExternalThread("offline-read", frozenset({"team"}), project), NoBridgeThreadStatus(),
+    )
+    comms.registry.declare(
+        NativeThread("offline-answered", frozenset({"team"}), project), StoppedThreadStatus(),
+    )
+    sent = comms.messaging.send("sender", "#team", "Check receipts").message
+    source = comms.bus.bus.delivery(sent.seq)
+    by_name = {recipient.canonical_thread: recipient for recipient in source.recipients}
+
+    with Coordination(str(CoordinationStore.path_in(comms.root))) as store, \
+            store.session.writing() as db:
+        attempt = HarnessDelivery(
+            ClaudeBridge,
+            by_name["offline-read"].recipient_lookup,
+            sent.message_id,
+            sent.seq,
+            DeliveredOutcome,
+            ObservedMonitor(transcript_record("complete-original"), sent.timestamp),
+        )
+        assert attempt.begin(store.assignments, db)
+        attempt.record(store.assignments, db)
+
+    comms.messaging.send("offline-answered", "#team", "Got it", answers=(sent.reference,))
+
+    window = comms.views.message_notifications_for_references(AllOutcomes(), (sent.reference,))
+    shown = {item.recipient: item for item in window.outcomes[(sent.seq, sent.message_id)]}
+    assert set(shown) == {"online-unread", "offline-read", "offline-answered"}
+    assert shown["online-unread"].label == "Sent"
+    assert shown["offline-read"].state.is_consumed()
+    assert shown["offline-answered"].label.startswith("Answered ")

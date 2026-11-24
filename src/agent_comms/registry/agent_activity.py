@@ -52,7 +52,10 @@ from agent_comms.registry.activity import (
     ObservedActivity,
 )
 from agent_comms.registry.activity_registry_reads import ActivityRegistryRead
-from agent_comms.registry.recipient_activity import RecipientActivity
+from agent_comms.registry.recipient_activity import (
+    OnlineRecipientActivity,
+    RecipientActivity,
+)
 from agent_comms.registry.registration_reads import ActivityRegistration
 from agent_comms.registry.thread_identity import OwnerIdentity, ThreadIncarnation
 from agent_comms.registry.thread_status import ThreadStatus
@@ -63,7 +66,7 @@ _LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class LiveRecipientActivity(RecipientActivity):
+class LiveRecipientActivity(OnlineRecipientActivity):
     thread: Thread
     activity: ObservedActivity
 

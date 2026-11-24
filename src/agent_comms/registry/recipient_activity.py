@@ -44,6 +44,22 @@ class RecipientActivity(
         """A message a running turn took, shown without a claim about current work."""
         return notification.with_state(TakenProgress(progress))
 
+    def shows_notification(
+        self, notification: AssignmentNotice[DeliveryProgress], *, displayed: bool,
+    ) -> bool:
+        """Offline recipients stay out of read receipts unless they saw or answered the message."""
+        return displayed or notification.state.shown_when_offline()
+
+
+@dataclass(frozen=True)
+class OnlineRecipientActivity(RecipientActivity):
+    """An online recipient without a live native turn lease (for example an active CLI bridge)."""
+
+    def shows_notification(
+        self, notification: AssignmentNotice[DeliveryProgress], *, displayed: bool,
+    ) -> bool:
+        return True
+
 
 @dataclass(frozen=True)
 class RecordedRecipientActivity(RecipientActivity):
@@ -53,6 +69,11 @@ class RecordedRecipientActivity(RecipientActivity):
         return reads.historical_displayed_recipient(
             source.message, notification.recipient_identity, snapshot, document=document
         )
+
+    def shows_notification(
+        self, notification: AssignmentNotice[DeliveryProgress], *, displayed: bool,
+    ) -> bool:
+        return True
 
 
 @dataclass(frozen=True)

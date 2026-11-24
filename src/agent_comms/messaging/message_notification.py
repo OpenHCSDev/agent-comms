@@ -387,13 +387,13 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
                     notification, source, reads, document, snapshot
                 )
                 read_marks.append(NotificationReadMark(source, notification.recipient_identity, displayed_to))
-                result[key].append(
-                    replace(
-                        notification,
-                        displayed_to=viewer.visible_reads(displayed_to, document.bus_identity),
-                        changed=notification.changed or bool(displayed_to),
-                    )
+                projected = replace(
+                    notification,
+                    displayed_to=viewer.visible_reads(displayed_to, document.bus_identity),
+                    changed=notification.changed or bool(displayed_to),
                 )
+                if observation.shows_notification(projected, displayed=bool(displayed_to)):
+                    result[key].append(projected)
             direct_read = cls.direct_read_notification(
                 source, snapshot, reads, document, viewer=viewer
             )

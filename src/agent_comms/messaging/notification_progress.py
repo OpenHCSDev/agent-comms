@@ -110,6 +110,10 @@ class DeliveryProgress(ThreadPresentationStatus):
     def is_queued(self) -> bool:
         return False
 
+    def shown_when_offline(self) -> bool:
+        """Whether this receipt stays visible when the recipient is offline."""
+        return False
+
     @property
     def answer(self) -> AssignmentResponse:
         return UnansweredResponse()
@@ -172,6 +176,9 @@ class ConsumedDelivery(SettledDelivery):
     def is_consumed(self) -> bool:
         return True
 
+    def shown_when_offline(self) -> bool:
+        return True
+
     def model_consumed(self, proof: ShownToModelProgress) -> Self:
         """An earlier proof already timed the entry; a later one adds nothing."""
         return self
@@ -194,6 +201,9 @@ class HumanReadProgress(SettledDelivery, DeliveryProgress):
 
     label: ClassVar[str] = "Read"
 
+    def shown_when_offline(self) -> bool:
+        return True
+
 
 @dataclass(frozen=True)
 class ContextualProgress(WaitingDelivery, DeliveryProgress):
@@ -208,6 +218,9 @@ class ContextualProgress(WaitingDelivery, DeliveryProgress):
 
     def is_consumed(self) -> bool:
         return self.proof.is_consumed()
+
+    def shown_when_offline(self) -> bool:
+        return self.proof.shown_when_offline()
 
     @property
     def answer(self) -> AssignmentResponse:
@@ -287,6 +300,9 @@ class AnsweredProgress(SettledDelivery, ContextualProgress):
     def answer(self) -> AnsweredResponse:
         return self.response
 
+    def shown_when_offline(self) -> bool:
+        return True
+
     def answered_notification(self, notification: AssignmentNotice[DeliveryProgress],
                               response: AnsweredResponse) -> AssignmentNotice[DeliveryProgress]:
         """A later independent response cannot replace an already recorded answer."""
@@ -301,6 +317,9 @@ class CompletedProgress(SettledDelivery, ContextualProgress):
 
     label = "Completed"
     detail = "The response workflow completed."
+
+    def shown_when_offline(self) -> bool:
+        return True
 
 
 class AssignmentProgress(DeliveryProgress):

@@ -281,9 +281,7 @@ class ThreadOwnerBinding(
         """An unavailable owner cannot supply a new existing-session load."""
 
     def recipient_activity(self, activity, snapshot, thread):
-        from agent_comms.registry.recipient_activity import UnavailableRecipientActivity
-
-        return UnavailableRecipientActivity()
+        return snapshot.status(thread.name).recipient_activity(thread.process_identity)
 
     def native_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         """Display this acquired binding, without observing another process cut."""
