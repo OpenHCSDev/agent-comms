@@ -105,7 +105,7 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.storage.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, VibeCheckNotice
-from agent_comms.task_attachments.team_pings import TeamUpdate
+from agent_comms.task_attachments.team_pings import RulePing, TeamUpdate
 from agent_comms.team.order import (
     AppliedOrderAction,
     ListedProblems,
@@ -1118,6 +1118,28 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
         SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
     assert held_bus.bus.bus.revision() == before
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
+
+
+def test_an_overdue_owner_directive_names_its_answerer_and_parks_when_stopped(held_bus):
+    """DirectiveUnacted waits on its answerer, so stopped answerers park below the board
+    instead of flooding every live teammate's tool responses."""
+    directive_msg = held_bus.bus.publisher.publish_ordinary(
+        Message(sender="outsider", target="colleague", type=InfoKind, body="Finish the cut",
+                timestamp=time.time() - 3600),
+        destination=CommandTarget.named("colleague"), origin=AgentOrigin(),
+    )
+    colleague = held_bus.registry.require("colleague").incarnation
+    store = held_bus.goals.todos
+    selected = NewestOpenRequest().select(store, colleague)
+    store.record_directive(selected[0].id, RequestDirective(
+        directive_msg.seq, directive_msg.timestamp + RequestDirective.window))
+    owed, = (rule for rule in OwedAnswer.opened(held_bus, colleague)
+             if isinstance(rule, DirectiveUnacted) and rule.message.reference == directive_msg.reference)
+    assert colleague in owed.named_threads()
+    ping = RulePing.capture(owed)
+    assert ping.threads == (colleague.name,)
+    assert not ping.parked(frozenset({"worker"}))
+    assert ping.parked(frozenset({colleague.name}))
 
 
 @pytest.mark.parametrize('body', ['@outsider This question is yours', 'The worker broadcasts its result'])
