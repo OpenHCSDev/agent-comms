@@ -35,6 +35,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination.errors import DeferredRead
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.installer.reporting import ReportPublication
 from agent_comms.messaging.message_notification import MessageNotification
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
@@ -263,11 +264,8 @@ class TeamRosterIdentity(OrderActionIdentity):
         return "roster=team"
 
 
-class OrderActionResult(DeclaredFamily, affix="OrderActionResult"):
+class OrderActionResult(ReportPublication, DeclaredFamily, affix="OrderActionResult"):
     """One unmistakable outcome from the shared teammate-verb boundary."""
-
-    def lines(self) -> tuple[str, ...]:
-        return ()
 
     def with_notes(self, notes: tuple[str, ...]) -> OrderActionResult:
         return self

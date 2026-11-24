@@ -105,6 +105,15 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.nominal.sealed import Sealed
 from agent_comms.registry.thread_identity import ThreadIncarnation, ThreadRole
 
+
+class RelayEnding(ABC):
+    """How a relay between a local connection and a WebSocket ended; the observation it
+    carried reports it."""
+
+    @abstractmethod
+    def describe(self) -> str: ...
+
+
 STOP_GRACE_SECONDS = 2.0
 PR_SET_NAME = 15
 
@@ -555,11 +564,8 @@ class GroupMember(ProcessIdentity, declared_name=None):
         return (self,) if platform.matches(self) else ()
 
 
-class LockHolder(DeclaredFamily, affix="LockHolder"):
+class LockHolder(RelayEnding, DeclaredFamily, affix="LockHolder"):
     """An observed flock owner; diagnosis, not authority to signal it."""
-
-    @abstractmethod
-    def describe(self) -> str: ...
 
     @staticmethod
     def described(holders: tuple[LockHolder, ...]) -> str:

@@ -61,6 +61,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (
     HelperStart,
     ProcessName,
+    RelayEnding,
     SpawnedHelper,
     join_retirement,
 )
@@ -2128,14 +2129,6 @@ class RelayConnection(Connection):
             with socket.socket(fileno=os.dup(self.fileno())) as peer:
                 peer.shutdown(socket.SHUT_RDWR)
         super().close()
-
-
-class RelayEnding(ABC):
-    """How a relay between a local connection and a WebSocket ended; the observation it
-    carried reports it."""
-
-    @abstractmethod
-    def describe(self) -> str: ...
 
 
 @dataclass(frozen=True)

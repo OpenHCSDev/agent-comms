@@ -25,6 +25,7 @@ from agent_comms.messaging.message_send_reads import PresenceMessageSender
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, TextRepresentation
 from agent_comms.nominal.lifecycle_capability import LifecycleCapability
+from agent_comms.planning.goals import OrphansHolds
 from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.presence_reads import PresenceEntry, PresenceSnapshot, PresenceThread
 from agent_comms.registry.roster_visibility import RosterVisibility
@@ -372,14 +373,6 @@ class HeartbeatThreadStatus(RunningThreadStatus):
 
 class IdleThreadStatus(ActiveThreadPresence):
     pass
-
-
-class OrphansHolds:
-    """A holder that can never answer: the work it held is orphaned, and any teammate may
-    release or withdraw it, as the REHOME line tells them to."""
-
-    def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
-        pass
 
 
 class StoppedPresence(Visible, ThreadStatus, declared_name=None):
