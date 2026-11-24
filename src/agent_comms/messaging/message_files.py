@@ -19,7 +19,7 @@ from pathlib import Path, PurePath
 from typing import Annotated, ClassVar
 
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.nominal.field_codec import MessageId, WireName, WireOmitDefault
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, WireName, WireOmitDefault
 from agent_comms.storage.typed_table import (
     Column,
     DurableStore,
@@ -138,12 +138,19 @@ class MessageFile:
     def __post_init__(self) -> None:
         require_file_name(self.name)
 
-    @property
-    def mention(self) -> str:
-        """How an agent's delivered message names it, with the read that returns its bytes."""
+    def mention_in(self, conversation: str) -> str:
+        """How an agent's delivered message names it, with the schema-valid read arguments."""
+        arguments = FieldCodec.compact(
+            {
+                "conversation": conversation,
+                "message": FieldCodec.encode(self.message),
+                "position": self.position,
+            },
+            ensure_ascii=True,
+        )
         return (
             f"File {self.position}: {self.name} ({self.mime_type}, {self.size} bytes); "
-            f"comms_message_file message={self.message.name} position={self.position}"
+            f"comms_message_file {arguments}"
         )
 
 

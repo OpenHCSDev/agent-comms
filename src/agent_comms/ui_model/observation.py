@@ -130,7 +130,6 @@ from agent_comms.registry.roster_visibility import RosterVisibility
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry.view_unread import ReplyIndexResult
-from agent_comms.team.team_heartbeat import TeamBoardAcquisition
 from agent_comms.team.team_hud import (
     AllTeamBoards,
     TeamBoardCut,
