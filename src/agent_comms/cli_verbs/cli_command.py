@@ -376,7 +376,7 @@ class TargetAction:
         return {'command': FieldCodec.encode(self.declaration), 'label': self.label,
                 'parameters': {'type': 'object', 'additionalProperties': False,
                     'properties': {item.name: item.json_schema() for item in self.editable_fields},
-                    'required': [item.name for item in self.editable_fields if item.required]},
+                    'required': [item.name for item in self.editable_fields if item.plan.constructor_required]},
                 'confirmation': self.confirmation, 'targets': list(self.targets),
                 'bound_count': len(self.bound)}
 

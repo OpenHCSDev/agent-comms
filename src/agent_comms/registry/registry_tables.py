@@ -11,12 +11,13 @@ and a reader holding revision r reads only what changed after r.
 from __future__ import annotations
 
 import sqlite3
+from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cache
 from pathlib import Path
-from typing import Annotated, ClassVar, Self, cast
+from typing import Annotated, Self, cast
 
 from pydantic import JsonValue
 
@@ -27,7 +28,7 @@ from agent_comms.nominal.declared_family import AcquiredMembers
 from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup, WireValue
 from agent_comms.registry.presence import PresenceCapture, PresenceChange, PresenceRevision
 from agent_comms.registry.registry_document import RegistryDocument
-from agent_comms.registry.thread_identity import TurnIdentity
+from agent_comms.registry.thread_identity import GenerationCounter, TurnIdentity
 from agent_comms.storage.file_observation import FileIdentity, FileRevision, MissingFile
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.row_mapping import RowMapping
@@ -93,35 +94,22 @@ class RegistryNamedRow(AcquiredMembers, RevisionStamped, declared_name=None):
     """One entry of a mapping section of the registry document, under its key; each family
     declares its section's place in the document and its value's wire type."""
 
-    path: ClassVar[tuple[str, ...]]
-    """The document attributes leading to this section's mapping."""
     name: Annotated[str, FrozenColumn(primary_key=True)]
 
     @classmethod
-    @cache
+    @abstractmethod
     def section(cls) -> tuple[str, ...]:
-        """The wire keys of ``path``, as the codec spells them."""
-        keys, value = [], RegistryDocument()
-        for name in cls.path:
-            keys.append(FieldCodec.record_key(type(value), name))
-            value = getattr(value, name)
-        return tuple(keys)
+        """The wire keys leading to this section in the encoded document."""
 
     @classmethod
+    @abstractmethod
     def entries(cls, document: RegistryDocument) -> Mapping[str, object]:
-        value: object = document
-        for name in cls.path:
-            value = getattr(value, name)
-        return value
+        """This section's mapping in ``document``."""
 
     @classmethod
+    @abstractmethod
     def cleared(cls, document: RegistryDocument) -> RegistryDocument:
         """``document`` with this section empty, so encoding it encodes none of its rows."""
-        def emptied(value: object, path: tuple[str, ...]) -> object:
-            head, *rest = path
-            inner = getattr(value, head)
-            return replace(value, **{head: emptied(inner, tuple(rest)) if rest else type(inner)()})
-        return emptied(document, cls.path)
 
     @classmethod
     def changed_entries(cls, document: RegistryDocument, earlier: RegistryDocument) -> tuple[str, ...]:
@@ -203,8 +191,20 @@ class RegistryHeader(RegistryRow):
 class RegistryThreads(WireStoredRow):
     """A thread's stored declaration, under its name."""
 
-    path = ("threads",)
     value: StoredWire
+
+    @classmethod
+    @cache
+    def section(cls) -> tuple[str, ...]:
+        return (FieldCodec.record_key(RegistryDocument, "threads"),)
+
+    @classmethod
+    def entries(cls, document: RegistryDocument) -> Mapping[str, object]:
+        return document.threads
+
+    @classmethod
+    def cleared(cls, document: RegistryDocument) -> RegistryDocument:
+        return replace(document, threads=type(document.threads)())
 
     @classmethod
     def changed_entries(cls, document: RegistryDocument, earlier: RegistryDocument) -> tuple[str, ...]:
@@ -219,32 +219,106 @@ class RegistryThreads(WireStoredRow):
 class RegistryStatuses(WireStoredRow):
     """A thread's stored status, under its name."""
 
-    path = ("statuses",)
     value: StoredWire
+
+    @classmethod
+    @cache
+    def section(cls) -> tuple[str, ...]:
+        return (FieldCodec.record_key(RegistryDocument, "statuses"),)
+
+    @classmethod
+    def entries(cls, document: RegistryDocument) -> Mapping[str, object]:
+        return document.statuses
+
+    @classmethod
+    def cleared(cls, document: RegistryDocument) -> RegistryDocument:
+        return replace(document, statuses=type(document.statuses)())
 
 
 @dataclass(frozen=True)
 class RegistryAliases(RegistryNamedRow):
     """An alias, and the thread name it resolves to."""
 
-    path = ("aliases",)
     value: str
 
+    @classmethod
+    @cache
+    def section(cls) -> tuple[str, ...]:
+        return (FieldCodec.record_key(RegistryDocument, "aliases"),)
+
+    @classmethod
+    def entries(cls, document: RegistryDocument) -> Mapping[str, object]:
+        return document.aliases
+
+    @classmethod
+    def cleared(cls, document: RegistryDocument) -> RegistryDocument:
+        return replace(document, aliases=type(document.aliases)())
+
 
 @dataclass(frozen=True)
-class RegistryOwnerGenerations(RegistryNamedRow):
+class RegistryGenerationRow(RegistryNamedRow, declared_name=None):
+    """A generation counter mapping nested under a GenerationCounter field of RegistryDocument."""
+
+    value: Annotated[int, Column(check="value > 0")]
+
+    @classmethod
+    @abstractmethod
+    def counter_in(cls, document: RegistryDocument) -> GenerationCounter: ...
+
+    @classmethod
+    @abstractmethod
+    def with_counter(cls, document: RegistryDocument, counter: GenerationCounter) -> RegistryDocument: ...
+
+    @classmethod
+    def entries(cls, document: RegistryDocument) -> Mapping[str, object]:
+        return cls.counter_in(document).generations
+
+    @classmethod
+    def cleared(cls, document: RegistryDocument) -> RegistryDocument:
+        counter = cls.counter_in(document)
+        return cls.with_counter(document, replace(counter, generations=type(counter.generations)()))
+
+
+@dataclass(frozen=True)
+class RegistryOwnerGenerations(RegistryGenerationRow):
     """A name's owner generation; deleted names keep theirs as a tombstone."""
 
-    path = ("owners", "generations")
-    value: Annotated[int, Column(check="value > 0")]
+    @classmethod
+    @cache
+    def section(cls) -> tuple[str, ...]:
+        return (
+            FieldCodec.record_key(RegistryDocument, "owners"),
+            FieldCodec.record_key(GenerationCounter, "generations"),
+        )
+
+    @classmethod
+    def counter_in(cls, document: RegistryDocument) -> GenerationCounter:
+        return document.owners
+
+    @classmethod
+    def with_counter(cls, document: RegistryDocument, counter: GenerationCounter) -> RegistryDocument:
+        return replace(document, owners=counter)
 
 
 @dataclass(frozen=True)
-class RegistryClaimGenerations(RegistryNamedRow):
+class RegistryClaimGenerations(RegistryGenerationRow):
     """A name's claim generation; deleted names keep theirs as a tombstone."""
 
-    path = ("claims", "generations")
-    value: Annotated[int, Column(check="value > 0")]
+    @classmethod
+    @cache
+    def section(cls) -> tuple[str, ...]:
+        return (
+            FieldCodec.record_key(RegistryDocument, "claims"),
+            FieldCodec.record_key(GenerationCounter, "generations"),
+        )
+
+    @classmethod
+    def counter_in(cls, document: RegistryDocument) -> GenerationCounter:
+        return document.claims
+
+    @classmethod
+    def with_counter(cls, document: RegistryDocument, counter: GenerationCounter) -> RegistryDocument:
+        return replace(document, claims=counter)
 
 
 @dataclass(frozen=True)
