@@ -121,7 +121,6 @@ from agent_comms.transport.connector_store import (
     ConnectorGrants,
     ConnectorStore,
     ConfidentialOAuthClient,
-    HeldUiProfiles,
     IssuedTokens,
     OAuthClientId,
     OAuthRedirectUri,
@@ -132,6 +131,7 @@ from agent_comms.transport.connector_store import (
     UiReadAccess,
     digest,
 )
+from agent_comms.transport.held_ui_profiles import HeldUiProfiles
 from agent_comms.transport.mcp import (
     AnsweredCall,
     InvalidRequestError,

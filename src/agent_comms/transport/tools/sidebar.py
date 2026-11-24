@@ -90,6 +90,7 @@ from agent_comms.registry.thread_management import (
 from agent_comms.transcript.transcripts import NotifiedThreadPresentation
 from agent_comms.registry.thread_text import ExpectedSession
 from agent_comms.registry.threads import Thread
+from agent_comms.team.board_actions import BoardActionApplied, BoardActionOffer
 from agent_comms.transport.request import (
     ObservedRequest,
     OptionalRead,
@@ -367,6 +368,15 @@ class CommsOwnerRequestTool(ToolRequest[OwnerAnswered]):
     )
     owner: Annotated[ThreadIncarnation, *tool_field("The owner incarnation the UI holds")]
     request: Annotated[RuntimeRequest, *tool_field("The declared runtime request")]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsBoardActionTool(ToolRequest[BoardActionApplied]):
+    """Apply one declaration-bound action from the selected recipient's Team board."""
+
+    label = "Apply board action"
+    description = "Apply one declaration-bound action from the selected recipient's Team board."
+    offer: Annotated[BoardActionOffer, *tool_field("The exact action offered by the board row")]
 
 
 @dataclass(frozen=True, kw_only=True)

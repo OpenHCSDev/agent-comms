@@ -20,7 +20,8 @@ from pathlib import Path
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.transport.connector_profile import ReachedRoute, UiConnectionProfile, UiGrantId
-from agent_comms.transport.connector_store import HeldUiProfiles, UiAccess
+from agent_comms.transport.connector_store import UiAccess
+from agent_comms.transport.held_ui_profiles import HeldUiProfiles
 from agent_comms.transport.tailnet_buses import PeerBus, TailnetBuses
 from agent_comms.transport.tool_result import ToolResult
 
