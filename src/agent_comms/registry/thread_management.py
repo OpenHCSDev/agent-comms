@@ -10,7 +10,7 @@ from functools import partial
 from pathlib import Path
 from typing import Self
 
-from agent_comms.agent_backend import RuntimeLocation
+from agent_comms.agent_backend import NewThreadBackend, RuntimeLocation
 from agent_comms.cli_bridges.history import History
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.config_options import RunningSelection
@@ -21,6 +21,7 @@ from agent_comms.execution.child_process import (
     ProcessIdentity,
     ProcessState,
 )
+from agent_comms.execution.cli_inbox_backend import CliInboxBackend
 from agent_comms.execution.imported_conversation import ImportedConversation
 from agent_comms.execution.imported_messages import ImportLimits
 from agent_comms.execution.launch_runtime import LaunchRuntime, TagListText
@@ -214,6 +215,16 @@ class NewThreadSpec(ThreadSettings):
         saved = RegistrySessionLocation.from_path(location.read_key, threads.root)
         return threads.registry.declare(replace(thread, session_file=saved))
 
+    def declare_cli_inbox(self, threads: ThreadManagement) -> ExternalThread:
+        thread = ExternalThread(
+            name=self.name,
+            tags=self.tags.for_new(),
+            worktree=self.project,
+            task=self.task.thread_text(),
+        )
+        threads.registry.require_declaration_available(thread, NoBridgeThreadStatus())
+        return ExternalThread.stored(threads.registry.declare(thread, NoBridgeThreadStatus()))
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ForkSpec(NewThreadSpec):
@@ -222,23 +233,49 @@ class ForkSpec(NewThreadSpec):
     parent: str
 
     def _parent(self, threads: ThreadManagement) -> Thread:
-        parent = threads.registry.require_member(self.parent, NativeThread)
-        parent.runtime.require_forkable()
+        parent = threads.registry.require(self.parent)
+        if not parent.independent_threads():
+            raise RelationViolationError(
+                f"Thread {parent.name!r} is a subagent; only independent threads can be forked."
+            )
+        parent.backend.require_forkable(parent)
         return parent
 
     def child(self, parent: Thread, runtime: RuntimeLocation, threads: ThreadManagement) -> Thread:
-        saved = RegistrySessionLocation.from_path(runtime.read_key, threads.root)
+        backend, session_path = runtime.fork_session_path(threads.root, self.project.path)
+        saved = RegistrySessionLocation.from_path(session_path, threads.root)
         return replace(self.declaration(),
                        parent=ForkedParent(parent.name), tags=self.tags.for_child(DeclaredTag.for_child(parent.tags)),
-                       backend=parent.backend, session_file=saved)
+                       backend=backend, session_file=saved)
 
     def declare(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Thread:
         # Copy saved history before locking the registry for its declaration.
         parent = self._parent(threads)
-        threads.registry.require_declaration_available(self.child(parent, parent.runtime, threads))
+        threads.registry.require_declaration_available(replace(
+            self.declaration(),
+            parent=ForkedParent(parent.name),
+            tags=self.tags.for_child(DeclaredTag.for_child(parent.tags)),
+        ))
         location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime, threads.root))
         return threads.registry.declare_child(
             parent, lambda current: self.child(current, location, threads),
+        )
+
+    def declare_cli_inbox(self, threads: ThreadManagement) -> ExternalThread:
+        parent = self._parent(threads)
+
+        def prepare(current: Thread) -> ExternalThread:
+            return ExternalThread(
+                name=self.name,
+                tags=self.tags.for_child(DeclaredTag.for_child(current.tags)),
+                worktree=self.project,
+                task=self.task.thread_text(),
+                parent=ForkedParent(current.name),
+            )
+
+        threads.registry.require_declaration_available(prepare(parent), NoBridgeThreadStatus())
+        return ExternalThread.stored(
+            threads.registry.declare_child(parent, prepare, status=NoBridgeThreadStatus())
         )
 
 
@@ -334,7 +371,7 @@ class ThreadManagement:
                 if not edit.original.snapshot.same_thread(current, selected, original):
                     raise RelationViolationError("External owner changed while preparing its native session.")
                 rehomed = current.as_member(
-                    NativeThread, process_identity=NO_PROCESS,
+                    NativeThread, backend=NewThreadBackend.selected(), process_identity=NO_PROCESS,
                     session_file=RegistrySessionLocation.from_path(session_path, self.root),
                 )
                 self.registry.require_declaration_available(rehomed, StoppedThreadStatus())
@@ -368,7 +405,7 @@ class ThreadManagement:
                 raise RelationViolationError("Thread changed while switching to CLI inbox.")
             NativeThread.stored(current)
             switched = current.without_turn().as_member(
-                ExternalThread, process_identity=NO_PROCESS,
+                ExternalThread, backend=CliInboxBackend, process_identity=NO_PROCESS,
             )
             self.registry.require_declaration_available(switched, NoBridgeThreadStatus())
             self.registry._declare_in(edit, switched, NoBridgeThreadStatus())
@@ -396,7 +433,8 @@ class ThreadManagement:
             if current.incarnation != original.incarnation:
                 raise RelationViolationError("Thread changed while switching to native Pi.")
             ExternalThread.stored(current)
-            prior = current.session_file.location(current.backend)
+            native_backend = NewThreadBackend.selected()
+            prior = current.session_file.location(native_backend)
             session_file = (
                 current.session_file
                 if prior.is_resumable()
@@ -405,7 +443,8 @@ class ThreadManagement:
                 )
             )
             switched = current.without_turn().as_member(
-                NativeThread, process_identity=NO_PROCESS, session_file=session_file,
+                NativeThread, backend=native_backend, process_identity=NO_PROCESS,
+                session_file=session_file,
             )
             self.registry.require_declaration_available(switched, StoppedThreadStatus())
             self.registry._declare_in(edit, switched, StoppedThreadStatus())
@@ -736,11 +775,4 @@ class ThreadManagement:
             return owner
 
     def _create_cli_inbox(self, spec: NewThreadSpec) -> ExternalThread:
-        thread = ExternalThread(
-            name=spec.name,
-            tags=spec.tags.for_new(),
-            worktree=spec.project,
-            task=spec.task.thread_text(),
-        )
-        self.registry.require_declaration_available(thread, NoBridgeThreadStatus())
-        return ExternalThread.stored(self.registry.declare(thread, NoBridgeThreadStatus()))
+        return spec.declare_cli_inbox(self)

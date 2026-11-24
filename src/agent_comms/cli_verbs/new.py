@@ -63,7 +63,7 @@ class NewThreadCliCommand(
             **{item.name: getattr(self, item.name) for item in fields(self.spec_type)},
             'project': LaunchCheckout.checked(self.project.path),
         })
-        options = ConfigOptions.configured()
+        options = ConfigOptions.for_route(ctx.route)
         asyncio.run(options.validate(self))
         self.apply_model_context(options.launch.configuration, self.model)
         child = ctx.threads.create(spec)

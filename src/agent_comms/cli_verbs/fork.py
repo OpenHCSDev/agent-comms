@@ -10,13 +10,14 @@ from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, TargetBound
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_management import ForkSpec, GivenTags
+from agent_comms.registry.thread_model import UndeclaredModel
 from agent_comms.registry.thread_settings import ThreadSettings
-from agent_comms.registry.threads import NativeOwnerCommand, Thread
+from agent_comms.registry.threads import ForkableThreadCommand, Thread
 
 
 @dataclass(frozen=True, kw_only=True)
-class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliCommand):
-    help = "Fork a child pi thread"
+class ForkCliCommand(ForkableThreadCommand, ThreadBoundCliCommand, NewThreadCliCommand):
+    help = "Fork a child thread from a parent's backend"
     menu_label = "Fork"
     spec_type = ForkSpec
     parent: Annotated[
@@ -29,5 +30,7 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliComm
 
     @classmethod
     def thread_binding(cls, thread: Thread) -> Self:
+        settings = ThreadSettings.field_values(thread)
+        settings["model"] = thread.catalog_model(UndeclaredModel())
         return cls(name='', parent=thread.name, tags=GivenTags(DeclaredTag.for_child(thread.tags)), project=thread.worktree,
-                   **ThreadSettings.field_values(thread))
+                   **settings)

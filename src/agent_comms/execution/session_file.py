@@ -180,7 +180,7 @@ class NoSessionFile(NullMember, SessionFile):
         return self
 
     def location(self, backend: type[AgentBackend]) -> RuntimeLocation:
-        return UnstartedRuntime(backend)
+        return backend.unstarted_location(UnstartedRuntime)
 
     def writable_location(self, backend: type[AgentBackend]) -> RuntimeLocation:
         return self.location(backend)

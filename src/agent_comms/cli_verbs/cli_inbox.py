@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from agent_comms.agent_backend import NewThreadBackend
 from agent_comms.cli_support.thread_lifecycle import ThreadLifecycleCliCommand
 from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.cli_verbs.cli_result import TargetEditResult
@@ -29,7 +30,7 @@ class CliInboxCliCommand(
 
     def apply(self, ctx: Comms) -> ThreadExecutionResult:
         switched = ctx.threads.switch_to_cli_inbox(self.name)
-        preserved = switched.session_file.location(switched.backend).is_resumable()
+        preserved = switched.session_file.location(NewThreadBackend.selected()).is_resumable()
         return ThreadExecutionResult(
             thread=switched.name,
             execution=FieldCodec.encode(type(switched)),

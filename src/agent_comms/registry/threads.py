@@ -15,6 +15,7 @@ from agent_comms.agent_backend import AgentBackend, NewThreadBackend, RuntimeLoc
 from agent_comms.context_segments.wake_values import WakeWorkContext, WakeWorkSource
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState
+from agent_comms.execution.cli_inbox_backend import CliInboxBackend
 from agent_comms.execution.launch_runtime import ThreadLaunch
 from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.pi_vocabulary import (
@@ -24,7 +25,6 @@ from agent_comms.execution.pi_vocabulary import (
     ThinkingLevelField,
 )
 from agent_comms.execution.session_file import NoSessionFile, SessionFile
-from agent_comms.execution.unstarted_runtime import UnstartedRuntime
 from agent_comms.execution.turn_lease import (
     FinishedTurn,
     NoTurnRecord,
@@ -57,6 +57,7 @@ from agent_comms.nominal.registration_inheritance import (
     InheritApplied,
     InheritEmpty,
     InheritPrevious,
+    RegistrationInheritance,
 )
 from agent_comms.planning.goal_failure_owner import GoalFailureOwner
 from agent_comms.planning.goal_mutation import GoalFork
@@ -155,6 +156,24 @@ class ConfigurableThreadCommand(ThreadCommandAvailability):
     @classmethod
     def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
         return thread.configurable_command_available(cls, status)
+
+
+class ForkableThreadCommand(ThreadCommandAvailability):
+    """A fork command available on any independent thread whose backend supports forking."""
+
+    @classmethod
+    def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
+        return thread.fork_command_available(cls, status)
+
+
+class InheritThreadBackend(RegistrationInheritance[type[AgentBackend]]):
+    """Keep a thread's native backend across re-registrations; switch cleanly across execution kinds."""
+
+    @classmethod
+    def apply(
+        cls, incoming: type[AgentBackend], previous: type[AgentBackend],
+    ) -> type[AgentBackend]:
+        return incoming.registered_over(previous)
 
 
 class OwnerLifecycleControl(ThreadCommandAvailability):
@@ -416,7 +435,7 @@ class ThreadProvenance(TaggedThreadSource):
         default_factory=NoThreadText
     )
     backend: Annotated[
-        type[AgentBackend], WireOmitDefault(), RegistrationPolicy(InheritPrevious)
+        type[AgentBackend], WireOmitDefault(), RegistrationPolicy(InheritThreadBackend)
     ] = field(default_factory=NewThreadBackend.selected)
 
     def answering_binding(self, lease: ThreadOwnerBinding) -> ThreadOwnerBinding:
@@ -997,6 +1016,11 @@ class Thread(
     ) -> bool:
         return False
 
+    def fork_command_available(
+        self, command: type[ThreadCommandAvailability], status: ThreadStatus,
+    ) -> bool:
+        return False
+
     def catalog_model(self, observed: ThreadModel) -> ThreadModel:
         return self.model.applied(observed)
 
@@ -1027,6 +1051,11 @@ class NativeThread(Thread):
     ) -> bool:
         return self.native_command_available(command, status)
 
+    def fork_command_available(
+        self, command: type[ThreadCommandAvailability], status: ThreadStatus,
+    ) -> bool:
+        return self.backend.is_forkable() and self.native_command_available(command, status)
+
     def restart_candidates(self, status: ThreadStatus) -> tuple[Thread, ...]:
         if self.process_identity.runs_here():
             return ()
@@ -1048,9 +1077,13 @@ class NativeThread(Thread):
         return self.turn_record.read_in(turns).project_activity(activity)
 
 
+@dataclass(frozen=True, kw_only=True)
 class ExternalThread(Thread):
     __slots__ = ()
     required_refusal = "Only an external CLI can publish a bridge process."
+    backend: Annotated[
+        type[AgentBackend], WireOmitDefault(), RegistrationPolicy(InheritThreadBackend)
+    ] = CliInboxBackend
 
     def external_command_available(self, command: type[ThreadCommandAvailability],
                                    status: ThreadStatus) -> bool:
@@ -1061,6 +1094,11 @@ class ExternalThread(Thread):
         self, command: type[ThreadCommandAvailability], status: ThreadStatus,
     ) -> bool:
         return self.external_command_available(command, status)
+
+    def fork_command_available(
+        self, command: type[ThreadCommandAvailability], status: ThreadStatus,
+    ) -> bool:
+        return self.backend.is_forkable() and self.external_command_available(command, status)
 
     def catalog_model(self, observed: ThreadModel) -> ThreadModel:
         return CliInboxThreadModel()
@@ -1078,15 +1116,6 @@ class ExternalThread(Thread):
 
     def apply_cli_inbox(self, threads: ThreadConfigurationTarget) -> Thread:
         return self
-
-    @cached_property
-    def runtime(self) -> RuntimeLocation:
-        """A CLI inbox publishes external transcript items even when it retains a prior Pi session."""
-        return UnstartedRuntime(self.backend)
-
-    @cached_property
-    def writable_runtime(self) -> RuntimeLocation:
-        return self.runtime
 
     def withdrawn(self) -> Thread:
         """The CLI bridge owns its binding and releases it as that process leaves
@@ -1138,6 +1167,7 @@ class ServiceThread(NoChannelInbox, Thread):
         return ServiceThreadStatus()
 
 
+@dataclass(frozen=True, kw_only=True)
 class SubagentThread(ExternalThread, declared_name="subagent_execution"):
     """A child working inside its parent session's turn: it reads its CLI inbox, holds no
     order and has no independent card, and starts with inherited channel membership."""
@@ -1184,6 +1214,7 @@ class SubagentThread(ExternalThread, declared_name="subagent_execution"):
 
 
 
+@dataclass(frozen=True, kw_only=True)
 class ForkThread(NoChannelInbox, SubagentThread, declared_name="fork_execution"):
     """An SDK child borrows its bound parent's context and records its own fork goal.
 

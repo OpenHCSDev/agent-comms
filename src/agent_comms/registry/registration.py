@@ -203,18 +203,24 @@ class Registration(
 
             return edit.document.user_thread().or_create(create)
 
-    def declare_child(self, original: Thread, prepare: Callable[[Thread], Thread]) -> Thread:
+    def declare_child(
+        self,
+        original: Thread,
+        prepare: Callable[[Thread], Thread],
+        *,
+        status: ThreadStatus = _DEFAULT_PRESENCE,
+    ) -> Thread:
         """Publish a prepared fork only while its original parent's source is current."""
         with self.store.editing() as edit:
-            current = edit.document.require_member(original.name, NativeThread)
-            current.runtime.require_forkable()
+            current = edit.document.require(original.name)
+            current.backend.require_forkable(current)
             child = prepare(current)
             if (current.incarnation, current.runtime) != (original.incarnation, original.runtime):
                 raise RelationViolationError(
                     f"Parent thread {original.name!r} changed its saved session during the fork; "
                     f"the created fork {child.runtime} was not registered."
                 )
-            return self._declare_in(edit, child, _DEFAULT_PRESENCE)
+            return self._declare_in(edit, child, status)
 
     def register_child(
         self, name: str, parent_name: str, execution: type[SubagentThread], goals: GoalFork[Thread, goals.GoalDeclaration],

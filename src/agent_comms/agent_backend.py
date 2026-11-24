@@ -25,6 +25,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms.errors import RelationViolationError
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.child_process import NoProcess, ProcessState
 from agent_comms.execution.history_view import OwnHistory
@@ -79,6 +80,9 @@ class RuntimeLocation(DeclaredFamily, TranscriptRuntime, affix='Runtime'):
 
     def new_location(self, root, worktree):
         return self
+
+    def fork_session_path(self, root: Path, worktree: Path) -> tuple[type[AgentBackend], str]:
+        return (self.backend, self.read_key)
 
     def arguments(self):
         return {"session_file": self.read_key}
@@ -251,6 +255,14 @@ class Forks(ABC):
     """Creates a child runtime location from a parent thread's history."""
 
     @classmethod
+    def is_forkable(cls) -> bool:
+        return True
+
+    @classmethod
+    def require_forkable(cls, parent: Thread) -> None:
+        parent.runtime.require_forkable()
+
+    @classmethod
     @abstractmethod
     async def fork(
         cls, parent: Thread, launcher: str, runtime: LaunchRuntime, root: Path,
@@ -312,6 +324,29 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     @classmethod
     @abstractmethod
     def new_location(cls, root, worktree) -> RuntimeLocation: ...
+
+    @classmethod
+    def unstarted_location(
+        cls, fallback: Callable[[type[AgentBackend]], RuntimeLocation],
+    ) -> RuntimeLocation:
+        return fallback(cls)
+
+    @classmethod
+    def is_forkable(cls) -> bool:
+        return False
+
+    @classmethod
+    def require_forkable(cls, parent: Thread) -> None:
+        raise RelationViolationError(f"{cls.__name__} does not support forking.")
+
+    @classmethod
+    def registered_over(cls, previous: type[AgentBackend]) -> type[AgentBackend]:
+        """Keep a previous native backend across re-registration; adopt incoming when switching off CLI inbox."""
+        return previous.as_native_backend(cls)
+
+    @classmethod
+    def as_native_backend(cls, incoming: type[AgentBackend]) -> type[AgentBackend]:
+        return cls
 
     @classmethod
     def seal(cls) -> None:
