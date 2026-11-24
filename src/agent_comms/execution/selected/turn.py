@@ -205,10 +205,12 @@ class SelectedAttempt:
             goal_permission=participant.goal_permission,
         )
 
-    async def prepare(self, session, action, write_authority):
+    async def prepare(
+        self, session, action, write_authority,
+    ) -> tuple[SelectedRequest, BatchSelectedAction]:
         participant = self.participant
         try:
-            action = BatchSelectedAction(tuple(
+            prepared = BatchSelectedAction(tuple(
                 (
                     assignment,
                     write_authority.select(
@@ -221,7 +223,7 @@ class SelectedAttempt:
                 for assignment in self.stage.assignments
             ))
             prompt = await SelectedPrompt(participant).full(
-                self.stage.assignments, self.obligations, action
+                self.stage.assignments, self.obligations, prepared
             )
             request = await SelectedRequest.reserve(
                 participant, session, self.stage, self.token, prompt
@@ -238,21 +240,21 @@ class SelectedAttempt:
                     participant.bus, participant.owner, participant.response_owner
                 )
             raise
-        return request, action
+        return request, prepared
 
     async def run(self, execution, session: SelectedSession, action, write_authority):
         participant = self.participant
-        request, action = await self.prepare(session, action, write_authority)
+        request, prepared = await self.prepare(session, action, write_authority)
         self.stage.progress.input_id = request.claim_scope.input_id
         async with request.native_failures():
-            tools = self.tool_owner(session, request.claim_scope.input_id, action)
+            tools = self.tool_owner(session, request.claim_scope.input_id, prepared)
             await participant.transition(PromptAcceptancePhase())
             result = await request.claim_scope.execute(
                 execution,
                 model=participant.model,
                 observe_event=self.observe_event,
                 selected_tool_mode=participant.model.provider_type.native_tool_mode(
-                    action.mode(tools), tools),
+                    prepared.mode(tools), tools),
                 # Only the full answer takes later inputs; a triage call answers one question.
                 following=execution.following,
             )
@@ -261,7 +263,7 @@ class SelectedAttempt:
             await participant.transition(PublishingPhase())
             await Coordination.run_async(
                 participant.store.session.path,
-                lambda store: action.apply(replace(tools, store=store)),
+                lambda store: prepared.apply(replace(tools, store=store)),
             )
             request.claim_scope.commit(participant.store, result.context)
             self.stage.progress.finish()

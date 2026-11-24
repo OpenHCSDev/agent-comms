@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agent_comms.cli_support.thread_lifecycle import ThreadLifecycleCliCommand
+from agent_comms.cli_support.named_thread import NamedThreadCliCommand
 from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.cli_verbs.cli_inbox import ThreadExecutionResult
 from agent_comms.comms import Comms
@@ -14,7 +14,7 @@ from agent_comms.registry.threads import ExternalOwnerCommand, OwnerLifecycleCon
 class NativeThreadCliCommand(
     ExternalOwnerCommand,
     OwnerLifecycleControl,
-    ThreadLifecycleCliCommand,
+    NamedThreadCliCommand,
     CliCommand[ThreadExecutionResult],
     declared_name="native-thread",
 ):

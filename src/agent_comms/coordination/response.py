@@ -395,7 +395,13 @@ def _require_final_owner(
     return snapshot
 
 
-def _answered_by(bus, boundary, owner: LiveResponseOwner, snapshot, obligation):
+def _answered_by(
+    bus,
+    boundary,
+    owner: LiveResponseOwner,
+    snapshot: RecoverySnapshot,
+    obligation: ResponseObligation,
+):
     """Selected originals and started inputs share the held native boundary."""
     lease = owner.thread.require_turn_lease()
     inputs = InputDispositions(bus.bus.path.parent).in_turn(lease.turn_id)
