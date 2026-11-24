@@ -6,7 +6,7 @@ import socket
 from aiohttp import WSMsgType, web
 from aiohttp.test_utils import TestClient, TestServer
 
-from agent_comms.ui_model.observation import RelayConnection, relay_frames
+from agent_comms.ui_model.observation_wire import RelayConnection, relay_frames
 
 
 def relaying(local: RelayConnection) -> TestServer:

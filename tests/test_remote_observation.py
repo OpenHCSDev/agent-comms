@@ -1,6 +1,8 @@
 """A UI's ObservationProcess served by a Core across the connector."""
 
 import asyncio
+import socket
+import time
 from dataclasses import dataclass
 
 from aiohttp.test_utils import TestServer
@@ -13,12 +15,12 @@ from agent_comms.transport.connector_profile import EndpointRoute, ResolvedRoute
 from agent_comms.transport.connector_store import ConnectorStore, UiReadAccess
 from agent_comms.transport.remote_core import ConnectorClient, ObservationRetired
 from agent_comms.ui_model.observation import (
-    ConnectionClosed,
     ObservationProcess,
     ObserveSidebar,
-    ServiceReported,
     SidebarResult,
+    ViewerEnd,
 )
+from agent_comms.ui_model.observation_wire import ConnectionClosed, ServiceReported
 from bus_record_fixture import prepare_native_comms
 
 
@@ -70,14 +72,11 @@ async def test_an_observation_process_receives_its_sidebar_from_a_remote_core(tm
 
 def test_retiring_a_peer_ends_its_relay_while_the_connector_is_still_connecting() -> None:
     """A listener that accepts but never answers the upgrade: retiring the peer must not wait."""
-    import socket
-    import time
-
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         listener.listen()
         port = listener.getsockname()[1]
-        peer = TestConnectorSource(Endpoint(URL(f"http://127.0.0.1:{port}")), Credential("t")).observation_peer()
+        peer = TestConnectorSource(Endpoint(URL(f"http://127.0.0.1:{port}")), Credential("t")).observation_peer(ViewerEnd)
         accepted, _ = listener.accept()
         with accepted:
             started = time.monotonic()
@@ -92,7 +91,7 @@ def test_an_ended_observation_reports_its_own_cause() -> None:
     """The service's traceback is reported as itself; a plain close reports the relay's recorded
     end, and waiting on the relay never rewrites that end as a retirement."""
 
-    peer = TestConnectorSource(Endpoint(URL("http://127.0.0.1:9/mcp")), Credential("token")).observation_peer()
+    peer = TestConnectorSource(Endpoint(URL("http://127.0.0.1:9/mcp")), Credential("token")).observation_peer(ViewerEnd)
     try:
         peer.join()
         assert not peer.thread.is_alive()

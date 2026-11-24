@@ -169,7 +169,8 @@ from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools.orders import CommsHeadVerdictTool, HeadVerdictTool
 from agent_comms.transport.tools.send import CommsSendTool, SendTool
 from agent_comms.transport.tools.served import SearchToolLookup
-from agent_comms.ui_model.observation import RelayConnection, relay_frames, serve_encoded
+from agent_comms.ui_model.observation import serve_encoded
+from agent_comms.ui_model.observation_wire import RelayConnection, relay_frames
 
 """A JSON-RPC request id, as the client chose it."""
 
