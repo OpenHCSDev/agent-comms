@@ -305,7 +305,7 @@ class CommsPauseGoalTool(GoalsArea, GoalChangeTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsGoalHistoryTool(GoalsArea, ThreadReadTool):
     label = "Goal history"
-    description = "Read recorded goal revisions and recorded provenance and observation gaps."
+    description = "Read past goal revisions, who changed them, and any recording gaps."
     goal_id: Annotated[
         OneGoal | AllGoals, *tool_field("Optional goal ID; omit for this thread's full history")
     ] = AllGoals()

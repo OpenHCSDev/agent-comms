@@ -24,7 +24,7 @@ from agent_comms.nominal.field_codec import Argument, Editor, NamedArgumentGroup
 
 @dataclass(frozen=True, kw_only=True)
 class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
-    help = "Export durable IRC/wire message history"
+    help = "Export message history"
     output: Annotated[
         str, Argument(flags=("--output",), options={"help": "Destination file"})
     ]
@@ -38,7 +38,7 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
         Argument(
             flags=("--everything",),
             group=NamedArgumentGroup("scope"),
-            options={"help": "Every wire message"},
+            options={"help": "Every bus message"},
         ),
     ] = False
     channel: Annotated[
