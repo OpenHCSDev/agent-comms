@@ -1232,9 +1232,6 @@ class DrainedSession(SessionTaskOwner, InputEventState):
         """A queue change reaches an open turn; without one the queue keeps it."""
         self.turn.send(item)
 
-    def require_inbox(self) -> TurnInbox:
-        return self.turn.require_inbox()
-
     def require_first_source(self) -> OriginalTurnInput:
         return self.turn.require_source()
 
@@ -1525,7 +1522,7 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
         request: PromptRequest,
         images: tuple[ImageInput, ...],
     ) -> PromptResponse:
-        inbox = self.state(session_id).require_inbox()
+        inbox = self.state(session_id).turn.require_inbox()
         controller = self.runtime.controller.get().attached(self.sessions.client)
         followup = UserFollowupSegment.capture(text.removeprefix(AGENT_PREFIX))
         async with QueuedInput.reserve(

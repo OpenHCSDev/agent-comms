@@ -21,6 +21,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, ClassVar, cast, get_args, get_origin
 
 from metaclass_registry.mro_dispatch import MroDispatch, handles
+from nominal_refactor_advisor.foreign_family import FunctionDefinition
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
@@ -793,8 +794,7 @@ class ClassChecks(ast.NodeVisitor):
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self.declared.add(node.name)
         self.classes.append((node.name, frozenset(NamedClasses.of(node.bases))))
-        self._methods.update(member for member in node.body
-                             if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)))
+        self._methods.update(member for member in FunctionDefinition.within(node.body))
         self.generic_visit(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:

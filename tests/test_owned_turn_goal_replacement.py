@@ -96,7 +96,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                     prompt='Following input after replacement', echo=True, images=(), controller=NO_CONTROLLER,
                  input_id=InputId.mint()) as reservation:
                     item = reservation.item
-                    item.place(agent.inputs, session_id, agent.inputs.state(session_id).require_inbox(),
+                    item.place(agent.inputs, session_id, agent.inputs.state(session_id).turn.require_inbox(),
                                InputContent(text=item.prompt))
                     reservation.release()
                 saved.provider.response_gate.set()
