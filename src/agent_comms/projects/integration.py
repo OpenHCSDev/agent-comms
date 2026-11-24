@@ -22,6 +22,7 @@ from agent_comms.execution.test_lease import LeaseStart, TestLease
 from agent_comms.installer.active_route import resolve_comms_route
 from agent_comms.installer.build_identity import RepositoryCommit
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
+from agent_comms.installer.runtime_resolution import StackSources
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument,
@@ -53,9 +54,7 @@ from agent_comms.projects.head_review import (
     IntegrationSource,
     LocalIntegrationSource,
     MergedIntegrationSource,
-    MergeHeadReview,
     OrdinaryInput,
-    PromotedHeadReview,
     PullRequestHead,
     ResolvedIntegrationSource,
     Side,
@@ -63,6 +62,7 @@ from agent_comms.projects.head_review import (
     UnpromotedHeadReview,
     UnpublishedInput,
 )
+from agent_comms.projects.merge_review import MergeHeadReview, PromotedHeadReview
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.work_branches import WorkBranches
@@ -467,7 +467,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
         payload = IntegrationInput.from_message(
             WorkBranches(self.repository.checkout).commit_message(self.carrier.head)
         )
-        urls = IntegrationInput.source_urls(self.repository, self.baseline, self.tested)
+        urls = StackSources.source_urls(self.repository, self.baseline, self.tested)
         companions: list[Repo] = []
         for name, url in sorted(urls.items(), key=lambda item: item[0].key):
             checkout = directory / "repositories" / Path(*name.key)
@@ -547,7 +547,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
                 "Tested base/tree differs from the frozen source input; recapture"
             )
         inputs.require_repositories(
-            IntegrationInput.declared_repositories(self.repository, self.baseline, self.tested)
+            StackSources.declared_repositories(self.repository, self.baseline, self.tested)
         )
         payload = IntegrationInput.from_message(
             WorkBranches(self.repository.checkout).commit_message(self.carrier.head)
@@ -556,6 +556,12 @@ class TestedSources(DeclaredFamily, affix="Sources"):
             if payload != (inputs,):
                 raise IntegrationFailed("The tested carrier and materialized input disagree")
             inputs.require_carrier(self.repository, self.carrier)
+            StackSources.require_carrier_contract(
+                self.repository,
+                local.baseline.commit,
+                self.carrier.head,
+                {source.repository for source in inputs.sources},
+            )
         else:
             for source in inputs.sources:
                 source.require_ordinary(self.carrier)
@@ -830,7 +836,7 @@ class IntegrationRun(InputPublication):
         base = IntegrationSource.main_head(core)
         candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
         core.acquire(base)
-        required = IntegrationInput.declared_repositories(core, base, candidate_commit)
+        required = StackSources.declared_repositories(core, base, candidate_commit)
         linked_repositories = {
             link.repo
             for todo in todos
@@ -1032,6 +1038,12 @@ class IntegrationRun(InputPublication):
         captured = PullRequestHead(repository.github, carrier.pr,
                                    Repo.git(self.checkout.path, "rev-parse", "HEAD").strip())
         inputs.validate_published(context.repos, captured)
+        StackSources.require_carrier_contract(
+            repository,
+            inputs.local.baseline.commit,
+            captured.head,
+            {source.repository for source in inputs.sources},
+        )
         print(f"PUBLISHED {link.url}; qualification only; no merge permission", flush=True)
         return inputs
 
@@ -1063,6 +1075,11 @@ class IntegrationRun(InputPublication):
         if len(recorded) != 1:
             raise IntegrationFailed("Recapture requires one existing published source cut")
         (previous,) = recorded
+        previous.require_repositories(
+            StackSources.declared_repositories(
+                repository, previous.local.baseline.commit, carrier.head
+            )
+        )
         previous.require_recapture(repository, carrier)
         primary = store.get(primary.id)
         primary.require_assignee(context.actor_identity, generation)

@@ -11,11 +11,10 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import TargetProgram
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_home import RuntimeHome
+from agent_comms.installer.runtime_record import CorePackage, ToadPackage
 from agent_comms.installer.runtime_resolution import (
-    CorePackage,
     ProjectMetadata,
     RuntimeResolution,
-    ToadPackage,
 )
 from agent_comms.installer.runtime_stack import (
     HistoricalRuntime,

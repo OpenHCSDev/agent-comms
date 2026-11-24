@@ -17,10 +17,10 @@ from agent_comms.transport.connector import LOOPBACK, PORT
 from agent_comms.execution.child_process import ResidentManager
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.harness_install import ConnectorClientHarness, Harness, replace_link
-from agent_comms.installer.runtime_resolution import (
+from agent_comms.installer.runtime_record import (
     ConsoleScriptPackage,
+    RecordedResolution,
     RuntimePackage,
-    RuntimeResolution,
 )
 from agent_comms.nominal.field_codec import PathText
 from agent_comms.transport.connector_store import ConnectorStore
@@ -36,7 +36,7 @@ class RuntimePublication:
         binary = Path(sys.executable).parent.resolve(strict=True)
         if not Path(agent_comms.__file__).resolve().is_relative_to(binary.parent):
             raise ValueError("Editable Core cannot publish a runtime; build the selected source")
-        RuntimeResolution.at(binary.parent)
+        RecordedResolution.at(binary.parent)
         packages = tuple(
             member.distribution for member in RuntimePackage.members_with(ConsoleScriptPackage))
         links = {
@@ -71,7 +71,7 @@ class RuntimePublication:
         """Refresh the declared installation, including an already-current runtime."""
         current = LaunchRuntime.current_pointer()
         selected = self.runtime.resolve(strict=True)
-        RuntimeResolution.at(selected)
+        RecordedResolution.at(selected)
         ResidentManager.current().prepare_units(home=Path.home())
         for link, target in self.links.items():
             replace_link(link, self.published_target(current, target))

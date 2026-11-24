@@ -66,12 +66,11 @@ from agent_comms.projects.head_review import (
     IntegrationInput,
     LocalIntegrationSource,
     MergedIntegrationSource,
-    MergeHeadReview,
     OrdinaryInput,
-    PromotedHeadReview,
     PullRequestHead,
     ReadPullRequestHead,
 )
+from agent_comms.projects.merge_review import MergeHeadReview, PromotedHeadReview
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.work_branches import (
     SourceGrowth,
@@ -239,7 +238,7 @@ def test_qualification_records_each_open_order_cut_without_promoting_or_finishin
         assert not record.verdict.allows_integration()
         assert not HeadReview.accepted(request.repo, request.head)
         with pytest.raises(TodoError, match="no recorded ok verdict"):
-            record.verdict.require_merge(request, context.repos)
+            MergeHeadReview.require_verdict_merge(record.verdict, request, context.repos)
 
     qualify_unchanged()  # Pending: the order still requires every unfinished clause.
     claim_order("P2", pull_request=request.pr, head=request.head)
@@ -480,7 +479,7 @@ def test_qualification_withdraws_acceptance_without_claiming_to_disarm_the_reque
     arms = tuple(call for call in github.calls() if call[:2] == ("pr", "merge"))
     assert arms == () and HeadReview.accepted(request.repo, request.head)
     with pytest.raises(ToolRefusedError, match="captured combined carrier"):
-        ReviewedHeadVerdict.require_merge(request, team_as(comms.root, "colleague").repos)
+        MergeHeadReview.require_verdict_merge(ReviewedHeadVerdict, request, team_as(comms.root, "colleague").repos)
     invoke(comms, request, QualifiedHeadVerdict(QUALIFIED))
     assert StoredHeadReview.current_verdict(comms.goals.todos, request) is QualifiedHeadVerdict
     assert not HeadReview.accepted(request.repo, request.head)
@@ -907,14 +906,14 @@ def test_only_explicit_combined_promotion_arms_the_reviewed_head_and_reports_for
         assert f"#{request.pr} is a draft, so not armed" in capsys.readouterr().out
     assert StoredHeadReview.current_verdict(comms.goals.todos, request) is ReviewedHeadVerdict
     assert PromotedHeadReview.accepted(request.repo, request.head)
-    ReviewedHeadVerdict.require_merge(request, context.repos)
+    MergeHeadReview.require_verdict_merge(ReviewedHeadVerdict, request, context.repos)
     # A stale pair of green carrier statuses cannot bypass current member decisions.
     member = inputs.source(pair.client.github).heads[0]
     QualifiedHeadVerdict(QUALIFIED).post(member.repo, member.head, "colleague", "withdraw member")
     assert HeadReview.accepted(request.repo, request.head)
     assert MergeHeadReview.accepted(request.repo, request.head)
     with pytest.raises(ToolRefusedError, match="no accepted exact-head source review"):
-        ReviewedHeadVerdict.require_merge(request, context.repos)
+        MergeHeadReview.require_verdict_merge(ReviewedHeadVerdict, request, context.repos)
 
 
 @pytest.mark.parametrize("verdict", (UnderReviewHeadVerdict(), RejectedHeadVerdict(REASON)))

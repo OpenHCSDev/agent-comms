@@ -15,7 +15,6 @@ from time import monotonic, sleep
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.installer.build_identity import RepositoryCommit
-from agent_comms.installer.runtime_resolution import PrivateUvProject, StackSources
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -452,37 +451,6 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
             )
         return selected[0]
 
-    @staticmethod
-    def declared_repositories(
-        core: Repo, baseline: str, candidate: str
-    ) -> tuple[RepositoryName, ...]:
-        """Actual declarations on both sides own the universe, including added/removed clients."""
-        return tuple(
-            sorted(
-                {core.github, *IntegrationInput.source_urls(core, baseline, candidate)},
-                key=lambda name: name.key,
-            )
-        )
-
-    @staticmethod
-    def source_urls(core: Repo, baseline: str, candidate: str) -> dict[RepositoryName, str]:
-        urls: dict[RepositoryName, str] = {}
-        for commit in (baseline, candidate):
-            declared = StackSources.declared_sources(
-                PrivateUvProject.decode(
-                    Repo.git(core.checkout, "show", f"{commit}:stack/pyproject.toml")
-                )
-            )
-            identities = tuple(Repo.repository_url(url) for url, branch in declared.values())
-            if len(set(identities)) != len(identities):
-                raise ToolRefusedError("One stack cut declares a Git repository more than once")
-            for url, _branch in declared.values():
-                identity = Repo.repository_url(url)
-                if identity == core.github:
-                    raise ToolRefusedError("The stack repeats Core as a Git companion source")
-                urls[identity] = url
-        return urls
-
     def validate(self, repositories: tuple[Repo, ...], carrier: PullRequestHead) -> None:
         """Git and forge prove this frozen input; Todo and verdict owners decide permission."""
         self._validate_current(repositories, carrier, carrier.current())
@@ -671,9 +639,6 @@ class UnpublishedInput(SubstantiveInput):
 
     def require_recapture(self, core: Repo, carrier: PullRequestHead) -> None:
         """A known published prospective cut may be replaced explicitly, never recreated."""
-        self.require_repositories(
-            self.declared_repositories(core, self.local.baseline.commit, carrier.head)
-        )
         self.bind(core, carrier)
         if self.from_message(WorkBranches(core.checkout).commit_message(carrier.head)) != (self,):
             raise ToolRefusedError("The published prospective cut does not contain this exact input")
@@ -745,9 +710,6 @@ class CombinedInput(SubstantiveInput):
         core.acquire(self.carrier.head, carrier.head)
         source = self.local
         source.require_origin(core)
-        self.require_repositories(
-            self.declared_repositories(core, source.baseline.commit, carrier.head)
-        )
         source.require_ancestry(core, self.carrier.head)
         source.require_ancestry(core, carrier.head)
         if reader.commit_parents(carrier.head) != (self.carrier.head,):
@@ -758,14 +720,6 @@ class CombinedInput(SubstantiveInput):
             raise ToolRefusedError(
                 "The current carrier does not contain this exact canonical input"
             )
-        StackSources.require_compatible(
-            PrivateUvProject.decode(
-                Repo.git(core.checkout, "show", f"{source.baseline.commit}:stack/pyproject.toml")
-            ),
-            PrivateUvProject.decode(
-                Repo.git(core.checkout, "show", f"{carrier.head}:stack/pyproject.toml")
-            ),
-        )
 
 
 class Side(DeclaredFamily, affix="Side"):
@@ -1002,91 +956,9 @@ class HeadReview(DeclaredFamily, affix="HeadReview"):
             raise ToolRefusedError(posted.stderr.strip() or f"Review status on {head} failed.")
 
 
-class MergeHeadReview(HeadReview, declared_name=None):
-    """An explicit permission to merge, separate from accepting source for combination."""
-
+@dataclass(frozen=True)
+class UnpromotedHeadReview(HeadReview):
     context = "agent-comms/merge"
-
-    @classmethod
-    def required_contexts(cls) -> tuple[str, ...]:
-        return (*super().required_contexts(), cls.context)
-
-    @classmethod
-    def require_combined(
-        cls, request: PullRequestHead, repositories: tuple[Repo, ...]
-    ) -> IntegrationInput:
-        repository = Repo.selected(repositories, request.repo.to_wire())
-        captured = IntegrationInput.from_message(
-            WorkBranches(repository.checkout).commit_message(request.head)
-        )
-        if not captured:
-            raise ToolRefusedError(
-                "Only a captured combined carrier may merge; accept individual source with judge ok"
-            )
-        (inputs,) = captured
-        inputs.validate(repositories, request)
-        inputs.require_source_reviews()
-        return inputs
-
-    @classmethod
-    def require_merge(
-        cls, request: PullRequestHead, repositories: tuple[Repo, ...]
-    ) -> IntegrationInput:
-        inputs = cls.require_combined(request, repositories)
-        cls.require_permission(request)
-        return inputs
-
-    @classmethod
-    def require_permission(cls, request: PullRequestHead) -> None:
-        if not (
-            HeadReview.accepted(request.repo, request.head)
-            and cls.accepted(request.repo, request.head)
-        ):
-            raise ToolRefusedError(
-                "The exact combined carrier has no explicit reviewed merge promotion"
-            )
-
-
-@dataclass(frozen=True)
-class PromotedHeadReview(MergeHeadReview):
-    """A forge permission, never a persisted source-review verdict."""
-
-    state = "success"
-
-    @classmethod
-    def allows_integration(cls) -> bool:
-        return True
-
-    def description(self, reviewer: str, subject: str) -> str:
-        return f"Explicitly promoted by {reviewer} on {subject}"
-
-    def require_sources(
-        self, goals: Goals, request: PullRequestHead, reviewer: ThreadIncarnation
-    ) -> None:
-        snapshot = goals.registry.snapshot()
-        project = snapshot.team_project.require_scope(snapshot, reviewer, request.repo)
-        inputs = self.require_combined(request, project.repos)
-        goals.todos.require_input_sources(inputs)
-
-    def enqueue(self, record: HeadReviewRecord, repositories: tuple[Repo, ...]) -> MergeArm:
-        request = record.request
-        if not HeadReview.accepted(request.repo, request.head):
-            raise ToolRefusedError("The exact combined source review must succeed before promotion")
-        current = request.current()
-        self.require_combined(request, repositories)
-        self.post(request.repo, request.head, record.actor.name, f"#{request.pr}")
-        try:
-            self.require_merge(request, repositories)
-        except ToolRefusedError, GitCommandError:
-            UnpromotedHeadReview().post(
-                request.repo, request.head, record.actor.name, f"#{request.pr}"
-            )
-            raise
-        return current.arm()
-
-
-@dataclass(frozen=True)
-class UnpromotedHeadReview(MergeHeadReview):
     state = "pending"
 
     def description(self, reviewer: str, subject: str) -> str:

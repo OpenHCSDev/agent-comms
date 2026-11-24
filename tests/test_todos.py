@@ -26,7 +26,7 @@ from agent_comms.execution.child_process import NoProcess, ProcessIdentity
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.installer.runtime_resolution import CorePackage, TextualPackage, ToadPackage
+from agent_comms.installer.runtime_record import CorePackage, TextualPackage, ToadPackage
 from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.planning.goal_actions import ClearGoalAction, SetGoalAction

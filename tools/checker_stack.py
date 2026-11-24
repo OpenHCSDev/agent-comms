@@ -19,8 +19,8 @@ from packaging.utils import canonicalize_name
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
+from agent_comms.installer.runtime_record import CorePackage
 from agent_comms.installer.runtime_resolution import (
-    CorePackage,
     PrivateUvProject,
     ResolvedLock,
     RuntimeResolution,

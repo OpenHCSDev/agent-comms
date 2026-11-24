@@ -53,7 +53,7 @@ from agent_comms.installer.reporting import (
     UnpostedWriter,
 )
 from agent_comms.installer.request import InstallRequest
-from agent_comms.installer.runtime_resolution import CorePackage
+from agent_comms.installer.runtime_record import CorePackage
 from agent_comms.installer.upgrade import (
     FinishedInstall,
     LiveRun,

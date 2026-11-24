@@ -80,7 +80,8 @@ from agent_comms.planning.orders import (
     UnquotedHeadReview,
 )
 from agent_comms.projects.change_report import FileLine
-from agent_comms.projects.head_review import HeadReviewOrder, PromotedHeadReview, PullRequestHead
+from agent_comms.projects.head_review import HeadReviewOrder, PullRequestHead
+from agent_comms.projects.merge_review import PromotedHeadReview
 from agent_comms.projects.slop import Derivation, Slop
 from agent_comms.storage.recorded_time import EventTime
 from agent_comms.team import order

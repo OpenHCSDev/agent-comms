@@ -52,7 +52,8 @@ from agent_comms.installer.native_package import (
 )
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
 from agent_comms.installer.probes.packages import CommitRecord, GitRecord, PackageRecord
-from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
+from agent_comms.installer.runtime_record import RuntimePackage
+from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.messaging.bus import Bus, BusRecord
 from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.channel_targets import CommandTarget

@@ -7,7 +7,7 @@ from agent_comms_hooks import ToolRefusedError
 
 from agent_comms.errors import TodoError
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.installer.runtime_resolution import ToadPackage
+from agent_comms.installer.runtime_record import ToadPackage
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning import orders
 from agent_comms.planning.goal_actions import SetGoalAction

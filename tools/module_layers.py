@@ -45,7 +45,8 @@ from mypy.options import Options
 from nominal_refactor_advisor import audit
 
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.runtime_resolution import CorePackage, ProjectMetadata, StackSources
+from agent_comms.installer.runtime_record import CorePackage
+from agent_comms.installer.runtime_resolution import ProjectMetadata, StackSources
 from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import boundary_decoder

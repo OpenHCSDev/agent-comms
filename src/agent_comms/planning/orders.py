@@ -181,7 +181,6 @@ from agent_comms.projects.head_review import (
     HeadReviewStatus,
     IntegrationInput,
     MergeArm,
-    MergeHeadReview,
     PreparedHeadReview,
     PullRequestHead,
     ReadPullRequestHead,
@@ -4043,12 +4042,6 @@ class HeadVerdict(HeadReview, declared_name=None):
         if not cls.allows_integration():
             raise TodoError(
                 f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
-
-    @classmethod
-    def require_merge(cls, request: PullRequestHead, repositories: tuple[Repo, ...]) -> None:
-        """The queue merges only a promoted combined carrier of ok sources."""
-        cls.require_ok(request)
-        MergeHeadReview.require_merge(request, repositories)
 
     @contextmanager
     def recording(self, request: PullRequestHead, reviewer: str, subject: str) -> Iterator[None]:
