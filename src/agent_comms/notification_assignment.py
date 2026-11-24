@@ -396,7 +396,9 @@ class NotificationAssignment(NotificationSource):
     def evidence_revision(cls, root: Path) -> int:
         """The coordination revision owned only by rows notification display reads."""
         store = CoordinationStore.observed(CoordinationStore.path_in(root))
-        with store.observing(NotificationEvidenceRevisionRead) as revision:
+        with store.observing(
+            NotificationEvidenceRevisionRead, RegistryStore.at(root),
+        ) as revision:
             return revision
 
     @classmethod
@@ -766,18 +768,28 @@ class NotificationEvidenceRevisionRead:
     """Read the one notification-evidence revision through the store's classified view."""
 
     @staticmethod
-    def capture(connection: sqlite3.Connection) -> int:
+    def capture(
+        connection: sqlite3.Connection,
+        schema_source: RegistryPrivacy | RegistryStore,
+    ) -> int:
+        schema_source.coordinator_schema().require_schema(connection)
         rows = NotificationEvidenceRevision.select(connection)
         if len(rows) > 1:
             raise ValueError("Notification evidence has more than one revision row")
         return rows[0].revision if rows else 0
 
     @staticmethod
-    def missing_store(_store: MissingStore) -> int:
+    def missing_store(
+        _store: MissingStore,
+        _schema_source: RegistryPrivacy | RegistryStore,
+    ) -> int:
         return 0
 
     @staticmethod
-    def invalid_store(store: InvalidStore) -> NoReturn:
+    def invalid_store(
+        store: InvalidStore,
+        _schema_source: RegistryPrivacy | RegistryStore,
+    ) -> NoReturn:
         raise ValueError(f"Notification evidence unavailable: {store.failure_reason}")
 
 
@@ -842,8 +854,12 @@ class AssignmentSource:
         return held
 
     def _current_held(self) -> HeldAssignmentReads:
+        with self.coordinator.observing(
+            NotificationEvidenceRevisionRead, self.privacy,
+        ) as evidence_revision:
+            revision = evidence_revision
         cut = AssignmentSourceCut(
-            NotificationAssignment.evidence_revision(self.root),
+            revision,
             tuple(FileRevision.capture(path)
                   for path in NotificationAssignment.source_paths(self.root)),
             self.registry_cut.revision,
