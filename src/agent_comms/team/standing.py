@@ -464,6 +464,9 @@ class DeliveryAwaitingJudgement(OwedAnswer, UndatedStandingRule, OrderHeadReview
         """The claim by its problem and head; its message may have no bus sequence yet."""
         return f"{self.problem} claim of {self.request.head[:9]}"
 
+    def clearing_action(self) -> str:
+        return f"Judge {self.cited} with a head verdict on {self.problem}."
+
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         """A verdict on the delivered head acts on the delivery; a chat reply does not."""
         return (HeadSubject(self.request),)
