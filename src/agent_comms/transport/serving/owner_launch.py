@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, ProportionalMemory, ResidentMemory
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
@@ -82,7 +82,7 @@ class ServedReadHostResourcesRuntimeRequest(
                 fleet_resident_bytes=sum(row.resident for row in ResidentMemory.tree(process, Path("/proc")).values()),
                 fleet_budget_bytes=comms.registry.storage_rule.team_memory_budget(owners),
             )
-        return await Coordination.run_worker(capture)
+        return await CoordinationWork.run_worker(capture)
 
 
 class ServedReadNativeChildProcessRuntimeRequest(
@@ -149,7 +149,7 @@ class ServedStopOwnerRuntimeRequest(
 
     async def result(self, ctx: RuntimeRequestContext) -> OwnerRetiredReply:
         agent = ctx.server.agent
-        entry = (await Coordination.run_worker(partial(
+        entry = (await CoordinationWork.run_worker(partial(
             agent._comms.registry.entry, self.thread,
         ))).entry
         owner = self.require_owner(entry)

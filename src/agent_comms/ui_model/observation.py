@@ -43,7 +43,7 @@ from agent_comms.acp_extension import (
     TranscriptSnapshotUpdate,
 )
 from agent_comms.comms import Comms
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import (
     CoordinationError,
     CoordinationReadUnavailable,
@@ -563,7 +563,7 @@ class ReadRequest(AwaitedRead, declared_name=None):
     async def answered(self, comms: Comms) -> object:
         """This process answers the read from ``comms`` itself; the outcome settles it the
         way the UI's waiter would, a busy source by asking again."""
-        outcome = await Coordination.run_worker(partial(self.answer, comms))
+        outcome = await CoordinationWork.run_worker(partial(self.answer, comms))
         return await outcome.settled(self, comms)
 
 
@@ -801,7 +801,7 @@ class ReadOwnerOperation(OwnerRead):
     operation: ToolRequest
 
     async def ask(self, comms: Comms) -> ToolResult:
-        cut = await Coordination.run_worker(comms.registry.store.snapshot_with_authority)
+        cut = await CoordinationWork.run_worker(comms.registry.store.snapshot_with_authority)
         return await OwnerScopedRead.serving(self.operation).answer(comms, self.owner, cut)
 
 
@@ -2303,7 +2303,7 @@ class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
         (Toad #2209); sharing that pool with ``receive`` deadlocks every read in flight.
         """
         pending = self._worker.submit(
-            Coordination.worker_context().run, WorkCpu.measured(operation),
+            CoordinationWork.worker_context().run, WorkCpu.measured(operation),
         )
         await join_retirement(asyncio.wrap_future(pending))
         return pending.result()

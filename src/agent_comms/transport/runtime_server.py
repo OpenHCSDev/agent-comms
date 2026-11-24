@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Self
 from pydantic import BaseModel
 
 from agent_comms.transport import serving
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import CoordinationError, IdentityConflict, Refused
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.controller import (
@@ -435,7 +435,7 @@ class ServedAttachedRuntimeRequest(
     async def bind(
         self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
     ) -> AttachedRuntimeRequestContext:
-        entry = (await Coordination.run_worker(partial(
+        entry = (await CoordinationWork.run_worker(partial(
             server.agent._comms.registry.entry, self.thread,
         ))).entry
         owner = self.require_owner(entry)

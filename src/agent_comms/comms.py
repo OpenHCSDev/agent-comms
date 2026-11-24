@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.context_store import ContextStore
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.owner_lifecycle import OwnerLifecycle
 from agent_comms.execution.transcript_sources import TranscriptSource
@@ -96,14 +96,14 @@ class Comms(
     ) -> AsyncGenerator[Message]:
         """Wait unlocked; each inbox read owns one client call on a worker, so the caller's loop
         keeps serving, and streaming records nothing."""
-        reader = await Coordination.run_worker(partial(self.watched_reader, name))
+        reader = await CoordinationWork.run_worker(partial(self.watched_reader, name))
         maintenance = MaintenanceBarrier(self.registry.store.path)
         bus = self.bus.bus
         sources = (*bus.commit_sources(), FileSource(maintenance.state_path))
         async with aclosing(bus.watch_sources(*sources)) as changes:
             async for _ in changes:
                 while True:
-                    batch = await Coordination.run_worker(
+                    batch = await CoordinationWork.run_worker(
                         partial(self.watched_batch, name, reader, after))
                     for message in batch.page.messages:
                         yield message

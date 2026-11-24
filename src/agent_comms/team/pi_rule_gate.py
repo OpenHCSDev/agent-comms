@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Self
 
 from agent_comms.comms import Comms
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.transcript_sources import TranscriptSource
 from agent_comms.installer.native_package import SYSTEM_PROMPT
 from agent_comms.messaging.bus_publication import Delivered
@@ -68,7 +68,7 @@ class PiRuleGate(DealtRuleGate):
 
     async def judge_call[Call: NativeToolCall](self, call: Call) -> None:
         """Blocking gate/store work stays with the existing coordination worker."""
-        await Coordination.run_worker(partial(call.judge_under, self))
+        await CoordinationWork.run_worker(partial(call.judge_under, self))
 
 
 @dataclass(frozen=True)

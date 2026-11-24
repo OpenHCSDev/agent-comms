@@ -3,29 +3,26 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
-from agent_comms.comms import Comms
+from agent_comms.planning.order_phase import OrderPhase
 from agent_comms.planning.plan_reading import PlanReading
 from agent_comms.registry.threads import Thread
 
-if TYPE_CHECKING:
-    from agent_comms.planning.plan_phase_base import PlanPhase
 
-
-class PhaseTask(ABC):
+class PhaseTask[Context, Phase: OrderPhase](ABC):
     instruction: ClassVar[str]
 
     @abstractmethod
     def start(
-        self, comms: Comms, assigner: Thread, phase: type[PlanPhase], reading: PlanReading
+        self, comms: Context, assigner: Thread, phase: type[Phase], reading: PlanReading
     ) -> None: ...
 
 
-class UnspecifiedPhaseTask(PhaseTask):
+class UnspecifiedPhaseTask(PhaseTask[object, OrderPhase]):
     instruction = "no checked task declared; supply its source, check and brief"
 
     def start(
-        self, comms: Comms, assigner: Thread, phase: type[PlanPhase], reading: PlanReading
+        self, comms: object, assigner: Thread, phase: type[OrderPhase], reading: PlanReading
     ) -> None:
         """Readiness alone cannot authorize a fabricated order."""

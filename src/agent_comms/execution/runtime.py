@@ -22,7 +22,7 @@ from acp.schema import (
 )
 
 from agent_comms.acp_extension import decode_updates
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.controller import ACP_PERMISSION_TIMEOUT_SECONDS, PermissionOutcome
 from agent_comms.execution.owner_protocol import (
@@ -132,7 +132,7 @@ class RuntimeProxy(RuntimeConnection):
                 ready = await OwnerLine.read(line).attach(self)
                 if ready is None:
                     continue
-                presented = await Coordination.run_worker(
+                presented = await CoordinationWork.run_worker(
                     partial(present_session, ready.ready, self.session_id)
                 )
                 if self._closed:
@@ -146,7 +146,7 @@ class RuntimeProxy(RuntimeConnection):
 
     async def present(self, line: OwnerUpdate) -> None:
         client = self.agent.sessions.client
-        metadata = await Coordination.run_worker(
+        metadata = await CoordinationWork.run_worker(
             partial(present_session, line.meta, self.session_id)
         )
         if self._closed or self.agent.sessions.client is not client:

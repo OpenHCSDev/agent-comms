@@ -8,7 +8,7 @@ from dataclasses import (
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.execution.fresh_private_session import create_fresh_private_session
 from agent_comms.execution.launch_runtime import (
@@ -120,7 +120,7 @@ class SelectedSession:
 
         with participant.cursor_delivery.measurements.operation("session_reopen"):
             async with participant.cursor_delivery.reading() as source_reads:
-                return await Coordination.run_worker(acquire)
+                return await CoordinationWork.run_worker(acquire)
 
 
 @dataclass(frozen=True)

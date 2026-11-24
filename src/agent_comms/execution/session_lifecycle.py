@@ -31,7 +31,7 @@ from pydantic import JsonValue
 from agent_comms.acp_extension import CoordinationChangedUpdate, GoalChangedUpdate
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import Refused
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, join_retirement
@@ -237,7 +237,7 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
         return thread
 
     async def bind_owned(self, thread: Thread, session_id: AcpSessionId) -> None:
-        owner = (await Coordination.run_worker(partial(
+        owner = (await CoordinationWork.run_worker(partial(
             self.comms.registry.entry, thread.name,
         ))).entry.owner_identity
         await self.bind_owner(thread, session_id, self.effects.inputs.configuration, owner)
@@ -248,7 +248,7 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
     ) -> OwnedSessionLifetime:
         async with self._attachment_lock:
             await self.retire_proxy(session_id)
-        await Coordination.run_worker(PiRedeal.of(self.comms, thread).start)
+        await CoordinationWork.run_worker(PiRedeal.of(self.comms, thread).start)
         # Acquisition starts the authentication producer. Publish its session
         # in the same loop turn, before any await can let that producer read it.
         state = self.effects.inputs.acquire_owner(session_id, configuration, owner)
@@ -258,8 +258,8 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
 
     async def new_session(self, request: NewSessionRequest) -> NewSessionResponse:
         self.reject_foreign_mcp(request)
-        await Coordination.run_worker(self.comms.owners.require_private_launch)
-        thread = await Coordination.run_worker(partial(self.declare_thread, request.cwd))
+        await CoordinationWork.run_worker(self.comms.owners.require_private_launch)
+        thread = await CoordinationWork.run_worker(partial(self.declare_thread, request.cwd))
         session_id = AcpSessionId(thread.name)
         await self.bind_owned(thread, session_id)
         self.effects.inputs.ensure_live_drain(session_id)
@@ -292,7 +292,7 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
         if not launch.process.runs_here():
             raise RelationViolationError("The launch does not name this worker host")
         selected = ThreadLaunch.current(launch.environment)
-        entry = (await Coordination.run_worker(partial(
+        entry = (await CoordinationWork.run_worker(partial(
             self.comms.registry.entry, owner.incarnation.name,
         ))).entry
         thread = entry.require_owner_process(owner, launch.process)
@@ -316,7 +316,7 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
                     thread = snapshot.require(state.owner.incarnation.name)
                     return self.effects.inputs.dispositions.lookup(key).queued_text(
                         thread.incarnation, snapshot.claim_generation(thread.name))
-                text = await Coordination.run_worker(capture)
+                text = await CoordinationWork.run_worker(capture)
                 await self.effects.inputs.emit_input_delivery_changed(session_id)
                 await self.effects.turns.run_agent_turn(
                     session_id, session_id, text, acceptance=NoTurnAcceptance(),
@@ -326,7 +326,7 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
     async def complete_unheld(self, expected: OwnerIdentity, claim: ClaimedIdentity) -> None:
         """A fenced owner whose session this host never held (an aborted start) completes
         here, the process its row is bound to."""
-        await Coordination.run_worker(partial(
+        await CoordinationWork.run_worker(partial(
             self.comms.owners.complete_session, expected, expected,
             ProcessIdentity.capture(os.getpid()), claim.claimed_generation,
         ))
@@ -343,7 +343,7 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
             await state.join_observations()
             await self.effects.turns.close_sessions((state,))
             self.effects.cursors.close_session(state.identifier)
-            await Coordination.run_worker(partial(
+            await CoordinationWork.run_worker(partial(
                 self.comms.owners.complete_session, state.owner, expected,
                 state.configuration.launch.process, claim.claimed_generation,
             ))
@@ -353,15 +353,15 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
             state.retired.set_result(None)
 
     async def _acquire_loaded(self, cwd: Checkout, session_id: AcpSessionId) -> Thread:
-        await Coordination.run_worker(self.comms.owners.require_private_launch)
-        thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
+        await CoordinationWork.run_worker(self.comms.owners.require_private_launch)
+        thread = await CoordinationWork.run_worker(partial(self.validated_thread, cwd, session_id))
         if not (
             self.binds(session_id, thread.name)
             and thread.process_identity.runs_here()
-            and (await Coordination.run_worker(partial(self.comms.registry.status, thread.name)))
+            and (await CoordinationWork.run_worker(partial(self.comms.registry.status, thread.name)))
                 .items_with(ActiveThreadPresence, thread)
         ):
-            thread = await Coordination.run_worker(partial(
+            thread = await CoordinationWork.run_worker(partial(
                 self.comms.owners.acquire_thread, thread.name,
             ))
         return thread
@@ -376,10 +376,10 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
     ) -> LoadSessionResponse:
         async with self._attachment_lock:
             await self.retire_proxy(session_id)
-            snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
+            snapshot = await CoordinationWork.run_worker(self.comms.registry.snapshot)
             binding = snapshot.owner_binding(thread.name)
             failed_command = FailedSessionLoadPlan(binding)
-            proxy = await Coordination.run_worker(partial(self.effects._create_runtime_proxy, thread, session_id))
+            proxy = await CoordinationWork.run_worker(partial(self.effects._create_runtime_proxy, thread, session_id))
             try:
                 snapshot.require_owner_process(snapshot.owner_identity(thread.name), thread.require_process())
                 metadata = await proxy.subscribe(subscription)
@@ -411,7 +411,7 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
         """Publish each observed identity generation once across concurrent consumers."""
         async with self._identity_lock:
             cached_name = self.require(session_id)
-            entry = (await Coordination.run_worker(partial(
+            entry = (await CoordinationWork.run_worker(partial(
                 self.comms.registry.entry, cached_name,
             ))).entry
             thread = entry.thread
@@ -451,7 +451,7 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
         self, session_id: AcpSessionId, thread_name: str, event: NativeMetadataObservation
     ) -> None:
         """Initialize only unset configuration from its actual native producer."""
-        await Coordination.run_worker(partial(
+        await CoordinationWork.run_worker(partial(
             self.comms.threads.initialize_native_configuration,
             thread_name, model=event.model, thinking_level=event.thinking_level,
         ))
@@ -464,7 +464,7 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
         return self.comms.configuration.answer(thread_name), snapshot
 
     async def metadata(self, thread_name: str, *, session_id: AcpSessionId) -> dict[str, JsonValue]:
-        configuration = await Coordination.run_worker(partial(
+        configuration = await CoordinationWork.run_worker(partial(
             self.configuration_updates, thread_name,
         ))
         return encode_updates(
@@ -506,11 +506,11 @@ class SessionLifecycle(SessionConfigurationSource[RuntimeProxy | IncompatibleOwn
                 for state in self.effects.inputs.drained.values()
                 for owner in state.executors()
             }
-            owners = await Coordination.run_worker(partial(self.comms.owners.fence_stop, *names))
-            requests = await Coordination.run_worker(partial(self.comms.owners.stop_requests, owners))
+            owners = await CoordinationWork.run_worker(partial(self.comms.owners.fence_stop, *names))
+            requests = await CoordinationWork.run_worker(partial(self.comms.owners.stop_requests, owners))
             for request in requests:
                 try:
-                    entry = (await Coordination.run_worker(partial(
+                    entry = (await CoordinationWork.run_worker(partial(
                         self.comms.registry.entry, request.thread))).entry
                     state = self.effects.inputs.state(self.require_fenced_session(entry)).owned()
                     await request.retire(self, state)
@@ -546,7 +546,7 @@ class AttachedSessionLifecycle(SessionLifecycle):
 
     async def new_session(self, request: NewSessionRequest) -> NewSessionResponse:
         self.reject_foreign_mcp(request)
-        thread = await Coordination.run_worker(partial(self.declare_thread, request.cwd))
+        thread = await CoordinationWork.run_worker(partial(self.declare_thread, request.cwd))
         session_id = AcpSessionId(thread.name)
         loaded = await self._attach_requested_session(
             thread,
@@ -562,7 +562,7 @@ class AttachedSessionLifecycle(SessionLifecycle):
     async def load_session(self, request: LoadSessionRequest) -> LoadSessionResponse:
         self.reject_foreign_mcp(request)
         session_id = FieldCodec.decode(AcpSessionId, request.session_id)
-        thread = await Coordination.run_worker(
+        thread = await CoordinationWork.run_worker(
             partial(self.validated_thread, FieldCodec.decode(Checkout, request.cwd), session_id)
         )
         return await self._attach_requested_session(

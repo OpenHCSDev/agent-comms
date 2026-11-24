@@ -29,7 +29,7 @@ from agent_comms.acp_extension import (
     TextNoticeUpdate,
 )
 from agent_comms.acp_tool_action import AcpToolAction
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.context_reading import ContextUsage, UnsizedContext
 from agent_comms.execution.controller import SessionUpdateSink
 from agent_comms.execution.native_output import NativeRecordLocation
@@ -84,7 +84,7 @@ class AcpEventConsumer(MroDispatch):
         update: Callable[[NativeCommittedPrefix], AgentCommsUpdate],
     ) -> None:
         sessions = self.agent.sessions
-        identity = await Coordination.run_worker(
+        identity = await CoordinationWork.run_worker(
             partial(
                 sessions.comms.transcripts.capture_native_output,
                 sessions.require(self.session_id),
@@ -219,7 +219,7 @@ class TurnEventConsumer(AcpEventConsumer):
 
     @handles(events.McpLiveStatus)
     async def on_mcp_live_status(self, event: events.McpLiveStatus) -> None:
-        if not await Coordination.run_worker(
+        if not await CoordinationWork.run_worker(
             partial(self.agent.turns.owns_turn, self.session_id, self.turn_id)
         ):
             return

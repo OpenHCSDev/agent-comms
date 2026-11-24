@@ -22,7 +22,7 @@ from agent_comms.config_options import (
     ConfigurationChanges,
     InvalidConfigChoice,
 )
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import IdentityConflict, Refused
 from agent_comms.execution.child_process import join_retirement
 from agent_comms.execution.controller import SessionUpdateSink
@@ -114,7 +114,7 @@ class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
             )
             return SetSessionConfigOptionResponse.model_validate(result)
         name = await self.sessions.sync_identity(session_id)
-        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        thread = await CoordinationWork.run_worker(partial(self.comms.registry.require, name))
         try:
             await self.effects.inputs.state(session_id).owned().configuration.catalog_for(member).change(self, thread, value)
         except (NativePiUnavailable, InvalidConfigChoice, IdentityConflict) as error:
@@ -147,13 +147,13 @@ class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
     async def store_configuration(
         self, thread: Thread, change: NextTurnConfiguration,
     ) -> None:
-        await Coordination.run_worker(partial(
+        await CoordinationWork.run_worker(partial(
             self.comms.threads.set_thread_configuration, thread, change,
         ))
 
     async def switch_to_cli_inbox(self, thread: Thread) -> None:
         """Switch this running native Pi thread onto a CLI inbox, then close its own runtime."""
-        await Coordination.run_worker(partial(
+        await CoordinationWork.run_worker(partial(
             self.comms.threads.switch_to_cli_inbox, thread.name, stop_owner=False,
         ))
         self.runtime.background(self._retire_after_switch())
@@ -171,7 +171,7 @@ class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
 
     async def use_stored_settings(self, session_id: AcpSessionId, name: str) -> None:
         """A running turn switches at its next model call, whichever process stored the change."""
-        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        thread = await CoordinationWork.run_worker(partial(self.comms.registry.require, name))
         settings = self.stored_settings(thread)
         source = await self.effects.turns.active_backend_turn(session_id)
         if self.settings_in_use.get(source.session_id, settings) == settings:
@@ -227,7 +227,7 @@ class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
         name = self.sessions.require(session_id)
         return await self.options(
             self.effects.inputs.state(session_id).owned().configuration,
-            await Coordination.run_worker(partial(self.comms.threads.running_selection, name)),
+            await CoordinationWork.run_worker(partial(self.comms.threads.running_selection, name)),
         )
 
     def stop_observing_configuration(self, session_id: AcpSessionId) -> None:

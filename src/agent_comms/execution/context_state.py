@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.context_history import ContextHistory, ContextView
 from agent_comms.execution.context_sizes import ContextSizes
 from agent_comms.execution.launch_runtime import RestartEnvironment
@@ -248,12 +248,12 @@ class LlamaSlotHost(TurnHost):
             yield
             return
         store = store_for(provider)
-        outcome = await Coordination.run_worker(partial(recoverable, store.enter, session))
+        outcome = await CoordinationWork.run_worker(partial(recoverable, store.enter, session))
         logger.info("CLM slot for %s: %s", session, outcome)
         try:
             yield
         finally:
-            await Coordination.run_worker(partial(recoverable, store.history(session).record))
+            await CoordinationWork.run_worker(partial(recoverable, store.history(session).record))
 
     def context_sizes(
         self, provider: type[ClmLocalProvider], session_file: str | Path | None,

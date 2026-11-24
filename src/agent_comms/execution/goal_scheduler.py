@@ -9,7 +9,7 @@ from pathlib import Path
 
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import Comms
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.errors import GoalAttemptError, GoalRefused, RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, join_retirement
 from agent_comms.execution.input_drain import InputDrain, OwnerSession, WakeScheduleCheck
@@ -87,7 +87,7 @@ class GoalScheduler:
 
     async def _retain_current_goal_turns(self, session_id: AcpSessionId) -> None:
         """Keep only turns still owned by the currently active goal."""
-        current = await Coordination.run_worker(lambda: self.comms.registry.require(
+        current = await CoordinationWork.run_worker(lambda: self.comms.registry.require(
             self.sessions.require(session_id)
         ).goal.active())
         WakeScheduleCheck._retain_goal_turns(
@@ -102,7 +102,7 @@ class GoalScheduler:
             check.require_valid()
         except ReservationViolationError:
             return
-        scheduled = await Coordination.run_worker(partial(self.prepare_goal, session_id))
+        scheduled = await CoordinationWork.run_worker(partial(self.prepare_goal, session_id))
         if scheduled is None:
             # The goal may have changed while its storage worker was preparing.
             await self._retain_current_goal_turns(session_id)
@@ -151,7 +151,7 @@ class GoalScheduler:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("A goal requires text.")
         name = self.sessions.require(session_id)
-        goal = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
+        goal = await CoordinationWork.run_worker(lambda: self.comms.goals.update_goal(
             name,
             SetGoalAction(text=text, expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()))),
             actor=OwnerInvocable,
@@ -164,11 +164,11 @@ class GoalScheduler:
     ) -> Goal:
         """Edit the current objective without replacing its identity or execution state."""
         name = self.sessions.require(session_id)
-        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        thread = await CoordinationWork.run_worker(partial(self.comms.registry.require, name))
         goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))
         # update_goal owns the registry lock and atomically rechecks both this
         # snapshot and the executing owner. Do not acquire its lock twice.
-        edited = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
+        edited = await CoordinationWork.run_worker(lambda: self.comms.goals.update_goal(
             name,
             EditGoalAction(
                 text=text,
@@ -189,10 +189,10 @@ class GoalScheduler:
         """Apply an explicit UI pause, resume, or clear through the current owner."""
         action.require_owner_control()
         name = self.sessions.require(session_id)
-        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        thread = await CoordinationWork.run_worker(partial(self.comms.registry.require, name))
         goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))
         try:
-            updated = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
+            updated = await CoordinationWork.run_worker(lambda: self.comms.goals.update_goal(
                 name,
                 action(
                     expect=GoalPrecondition(
@@ -213,11 +213,11 @@ class GoalScheduler:
     async def retry_goal(self, session_id: AcpSessionId, goal_id: GoalId, expected_revision: int) -> Goal:
         """Record an explicit UI retry in the executing owner's private ledger."""
         name = self.sessions.require(session_id)
-        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        thread = await CoordinationWork.run_worker(partial(self.comms.registry.require, name))
         goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))
         if self.pending_goal_origins.get(name) == goal_id:
             raise GoalRefused("Wait for the goal origin turn to finish.")
-        resumed = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
+        resumed = await CoordinationWork.run_worker(lambda: self.comms.goals.update_goal(
             name,
             RetryGoalAction(
                 expect=GoalPrecondition(
@@ -270,7 +270,7 @@ class GoalScheduler:
     async def read_goal_changes(self) -> None:
         requests, self.goal_reads = tuple(self.goal_reads), []
         try:
-            events = await Coordination.run_worker(partial(
+            events = await CoordinationWork.run_worker(partial(
                 self.comms.goals.goal_changes,
                 tuple((request.name, request.previous) for request in requests),
             ))

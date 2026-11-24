@@ -11,7 +11,7 @@ from agent_comms import agent_events as events
 from agent_comms.acp_extension import LiveQueueScope, TranscriptChangedUpdate
 from agent_comms.agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
 from agent_comms.comms import Comms
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.acp_failure import FailedNativeTurnOutcome, NativeTurnOutcome
 from agent_comms.execution.diagnostics import record_request_progress, record_terminal_failure
 from agent_comms.execution.native_turn_context import ContextObserved
@@ -99,7 +99,7 @@ class TurnProgress(AgentEventConsumer[Comms]):
 
     @handles(ContextObserved)
     async def observe_context(self, event):
-        await Coordination.run_worker(partial(
+        await CoordinationWork.run_worker(partial(
             self.comms.registry.observe_offered_tools,
             self.thread.incarnation, event.context.offered_tools,
         ))
@@ -129,7 +129,7 @@ class TurnProgress(AgentEventConsumer[Comms]):
 
     @handles(events.ProviderUsage)
     async def provider_usage(self, event: events.ProviderUsage) -> None:
-        await Coordination.run_worker(partial(self.goals.provider_usage, event))
+        await CoordinationWork.run_worker(partial(self.goals.provider_usage, event))
 
     @handles(events.Chunk)
     async def chunk(self, event: events.Chunk) -> None:
@@ -138,7 +138,7 @@ class TurnProgress(AgentEventConsumer[Comms]):
 
     @handles(events.CommittedProgress)
     async def committed_progress(self, event: events.CommittedProgress) -> None:
-        await self.report_sends(await Coordination.run_worker(partial(self.publish_progress, event.text)))
+        await self.report_sends(await CoordinationWork.run_worker(partial(self.publish_progress, event.text)))
 
     async def report_sends(self, results: Iterable[SendResult]) -> None:
         for result in results:
@@ -171,10 +171,10 @@ class TurnProgress(AgentEventConsumer[Comms]):
 
     @handles(events.Done)
     async def done(self, event: events.Done) -> events.Done:
-        sent = await Coordination.run_worker(
+        sent = await CoordinationWork.run_worker(
             partial(self.inputs.dispositions.in_turn, self.turn_lease.turn_id))
         keys = tuple(sent.rows)
-        document = await Coordination.run_worker(partial(
+        document = await CoordinationWork.run_worker(partial(
             self.inputs.dispositions.read, (*keys, *self.original.keys),
         ))
         unknown_attempts = not document.all_started(keys)
@@ -226,10 +226,10 @@ class TurnProgress(AgentEventConsumer[Comms]):
     @handles(events.ToolEnd)
     async def tool_ended(self, event: events.ToolEnd) -> None:
         await self.sessions.sync_identity(self.session_id)
-        await Coordination.run_worker(partial(self.goals.tool_ended, event))
+        await CoordinationWork.run_worker(partial(self.goals.tool_ended, event))
 
     async def transition(self, phase) -> None:
-        states = await Coordination.run_worker(partial(
+        states = await CoordinationWork.run_worker(partial(
             self.comms.agents.transition_turn, self.turn_lease, phase
         ))
         await self.emit_turn_effects(states)
@@ -241,7 +241,7 @@ class TurnProgress(AgentEventConsumer[Comms]):
 
     @handles(NativePhaseChanged)
     async def native_phase(self, event: NativePhaseChanged) -> None:
-        states = await Coordination.run_worker(partial(
+        states = await CoordinationWork.run_worker(partial(
             self.comms.agents.observe_native_phase, self.turn_lease, event.phase
         ))
         await self.emit_turn_effects(states)
@@ -334,10 +334,10 @@ class TurnProgress(AgentEventConsumer[Comms]):
         terminal = await self.turn.terminal.prepare_publication(self)
         # Cancellation must join original sends, their annotation and the
         # checkpoint before OwnedTurn can settle or release its lease.
-        await self.report_sends(await Coordination.run_worker(
+        await self.report_sends(await CoordinationWork.run_worker(
             partial(self.publish_checkpoint, terminal)
         ))
-        checkpoint = await Coordination.run_worker(partial(
+        checkpoint = await CoordinationWork.run_worker(partial(
             self.comms.transcripts.transcript_checkpoint, self.thread_name))
         await self.runtime.publish_facts(
             TranscriptChangedUpdate(checkpoint), session_id=self.session_id,

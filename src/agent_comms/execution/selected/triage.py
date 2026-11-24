@@ -20,7 +20,8 @@ from agent_comms.coordination.assignment_states import (
     IgnoredAssignment,
     TriagePendingAssignment,
 )
-from agent_comms.coordination.coordinator import Coordination
+from agent_comms.coordination.session import CoordinationSession
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import WireOrigin
 from agent_comms.execution.native_input_proof import NativeContextProof
@@ -89,7 +90,7 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
     def proves_source(cls, evidence: tuple[HistoricalNativeInput, ...]) -> bool: ...
 
     @abstractmethod
-    def settle(self, store: Coordination, db: Connection, current: WakeAssignment) -> None: ...
+    def settle(self, session: CoordinationSession, db: Connection, current: WakeAssignment) -> None: ...
 
     @abstractmethod
     async def continue_turn(
@@ -104,10 +105,10 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
     def proves_source(cls, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
         return True
 
-    def settle(self, store: Coordination, db: Connection, current: WakeAssignment) -> None:
+    def settle(self, session: CoordinationSession, db: Connection, current: WakeAssignment) -> None:
         # Both declared edges stay in the native proof's one transaction. Never
         # publish a retryable TRIAGE_PENDING state after the input has been sent.
-        now = store.session.now(current.updated_at_ms)
+        now = session.now(current.updated_at_ms)
         WakeAssignment.update(
             db,
             where="assignment_id=?",
@@ -122,14 +123,14 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
             parameters=(current.assignment_id,),
             lifecycle=IgnoredAssignment(),
             revision=current.revision + 2,
-            updated_at_ms=store.session.now(now),
+            updated_at_ms=session.now(now),
         )
 
     async def continue_turn(
         self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
         execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
     ) -> CoordinatedTurn:
-        await Coordination.run_worker(participant.consume_reply_wait)
+        await CoordinationWork.run_worker(participant.consume_reply_wait)
         return await CoordinatedTurn.capture(participant, input_id, IgnoredAssignment)
 
 
@@ -139,7 +140,7 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
     def proves_source(cls, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
         return any(proof.execution.proves_full_source(proof) for proof in evidence)
 
-    def settle(self, store: Coordination, db: Connection, current: WakeAssignment) -> None:
+    def settle(self, session: CoordinationSession, db: Connection, current: WakeAssignment) -> None:
         # Deferred until the execution owner atomically engages this exact claim.
         pass
 
@@ -249,7 +250,7 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
         execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
     ) -> CoordinatedTurn | None:
 
-        sent = await Coordination.run_worker(partial(
+        sent = await CoordinationWork.run_worker(partial(
             publish_native_failure, participant, input_id,
             self.reason(),
             source_error=self.error,
