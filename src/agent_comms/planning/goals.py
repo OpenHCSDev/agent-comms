@@ -76,6 +76,14 @@ from agent_comms.ui_model.goal import GoalDisplay, GoalExecutionDisplay
 from agent_comms_hooks.shell_commands import ShellCommand
 
 
+class OrphansHolds:
+    """A holder that can never answer: the work it held is orphaned, and any teammate may
+    release or withdraw it, as the REHOME line tells them to."""
+
+    def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
+        pass
+
+
 @dataclass(frozen=True)
 class GoalUnavailable(GoalDisplay["GoalDeclaration", "Goal"]):
     last_confirmed: GoalDeclaration
@@ -727,10 +735,7 @@ class GoalDeclaration(
 
 
 @dataclass(frozen=True)
-class NoGoal(NullMember, GoalDeclaration):
-    def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
-        """A cleared or replaced goal cannot keep its old assignments occupied."""
-
+class NoGoal(OrphansHolds, NullMember, GoalDeclaration):
     def stopped_permit(self, store: GoalPermitSource) -> GoalTurnPermit:
         return NoLaunchPermit()
 

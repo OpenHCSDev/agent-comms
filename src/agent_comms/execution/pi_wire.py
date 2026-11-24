@@ -32,6 +32,15 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.pi_counts import NonnegativePiCount, TotalPiCount, UnreportedCount
 
+
+@dataclass(frozen=True, slots=True)
+class UnsuppliedArgument(NullMember):
+    """The model left this optional tool argument out; Pi applies its own default."""
+
+    def value_or[D](self, default: D) -> D:
+        return default
+
+
 if TYPE_CHECKING:
     from agent_comms.execution.pending_requests import PendingRequest, PendingRequests
     from agent_comms.execution.pi_commands import PiCommand
@@ -163,7 +172,7 @@ class PiReported[T](SingleFieldValue):
 
 
 @dataclass(frozen=True, slots=True)
-class PiOmitted(NullMember, NativeResponseErrorRead):
+class PiOmitted(UnsuppliedArgument, NativeResponseErrorRead):
     """Pi left an optional field out or sent null; it goes back out the same way."""
 
     def is_reported(self) -> bool:
@@ -178,9 +187,6 @@ class PiOmitted(NullMember, NativeResponseErrorRead):
 
     def preserve_evidence(self, raw: object) -> Self:
         return self
-
-    def value_or[D](self, default: D) -> D:
-        return default
 
     def text_or[D](self, default: D) -> D:
         return default

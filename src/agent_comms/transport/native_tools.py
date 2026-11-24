@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms.execution.pi_wire import PiReported
+from agent_comms.execution.pi_wire import PiReported, UnsuppliedArgument
 from agent_comms.execution.turn_goal_permission import TurnGoalPermission
 from agent_comms.messaging.envelope_claim_transitions import (
     ExistingFileClaim,
@@ -20,7 +20,6 @@ from agent_comms.nominal.declared_family import UnknownFamilyMember
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
-    NullMember,
     ToolCallId,
     WireContext,
     WireOmitDefault,
@@ -54,14 +53,6 @@ from agent_comms.transport.tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from agent_comms.team.pi_rule_gate import PiRuleGate
-
-
-@dataclass(frozen=True, slots=True)
-class UnsuppliedArgument(NullMember):
-    """The model left this optional tool argument out; Pi applies its own default."""
-
-    def value_or[D](self, default: D) -> D:
-        return default
 
 
 @dataclass(frozen=True)
