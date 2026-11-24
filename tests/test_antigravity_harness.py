@@ -10,10 +10,20 @@ from aiohttp.test_utils import TestClient, TestServer, unused_port
 from yarl import URL
 
 from agent_comms.cli_bridges.antigravity import AntigravityBridge
+from agent_comms.cli_bridges.antigravity_rule_gate import (
+    AntigravityReadFileTool,
+    handle_hook,
+)
 from agent_comms.cli_bridges.antigravity_transcript import (
     AntigravityTranscript,
     RunningAntigravity,
 )
+from agent_comms_hooks.antigravity import (
+    ANTIGRAVITY_HOOK_NAME,
+    _fast_path as agy_hook_fast_path,
+)
+from agent_comms_hooks.hook_switch import StartVerb, StopVerb
+from agent_comms_hooks.skill import DeckReader
 from agent_comms.cli_bridges.history import OfflineHistory, OnlineHistory
 from agent_comms.cli_bridges.inbox_watch_client import (
     AntigravityFollowedTranscript,
@@ -204,6 +214,8 @@ def test_antigravity_offline_and_online_history_decode_transcript(
     )
 
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("ANTIGRAVITY_TRANSCRIPT", raising=False)
+    monkeypatch.delenv("ANTIGRAVITY_CONVERSATION_ID", raising=False)
     running = OnlineHistory.running(AntigravityHarness, conv_id, None, tmp_path)  # type: ignore[arg-type]
     assert isinstance(running, RunningAntigravity)
     assert running.source == transcript
@@ -654,3 +666,246 @@ async def test_comms_ack_and_answered_send_settle_cloud_delivery_without_transcr
             ).outcomes[second.seq, second.message_id]
             assert after_second.state.is_consumed()
             assert isinstance(after_second.answer, AnsweredResponse)
+
+
+def test_every_dealt_file_fits_antigravity_default_read_span() -> None:
+    span = AntigravityReadFileTool.default_span()
+    for path in DeckReader.sources():
+        assert span.covers(path), f"{path} exceeds Antigravity single-read cap (800 lines / 46080 bytes)"
+
+
+def test_antigravity_harness_installs_hooks_and_switch_toggles_them(tmp_path: Path) -> None:
+    harness = AntigravityHarness(tmp_path)
+    hooks_path = harness.hooks_config
+    hooks_path.parent.mkdir(parents=True)
+    hooks_path.write_text(json.dumps({"user-hook": {"PreInvocation": []}}), encoding="utf-8")
+
+    configured = harness.configure()
+    assert configured == (hooks_path,)
+    saved = json.loads(hooks_path.read_text(encoding="utf-8"))
+    assert "user-hook" in saved
+    gate_entry = saved[ANTIGRAVITY_HOOK_NAME]
+    assert set(gate_entry) == {"SessionStart", "PreInvocation", "PreToolUse", "PostToolUse"}
+
+    StopVerb(sender="comms-a", why="test").switched_antigravity(saved)
+    assert saved[ANTIGRAVITY_HOOK_NAME]["enabled"] is False
+    hooks_path.write_text(json.dumps(saved), encoding="utf-8")
+    # Re-running configure preserves disabled state until explicitly started again.
+    harness.configure()
+    reloaded = json.loads(hooks_path.read_text(encoding="utf-8"))
+    assert reloaded[ANTIGRAVITY_HOOK_NAME]["enabled"] is False
+
+    StartVerb().switched_antigravity(reloaded)
+    assert "enabled" not in reloaded[ANTIGRAVITY_HOOK_NAME]
+
+
+def test_antigravity_rule_gate_deals_on_start_and_re_deals_after_checkpoint_compaction(
+    tmp_path: Path,
+) -> None:
+    real_sources = DeckReader.sources()
+    assert len(real_sources) >= 2
+
+    workspace = tmp_path / "repo"
+    (workspace / "src/agent_comms/team/rules").mkdir(parents=True)
+    transcript = tmp_path / "brain" / "conv-1" / ".system_generated/logs/transcript.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text(
+        json.dumps({
+            "step_index": 0,
+            "source": "USER_EXPLICIT",
+            "type": "USER_INPUT",
+            "status": "DONE",
+            "created_at": "2026-11-24T04:00:00Z",
+            "content": "<USER_REQUEST>\nFix Antigravity compaction dealing.\n</USER_REQUEST>",
+        }) + "\n",
+        encoding="utf-8",
+    )
+
+    base = {
+        "conversationId": "conv-1",
+        "transcriptPath": str(transcript),
+        "artifactDirectoryPath": str(tmp_path / "brain" / "conv-1"),
+        "workspacePaths": [str(workspace)],
+        "cwd": str(workspace),
+    }
+
+    # 1. SessionStart deals real DeckReader sources and injects the deal order.
+    started = handle_hook({**base, "hookEventName": "SessionStart"})
+    injected = started["injectSteps"][0]["systemMessage"]["systemMessage"]
+    assert str(real_sources[0].resolve()) in injected
+    assert "Fix Antigravity compaction dealing." in injected
+
+    # 2. PreToolUse denies ordinary run_command and unrelated reads, but allows dealt reads,
+    #    emergency stop, comms_mcp.py wake-on, and comms MCP tools.
+    denied = handle_hook({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"id": "1", "name": "run_command", "args": {"CommandLine": "pytest"}},
+    })
+    assert denied["decision"] == "deny"
+
+    assert handle_hook({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"id": "2", "name": "call_mcp_tool", "args": {"ServerName": "comms", "ToolName": "comms_send"}},
+    }) == {"decision": "allow"}
+
+    assert handle_hook({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"id": "3", "name": "run_command", "args": {"CommandLine": "python3 comms_mcp.py wake-on /tmp/x.log"}},
+    }) == {"decision": "allow"}
+
+    assert handle_hook({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"id": "4", "name": "run_command", "args": {"CommandLine": "agent-comms-hooks stop --from comms-a --why test"}},
+    }) == {"decision": "allow"}
+
+    # Failed read_file must NOT count as read.
+    first_source = real_sources[0].resolve()
+    assert handle_hook({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"id": "r0", "name": "read_file", "args": {"Path": str(first_source)}},
+    }) == {"decision": "allow"}
+    handle_hook({
+        **base,
+        "hookEventName": "PostToolUse",
+        "error": "permission denied",
+        "toolCall": {"id": "r0", "name": "read_file", "args": {"Path": str(first_source)}},
+    })
+    assert handle_hook({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"id": "x", "name": "run_command", "args": {"CommandLine": "ls"}},
+    })["decision"] == "deny"
+
+    # Complete every real dealt read via PreToolUse + PostToolUse in order.
+    for idx, path in enumerate(real_sources):
+        resolved = path.resolve()
+        assert handle_hook({
+            **base,
+            "hookEventName": "PreToolUse",
+            "toolCall": {"id": f"pre-{idx}", "name": "read_file", "args": {"Path": str(resolved)}},
+        }) == {"decision": "allow"}
+        handle_hook({
+            **base,
+            "hookEventName": "PostToolUse",
+            "toolCall": {"id": f"post-{idx}", "name": "read_file", "args": {"Path": str(resolved)}},
+        })
+
+    # Toggle audit=off on the stored deal to verify gate-open fast-path + compaction re-deal.
+    deal_path = transcript.with_suffix(".deal.json")
+    deal_doc = json.loads(deal_path.read_text(encoding="utf-8"))
+    deal_doc["audit"] = "off"
+    deal_path.write_text(json.dumps(deal_doc), encoding="utf-8")
+
+    # Refresh cursor through PreInvocation: gate is now open and fast-path returns allow.
+    assert handle_hook({**base, "hookEventName": "PreInvocation"}) == {}
+    pre_tool_payload = {
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"id": "5", "name": "run_command", "args": {"CommandLine": "ls"}},
+    }
+    assert agy_hook_fast_path(pre_tool_payload) == {"decision": "allow"}
+
+    # 3. Append a CHECKPOINT record to transcript.jsonl (simulating Antigravity compaction):
+    #    fast-path MUST return None (busting cache), PreInvocation MUST inject a fresh CompactedDeal
+    #    with Tristan's verbatim prompt, and PreToolUse MUST deny ordinary tools again!
+    with transcript.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({
+            "step_index": 42,
+            "source": "SYSTEM",
+            "type": "CHECKPOINT",
+            "status": "DONE",
+            "created_at": "2026-11-24T04:42:47Z",
+            "content": "Summary of earlier turns",
+        }) + "\n")
+
+    assert agy_hook_fast_path(pre_tool_payload) is None
+    redeal = handle_hook({**base, "hookEventName": "PreInvocation"})
+    redeal_text = redeal["injectSteps"][0]["systemMessage"]["systemMessage"]
+    assert "2026-11-24T04:42:47Z" in redeal_text
+    assert "Fix Antigravity compaction dealing." in redeal_text
+    assert handle_hook(pre_tool_payload)["decision"] == "deny"
+
+
+def test_comms_mcp_cloud_agy_hook_fallback_deals_and_redeals_on_checkpoint(tmp_path: Path) -> None:
+    import subprocess
+    import sys
+
+    script = Path(__file__).resolve().parents[1] / ".agents/skills/comms-cloud-connect/scripts/comms_mcp.py"
+    repo = tmp_path / "agent-comms"
+    (repo / "src/agent_comms/team/paper/semantic-completeness").mkdir(parents=True)
+    (repo / "src/agent_comms/team/rules").mkdir(parents=True)
+    paper = repo / "src/agent_comms/team/paper/semantic-completeness/01.md"
+    rule = repo / "src/agent_comms/team/rules/spine.md"
+    paper.write_text("# Paper\nBody.\n", encoding="utf-8")
+    rule.write_text("# Spine\nBody.\n", encoding="utf-8")
+
+    transcript = tmp_path / "conv" / "transcript.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text(
+        json.dumps({
+            "step_index": 0,
+            "source": "USER_EXPLICIT",
+            "type": "USER_INPUT",
+            "status": "DONE",
+            "created_at": "2026-11-24T04:00:00Z",
+            "content": "<USER_REQUEST>\nCloud compaction test.\n</USER_REQUEST>",
+        }) + "\n",
+        encoding="utf-8",
+    )
+
+    def invoke(payload: dict[str, object]) -> dict[str, object]:
+        proc = subprocess.run(
+            [sys.executable, str(script), "agy-hook", "--cloud-only", "--repo", str(repo)],
+            input=json.dumps(payload),
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        return json.loads(proc.stdout)
+
+    base = {"transcriptPath": str(transcript), "cwd": str(repo), "workspacePaths": [str(repo)]}
+    started = invoke({**base, "hookEventName": "SessionStart"})
+    assert str(paper.resolve()) in started["injectSteps"][0]["systemMessage"]["systemMessage"]
+    assert invoke({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"name": "run_command", "args": {"CommandLine": "pytest"}},
+    })["decision"] == "deny"
+
+    for dealt in (paper, rule):
+        invoke({
+            **base,
+            "hookEventName": "PostToolUse",
+            "toolCall": {"name": "read_file", "args": {"Path": str(dealt)}},
+        })
+    assert invoke({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"name": "run_command", "args": {"CommandLine": "pytest"}},
+    }) == {"decision": "allow"}
+
+    # Compaction CHECKPOINT re-closes the cloud gate and injects verbatim user words.
+    with transcript.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({
+            "step_index": 99,
+            "source": "SYSTEM",
+            "type": "CHECKPOINT",
+            "status": "DONE",
+            "created_at": "2026-11-24T04:55:00Z",
+            "content": "Compacted summary",
+        }) + "\n")
+
+    redeal = invoke({**base, "hookEventName": "PreInvocation"})
+    msg = redeal["injectSteps"][0]["systemMessage"]["systemMessage"]
+    assert "2026-11-24T04:55:00Z" in msg
+    assert "Cloud compaction test." in msg
+    assert invoke({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"name": "run_command", "args": {"CommandLine": "pytest"}},
+    })["decision"] == "deny"

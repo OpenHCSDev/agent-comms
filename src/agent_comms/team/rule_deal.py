@@ -511,6 +511,10 @@ class ToolGateState(State):
     def permits_read(self, path: Path) -> bool:
         """Whether this dealt file may open now."""
 
+    def is_open(self) -> bool:
+        """Whether the gate owes nothing and allows ordinary tools."""
+        return False
+
     def permits_source_read(self) -> bool:
         """Whether a file outside the deal may be read now."""
         return False
@@ -526,6 +530,9 @@ class ToolGateState(State):
 
 class Open(ToolGateState):
     """Nothing is owed: the call runs."""
+
+    def is_open(self) -> bool:
+        return True
 
     def enforce(self, gate: ToolGate, tool: str) -> None:
         return

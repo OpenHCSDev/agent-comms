@@ -29,6 +29,10 @@ from agent_comms.host_services.codex_inbox import CodexInboxService
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import ScratchName
 from agent_comms_hooks import ClaudeHookProgram
+from agent_comms_hooks.antigravity import (
+    ANTIGRAVITY_HOOK_NAME,
+    hook_entry as antigravity_hook_entry,
+)
 
 
 def replace_link(link: Path, target: Path) -> None:
@@ -239,6 +243,10 @@ class AntigravityHarness(ConnectorClientHarness, declared_name="antigravity"):
     def mcp_config(self) -> Path:
         return self.home / ".gemini/config/mcp_config.json"
 
+    @property
+    def hooks_config(self) -> Path:
+        return self.home / ".gemini/config/hooks.json"
+
     def connector_registered(self) -> bool:
         if not self.mcp_config.is_file():
             return False
@@ -259,8 +267,24 @@ class AntigravityHarness(ConnectorClientHarness, declared_name="antigravity"):
 
         merge_json(self.mcp_config, add_comms)
 
+    def _hook_command(self) -> str:
+        installed = self.home / ".local/bin/agent-comms-antigravity-hook"
+        if installed.exists():
+            return str(installed)
+        return shutil.which("agent-comms-antigravity-hook") or str(installed)
+
     def configure(self) -> tuple[Path, ...]:
-        return ()
+        command = self._hook_command()
+
+        def reconcile_hooks(document: dict) -> None:
+            existing = document.get(ANTIGRAVITY_HOOK_NAME)
+            entry = antigravity_hook_entry(command)
+            if isinstance(existing, dict) and existing.get("enabled") is False:
+                entry["enabled"] = False
+            document[ANTIGRAVITY_HOOK_NAME] = entry
+
+        merge_json(self.hooks_config, reconcile_hooks)
+        return (self.hooks_config,)
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import secrets
+import shlex
 import shutil
 import subprocess
 import sys
@@ -462,20 +463,10 @@ def _find_agent_comms_root(hint: str | None) -> Path | None:
     return None
 
 
-def cmd_list_deal(args: argparse.Namespace) -> int:
-    root = _find_agent_comms_root(args.repo)
-    if root is None:
-        sys.stderr.write(
-            "agent-comms checkout not found in workspace.\n"
-            "Clone shallowly or read from OpenHCSDev/agent-comms:\n"
-            "  git clone --depth 1 https://github.com/OpenHCSDev/agent-comms.git /tmp/agent-comms-rules\n"
-            "  python3 comms_mcp.py list-deal /tmp/agent-comms-rules\n"
-        )
-        return 1
-
+def _collect_deal_files(root: Path, variant: str = "full") -> list[Path]:
     team = root / "src" / "agent_comms" / "team"
     files: list[Path] = []
-    if args.variant in ("full", "no-patterns"):
+    if variant in ("full", "no-patterns"):
         for paper_dir in PAPER_ORDER:
             pdir = team / "paper" / paper_dir
             if pdir.is_dir():
@@ -488,7 +479,7 @@ def cmd_list_deal(args: argparse.Namespace) -> int:
     )
     files.extend(rule_files)
 
-    if args.variant != "light":
+    if variant != "light":
         for extra in (
             team / "voice.md",
             team / "pattern_sources.py",
@@ -497,7 +488,7 @@ def cmd_list_deal(args: argparse.Namespace) -> int:
             if extra.is_file():
                 files.append(extra)
 
-    if args.variant in ("full", "no-papers"):
+    if variant in ("full", "no-papers"):
         nra_candidates = [
             root.parent / "NominalRefactorAdvisor" / "src" / "nominal_refactor_advisor" / "audit" / "patterns",
             Path.home() / "code" / "projects" / "NominalRefactorAdvisor" / "src" / "nominal_refactor_advisor" / "audit" / "patterns",
@@ -509,9 +500,285 @@ def cmd_list_deal(args: argparse.Namespace) -> int:
                 break
         if (team / "patterns.md").is_file():
             files.append(team / "patterns.md")
+    return [p.resolve() for p in files]
 
-    for path in files:
+
+def cmd_list_deal(args: argparse.Namespace) -> int:
+    root = _find_agent_comms_root(args.repo)
+    if root is None:
+        sys.stderr.write(
+            "agent-comms checkout not found in workspace.\n"
+            "Clone shallowly or read from OpenHCSDev/agent-comms:\n"
+            "  git clone --depth 1 https://github.com/OpenHCSDev/agent-comms.git /tmp/agent-comms-rules\n"
+            "  python3 comms_mcp.py list-deal /tmp/agent-comms-rules\n"
+        )
+        return 1
+
+    for path in _collect_deal_files(root, args.variant):
         print(path)
+    return 0
+
+
+def _find_installed_agy_hook() -> str | None:
+    if found := shutil.which("agent-comms-antigravity-hook"):
+        return found
+    for candidate in (
+        Path.home() / ".local" / "bin" / "agent-comms-antigravity-hook",
+        Path.home() / ".local" / "share" / "agent-comms" / "current" / "bin" / "agent-comms-antigravity-hook",
+    ):
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def _cloud_latest_checkpoint(transcript: Path) -> tuple[int, str, int]:
+    if not transcript.is_file():
+        return (-1, "", 0)
+    raw_bytes = transcript.read_bytes()
+    size = len(raw_bytes)
+    for line in reversed(raw_bytes.splitlines()):
+        if b'"CHECKPOINT"' not in line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(rec, dict) and rec.get("type") == "CHECKPOINT":
+            return (int(rec.get("step_index", 0)), str(rec.get("created_at", "")), size)
+    return (-1, "", size)
+
+
+def _cloud_owner_words(transcript: Path, limit: int = 3) -> list[str]:
+    if not transcript.is_file():
+        return []
+    found: list[str] = []
+    for line in reversed(transcript.read_bytes().splitlines()):
+        if b'"USER_INPUT"' not in line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(rec, dict) or rec.get("type") != "USER_INPUT":
+            continue
+        content = str(rec.get("content", "")).strip()
+        start = content.find("<USER_REQUEST>")
+        end = content.find("</USER_REQUEST>")
+        if start >= 0 and end > start:
+            content = content[start + len("<USER_REQUEST>") : end].strip()
+        if content:
+            found.append(content)
+            if len(found) >= limit:
+                break
+    return list(reversed(found))
+
+
+def _cloud_read_covers(path: Path, args: dict[str, Any]) -> bool:
+    try:
+        byte_offset = int(args.get("ByteOffset") or 0)
+    except (TypeError, ValueError):
+        return False
+    if byte_offset > 0:
+        return False
+    try:
+        start = int(args.get("StartLine") or 1)
+    except (TypeError, ValueError):
+        start = 1
+    raw_end = args.get("EndLine")
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return False
+    lines = len(data.splitlines())
+    limit = 800 if raw_end is None else min(800, max(0, int(raw_end) - start + 1))
+    return start <= 1 and limit >= lines and len(data) <= 46_080
+
+
+def _cloud_command_allowed(cmd: str) -> bool:
+    return any(
+        marker in cmd
+        for marker in (
+            "agent-comms-hooks stop",
+            "agent-comms-inbox-watch",
+            "comms_mcp.py",
+        )
+    )
+
+
+def _cloud_agy_hook(payload: dict[str, Any], repo_hint: str | None) -> dict[str, Any]:
+    event = str(payload.get("hookEventName") or "")
+    transcript_raw = str(payload.get("transcriptPath") or "")
+    artifact_raw = str(payload.get("artifactDirectoryPath") or "")
+    cwd_raw = str(payload.get("cwd") or "")
+    transcript = Path(transcript_raw).expanduser() if transcript_raw else None
+    if transcript is not None:
+        stem = transcript.with_suffix("")
+    elif artifact_raw:
+        stem = Path(artifact_raw).expanduser() / "rule-deal"
+    else:
+        return {"decision": "allow"} if event == "PreToolUse" else {}
+
+    state_path = stem.with_suffix(".cloud-deal.json")
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        if not isinstance(state, dict):
+            state = {}
+    except (OSError, json.JSONDecodeError):
+        state = {}
+
+    root = _find_agent_comms_root(repo_hint or cwd_raw or None)
+    if root is None:
+        for ws in payload.get("workspacePaths") or []:
+            if isinstance(ws, str):
+                root = _find_agent_comms_root(ws)
+                if root is not None:
+                    break
+    if root is None and not state:
+        return {"decision": "allow"} if event == "PreToolUse" else {}
+
+    def save_state() -> None:
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = state_path.with_suffix(".cloud-deal.tmp")
+        tmp.write_text(json.dumps(state), encoding="utf-8")
+        os.replace(tmp, state_path)
+
+    def deal_fresh(trigger: str, step: int, at: str, size: int) -> str:
+        files = [str(p) for p in _collect_deal_files(root, "full")] if root is not None else list(state.get("dealt", []))
+        state.update({
+            "checkpoint_step": step,
+            "checkpoint_at": at,
+            "transcript_size": size,
+            "dealt": files,
+            "read": [],
+            "trigger": trigger,
+        })
+        save_state()
+        listing = "\n".join(f"  {i + 1}. {p}" for i, p in enumerate(files))
+        parts = [
+            f"{trigger} Read every dealt file in order with `read_file` before running other tools:\n{listing}"
+        ]
+        if transcript is not None and (prompts := _cloud_owner_words(transcript)):
+            parts.append(
+                "WHAT TRISTAN ACTUALLY SAID LAST, verbatim, oldest first:\n"
+                + "\n\n".join(f"> {p}" for p in prompts)
+            )
+        return "\n\n".join(parts)
+
+    def check_trigger(startup: bool = False) -> str:
+        step, at, size = _cloud_latest_checkpoint(transcript) if transcript else (-1, "", 0)
+        if not state.get("dealt"):
+            return deal_fresh("Fresh session started.", step, at, size)
+        if step > int(state.get("checkpoint_step", -1)):
+            stamp = f" at {at}" if at else ""
+            return deal_fresh(f"Context compacted{stamp}; the summary paraphrased the rules.", step, at, size)
+        if startup:
+            return ""
+        if size != state.get("transcript_size"):
+            state["transcript_size"] = size
+            save_state()
+        return ""
+
+    if event == "SessionStart":
+        text = check_trigger(startup=True)
+        return {"injectSteps": [{"systemMessage": {"systemMessage": text}}]} if text else {}
+
+    if event == "PreInvocation":
+        text = check_trigger()
+        return {"injectSteps": [{"systemMessage": {"systemMessage": text}}]} if text else {}
+
+    if event == "PreToolUse":
+        check_trigger()
+        dealt: list[str] = list(state.get("dealt", []))
+        read_set = set(state.get("read", []))
+        unread = [p for p in dealt if p not in read_set]
+        if not unread:
+            return {"decision": "allow"}
+        call = payload.get("toolCall") if isinstance(payload.get("toolCall"), dict) else {}
+        tool = str(call.get("name") or "")
+        args = call.get("args") if isinstance(call.get("args"), dict) else {}
+        if tool == "read_file":
+            raw_path = str(args.get("Path") or "")
+            if raw_path:
+                resolved = str(Path(raw_path).expanduser().resolve())
+                if resolved in dealt:
+                    return {"decision": "allow"}
+        if tool == "call_mcp_tool" and str(args.get("ServerName") or "") == "comms":
+            return {"decision": "allow"}
+        if tool == "run_command" and _cloud_command_allowed(str(args.get("CommandLine") or "")):
+            return {"decision": "allow"}
+        head = "\n".join(f"  - {p}" for p in unread[:5])
+        more = f"\n  ... and {len(unread) - 5} more" if len(unread) > 5 else ""
+        return {
+            "decision": "deny",
+            "reason": f"{state.get('trigger', 'Rule deal open.')} Read every dealt file with `read_file` before `{tool}` ({len(unread)} unread):\n{head}{more}",
+        }
+
+    if event == "PostToolUse":
+        if payload.get("error"):
+            return {}
+        call = payload.get("toolCall") if isinstance(payload.get("toolCall"), dict) else {}
+        if call.get("name") == "read_file":
+            args = call.get("args") if isinstance(call.get("args"), dict) else {}
+            raw_path = str(args.get("Path") or "")
+            if raw_path:
+                resolved = Path(raw_path).expanduser().resolve()
+                dealt = list(state.get("dealt", []))
+                if str(resolved) in dealt and _cloud_read_covers(resolved, args):
+                    read_list = list(state.get("read", []))
+                    if str(resolved) not in read_list:
+                        read_list.append(str(resolved))
+                        state["read"] = read_list
+                        save_state()
+        return {}
+
+    return {}
+
+
+def cmd_agy_hook(args: argparse.Namespace) -> int:
+    if not args.cloud_only:
+        installed = _find_installed_agy_hook()
+        if installed:
+            os.execv(installed, [installed])
+    raw = sys.stdin.read()
+    try:
+        payload = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    answer = _cloud_agy_hook(payload, args.repo)
+    sys.stdout.write(json.dumps(answer) + "\n")
+    sys.stdout.flush()
+    return 0
+
+
+def cmd_install_hooks(args: argparse.Namespace) -> int:
+    hooks_path = Path(args.hooks_path).expanduser()
+    hooks_path.parent.mkdir(parents=True, exist_ok=True)
+    installed = _find_installed_agy_hook()
+    if installed and not args.cloud_only:
+        command = installed
+    else:
+        script = Path(__file__).resolve()
+        repo_flag = f" --repo {shlex.quote(str(Path(args.repo).expanduser().resolve()))}" if args.repo else ""
+        command = f"python3 {shlex.quote(str(script))} agy-hook{repo_flag}"
+    try:
+        doc = json.loads(hooks_path.read_text(encoding="utf-8")) if hooks_path.is_file() else {}
+        if not isinstance(doc, dict):
+            doc = {}
+    except (OSError, json.JSONDecodeError):
+        doc = {}
+    handler = {"type": "command", "command": command}
+    doc["agent-comms-rule-gate"] = {
+        "SessionStart": [handler],
+        "PreInvocation": [handler],
+        "PreToolUse": [{"matcher": "*", "hooks": [handler]}],
+        "PostToolUse": [{"matcher": "*", "hooks": [handler]}],
+    }
+    tmp = hooks_path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, hooks_path)
+    print(f"Installed agent-comms-rule-gate in {hooks_path} -> {command}")
     return 0
 
 
@@ -569,6 +836,17 @@ def main() -> int:
         help="Deal variant matching agent-comms-prime",
     )
     p_deal.set_defaults(func=cmd_list_deal)
+
+    p_hook = sub.add_parser("agy-hook", help="Handle an Antigravity hooks.json event on stdin/stdout")
+    p_hook.add_argument("--repo", default=None, help="Path to agent-comms checkout for cloud fallback")
+    p_hook.add_argument("--cloud-only", action="store_true", help="Force stdlib cloud fallback even when installed hook exists")
+    p_hook.set_defaults(func=cmd_agy_hook)
+
+    p_inst = sub.add_parser("install-hooks", help="Install agent-comms-rule-gate into ~/.gemini/config/hooks.json")
+    p_inst.add_argument("--hooks-path", default="~/.gemini/config/hooks.json", help="Target hooks.json path")
+    p_inst.add_argument("--repo", default=None, help="Path to agent-comms checkout for cloud fallback")
+    p_inst.add_argument("--cloud-only", action="store_true", help="Configure hooks.json to run comms_mcp.py agy-hook directly")
+    p_inst.set_defaults(func=cmd_install_hooks)
 
     args = parser.parse_args()
     return args.func(args)

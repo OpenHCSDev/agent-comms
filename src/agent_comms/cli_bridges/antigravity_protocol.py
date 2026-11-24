@@ -160,6 +160,10 @@ class AntigravityRecord(TaggedWire, HistoryRecord, affix=""):
         del session
         return ()
 
+    def compacted_at(self) -> tuple[tuple[int, str], ...]:
+        """Step index and timestamp when this record marks a compaction boundary."""
+        return ()
+
 
 class UserInputRecord(AntigravityRecord, declared_name="USER_INPUT"):
     """Explicit user turn starting a new conversation exchange."""
@@ -301,6 +305,9 @@ class CheckpointRecord(AntigravityRecord, declared_name="CHECKPOINT"):
 
     def begins_history(self) -> bool:
         return True
+
+    def compacted_at(self) -> tuple[tuple[int, str], ...]:
+        return ((self.step_index, self.created_at),)
 
     def updates(self, session: AntigravitySession) -> tuple[RuntimeUpdate, ...]:
         del session
