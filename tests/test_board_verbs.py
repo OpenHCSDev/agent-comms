@@ -69,7 +69,7 @@ from agent_comms.team.standing_rules import (
     StandingRule,
 )
 from agent_comms.transport.tool_caller import ForkCaller, HumanCaller, PeerCaller, ThreadCaller
-from agent_comms.transport.tools.orders import CommsBoardActionTool
+from agent_comms.transport.tools.orders import ServedCommsBoardActionTool
 from agent_comms_hooks import ToolRefusedError
 from github_fixture import GitHubFixture
 from team_heartbeat_fixture import capture_frame
@@ -303,11 +303,11 @@ def test_board_action_refuses_stale_source_and_dispatches_current_offer_once(boa
         )
         stale = ProbeOffer(TextDigest.of("older board source"), recipient)
         with pytest.raises(ToolRefusedError, match="human UI"):
-            CommsBoardActionTool(offer=current).apply(comms, PeerCaller("colleague"))
+            ServedCommsBoardActionTool(offer=current).apply(comms, PeerCaller("colleague"))
         with pytest.raises(ToolRefusedError, match="stale"):
-            CommsBoardActionTool(offer=stale).apply(comms, HumanCaller())
+            ServedCommsBoardActionTool(offer=stale).apply(comms, HumanCaller())
         assert dispatched == []
-        assert CommsBoardActionTool(offer=current).apply(
+        assert ServedCommsBoardActionTool(offer=current).apply(
             comms, HumanCaller()
         ) == BoardActionApplied(("applied for colleague",))
         assert dispatched == ["colleague"]

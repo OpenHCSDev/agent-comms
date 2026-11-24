@@ -128,6 +128,7 @@ from agent_comms.transport.tools.reads import (
     TeammateRead,
     TranscriptPageRead,
 )
+from agent_comms.transport.tools.sidebar import CommsBoardActionTool
 from agent_comms_hooks import ToolRefusedError
 
 
@@ -323,10 +324,10 @@ class CommsBoardTool(ShortListed, WorkArea, BoardReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsBoardActionTool(ScreensArea, HumanToolRequest[BoardActionApplied]):
-    label = "Apply board action"
-    description = "Apply one declaration-bound action from the selected recipient's Team board."
-    offer: Annotated[BoardActionOffer, *tool_field("The exact action offered by the board row")]
+class ServedCommsBoardActionTool(
+    ScreensArea, HumanToolRequest[BoardActionApplied], CommsBoardActionTool
+):
+    """Serving CommsBoardActionTool."""
 
     def answered(self, comms: Comms) -> BoardActionApplied:
         recipient = self.offer.recipient
