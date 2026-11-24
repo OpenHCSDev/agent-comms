@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from abc import abstractmethod
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
@@ -44,12 +43,6 @@ class FileObservation(SubclassUnion, affix=""):
         """The observed revision; a missing file raises ``refusal``."""
 
     @abstractmethod
-    def either[Answer](
-        self, present: Callable[[FileRevision], Answer], missing: Callable[[], Answer],
-    ) -> Answer:
-        """Answer from the observed revision, or for the missing file."""
-
-    @abstractmethod
     def file_identity(self) -> FileIdentity | MissingFile:
         """The file this observation saw, or the absence it saw."""
 
@@ -70,11 +63,6 @@ class MissingFile(NullMember, FileObservation):
 
     def require(self, refusal: Exception) -> FileRevision:
         raise refusal
-
-    def either[Answer](
-        self, present: Callable[[FileRevision], Answer], missing: Callable[[], Answer],
-    ) -> Answer:
-        return missing()
 
     def file_identity(self) -> MissingFile:
         return self
@@ -134,11 +122,6 @@ class FileRevision(RecordMember, FileObservation):
 
     def require(self, refusal: Exception) -> FileRevision:
         return self
-
-    def either[Answer](
-        self, present: Callable[[FileRevision], Answer], missing: Callable[[], Answer],
-    ) -> Answer:
-        return present(self)
 
     def file_identity(self) -> FileIdentity:
         return self.identity

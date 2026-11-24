@@ -87,7 +87,11 @@ from agent_comms.ui_model.observation import (
     PublishState,
     ReadBusy,
     ReadNotifications,
+    ReadReload,
     ReadRequest,
+    ReadUnreadable,
+    ReadValue,
+    RetryableRead,
     RevisionObserved,
     ServiceResult,
     SidebarObserved,
@@ -395,6 +399,29 @@ class SidebarReading(ReadingObservation[ObserveSidebar], MroDispatch):
             yield sent
 
 
+class _TeamHudReadOutcome(MroDispatch):
+    @handles(ReadValue)
+    def observed(
+        self, outcome: ReadValue[TeamHudObserved], revision: WireRevision,
+    ) -> ObservationStep:
+        return outcome.value
+
+    @handles(RetryableRead)
+    def retrying(
+        self, outcome: RetryableRead[TeamHudObserved], revision: WireRevision,
+    ) -> ObservationStep:
+        return ObservationStep()
+
+    @handles(ReadUnreadable)
+    def unreadable(
+        self, outcome: ReadUnreadable[TeamHudObserved], revision: WireRevision,
+    ) -> ObservationStep:
+        return TeamHudUnreadable(revision, outcome.cause)
+
+
+_TEAM_HUD_READ_OUTCOME = _TeamHudReadOutcome()
+
+
 @dataclass(frozen=True)
 class RetainedTeamFrames:
     """The heartbeat's retained atomic publication for one reader selection."""
@@ -404,16 +431,14 @@ class RetainedTeamFrames:
     def observed(
         self, comms: Comms, revision: WireRevision,
     ) -> Generator[ObservationStep]:
-        yield UnreadableHistory.outcome(
+        outcome = UnreadableHistory.outcome(
             lambda: TeamHudObserved(
                 revision,
                 TeamBoardPublicationStore.read_cut(comms.root, self.selection),
             ),
-        ).answer(
-            lambda observed: observed,
-            lambda error: ObservationStep(),
-            lambda error: TeamHudUnreadable(revision, error),
-            lambda error: ObservationStep(),
+        )
+        yield _TeamHudReadOutcome.handler_for(type(outcome))(
+            _TEAM_HUD_READ_OUTCOME, outcome, revision,
         )
 
 
@@ -476,6 +501,88 @@ class NotificationBatch(BatchRead):
     ) -> Iterator[ObservationStep]:
         current.append(self)
         return iter(())
+
+
+class _NotificationReadOutcome(MroDispatch):
+    @handles(ReadValue)
+    def observed(
+        self, outcome: ReadValue[NotificationWindow], request: ReadNotifications,
+        comms: Comms, revision: WireRevision, activity,
+    ) -> BatchRead:
+        return NotificationBatch(
+            request, NotificationsRead.of(revision, comms, activity, outcome.value),
+            NotificationsObserved(revision, request, outcome.value.outcomes),
+        )
+
+    @handles(RetryableRead)
+    def deferred(
+        self, outcome: RetryableRead[NotificationWindow], request: ReadNotifications,
+        comms: Comms, revision: WireRevision, activity,
+    ) -> BatchRead:
+        return PendingBatch()
+
+    @handles(ReadReload)
+    def reload(
+        self, outcome: ReadReload[NotificationWindow], request: ReadNotifications,
+        comms: Comms, revision: WireRevision, activity,
+    ) -> BatchRead:
+        # The request's own display cut is stale: answer it, so the UI asks afresh.
+        return NotificationBatch(
+            request, StaleNotificationsRead(revision),
+            NotificationsReload(revision, request, outcome.error),
+        )
+
+    @handles(ReadUnreadable)
+    def unreadable(
+        self, outcome: ReadUnreadable[NotificationWindow], request: ReadNotifications,
+        comms: Comms, revision: WireRevision, activity,
+    ) -> BatchRead:
+        return NotificationBatch(
+            request, UnreadableNotificationsRead(revision),
+            NotificationsUnreadable(revision, request, outcome.cause),
+        )
+
+
+class _LocatedThreadsOutcome(MroDispatch):
+    @handles(ReadValue)
+    def observed(
+        self, outcome: ReadValue[LocatedThreads], reading: ThreadReading,
+        located: LocatedThreads, results: dict[str, ThreadReadResult],
+    ) -> Iterator[ObservationStep]:
+        return reading.presented(outcome.value.reads, results)
+
+    @handles(RetryableRead)
+    def busy(
+        self, outcome: RetryableRead[LocatedThreads], reading: ThreadReading,
+        located: LocatedThreads, results: dict[str, ThreadReadResult],
+    ) -> Iterator[ObservationStep]:
+        return reading.failed(located.names, ThreadBusy(), results)
+
+    @handles(ReadUnreadable)
+    def unreadable(
+        self, outcome: ReadUnreadable[LocatedThreads], reading: ThreadReading,
+        located: LocatedThreads, results: dict[str, ThreadReadResult],
+    ) -> Iterator[ObservationStep]:
+        return reading.failed(located.names, ThreadUnavailable(outcome.cause), results)
+
+
+class _ThreadPresentationOutcome(MroDispatch):
+    @handles(ReadValue)
+    def presented(self, outcome: ReadValue[ThreadPresentation]) -> ThreadReadResult:
+        return ThreadPresented(outcome.value)
+
+    @handles(RetryableRead)
+    def busy(self, outcome: RetryableRead[ThreadPresentation]) -> ThreadReadResult:
+        return ThreadBusy()
+
+    @handles(ReadUnreadable)
+    def unreadable(self, outcome: ReadUnreadable[ThreadPresentation]) -> ThreadReadResult:
+        return ThreadUnavailable(outcome.cause)
+
+
+_NOTIFICATION_READ_OUTCOME = _NotificationReadOutcome()
+_LOCATED_THREADS_OUTCOME = _LocatedThreadsOutcome()
+_THREAD_PRESENTATION_OUTCOME = _ThreadPresentationOutcome()
 
 
 class NotificationReading(ReadingObservation[ObserveNotifications]):
@@ -547,18 +654,10 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
             request.require_root(comms)
             return request.read(comms)
 
-        return UnreadableHistory.outcome(read).answer(
-            lambda window: NotificationBatch(
-                request, NotificationsRead.of(revision, comms, activity, window),
-                NotificationsObserved(revision, request, window.outcomes)),
-            lambda error: PendingBatch(),
-            lambda error: NotificationBatch(
-                request, UnreadableNotificationsRead(revision),
-                NotificationsUnreadable(revision, request, error)),
-            # The request's own display cut is stale: answer it, so the UI asks afresh.
-            lambda error: NotificationBatch(
-                request, StaleNotificationsRead(revision),
-                NotificationsReload(revision, request, error)))
+        outcome = UnreadableHistory.outcome(read)
+        return _NotificationReadOutcome.handler_for(type(outcome))(
+            _NOTIFICATION_READ_OUTCOME, outcome, request, comms, revision, activity,
+        )
 
     def answer(self, request: ReadNotifications, revision: WireRevision) -> Iterator[Observed]:
         """Send a request its outcomes only when a batch behind them was read since."""
@@ -610,11 +709,9 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         results: dict[str, ThreadReadResult] = {}
         outcome = UnreadableHistory.outcome(partial(self.located, comms, revision, previous))
         located = self.located_threads
-        yield from outcome.answer(
-            lambda located: self.presented(located.reads, results),
-            lambda error: self.failed(located.names, ThreadBusy(), results),
-            lambda error: self.failed(located.names, ThreadUnavailable(error), results),
-            lambda error: self.failed(located.names, ThreadBusy(), results))
+        yield from _LocatedThreadsOutcome.handler_for(type(outcome))(
+            _LOCATED_THREADS_OUTCOME, outcome, self, located, results,
+        )
         retained = {**previous.results, **located.painted}
         results.update(
             (name, value) for name, value in retained.items()
@@ -708,9 +805,10 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
     ) -> Iterator[ObservationStep]:
         with reads as captured:
             for name, read in captured.items():
-                results[name] = UnreadableHistory.outcome(read).answer(
-                    ThreadPresented,
-                    lambda error: ThreadBusy(), ThreadUnavailable, lambda error: ThreadBusy())
+                outcome = UnreadableHistory.outcome(read)
+                results[name] = _ThreadPresentationOutcome.handler_for(type(outcome))(
+                    _THREAD_PRESENTATION_OUTCOME, outcome,
+                )
                 yield ObservationStep()
 
 

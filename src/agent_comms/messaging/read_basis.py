@@ -1092,17 +1092,24 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
         )
 
 
-@dataclass(frozen=True, slots=True)
-class ListedDeliveries(MessageDisplayScope):
-    """The messages of another scope whose sequences the route index listed."""
+class TargetedDisplayScope(MessageDisplayScope, declared_name=None):
+    """A display scope carrying explicit target names for route-index filtering."""
 
-    scope: MessageDisplayScope
-    sequences: frozenset[int]
+    __slots__ = ()
     targets: frozenset[str]
 
     @property
     def index_targets(self) -> frozenset[str]:
         return self.targets
+
+
+@dataclass(frozen=True, slots=True)
+class ListedDeliveries(TargetedDisplayScope):
+    """The messages of another scope whose sequences the route index listed."""
+
+    scope: MessageDisplayScope
+    sequences: frozenset[int]
+    targets: frozenset[str]
 
     @property
     def condition(self) -> tuple[str, tuple]:
@@ -1114,7 +1121,7 @@ class ListedDeliveries(MessageDisplayScope):
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelDisplayScope(MessageDisplayScope):
+class ChannelDisplayScope(TargetedDisplayScope):
     """One captured local display predicate; it never changes delivery or history ownership."""
 
     channel: str
@@ -1126,10 +1133,6 @@ class ChannelDisplayScope(MessageDisplayScope):
 
     def activity(self, source: BusReader):
         return source.target_activity(*self.index_predicate)
-
-    @property
-    def index_targets(self) -> frozenset[str]:
-        return self.targets
 
     def lower_bound(self, cursor: ReadCursor, snapshot: RegistryProvenance) -> int:
         return min((cursor.for_conversation(ChannelConversation(target)).high_water

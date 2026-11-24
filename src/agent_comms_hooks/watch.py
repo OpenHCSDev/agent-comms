@@ -22,7 +22,7 @@ from dataclasses import (
     field,
 )
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Protocol
 
 from agent_comms_hooks import (
     ClaudeHook,
@@ -143,7 +143,7 @@ class SessionEndpoint:
 
     def bindings(self) -> tuple[WatchRecord, ...]:
         """The bus thread this session is bound to, once it is enrolled; none before."""
-        return self.session().when_bound(unbound=tuple, bound=lambda: (self.recorded(),))
+        return self.session().bindings()
 
     @property
     def socket_path(self) -> Path:
@@ -179,6 +179,11 @@ class HeldSocketWatch(SocketWatch):
         time.sleep(.05)
 
 
+class _WatchStateOwner[State](Protocol):
+    def unbound_state(self, held: bool) -> State: ...
+    def recorded_state(self, held: bool) -> State: ...
+
+
 @dataclass(frozen=True)
 class HookSession(SocketWatch, ABC):
     endpoint: SessionEndpoint
@@ -187,9 +192,12 @@ class HookSession(SocketWatch, ABC):
         raise HookBridgeUnavailable(
             f"Session {self.endpoint.thread} is bound to no bus thread; bind it to the bus first")
 
-    def when_bound[Answer](self, unbound: Callable[[], Answer], bound: Callable[[], Answer]) -> Answer:
+    def bindings(self) -> tuple[WatchRecord, ...]:
         """An unbound session supplies no enrolled record to the resident watch."""
-        return unbound()
+        return ()
+
+    def watch_state[State](self, watch: _WatchStateOwner[State], held: bool) -> State:
+        return watch.unbound_state(held)
 
     @abstractmethod
     def invoke(self, program: type[ClaudeHookProgram], record: Mapping[str, object]) -> None: ...
@@ -207,8 +215,11 @@ class BoundSession(HookSession):
     def require_bound(self) -> None:
         """Enrollment is already established by this state; socket liveness is separate."""
 
-    def when_bound[Answer](self, unbound: Callable[[], Answer], bound: Callable[[], Answer]) -> Answer:
-        return bound()
+    def bindings(self) -> tuple[WatchRecord, ...]:
+        return (self.endpoint.recorded(),)
+
+    def watch_state[State](self, watch: _WatchStateOwner[State], held: bool) -> State:
+        return watch.recorded_state(held)
 
     def answer(self, program: type[ClaudeHookProgram], record: Mapping[str, object],
                *, timeout: float = HookAnswer.timeout) -> HookAnswer:

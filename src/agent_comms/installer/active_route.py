@@ -16,6 +16,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
 
+from metaclass_registry.mro_dispatch import MroDispatch, handles
+
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import Platform
 from agent_comms.execution.launch_root import LaunchRoot
@@ -308,12 +310,26 @@ class RouteFileNotPrivate(ValueError):
         super().__init__("active comms route must be one owner-only regular file")
 
 
+class _ActiveRouteDecode(MroDispatch):
+    @handles(FileRevision)
+    def present(self, revision: FileRevision, source: DocumentBytes, path: Path) -> PublishedRoute:
+        return ActiveRoute.from_bytes(source.content, path)
+
+    @handles(MissingFile)
+    def missing(self, revision: MissingFile, source: DocumentBytes, path: Path) -> PublishedRoute:
+        return NoActiveRoute()
+
+
+_ACTIVE_ROUTE_DECODE = _ActiveRouteDecode()
+
+
 def read_active_route(path: Path | None = None) -> PublishedRoute:
     """Decode the one trusted default route; explicit roots bypass this file."""
     path = active_route_path() if path is None else path
     source = ActiveRouteFile(path).capture()
-    return source.revision.either(
-        lambda present: ActiveRoute.from_bytes(source.content, path), NoActiveRoute)
+    return _ActiveRouteDecode.handler_for(type(source.revision))(
+        _ACTIVE_ROUTE_DECODE, source.revision, source, path,
+    )
 
 
 def route_new_bus(route: ActiveRoute, path: Path) -> str:

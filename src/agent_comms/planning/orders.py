@@ -2656,7 +2656,7 @@ class DeliverableProblemOrder(FreshMainCheck, OpenProblemOrder, declared_name=No
             repo, "rev-parse", f"{FreshMainCheck.check_base(self, repo)}^{{commit}}"
         ).strip()
         ran = self.check.at(main, self.check.directory, checkout_base)
-        if not self.check.result.distance(ran).project(lambda away: away == 0, lambda _: False):
+        if not self.check.result.distance(ran).is_zero:
             return ()
         source = PullRequestSource(todo, pulls, verified_commits=(main,))
         return tuple(self.run.after_merge(todo, merged)

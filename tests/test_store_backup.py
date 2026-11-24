@@ -193,7 +193,12 @@ def test_rollback_retained_family_is_saved_without_rewrite_selection(tmp_path, e
     assert retained
     for path in retained:
         if existed:
-            path.write_bytes(b"original")
+            if path.suffix == ".sqlite3":
+                with sqlite3.connect(path) as connection:
+                    connection.execute("CREATE TABLE probe (value TEXT)")
+                    connection.execute("INSERT INTO probe VALUES ('original')")
+            else:
+                path.write_bytes(b"original")
     backup = StoreBackup.take(root, tmp_path / "route.json", (), tmp_path / "spill")
     assert set(backup.selected_files()) == {path.relative_to(root) for path in retained}
     for path in retained:
@@ -201,7 +206,11 @@ def test_rollback_retained_family_is_saved_without_rewrite_selection(tmp_path, e
     backup.restore(lambda: None)
     for path in retained:
         if existed:
-            assert path.read_bytes() == b"original"
+            if path.suffix == ".sqlite3":
+                with sqlite3.connect(path) as connection:
+                    assert connection.execute("SELECT value FROM probe").fetchall() == [("original",)]
+            else:
+                assert path.read_bytes() == b"original"
         else:
             assert not path.exists()
 

@@ -952,10 +952,10 @@ class RepositoryReads:
     """A pass's repository reads, keyed by Git's common directory, not worktree aliases."""
 
     def __init__(self) -> None:
+        self._statuses: dict[Path, CheckoutStatus] = {}
         self._histories: dict[Path, CheckoutHistory] = {}
         self._worktree_histories: dict[Path, CheckoutHistory] = {}
         self._remote_cuts: dict[Path, dict[str, dict[str, str]]] = {}
-        self._statuses: dict[Path, CheckoutStatus] = {}
 
     @classmethod
     def retaining(cls, previous: RepositoryReads) -> Self:
@@ -1017,8 +1017,7 @@ class RepositoryReads:
             status.close()
 
     def __del__(self) -> None:
-        if hasattr(self, "_statuses"):
-            self.close()
+        self.close()
 
     def remote_cuts(self, checkout: Checkout) -> dict[str, dict[str, str]]:
         """Each remote's published refs: worktrees of one repository share their remotes. The
@@ -1414,6 +1413,14 @@ class CommitGraph(Mapping[str, GitCommit]):
     def __len__(self) -> int:
         return 0
 
+    def restore_history(self, history: CheckoutHistory, source: GitGraphSource) -> CommitGraph:
+        history._cache = GitHistoryCache(source.repository)
+        restored = history._cache.read(source)
+        if restored is not None:
+            history._graph_seed = restored.graph()
+            history._message_seed = restored.messages()
+        return history._graph_seed
+
     def following(self, source: GitGraphSource, heads: tuple[str, ...]) -> CapturedCommitGraph:
         return CapturedCommitGraph(source, GitCommit.read(source, heads))
 
@@ -1437,6 +1444,9 @@ class CapturedCommitGraph(CommitGraph):
 
     def __len__(self) -> int:
         return len(self.commits)
+
+    def restore_history(self, history: CheckoutHistory, source: GitGraphSource) -> CommitGraph:
+        return self
 
     def following(self, source: GitGraphSource, heads: tuple[str, ...]) -> CapturedCommitGraph:
         if source != self.source:
@@ -1802,13 +1812,7 @@ class CheckoutHistory:
     @cached_property
     def graph(self) -> Mapping[str, GitCommit]:
         source, heads = self.graph_request
-        if type(self._graph_seed) is CommitGraph:
-            self._cache = GitHistoryCache(source.repository)
-            restored = self._cache.read(source)
-            if restored is not None:
-                self._graph_seed = restored.graph()
-                self._message_seed = restored.messages()
-        return self._graph_seed.following(source, heads)
+        return self._graph_seed.restore_history(self, source).following(source, heads)
 
     def resolve(self, revision: str) -> str:
         """Resolve captured ref names or an unambiguous captured commit abbreviation."""

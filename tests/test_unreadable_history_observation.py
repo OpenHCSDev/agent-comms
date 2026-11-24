@@ -280,7 +280,5 @@ def test_a_reload_reads_afresh_once_and_answers_reload_only_when_its_bounds_stay
     outcome = UnreadableHistory.outcome(stale_bounds)
     assert isinstance(outcome, ReadReload)
     assert reads == ["stale", "stale"]
-    assert outcome.answer(
-        lambda value: "value", lambda error: "deferred", lambda error: "unreadable",
-        lambda error: f"reload: {error}",
-    ) == "reload: witness belongs to another page window"
+    with pytest.raises(ReloadRequired, match="witness belongs to another page window"):
+        outcome.raised()

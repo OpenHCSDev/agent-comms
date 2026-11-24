@@ -131,11 +131,10 @@ class WatchClaim(SessionEndpoint):
         return None
 
     def state(self) -> WatchState:
-        held = self.claim.held_elsewhere()
-        return self.session().when_bound(
-            unbound=lambda: ClaimingWatch() if held else UnclaimedWatch(),
-            bound=lambda: self.recorded_state(held),
-        )
+        return self.session().watch_state(self, self.claim.held_elsewhere())
+
+    def unbound_state(self, held: bool) -> WatchState:
+        return ClaimingWatch() if held else UnclaimedWatch()
 
     def recorded_state(self, held: bool) -> WatchState:
         record = self.recorded()

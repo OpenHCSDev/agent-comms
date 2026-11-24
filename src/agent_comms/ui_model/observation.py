@@ -238,15 +238,6 @@ class StoredRead[T](ABC):
     """A stored read's outcome: its value, or one of the three ways it fails."""
 
     @abstractmethod
-    def answer[R](
-        self,
-        value: Callable[[T], R],
-        deferred: Callable[[DeferredRead], R],
-        unreadable: Callable[[UnreadableHistory], R],
-        reload: Callable[[ReloadRequired], R],
-    ) -> R: ...
-
-    @abstractmethod
     def raised(self) -> T:
         """The value, or the failure raised again for a caller that answers it itself."""
 
@@ -255,71 +246,38 @@ class StoredRead[T](ABC):
 class ReadValue[T](StoredRead[T]):
     value: T
 
-    def answer[R](
-        self,
-        value: Callable[[T], R],
-        deferred: Callable[[DeferredRead], R],
-        unreadable: Callable[[UnreadableHistory], R],
-        reload: Callable[[ReloadRequired], R],
-    ) -> R:
-        return value(self.value)
-
     def raised(self) -> T:
         return self.value
 
 
+class RetryableRead[T](StoredRead[T]):
+    """A transient failure whose caller retries or reloads rather than reporting broken."""
+
+    error: DeferredRead | ReloadRequired
+
+    def raised(self) -> T:
+        raise self.error
+
+
 @dataclass(frozen=True)
-class ReadDeferred[T](StoredRead[T]):
+class ReadDeferred[T](RetryableRead[T]):
     """Currentness or contention: the existing read is retried, not shown as broken."""
 
     error: DeferredRead
 
-    def answer[R](
-        self,
-        value: Callable[[T], R],
-        deferred: Callable[[DeferredRead], R],
-        unreadable: Callable[[UnreadableHistory], R],
-        reload: Callable[[ReloadRequired], R],
-    ) -> R:
-        return deferred(self.error)
-
-    def raised(self) -> T:
-        raise self.error
-
 
 @dataclass(frozen=True)
-class ReadReload[T](StoredRead[T]):
+class ReadReload[T](RetryableRead[T]):
     """The read's own bounds name a source that is gone: retrying them never answers, so the
     caller re-reads from fresh bounds instead of waiting."""
 
     error: ReloadRequired
-
-    def answer[R](
-        self,
-        value: Callable[[T], R],
-        deferred: Callable[[DeferredRead], R],
-        unreadable: Callable[[UnreadableHistory], R],
-        reload: Callable[[ReloadRequired], R],
-    ) -> R:
-        return reload(self.error)
-
-    def raised(self) -> T:
-        raise self.error
 
 
 @dataclass(frozen=True)
 class ReadUnreadable[T](StoredRead[T]):
     error: ValueError
     cause: UnreadableHistory
-
-    def answer[R](
-        self,
-        value: Callable[[T], R],
-        deferred: Callable[[DeferredRead], R],
-        unreadable: Callable[[UnreadableHistory], R],
-        reload: Callable[[ReloadRequired], R],
-    ) -> R:
-        return unreadable(self.cause)
 
     def raised(self) -> T:
         raise self.cause from self.error
@@ -609,6 +567,32 @@ class ReadOwnerOperation(OwnerRead):
         return await OwnerScopedRead.serving(self.operation).answer(comms, self.owner, cut)
 
 
+class _SidebarReadOutcome(MroDispatch):
+    @handles(ReadValue)
+    def observed(
+        self, outcome: ReadValue[SidebarObserved], revision: WireRevision, request: ObserveSidebar,
+    ) -> SidebarResult:
+        return outcome.value
+
+    @handles(RetryableRead)
+    def preparing(
+        self, outcome: RetryableRead[SidebarObserved], revision: WireRevision, request: ObserveSidebar,
+    ) -> SidebarResult:
+        # This read takes no caller bounds, so no stale witness can reach it; only a
+        # source moving under both reads can (TranscriptChanged, DMScopeChanged), and
+        # that move is the write the next revision answers.
+        return SidebarPreparing(revision, request, outcome.error)
+
+    @handles(ReadUnreadable)
+    def unreadable(
+        self, outcome: ReadUnreadable[SidebarObserved], revision: WireRevision, request: ObserveSidebar,
+    ) -> SidebarResult:
+        return SidebarUnreadable(revision, request, outcome.cause)
+
+
+_SIDEBAR_READ_OUTCOME = _SidebarReadOutcome()
+
+
 @dataclass(frozen=True)
 class ObserveSidebar(InterestRequest):
     worktree: Checkout
@@ -622,15 +606,12 @@ class ObserveSidebar(InterestRequest):
     def _answer(
         self, revision: WireRevision, read: Callable[[], CoordinationSnapshot],
     ) -> SidebarResult:
-        return UnreadableHistory.outcome(lambda: SidebarObserved(
+        outcome = UnreadableHistory.outcome(lambda: SidebarObserved(
             revision, self, snapshot := read(), SidebarModel.derive(snapshot),
-        )).answer(
-            lambda observed: observed, lambda error: SidebarPreparing(revision, self, error),
-            lambda error: SidebarUnreadable(revision, self, error),
-            # This read takes no caller bounds, so no stale witness can reach it; only a
-            # source moving under both reads can (TranscriptChanged, DMScopeChanged), and
-            # that move is the write the next revision answers.
-            lambda error: SidebarPreparing(revision, self, error))
+        ))
+        return _SidebarReadOutcome.handler_for(type(outcome))(
+            _SIDEBAR_READ_OUTCOME, outcome, revision, self,
+        )
 
 
 @dataclass(frozen=True)

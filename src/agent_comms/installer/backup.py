@@ -18,6 +18,8 @@ from pathlib import Path
 from string import Formatter
 from typing import Annotated, ClassVar, Iterator, Self
 
+from metaclass_registry.mro_dispatch import MroDispatch, handles
+
 from agent_comms.execution.child_process import Platform
 from agent_comms.installer.active_route import (
     ActiveRoute,
@@ -30,6 +32,7 @@ from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.storage.file_observation import (
+    DocumentBytes,
     FileObservation,
     FileRevision,
     MissingFile,
@@ -66,25 +69,36 @@ class SavedFile:
         return cls(observed.st_size, observed.st_mtime_ns, observed.st_ino)
 
 
+class _SavedRouteDecode(MroDispatch):
+    @handles(FileRevision)
+    def present(self, revision: FileRevision, source: DocumentBytes, path: Path) -> SavedRoute:
+        info = path.stat()
+        content = source.content
+        try:
+            route = ActiveRoute.from_bytes(content, path)
+        except MalformedRecord:
+            pass  # An unreadable original is restored byte-for-byte.
+        else:
+            content = route.rebound().encoded()
+        return PresentSavedRoute(content, info.st_mode, info.st_nlink)
+
+    @handles(MissingFile)
+    def missing(self, revision: MissingFile, source: DocumentBytes, path: Path) -> SavedRoute:
+        return AbsentSavedRoute()
+
+
+_SAVED_ROUTE_DECODE = _SavedRouteDecode()
+
+
 class SavedRoute(ABC):
     """The original route's prepared restoration, including original absence."""
 
     @staticmethod
     def read(path: Path) -> SavedRoute:
         source = ActiveRouteFile(path).capture()
-
-        def present(revision: FileRevision) -> SavedRoute:
-            info = path.stat()
-            content = source.content
-            try:
-                route = ActiveRoute.from_bytes(content, path)
-            except MalformedRecord:
-                pass  # An unreadable original is restored byte-for-byte.
-            else:
-                content = route.rebound().encoded()
-            return PresentSavedRoute(content, info.st_mode, info.st_nlink)
-
-        return source.revision.either(present, AbsentSavedRoute)
+        return _SavedRouteDecode.handler_for(type(source.revision))(
+            _SAVED_ROUTE_DECODE, source.revision, source, path,
+        )
 
     @abstractmethod
     def matches(self, path: Path) -> bool: ...
