@@ -39,7 +39,6 @@ from agent_comms.execution.pi_vocabulary import (
     ThinkingLevelField,
 )
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.importing import ThreadImported
 from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.read_basis import ReadAuthority
@@ -74,6 +73,14 @@ from agent_comms.registry.thread_model import (
     UndeclaredModel,
 )
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
+from agent_comms.registry.thread_results import (
+    ImportDirectory,
+    ProjectChangeResult,
+    RenameThreadResult,
+    SourceDirectory,
+    ThreadImported,
+    ThreadTitleResult,
+)
 from agent_comms.registry.thread_settings import ThreadSettings
 from agent_comms.registry.thread_status import NoBridgeThreadStatus, StoppedThreadStatus
 from agent_comms.registry.thread_text import ForkedParent, GivenThreadText, ThreadText
@@ -90,28 +97,6 @@ from agent_comms.storage.locked_store import PatternFile, RuntimeFile
 from agent_comms.transport.tool_declaration import NativeRequestTools
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks.process_claim import ClaimHeldError, ProcessSingleton
-
-
-@dataclass(frozen=True, slots=True)
-class ChangeResult(ToolResult):
-    """A value that moved from previous to current; changed says whether it differs."""
-
-    previous: str
-    current: str
-    changed: bool
-
-
-@dataclass(frozen=True, slots=True)
-class RenameThreadResult(ChangeResult):
-    """A thread display name change."""
-
-
-@dataclass(frozen=True, slots=True)
-class ThreadTitleResult(ToolResult):
-    """A title set on its own; the thread's identity and aliases are untouched."""
-
-    name: str
-    title: str
 
 
 class TagChoice(SubclassUnion, affix="Tags"):
@@ -155,37 +140,6 @@ class ChangedTags(RecordMember, TagChoice):
 
     def for_child(self, parent: frozenset[str]) -> frozenset[str]:
         return (parent | self.add) - self.remove
-
-
-class ImportDirectory(SubclassUnion, affix="Directory"):
-    """Where an imported thread works: a given directory, or its source's project."""
-
-    @abstractmethod
-    def project(self, snapshot: ImportedConversation) -> str: ...
-
-    @abstractmethod
-    def local_directory(self) -> Path:
-        """The directory a running harness's session is asked for."""
-
-
-@dataclass(frozen=True, slots=True)
-class GivenDirectory(SingleFieldValue, ImportDirectory):
-    path: str
-
-    def project(self, snapshot: ImportedConversation) -> str:
-        return self.path
-
-    def local_directory(self) -> Path:
-        return Path(self.path).expanduser()
-
-
-@dataclass(frozen=True, slots=True)
-class SourceDirectory(NullMember, ImportDirectory):
-    def project(self, snapshot: ImportedConversation) -> str:
-        return snapshot.project
-
-    def local_directory(self) -> Path:
-        return Path.cwd()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -294,11 +248,6 @@ class ThreadDeleted(CliResult):
     deleted: str
     session_bytes_freed: int
     detached_children: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class ProjectChangeResult(ChangeResult):
-    thread: str
 
 
 @dataclass(eq=False, repr=False)

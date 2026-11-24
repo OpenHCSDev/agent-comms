@@ -52,8 +52,6 @@ from agent_comms.execution.owner_lifecycle import OwnerStartResult
 from agent_comms.execution.pi_vocabulary import ServiceTier, ThinkingLevelField
 from agent_comms.execution.restart_queue import QueuedRestart, RestartQueue, RestartQueued
 from agent_comms.execution.turn_context import ContextManifest, ContextSourceText, SegmentManifest
-from agent_comms.history_views import RetiredViews
-from agent_comms.importing import ThreadImported
 from agent_comms.messaging.bus_identity import BusIdentityStore
 from agent_comms.messaging.channel_management import ListTagEdit, TagEdit
 from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget
@@ -122,11 +120,15 @@ from agent_comms.registry.relationships import (
 from agent_comms.registry.thread_identity import ThreadIncarnation, ToolName
 from agent_comms.registry.thread_management import (
     InheritedTags,
+    TagChoice,
+)
+from agent_comms.registry.thread_results import (
     ProjectChangeResult,
     RenameThreadResult,
-    TagChoice,
+    ThreadImported,
     ThreadTitleResult,
 )
+from agent_comms.ui_model.retired_views import RetiredViews
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.transcript.transcripts import NotifiedThreadPresentation
 from agent_comms.registry.threads import (

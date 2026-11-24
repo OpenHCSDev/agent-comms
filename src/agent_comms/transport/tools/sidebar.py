@@ -34,8 +34,6 @@ from agent_comms.execution.turn_context import (
     Provenance,
     SegmentManifest,
 )
-from agent_comms.history_views import RetiredViews
-from agent_comms.importing import ThreadImported
 from agent_comms.installer.harness_install import Harness
 from agent_comms.messaging.channel_targets import (
     ChannelSelection,
@@ -82,10 +80,11 @@ from agent_comms.registry.registry_document import (
 from agent_comms.registry.relationship_store import SortableRelationshipGroup
 from agent_comms.registry.relationships import ThreadCommsSnapshot
 from agent_comms.registry.thread_identity import ClaimedIdentity, ThreadIncarnation
-from agent_comms.registry.thread_management import (
+from agent_comms.registry.thread_results import (
     ImportDirectory,
     ProjectChangeResult,
     RenameThreadResult,
+    ThreadImported,
 )
 from agent_comms.transcript.transcripts import NotifiedThreadPresentation
 from agent_comms.registry.thread_text import ExpectedSession
@@ -100,6 +99,7 @@ from agent_comms.transport.request import (
 )
 from agent_comms.transport.runtime_request import RuntimeRequest
 from agent_comms.transport.tool_result import ToolResult
+from agent_comms.ui_model.retired_views import RetiredViews
 from agent_comms.working_memory.working_memory_labels import ModelLabel
 
 

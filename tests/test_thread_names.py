@@ -4,7 +4,7 @@ from agent_comms.acp_extension import CoordinationChangedUpdate
 from agent_comms.context_store import BeforeContextManifest, ContextManifestCursor
 from agent_comms.display_order import ThreadSort
 from agent_comms.execution.context_prior import ContextStoreIdentity
-from agent_comms.history_views import RetiredViews
+from agent_comms.ui_model.retired_views import RetiredViews
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.historical_views import (
     AllHistoricalSenders,
@@ -51,7 +51,7 @@ from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_management import ThreadTitleResult
+from agent_comms.registry.thread_results import ThreadTitleResult
 from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tool_caller import ThreadCaller
 

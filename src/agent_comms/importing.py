@@ -13,7 +13,6 @@ from io import StringIO
 from pathlib import Path
 
 from agent_comms.cli_bridges.runtime_updates import SessionFacts
-from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.execution.import_history_source import ImportHistorySource
 from agent_comms.execution.imported_conversation import ImportedConversation
 from agent_comms.execution.imported_messages import (
@@ -34,7 +33,6 @@ from agent_comms.installer.harness_install import Harness
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_text import NoThreadText, ThreadText
 from agent_comms.transcript.transcript_events import TranscriptEvent
-from agent_comms.transport.tool_result import ToolResult
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -157,27 +155,3 @@ class ImportBuffer:
             historical_instructions=tuple(
                 sorted(self.instructions, key=lambda value: value.instruction_position())),
         )
-
-
-@dataclass(frozen=True, slots=True)
-class ThreadImported(CliResult, ToolResult):
-    thread: str
-    session_file: str
-    harness: type[Harness]
-    source_id: str
-    imported_messages: int
-    omitted_messages: int
-    truncated_messages: int
-    notices: tuple[str, ...]
-    historical_instructions: tuple[HistoricalInstructionProvenance, ...] = ()
-
-    @classmethod
-    def of(cls, thread: str, session_file: Path, snapshot: ImportedConversation) -> ThreadImported:
-        return cls(
-            thread=thread, session_file=str(session_file), harness=snapshot.harness, source_id=snapshot.source_id,
-            imported_messages=snapshot.imported_messages, omitted_messages=snapshot.messages_seen - snapshot.imported_messages,
-            truncated_messages=snapshot.truncated_messages, notices=snapshot.notices, historical_instructions=snapshot.historical_instructions,
-        )
-
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode(self)

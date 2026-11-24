@@ -14,7 +14,7 @@ from pathlib import Path
 from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
 from agent_comms.comms import wire
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.thread_management import GivenDirectory
+from agent_comms.registry.thread_results import GivenDirectory
 from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.registry.thread_storage import StorageRoots
 from agent_comms.registry.thread_text import GivenThreadText
