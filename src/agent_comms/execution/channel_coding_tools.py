@@ -248,7 +248,7 @@ class CodingToolMode(CodingChildMode):
             turn, ownership, self.owner, PiRuleGate.of(self.owner.comms, self.owner.thread))
 
 
-class CodingToolOperation(DeclaredFamily, ABC):
+class CodingToolOperation(DeclaredFamily):
     @abstractmethod
     async def reply(self, socket: CodingToolSocket, call: CodingCall) -> dict[str, object]: ...
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 
 import json
 from abc import abstractmethod
@@ -38,17 +37,13 @@ from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldV
 from agent_comms.nominal.sealed import Sealed
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_provenance import RegistryProvenance
-from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.private_path import ObservedPath
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
-
-if TYPE_CHECKING:
-    from agent_comms.registry.thread_identity import ThreadIncarnation
-
 
 class ReadNotice(SubclassUnion, affix="ReadNotice"):
     """A decoded notice owns consumption and whether it has anything to display."""

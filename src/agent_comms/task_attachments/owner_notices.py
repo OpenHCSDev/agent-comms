@@ -30,11 +30,11 @@ from agent_comms.messaging.sending import Messaging
 from agent_comms.messaging.task_attachment import TaskAttachment
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.threads import Thread
 from agent_comms.storage.typed_table import TypedTable
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True)
