@@ -47,12 +47,12 @@ from agent_comms.transport.request import (
     ToolRequest,
 )
 from agent_comms.transport.tool_result import ToolResult
-from agent_comms.ui_model.observation import (
+from agent_comms.ui_model.observation_wire import (
+    EncodedConnection,
     ObservationPeer,
     ObservationSource,
     ObserverDied,
     RelayConnection,
-    ViewerEnd,
     relay_frames,
 )
 
@@ -107,13 +107,13 @@ class ConnectorObservationPeer(ObservationPeer):
     UI's ViewerEnd and the connector's /observe socket from a thread with its own event
     loop, so the UI's loop is never borrowed; the frames are declared records both ways."""
 
-    def __init__(self, access: ConnectorClient) -> None:
+    def __init__(self, access: ConnectorClient, codec: type[EncodedConnection]) -> None:
         self.url = access.endpoint.url.with_path(OBSERVE_PATH)
         # The profile's route owns how its endpoint is reached, for this socket as
         # much as for the calls: aiohttp resolves the name itself otherwise.
         self.route = access.route
         viewer, relay = socket.socketpair()
-        self.connection = access.viewer_end(viewer.detach())
+        self.connection = access.viewer_end(viewer.detach(), codec)
         self.ending: RelayEnding = ConnectorClosed()
         # The relay's loop and task exist before its thread starts, so retiring the peer can
         # cancel it at any point, connection setup included.
@@ -177,9 +177,9 @@ class ConnectorClient(UiConnectionProfile, ObservationSource):
     """Reaching one connector: its endpoint, the credential it accepts, the route this machine
     reaches it by, and the TLS trust both the calls and the observation use."""
 
-    def viewer_end(self, handle: int) -> Connection:
+    def viewer_end(self, handle: int, codec: type[EncodedConnection]) -> Connection:
         """The caller owns how received observation records are decoded."""
-        return ViewerEnd(handle)
+        return codec(handle)
 
     @cached_property
     def tls(self) -> ssl.SSLContext:
@@ -188,8 +188,8 @@ class ConnectorClient(UiConnectionProfile, ObservationSource):
         observation alike."""
         return ssl.create_default_context()
 
-    def observation_peer(self) -> ConnectorObservationPeer:
-        return ConnectorObservationPeer(self)
+    def observation_peer(self, codec: type[EncodedConnection]) -> ConnectorObservationPeer:
+        return ConnectorObservationPeer(self, codec)
 
 
 class ThreadConnection(threading.local):

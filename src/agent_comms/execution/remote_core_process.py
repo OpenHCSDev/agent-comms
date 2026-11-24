@@ -5,6 +5,7 @@ from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import replace
 from functools import cached_property
+from multiprocessing.connection import Connection
 from threading import BoundedSemaphore, Lock
 from typing import ClassVar, Self, cast
 
@@ -15,7 +16,7 @@ from agent_comms.execution.launch_runtime import ThreadLaunch
 from agent_comms.transport.remote_core import RemoteCoreAccess
 from agent_comms.transport.request import ReadRequest, ToolRequest
 from agent_comms.transport.tool_result import ToolResult
-from agent_comms.ui_model.observation import ViewerEnd
+from agent_comms.ui_model.observation_wire import EncodedConnection
 
 _remote: RemoteCoreAccess
 REMOTE_READ_PROCESS = ProcessName("ac-core-read")
@@ -72,15 +73,20 @@ class RemoteReadProcess:
         self.workers.shutdown(wait=True)
 
 
-class ProcessViewerEnd(ViewerEnd):
+class ProcessViewerEnd(Connection):
     """Read bytes on the receiving worker; decode their records in a child."""
 
-    def __init__(self, handle: int, process: RemoteReadProcess) -> None:
+    def __init__(self, handle: int, process: RemoteReadProcess,
+                 codec: type[EncodedConnection]) -> None:
         super().__init__(handle)
         self.process = process
+        self.codec = codec
+
+    def send(self, obj: object) -> None:
+        self.send_bytes(self.codec.encode(obj))
 
     def recv(self) -> object:
-        return self.process.decode(type(self).decode, self.recv_bytes())
+        return self.process.decode(self.codec.decode, self.recv_bytes())
 
 
 class ProcessRemoteCoreAccess(RemoteCoreAccess, MroDispatch):
@@ -117,8 +123,8 @@ class ProcessRemoteCoreAccess(RemoteCoreAccess, MroDispatch):
     def call_in_place[R: ToolResult](self, request: ToolRequest[R]) -> R:
         return RemoteCoreAccess.call(self, request)
 
-    def viewer_end(self, handle: int) -> ProcessViewerEnd:
-        return ProcessViewerEnd(handle, self.read_process)
+    def viewer_end(self, handle: int, codec: type[EncodedConnection]) -> ProcessViewerEnd:
+        return ProcessViewerEnd(handle, self.read_process, codec)
 
     def close(self) -> None:
         # An unused executor starts no process, including when closed here.

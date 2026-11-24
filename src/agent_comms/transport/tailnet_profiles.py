@@ -20,7 +20,6 @@ from pathlib import Path
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.transport.connector_profile import ReachedRoute, UiConnectionProfile, UiGrantId
-from agent_comms.transport.connector_store import UiAccess
 from agent_comms.transport.held_ui_profiles import HeldUiProfiles
 from agent_comms.transport.tailnet_buses import PeerBus, TailnetBuses
 from agent_comms.transport.tool_result import ToolResult
@@ -103,15 +102,9 @@ class PeerAnsweredNothing(AskedPeer):
 
 
 class TailnetProfiles(TailnetBuses):
-    """The ask: one ssh call to a peer's own connector, which decides for itself."""
+    """Held peer profiles and decoded replies; host-side SSH asks live in ``served_tailnet``."""
 
     connector_cli: str = f"{TailnetBuses.remote_cli}-connector"
-
-    @classmethod
-    def ask_command(cls, found: PeerBus) -> tuple[str, ...]:
-        """Its own connector decides: this says nothing about the peer's root or endpoint,
-        because the machine being asked owns both."""
-        return (*cls.probe_command(found.peer)[:-1], f"{cls.connector_cli} offer-ui --access {UiAccess.declared_name}")
 
     @classmethod
     def asked(cls, found: PeerBus, status: int, output: str) -> AskedPeer:
@@ -162,11 +155,3 @@ class TailnetProfiles(TailnetBuses):
         path.unlink(missing_ok=True)
         reached = replace(profile, route=ReachedRoute(found.peer.address))
         return reached.write_new(path)
-
-    @classmethod
-    def ask(cls, found: PeerBus, previous: tuple[UiGrantId, ...] = ()) -> AskedPeer:
-        """Ask on Core's host; the profile value crosses back to its recipient."""
-        status, output = cls.run(cls.ask_command(found))
-        answer = cls.asked(found, status, output)
-        answer.replace_previous(previous)
-        return answer

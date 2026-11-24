@@ -8,7 +8,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.storage.maintenance_barrier import MaintenanceHeldError
 from agent_comms.transport.mcp_wire import ToolsCallReply, ToolsCallResult
 from agent_comms.transport.remote_core import ConnectorObserverClosed, ServiceFailed
-from agent_comms.ui_model.observation import PeerClosed
+from agent_comms.ui_model.observation_wire import PeerClosed
 
 
 @pytest.mark.parametrize('error,expected', [

@@ -5,6 +5,7 @@ gives — a profile, the offer-ui refusal, an older install with no such verb.
 """
 
 import json
+import time
 from dataclasses import replace
 
 import pytest
@@ -32,6 +33,7 @@ from agent_comms.transport.tailnet_profiles import (
     PeerRefusedProfile,
     TailnetProfiles,
 )
+from agent_comms.transport.tools.served_tailnet import HostTailnetProfiles
 
 GAMING = PeerHoldsBus(TailnetPeer("ts-gaming", "100.119.57.99", True), 43)
 
@@ -45,7 +47,7 @@ def profile_text() -> str:
 
 
 def test_the_ask_runs_the_peers_own_connector_over_ssh():
-    command = TailnetProfiles.ask_command(GAMING)
+    command = HostTailnetProfiles.ask_command(GAMING)
     assert command[0] == "ssh" and "100.119.57.99" in command
     assert command[-1].endswith("agent-comms-connector offer-ui --access ui_access"), (
         f"the peer decides its own root and endpoint, so the ask names neither: {command}")
@@ -97,9 +99,6 @@ def test_a_held_profile_pointing_anywhere_but_mcp_is_not_openable(tmp_path, monk
     It decodes and its grant is live, so the only thing wrong with it is where it points,
     and the family says so rather than offering a row that posts to / and fails.
     """
-    import time
-
-
     monkeypatch.setattr(HeldUiProfiles, "directory", classmethod(lambda cls: tmp_path))
     live = time.time() + 3600
     held = FieldCodec.decode(UiConnectionProfile, FieldCodec.parse(profile_text().encode()))
@@ -124,9 +123,9 @@ def test_asking_again_replaces_what_was_held_and_revokes_it(tmp_path, monkeypatc
     monkeypatch.setattr(TailnetProfiles, "run",
                         classmethod(lambda cls, command: asked.append(tuple(command)) or (0, profile_text())))
 
-    first = TailnetProfiles.ask(GAMING, TailnetProfiles.held_grants(GAMING)).hold()
+    first = HostTailnetProfiles.ask(GAMING, TailnetProfiles.held_grants(GAMING)).hold()
     held = sorted(path.name for path in tmp_path.iterdir())
-    second = TailnetProfiles.ask(GAMING, TailnetProfiles.held_grants(GAMING)).hold()
+    second = HostTailnetProfiles.ask(GAMING, TailnetProfiles.held_grants(GAMING)).hold()
 
     assert held == ["ts-gaming.json"] and first.path == second.path
     assert sorted(path.name for path in tmp_path.iterdir()) == ["ts-gaming.json"], (

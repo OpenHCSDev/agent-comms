@@ -24,6 +24,7 @@ from agent_comms.transport.connector_profile import (
 from agent_comms.transport.progress import WireExportObserver, WireExportProgress
 from agent_comms.transport.request import ObservedRequest, ReadRequest, ToolRequest
 from agent_comms.transport.tool_result import ToolResult
+from agent_comms.ui_model.observation_wire import EncodedConnection
 
 
 @dataclass(frozen=True)
@@ -67,7 +68,7 @@ class HeldRead(ReadRequest[CpuReply], declared_name="test_process_held_read"):
         return {"produced_pid": os.getpid(), "checksum": 1}
 
 
-class ProbedViewerEnd(ProcessViewerEnd):
+class ProbedCodec(EncodedConnection):
     receives = CpuReply
 
 
@@ -172,7 +173,7 @@ def test_a_closed_client_refuses_a_new_read(access):
 
 def test_received_packets_use_their_declared_decoder_in_a_child(access):
     incoming, outgoing = socket.socketpair()
-    with ProbedViewerEnd(incoming.detach(), access.read_process) as viewer, Connection(outgoing.detach()) as sender:
+    with ProcessViewerEnd(incoming.detach(), access.read_process, ProbedCodec) as viewer, Connection(outgoing.detach()) as sender:
         sender.send_bytes(reply_packet())
         reply = viewer.recv()
         assert reply.checksum == 42
@@ -181,7 +182,7 @@ def test_received_packets_use_their_declared_decoder_in_a_child(access):
 
 def test_malformed_packets_fail_and_the_next_packet_can_still_be_decoded(access):
     incoming, outgoing = socket.socketpair()
-    with ProbedViewerEnd(incoming.detach(), access.read_process) as viewer, Connection(outgoing.detach()) as sender:
+    with ProcessViewerEnd(incoming.detach(), access.read_process, ProbedCodec) as viewer, Connection(outgoing.detach()) as sender:
         sender.send_bytes(b"not JSON")
         with pytest.raises(ValueError):
             viewer.recv()
@@ -198,7 +199,7 @@ def test_slow_reads_leave_an_interpreter_available_for_arrived_packets(access, t
             while len(tuple(tmp_path.glob("read-*.ready"))) < 3:
                 assert time.monotonic() < deadline, "Read workers did not start"
                 time.sleep(.01)
-            decoded = callers.submit(access.read_process.decode, ProbedViewerEnd.decode, reply_packet())
+            decoded = callers.submit(access.read_process.decode, ProbedCodec.decode, reply_packet())
             assert decoded.result(timeout=30).decoded_pid != os.getpid()
             assert all(not read.done() for read in reads)
         finally:

@@ -30,7 +30,7 @@ class Source:
     def __init__(self, connection):
         self.connection = connection
 
-    def observation_peer(self):
+    def observation_peer(self, codec):
         return Peer(self.connection)
 
 
