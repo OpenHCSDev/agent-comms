@@ -28,6 +28,7 @@ from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import client_wire
 from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.repo import Repo
 from agent_comms.storage.store_files import AtomicFile
 from agent_comms.team.rule_deal import (
@@ -271,6 +272,13 @@ class AntigravityCallMcpTool(AntigravityToolMeaning, declared_name="call_mcp_too
         gate.judge_tool(tool)
 
 
+@dataclass(frozen=True, slots=True)
+class BoundThreadRecord:
+    """Thread name recorded in an Antigravity artifact directory's `.agy-thread.json`."""
+
+    thread: str
+
+
 @dataclass
 class AntigravityRuleGate(DealtRuleGate):
     """One Antigravity conversation's rule deal, stored beside its `transcript.jsonl`."""
@@ -454,10 +462,13 @@ class AntigravityRuleGate(DealtRuleGate):
     def bound_thread_name(self) -> str:
         """Resolve the bus thread bound to this Antigravity conversation, if any."""
         try:
-            raw = json.loads(self.bound_thread_path.read_text(encoding="utf-8"))
-            if isinstance(raw, dict) and isinstance(raw.get("thread"), str) and raw["thread"].strip():
-                return raw["thread"].strip()
-        except (OSError, ValueError):
+            binding = FieldCodec.decode(
+                BoundThreadRecord,
+                FieldCodec.parse(self.bound_thread_path.read_text(encoding="utf-8")),
+            )
+            if binding.thread.strip():
+                return binding.thread.strip()
+        except (OSError, ValueError, TypeError):
             pass
         if self.transcript_path != Path():
             conversation_id = AntigravityTranscript.conversation_id_of(self.transcript_path)
