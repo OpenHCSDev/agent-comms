@@ -27,8 +27,11 @@ from agent_comms.team.rule_deal import (
     AuditDue,
     CompactedDeal,
     CompactionDeal,
+    DealDelivery,
     DealTrigger,
     DealtRuleGate,
+    EmptyDealDelivery,
+    InjectedDelivery,
     Owed,
     ReadSpan,
     StartedDeal,
@@ -40,6 +43,9 @@ from agent_comms_hooks.skill import DeckReader
 _CHECKPOINT_SUFFIX = ".agy-checkpoint.json"
 _MAX_READ_LINES = 800
 _MAX_READ_BYTES = 46_080
+# Antigravity truncates an individual injected systemMessage around ~48.9 KB; splitting
+# per dealt file at 40 KB keeps every injected step well below that ceiling with zero loss.
+_MAX_INJECT_BYTES = 40_000
 _WATCH_PROGRAMS = frozenset({"agent-comms-inbox-watch"})
 _COMMS_HELPER_VERBS = frozenset({"run-watch", "wake-on", "call", "status", "list-deal", "use-thread"})
 
@@ -253,6 +259,10 @@ class AntigravityRuleGate(DealtRuleGate):
     cwd: Path
     workspace_paths: tuple[Path, ...]
     denied_reason: str = field(default="", init=False)
+    active_delivery: DealDelivery = field(default_factory=EmptyDealDelivery, init=False)
+
+    def delivery(self) -> DealDelivery:
+        return self.active_delivery
 
     @property
     def stem(self) -> Path:
@@ -357,12 +367,80 @@ class AntigravityRuleGate(DealtRuleGate):
         return "\n\n".join(part for part in parts if part)
 
     def deal_fresh(self, trigger: DealTrigger, repos: tuple[Repo, ...]) -> str:
+        self.active_delivery = EmptyDealDelivery()
         prompts = self.owner_words()
         self.deal(DeckReader, AuditDue(prompts, repos), trigger)
         return self._order_text(trigger, prompts)
 
+    def _deal_injected(self, trigger: DealTrigger, repos: tuple[Repo, ...]) -> tuple[str, ...]:
+        def deliver() -> tuple[str, ...]:
+            chunks, delivery = InjectedDelivery.render(
+                DeckReader.sources(), max_bytes=_MAX_INJECT_BYTES
+            )
+            self.active_delivery = delivery
+            prompts = self.owner_words()
+            self.deal(DeckReader, AuditDue(prompts, repos), trigger)
+            return (*chunks, self._order_text(trigger, prompts))
+
+        return trigger.deliver(self.current().mode, deliver, ())
+
+    def _inject_pending_unread(self) -> tuple[str, ...]:
+        pending = self.state().unread_paths()
+        if not pending:
+            return ()
+        chunks, delivery = InjectedDelivery.render(pending, max_bytes=_MAX_INJECT_BYTES)
+        self.record_reads(delivery.reads())
+        prompts = self.owner_words()
+        record = self.current()
+        parts = [
+            (
+                f"{record.trigger.reason()} Injected all {len(pending)} remaining dealt files"
+                " directly into your system messages above and recorded them as read. Do not"
+                " re-read them with a tool; the read gate is now open for those files."
+            ),
+            self.template_once(record.due),
+        ]
+        if prompts:
+            parts.append(
+                "\n\n".join(
+                    (
+                        "WHAT TRISTAN ACTUALLY SAID LAST, verbatim, oldest first. Not your summary"
+                        " of it. Your audit answers each one, and your next action serves them,"
+                        " not the summary's next step:",
+                        *(f"> {words}" for words in prompts),
+                    )
+                )
+            )
+        return (*chunks, "\n\n".join(part for part in parts if part))
+
+    def inject_deal(self, *, startup: bool = False) -> tuple[str, ...]:
+        """Inject dealt sources directly on `SessionStart` / `PreInvocation` so static papers
+        and rules arrive in context with zero tool-call round-trips."""
+        repos = self.team_repositories()
+        if not self.in_team_workspace(repos):
+            return ()
+        cursor = AntigravityCheckpointCursor.read(self.checkpoint_cursor_path)
+        step, created_at, size = self.latest_checkpoint()
+        if not self.record.exists():
+            messages = self._deal_injected(StartedDeal(), repos)
+            self._save_cursor(step, created_at, size)
+            return messages
+        if step > cursor.checkpoint_step:
+            trigger: CompactionDeal = (
+                CompactedDeal(created_at) if created_at else UnstampedCompactionDeal()
+            )
+            messages = self._deal_injected(trigger, repos)
+            self._save_cursor(step, created_at, size)
+            return messages
+        messages = self._inject_pending_unread()
+        if startup:
+            self._save_cursor(step, created_at, size)
+            return messages
+        self._save_cursor(cursor.checkpoint_step, cursor.checkpoint_at, size)
+        return messages
+
     def check_deal(self, *, startup: bool = False) -> str:
-        """Deal on startup or whenever a newer `CHECKPOINT` appeared in `transcript.jsonl`."""
+        """Deal without injection (used by `PreToolUse`, which cannot return `injectSteps`)."""
         repos = self.team_repositories()
         if not self.in_team_workspace(repos):
             return ""
@@ -407,10 +485,9 @@ def _in_agent_cwd(cwd: Path) -> Iterator[None]:
             os.chdir(previous)
 
 
-def _inject_system_message(text: str) -> dict[str, object]:
-    if not text:
-        return {}
-    return {"injectSteps": [{"systemMessage": {"systemMessage": text}}]}
+def _inject_system_messages(messages: tuple[str, ...]) -> dict[str, object]:
+    steps = [{"systemMessage": {"systemMessage": text}} for text in messages if text]
+    return {"injectSteps": steps} if steps else {}
 
 
 class AntigravityHookEvent(DeclaredFamily):
@@ -432,13 +509,13 @@ class AntigravityOtherEvent(AntigravityHookEvent):
 class AntigravitySessionStartEvent(AntigravityHookEvent, declared_name="SessionStart"):
     def run(self, gate: AntigravityRuleGate, payload: Mapping[str, object]) -> dict[str, object]:
         del payload
-        return _inject_system_message(gate.check_deal(startup=True))
+        return _inject_system_messages(gate.inject_deal(startup=True))
 
 
 class AntigravityPreInvocationEvent(AntigravityHookEvent, declared_name="PreInvocation"):
     def run(self, gate: AntigravityRuleGate, payload: Mapping[str, object]) -> dict[str, object]:
         del payload
-        return _inject_system_message(gate.check_deal())
+        return _inject_system_messages(gate.inject_deal())
 
 
 class AntigravityPreToolUseEvent(AntigravityHookEvent, declared_name="PreToolUse"):

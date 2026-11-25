@@ -3,10 +3,11 @@ but reading them and writing the audit that answers them is refused until it has
 
 The order to read the rules is text, and text loses to a compaction summary: the model holds its
 own paraphrase of the rules and treats the order as optional. The gate makes the order the only
-path forward, whatever runs the agent. Reading alone is passive too, so the files open in batches
-of `Unread.batch` and the audit then answers the costly probes (rule_probes.py): a quote and a
-paraphrase per rule were cheap to write and proved nothing, so the deal asks what only looking at
-the code, the papers or Tristan's words can answer.
+path forward, whatever runs the agent. Every remaining dealt file is listed upfront so they open
+in one parallel call when not already delivered by the system prompt or lifecycle hook, and the
+audit then answers the costly probes (rule_probes.py): a quote and a paraphrase per rule were cheap
+to write and proved nothing, so the deal asks what only looking at the code, the papers or
+Tristan's words can answer.
 
 `State` is the one root: a deal is a state, a gate state is a state, and what a deal still owes
 is a state, so every consumer holds the family and asks it. `RuleDeal` owns where one session's
@@ -18,6 +19,7 @@ Code hooks deny a PreToolUse event, Core's Pi tool owner raises a tool denial.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from abc import ABC, abstractmethod
@@ -258,8 +260,8 @@ class DealDelivery(DeclaredFamily, affix="Delivery"):
         return (
             f"Read each of these {len(sources)} files in full with the Read tool before any other"
             " action: they are every rule you follow and the sources they come from. A summary"
-            " or memory of them does not count as reading them. Read them in order, in batches"
-            f" of {record.read_batch}, then answer the audit at {audit}: reading alone is passive."
+            " or memory of them does not count as reading them. Read all of them in dealt order"
+            f" in one parallel call, then answer the audit at {audit}: reading alone is passive."
             f" {self.open_meanwhile} This order is given once"
             " per session start or compaction; a short slice of them comes back inline every few"
             " tool calls.\n" + "\n".join(str(source) for source in sources)
@@ -272,6 +274,81 @@ class EmptyDealDelivery(DealDelivery):
 
     def launch_arguments(self) -> tuple[str, ...]:
         return ()
+
+
+def _split_inline_section(title: str, text: str, max_bytes: int) -> tuple[str, ...]:
+    """Split one dealt source on line boundaries so each injected message fits `max_bytes`."""
+    header = f"## {title}\n\n"
+    whole = header + text
+    if len(whole.encode("utf-8")) <= max_bytes:
+        return (whole,)
+    lines = text.splitlines()
+    raw_parts: list[str] = []
+    # Reserve space for the numbered heading `## <title> (part X/Y)\n\n`.
+    body_budget = max(1, max_bytes - len(f"## {title} (part 99/99)\n\n".encode("utf-8")))
+    current: list[str] = []
+    current_bytes = 0
+    for line in lines:
+        line_bytes = len(line.encode("utf-8"))
+        sep = 1 if current else 0
+        if current and current_bytes + sep + line_bytes > body_budget:
+            raw_parts.append("\n".join(current))
+            current = [line]
+            current_bytes = line_bytes
+        else:
+            current.append(line)
+            current_bytes += sep + line_bytes
+    if current:
+        raw_parts.append("\n".join(current))
+    total = len(raw_parts)
+    return tuple(
+        f"## {title} (part {index}/{total})\n\n{part}"
+        for index, part in enumerate(raw_parts, start=1)
+    )
+
+
+@dataclass(frozen=True)
+class InjectedDelivery(DealDelivery):
+    """The dealt files were injected directly into the session's context by a lifecycle hook
+    (such as Antigravity `SessionStart` / `PreInvocation` `injectSteps`), so every delivered
+    file counts as read at the exact SHA-256 of the bytes injected."""
+
+    delivered: tuple[DealtRead, ...] = ()
+
+    @classmethod
+    def render(cls, paths: Iterable[Path], *, max_bytes: int) -> tuple[tuple[str, ...], Self]:
+        """One read of each dealt file supplies both its injected chunks and its read digest."""
+        chunks: list[str] = []
+        reads: list[DealtRead] = []
+        for path in paths:
+            resolved = path.resolve()
+            raw = resolved.read_bytes()
+            source = DealtSource.of(resolved)
+            reads.append(DealtRead(source, hashlib.sha256(raw).hexdigest()))
+            chunks.extend(
+                _split_inline_section(
+                    f"{source.package}/{source.relative}",
+                    raw.decode("utf-8").strip(),
+                    max_bytes,
+                )
+            )
+        return (tuple(chunks), cls(tuple(reads)))
+
+    def launch_arguments(self) -> tuple[str, ...]:
+        return ()
+
+    def reads(self) -> tuple[DealtRead, ...]:
+        return self.delivered
+
+    def told(self, record: DealRecord, audit: Path) -> str:
+        sources = record.paths
+        return (
+            f"These {len(sources)} dealt files were injected directly into your system messages"
+            " above, in dealt order, and count as read: they are every rule you follow and the"
+            " sources they come from. Do not re-read them with a tool unless the gate names a"
+            f" file that changed. If an audit is required, answer it at {audit}."
+            f" {self.open_meanwhile}"
+        )
 
 
 @dataclass(frozen=True)
@@ -519,6 +596,10 @@ class ToolGateState(State):
         """Whether a file outside the deal may be read now."""
         return False
 
+    def unread_paths(self) -> tuple[Path, ...]:
+        """Dealt files currently owed by this state, in dealt order."""
+        return ()
+
     def started(self, deal: Redeals) -> None:
         """A restart keeps the context it had, and the deal it still answers."""
         return
@@ -566,6 +647,9 @@ class Blocked(ToolGateState):
 
     def permits_source_read(self) -> bool:
         return self.cause.permits_source_read()
+
+    def unread_paths(self) -> tuple[Path, ...]:
+        return self.cause.unread_paths()
 
     def context_observed(self, deal: Redeals, usage: ContextUsage) -> None:
         """A refresh passed while the deal is being answered is answered by it: the context
@@ -779,8 +863,6 @@ class RuleGateSettings(ConfigurationRecord):
     audit_confirmation: Annotated[type[RuleCheckPolicy], RegisteredClassChoices(RuleCheckPolicy),
                                   WireName("confirmation"),
                             Description("Ask did you mean it after an audit; ignored when audit is off")] = OffRuleCheckPolicy
-    read_batch: Annotated[int, Ge(1),
-                          Description("Files opened together before answering the audit")] = 5
     owner_prompts: Annotated[int, Ge(1),
                              Description("Recent owner prompts included in each deal")] = 6
     refresh_remaining: Annotated[tuple[Annotated[float, Gt(0), Lt(1)], ...],
@@ -983,6 +1065,9 @@ class Owed(State):
         """Reading a dealt file is the way through the gate."""
         return True
 
+    def unread_paths(self) -> tuple[Path, ...]:
+        return ()
+
 
 @dataclass(frozen=True)
 class Unmeant(Owed):
@@ -1040,14 +1125,11 @@ class Unmeant(Owed):
 
 @dataclass(frozen=True)
 class Unread(Owed):
-    """A dealt file has not been read in full. They open in the order dealt: the papers first,
-    the pattern catalog last. On 2026-10-30 claude-code opened the closing file and two rules first and
-    never read either paper, because any unread dealt file opened."""
+    """A dealt file has not been read in full. Every remaining dealt file is listed upfront in
+    dealt order and permitted together so all of them open in one parallel call; other tools
+    stay locked until every dealt file has been read in full."""
 
     remaining: tuple[Path, ...]
-    unopened: tuple[Path, ...]
-    """The dealt files no read has opened yet, in the order dealt; one in flight counts as
-    opened, so a parallel batch's first read does not pin the order to itself."""
 
     before: ClassVar[str] = "reading"
 
@@ -1055,39 +1137,25 @@ class Unread(Owed):
     def policy(cls, record: DealRecord) -> type[RuleCheckPolicy]:
         return record.required_reads
 
-    @property
-    def batch(self) -> int:
-        return self.record.read_batch
-
-    def permits_read(self, path: Path) -> bool:
-        """Any file already opened, since re-reading is how a rule gets answered, or one of the
-        next unopened batch in the dealt order: a parallel batch's hooks reach the lock in any
-        order, so naming only the very next file refused reads the batch had sent in order."""
-        return path not in self.unopened or path in self.unopened[:self.batch]
-
     @classmethod
     def owed_by(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> Iterator[Self]:
+        del opened
         read = record.read_by(deal)
         remaining = tuple(source for source in record.paths if source not in read)
         if remaining:
-            taken = record.opened_by(deal, opened)
-            yield cls(record, deal.audit, remaining,
-                      tuple(source for source in record.paths if source not in taken))
+            yield cls(record, deal.audit, remaining)
 
-    def next_batch(self) -> tuple[Path, ...]:
-        """The next `batch` files still unread, in the dealt order: a file opened but
-        read only in part is named first, and every one named may open now."""
-        return self.remaining[:self.batch]
+    def unread_paths(self) -> tuple[Path, ...]:
+        return self.remaining
 
     @property
     def reason(self) -> str:
-        """The batch is named on every refusal: told only the next file, sessions read one file
-        per call."""
+        """Name every remaining dealt file upfront in dealt order so the session clears the
+        gate in one parallel call instead of bouncing per batch."""
+        paths = "\n".join(str(source) for source in self.remaining)
         return (
-            f"Read the next batch whole, in one parallel call (batches of {self.batch})."
-            " Next batch: "
-            + ", ".join(str(source) for source in self.next_batch())
-            + f". {len(self.remaining)} dealt files left."
+            f"Read all {len(self.remaining)} remaining dealt files in full, in dealt order,"
+            f" in one parallel call:\n{paths}"
         )
 
 
@@ -1304,6 +1372,15 @@ class RuleDeal(State, DealtCalls):
         AtomicFile(self.record).write_bytes(
             json.dumps(FieldCodec.encode(record)).encode()
         )
+
+    def record_reads(self, reads: Iterable[DealtRead]) -> None:
+        """Append already-verified dealt reads (such as files injected directly by a lifecycle hook)."""
+        lines = "".join(read.line() for read in reads)
+        if not lines:
+            return
+        with self.write_guard(self.dealt_read):
+            with self.dealt_read.open("a", encoding="utf-8") as record:
+                record.write(lines)
 
     def record_read(self, path: Path, span: ReadSpan) -> bool:
         """A completed read covering a whole dealt file counts its content; any other read

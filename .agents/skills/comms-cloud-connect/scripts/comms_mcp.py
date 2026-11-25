@@ -605,6 +605,35 @@ def _cloud_command_allowed(cmd: str) -> bool:
     )
 
 
+_CLOUD_MAX_INJECT_BYTES = 40_000
+
+
+def _split_cloud_section(path: Path, max_bytes: int = _CLOUD_MAX_INJECT_BYTES) -> list[str]:
+    text = path.read_text(encoding="utf-8").strip()
+    title = str(path)
+    whole = f"## {title}\n\n{text}"
+    if len(whole.encode("utf-8")) <= max_bytes:
+        return [whole]
+    body_budget = max(1, max_bytes - len(f"## {title} (part 99/99)\n\n".encode("utf-8")))
+    parts: list[str] = []
+    current: list[str] = []
+    current_bytes = 0
+    for line in text.splitlines():
+        line_bytes = len(line.encode("utf-8"))
+        sep = 1 if current else 0
+        if current and current_bytes + sep + line_bytes > body_budget:
+            parts.append("\n".join(current))
+            current = [line]
+            current_bytes = line_bytes
+        else:
+            current.append(line)
+            current_bytes += sep + line_bytes
+    if current:
+        parts.append("\n".join(current))
+    total = len(parts)
+    return [f"## {title} (part {i}/{total})\n\n{part}" for i, part in enumerate(parts, start=1)]
+
+
 def _cloud_agy_hook(payload: dict[str, Any], repo_hint: str | None) -> dict[str, Any]:
     event = str(payload.get("hookEventName") or "")
     transcript_raw = str(payload.get("transcriptPath") or "")
@@ -642,53 +671,77 @@ def _cloud_agy_hook(payload: dict[str, Any], repo_hint: str | None) -> dict[str,
         tmp.write_text(json.dumps(state), encoding="utf-8")
         os.replace(tmp, state_path)
 
-    def deal_fresh(trigger: str, step: int, at: str, size: int) -> str:
-        files = [str(p) for p in _collect_deal_files(root, "full")] if root is not None else list(state.get("dealt", []))
-        state.update({
-            "checkpoint_step": step,
-            "checkpoint_at": at,
-            "transcript_size": size,
-            "dealt": files,
-            "read": [],
-            "trigger": trigger,
-        })
-        save_state()
-        listing = "\n".join(f"  {i + 1}. {p}" for i, p in enumerate(files))
+    def build_injected(files: list[str], trigger: str) -> list[dict[str, Any]]:
+        steps: list[dict[str, Any]] = []
+        for raw_path in files:
+            for chunk in _split_cloud_section(Path(raw_path)):
+                steps.append({"systemMessage": {"systemMessage": chunk}})
         parts = [
-            f"{trigger} Read every dealt file in order with `read_file` before running other tools:\n{listing}"
+            f"{trigger} All {len(files)} dealt files were injected into your system messages above and recorded as read."
         ]
         if transcript is not None and (prompts := _cloud_owner_words(transcript)):
             parts.append(
                 "WHAT TRISTAN ACTUALLY SAID LAST, verbatim, oldest first:\n"
                 + "\n\n".join(f"> {p}" for p in prompts)
             )
-        return "\n\n".join(parts)
+        steps.append({"systemMessage": {"systemMessage": "\n\n".join(parts)}})
+        return steps
 
-    def check_trigger(startup: bool = False) -> str:
+    def deal_fresh(trigger: str, step: int, at: str, size: int, *, inject: bool) -> list[dict[str, Any]]:
+        files = [str(p) for p in _collect_deal_files(root, "full")] if root is not None else list(state.get("dealt", []))
+        steps = build_injected(files, trigger) if inject else []
+        state.update({
+            "checkpoint_step": step,
+            "checkpoint_at": at,
+            "transcript_size": size,
+            "dealt": files,
+            "read": list(files) if inject else [],
+            "trigger": trigger,
+        })
+        save_state()
+        return steps
+
+    def check_trigger(startup: bool = False, *, inject: bool = False) -> list[dict[str, Any]]:
         step, at, size = _cloud_latest_checkpoint(transcript) if transcript else (-1, "", 0)
         if not state.get("dealt"):
-            return deal_fresh("Fresh session started.", step, at, size)
+            return deal_fresh("Fresh session started.", step, at, size, inject=inject)
         if step > int(state.get("checkpoint_step", -1)):
             stamp = f" at {at}" if at else ""
-            return deal_fresh(f"Context compacted{stamp}; the summary paraphrased the rules.", step, at, size)
+            return deal_fresh(
+                f"Context compacted{stamp}; the summary paraphrased the rules.",
+                step,
+                at,
+                size,
+                inject=inject,
+            )
+        if inject:
+            dealt: list[str] = list(state.get("dealt", []))
+            read_set = set(state.get("read", []))
+            unread = [p for p in dealt if p not in read_set]
+            if unread:
+                steps = build_injected(unread, str(state.get("trigger") or "Rule deal open."))
+                state["read"] = list(dict.fromkeys([*state.get("read", []), *unread]))
+                state["transcript_size"] = size
+                save_state()
+                return steps
         if startup:
-            return ""
+            return []
         if size != state.get("transcript_size"):
             state["transcript_size"] = size
             save_state()
-        return ""
+        return []
 
     if event == "SessionStart":
-        text = check_trigger(startup=True)
-        return {"injectSteps": [{"systemMessage": {"systemMessage": text}}]} if text else {}
+        steps = check_trigger(startup=True, inject=True)
+        return {"injectSteps": steps} if steps else {}
 
     if event == "PreInvocation":
-        text = check_trigger()
-        return {"injectSteps": [{"systemMessage": {"systemMessage": text}}]} if text else {}
+        steps = check_trigger(inject=True)
+        return {"injectSteps": steps} if steps else {}
 
     if event == "PreToolUse":
-        check_trigger()
-        dealt: list[str] = list(state.get("dealt", []))
+        check_trigger(inject=False)
+        dealt = list(state.get("dealt", []))
         read_set = set(state.get("read", []))
         unread = [p for p in dealt if p not in read_set]
         if not unread:
@@ -706,11 +759,13 @@ def _cloud_agy_hook(payload: dict[str, Any], repo_hint: str | None) -> dict[str,
             return {"decision": "allow"}
         if tool == "run_command" and _cloud_command_allowed(str(args.get("CommandLine") or "")):
             return {"decision": "allow"}
-        head = "\n".join(f"  - {p}" for p in unread[:5])
-        more = f"\n  ... and {len(unread) - 5} more" if len(unread) > 5 else ""
+        listing = "\n".join(f"  - {p}" for p in unread)
         return {
             "decision": "deny",
-            "reason": f"{state.get('trigger', 'Rule deal open.')} Read every dealt file with `read_file` before `{tool}` ({len(unread)} unread):\n{head}{more}",
+            "reason": (
+                f"{state.get('trigger', 'Rule deal open.')} Read all {len(unread)} remaining dealt"
+                f" files in full in one parallel call before `{tool}`:\n{listing}"
+            ),
         }
 
     if event == "PostToolUse":

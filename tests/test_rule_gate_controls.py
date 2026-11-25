@@ -15,6 +15,7 @@ from agent_comms.projects.rule_probes import (
 )
 from agent_comms.team.pi_rule_gate import PiRedeal, RulesUnread
 from agent_comms.team.rule_deal import (
+    EmptyDealDelivery,
     FullDealMode,
     OffDealMode,
     OffRuleCheckPolicy,
@@ -58,7 +59,8 @@ async def test_rule_settings_prepare_both_choices_and_apply_through_the_command(
     assert FieldCodec.encode(gate.current())["confirmation"] == "off"
 
 
-def test_emergency_release_runs_while_locked_and_preserves_evidence(team_bus):
+def test_emergency_release_runs_while_locked_and_preserves_evidence(team_bus, monkeypatch):
+    monkeypatch.setattr(PiRedeal, "delivery", lambda self: EmptyDealDelivery())
     gate = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
     gate.start()
     audit = gate.audit.read_bytes()
@@ -82,10 +84,13 @@ def test_emergency_release_runs_while_locked_and_preserves_evidence(team_bus):
     (OffRuleCheckPolicy, nullcontext()),
     (RequiredRuleCheckPolicy, pytest.raises(RulesUnread)),
 ))
-def test_audit_off_keeps_read_policy_and_compaction_refresh(team_bus, reads, after_compaction):
+def test_audit_off_keeps_read_policy_and_compaction_refresh(
+    team_bus, monkeypatch, reads, after_compaction
+):
+    monkeypatch.setattr(PiRedeal, "delivery", lambda self: EmptyDealDelivery())
     gate = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
     gate.start()
-    gate.configure(RuleGateSettings(required_reads=reads, audit=OffRuleCheckPolicy))
+    gate.configure(RuleGateSettings(mode=FullDealMode, required_reads=reads, audit=OffRuleCheckPolicy))
     sources = gate.current().dealt
     for source in sources:
         source.read_text()

@@ -39,6 +39,7 @@ from agent_comms.team.rule_deal import (
     Owed,
     OwnerWordsAnswer,
     RefreshDeal,
+    RequiredRuleCheckPolicy,
     RuleGateSettings,
     SessionAudit,
     StartedDeal,
@@ -57,8 +58,10 @@ def call(name: str, arguments: dict[str, object]) -> CodingCall:
 
 
 @pytest.fixture
-def peer_deal(team_bus):
-    """The deal Core renews for the bus's ordinary peer, in the bus's own scratch."""
+def peer_deal(team_bus, monkeypatch):
+    """The deal Core renews for the bus's ordinary peer, in the bus's own scratch, with no
+    pre-rendered system prompt so tool-read enforcement is exercised directly."""
+    monkeypatch.setattr(PiRedeal, "delivery", lambda self: EmptyDealDelivery())
     deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
     assert deal.scratch.is_relative_to(team_bus.root)
     return deal
@@ -127,6 +130,7 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
     events.CompactionAbort().deal_rules(peer_deal)
     bash.judge_under(peer_deal)  # an aborted compaction kept the context
     events.CompactionEnd().deal_rules(peer_deal)
+    peer_deal.configure(RuleGateSettings(audit=RequiredRuleCheckPolicy))
     assert peer_deal.current().due.owner_words == words
     with pytest.raises(RulesUnread, match="bash waits on reading"):
         bash.judge_under(peer_deal)
@@ -184,19 +188,21 @@ def refused(deal: PiRedeal) -> bool:
     return False
 
 
-def test_a_refresh_deal_opens_in_order_and_pi_may_edit_the_audit(peer_deal):
-    """A refresh deals no papers and its files open in the dealt order as they are read; the
-    audit is edited in place by Pi's edit tool, which waits like a write elsewhere."""
+def test_a_refresh_deal_opens_all_dealt_files_in_parallel_and_pi_may_edit_the_audit(peer_deal):
+    """A refresh deals no papers, lists every remaining dealt file upfront, permits reading all
+    of them in one parallel call, and still refuses unrelated edits while unread."""
     events.CompactionEnd().deal_rules(peer_deal)
+    peer_deal.configure(RuleGateSettings(mode=FullDealMode, audit=RequiredRuleCheckPolicy))
     answer_deal(peer_deal)
     peer_deal.observe_context(ContextUsage(35, 100))
     dealt = peer_deal.current().dealt
-    with pytest.raises(RulesUnread, match="Next batch"):
-        call("read", {"path": str(dealt[2 * peer_deal.current().read_batch])}).judge_under(peer_deal)
-    for source in dealt[:peer_deal.current().read_batch]:
+    with pytest.raises(RulesUnread) as exc:
+        call("bash", {"command": "ls"}).judge_under(peer_deal)
+    for source in dealt:
+        assert str(source) in str(exc.value)
+    for source in reversed(dealt):
         call("read", {"path": str(source)}).judge_under(peer_deal)
         peer_deal.record_read(source, ReadInput(source).span())
-    call("read", {"path": str(dealt[peer_deal.current().read_batch])}).judge_under(peer_deal)
     edit = {"edits": [{"oldText": "a", "newText": "b"}]}
     call("edit", {"path": str(peer_deal.audit), **edit}).judge_under(peer_deal)
     with pytest.raises(RulesUnread):
@@ -209,6 +215,7 @@ def test_the_rules_come_back_once_at_each_declared_share_of_context_left(peer_de
     and deals the papers too."""
     assert [refresh.remaining for refresh in peer_deal.refreshes] == [0.66, 0.33]
     events.CompactionEnd().deal_rules(peer_deal)
+    peer_deal.configure(RuleGateSettings(mode=FullDealMode, audit=RequiredRuleCheckPolicy))
     assert peer_deal.current().dealt[:len(TeamPackage.paper())] == tuple(
         path.resolve() for path in TeamPackage.paper())
     answer_deal(peer_deal)
@@ -232,6 +239,7 @@ def test_a_context_report_that_owes_no_refresh_never_judges_the_deal(peer_deal, 
     files against the installed packages, twice, to answer `nothing is due` (11.8 ms of worker
     CPU per model request on a live thread's deal)."""
     events.CompactionEnd().deal_rules(peer_deal)
+    peer_deal.configure(RuleGateSettings(mode=FullDealMode))
     answer_deal(peer_deal)
     judged = []
     judge = PiRedeal.state
@@ -266,7 +274,7 @@ def test_policy_fields_preserve_evidence_and_survive_redealing(peer_deal):
     peer_deal.start()
     answer_deal(peer_deal)
     audit, reads = peer_deal.audit.read_bytes(), peer_deal.dealt_read.read_bytes()
-    settings = RuleGateSettings(read_batch=2, owner_prompts=3, refresh_remaining=(0.5,))
+    settings = RuleGateSettings(owner_prompts=3, refresh_remaining=(0.5,))
     peer_deal.configure(settings)
     assert RuleGateSettings.capture(peer_deal.current()) == settings
     assert (peer_deal.audit.read_bytes(), peer_deal.dealt_read.read_bytes()) == (audit, reads)
@@ -274,7 +282,7 @@ def test_policy_fields_preserve_evidence_and_survive_redealing(peer_deal):
     peer_deal.renew(StartedDeal())
     assert RuleGateSettings.capture(peer_deal.current()) == settings
     with pytest.raises(ValueError):
-        peer_deal.configure(replace(settings, read_batch=0))
+        peer_deal.configure(replace(settings, owner_prompts=0))
     assert RuleGateSettings.capture(peer_deal.current()) == settings
 
 
@@ -299,7 +307,8 @@ def test_automatic_redeals_preserve_the_configured_session(peer_deal, mode):
 
 
 @pytest.mark.parametrize("name", ("unit-x", "claude-code"))
-def test_compaction_mode_redeals_lost_context_but_never_periodic_refreshes(team_bus, name):
+def test_compaction_mode_redeals_lost_context_but_never_periodic_refreshes(team_bus, name, monkeypatch):
+    monkeypatch.setattr(PiRedeal, "delivery", lambda self: EmptyDealDelivery())
     deal = PiRedeal.of(team_bus, team_bus.registry.require(name))
     deal.start()
     answer_deal(deal)
@@ -350,6 +359,7 @@ def test_every_refusal_opens_with_why_its_deal_was_dealt(peer_deal):
 
     bash = call("bash", {"command": "ls"})
     peer_deal.start()
+    peer_deal.configure(RuleGateSettings(mode=FullDealMode))
     with pytest.raises(RulesUnread, match=re.escape(StartedDeal().reason())):
         bash.judge_under(peer_deal)
     events.CompactionEnd().deal_rules(peer_deal)
@@ -386,6 +396,9 @@ def compacted_pi_session(tmp_path, team_bus, name):
         model=DeclaredModel("anthropic/claude-opus-4-6")))
     deal = PiRedeal.of(team_bus, team_bus.registry.require(name))
     events.CompactionEnd().deal_rules(deal)
+    deal.configure(RuleGateSettings(
+        audit=RequiredRuleCheckPolicy, audit_confirmation=RequiredRuleCheckPolicy,
+    ))
     return session, deal
 
 
@@ -542,6 +555,9 @@ def test_a_meant_refusal_names_its_one_id_and_why_the_written_answer_failed(team
 def test_a_meant_refusal_repeats_the_words_its_id_asked_not_the_audits_newest(team_bus):
     deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
     deal.redeal(StartedDeal())
+    deal.configure(RuleGateSettings(
+        audit=RequiredRuleCheckPolicy, audit_confirmation=RequiredRuleCheckPolicy,
+    ))
     asked = Asked(MessageId.mint("own-words"), "> the row this id asked about\n\ndid you mean it?")
     deal.meant.replace(MeantRecord(open=(asked,)))
     newer = FieldCodec.decode(Probe, {"probe": "flinch", "answer": "a newer row written since"})
@@ -556,6 +572,9 @@ def test_an_audit_that_does_not_parse_is_refused_out_loud_before_anything_else(t
     its refusal showed a blank quote, with nothing saying the file was broken."""
     deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
     deal.redeal(StartedDeal())
+    deal.configure(RuleGateSettings(
+        audit=RequiredRuleCheckPolicy, audit_confirmation=RequiredRuleCheckPolicy,
+    ))
     question = MessageId.mint("broken-audit")
     deal.meant.replace(MeantRecord(open=(Asked(question),)))
     good = deal.audit.read_text()
