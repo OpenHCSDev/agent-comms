@@ -708,7 +708,7 @@ def test_antigravity_harness_installs_hooks_and_switch_toggles_them(tmp_path: Pa
     assert "enabled" not in reloaded[ANTIGRAVITY_HOOK_NAME]
 
 
-def test_antigravity_rule_gate_deals_on_start_and_re_deals_after_checkpoint_compaction(
+def test_antigravity_rule_gate_injects_on_start_and_recovers_checkpoint_compaction(
     tmp_path: Path,
 ) -> None:
     real_sources = DeckReader.sources()
@@ -737,91 +737,28 @@ def test_antigravity_rule_gate_deals_on_start_and_re_deals_after_checkpoint_comp
         "workspacePaths": [str(workspace)],
         "cwd": str(workspace),
     }
-
-    # 1. SessionStart deals real DeckReader sources and injects the deal order.
-    started = handle_hook({**base, "hookEventName": "SessionStart"})
-    injected = started["injectSteps"][0]["systemMessage"]["systemMessage"]
-    assert str(real_sources[0].resolve()) in injected
-    assert "Fix Antigravity compaction dealing." in injected
-
-    # 2. PreToolUse denies ordinary run_command and unrelated reads, but allows dealt reads,
-    #    emergency stop, comms_mcp.py wake-on, and comms MCP tools.
-    denied = handle_hook({
-        **base,
-        "hookEventName": "PreToolUse",
-        "toolCall": {"id": "1", "name": "run_command", "args": {"CommandLine": "pytest"}},
-    })
-    assert denied["decision"] == "deny"
-
-    assert handle_hook({
-        **base,
-        "hookEventName": "PreToolUse",
-        "toolCall": {"id": "2", "name": "call_mcp_tool", "args": {"ServerName": "comms", "ToolName": "comms_send"}},
-    }) == {"decision": "allow"}
-
-    assert handle_hook({
-        **base,
-        "hookEventName": "PreToolUse",
-        "toolCall": {"id": "3", "name": "run_command", "args": {"CommandLine": "python3 comms_mcp.py wake-on /tmp/x.log"}},
-    }) == {"decision": "allow"}
-
-    assert handle_hook({
-        **base,
-        "hookEventName": "PreToolUse",
-        "toolCall": {"id": "4", "name": "run_command", "args": {"CommandLine": "agent-comms-hooks stop --from comms-a --why test"}},
-    }) == {"decision": "allow"}
-
-    # Failed read_file must NOT count as read.
-    first_source = real_sources[0].resolve()
-    assert handle_hook({
-        **base,
-        "hookEventName": "PreToolUse",
-        "toolCall": {"id": "r0", "name": "read_file", "args": {"Path": str(first_source)}},
-    }) == {"decision": "allow"}
-    handle_hook({
-        **base,
-        "hookEventName": "PostToolUse",
-        "error": "permission denied",
-        "toolCall": {"id": "r0", "name": "read_file", "args": {"Path": str(first_source)}},
-    })
-    assert handle_hook({
-        **base,
-        "hookEventName": "PreToolUse",
-        "toolCall": {"id": "x", "name": "run_command", "args": {"CommandLine": "ls"}},
-    })["decision"] == "deny"
-
-    # Complete every real dealt read via PreToolUse + PostToolUse in order.
-    for idx, path in enumerate(real_sources):
-        resolved = path.resolve()
-        assert handle_hook({
-            **base,
-            "hookEventName": "PreToolUse",
-            "toolCall": {"id": f"pre-{idx}", "name": "read_file", "args": {"Path": str(resolved)}},
-        }) == {"decision": "allow"}
-        handle_hook({
-            **base,
-            "hookEventName": "PostToolUse",
-            "toolCall": {"id": f"post-{idx}", "name": "read_file", "args": {"Path": str(resolved)}},
-        })
-
-    # Toggle audit=off on the stored deal to verify gate-open fast-path + compaction re-deal.
-    deal_path = transcript.with_suffix(".deal.json")
-    deal_doc = json.loads(deal_path.read_text(encoding="utf-8"))
-    deal_doc["audit"] = "off"
-    deal_path.write_text(json.dumps(deal_doc), encoding="utf-8")
-
-    # Refresh cursor through PreInvocation: gate is now open and fast-path returns allow.
-    assert handle_hook({**base, "hookEventName": "PreInvocation"}) == {}
     pre_tool_payload = {
         **base,
         "hookEventName": "PreToolUse",
-        "toolCall": {"id": "5", "name": "run_command", "args": {"CommandLine": "ls"}},
+        "toolCall": {"id": "1", "name": "run_command", "args": {"CommandLine": "pytest"}},
     }
+
+    # 1. SessionStart injects every dealt source in <= 40 KB chunks, marks them read,
+    #    and leaves the gate immediately open (zero read_file round-trips).
+    started = handle_hook({**base, "hookEventName": "SessionStart"})
+    injected_steps = [step["systemMessage"]["systemMessage"] for step in started["injectSteps"]]
+    assert len(injected_steps) >= len(real_sources) + 1
+    assert all(len(step.encode("utf-8")) <= 40_000 for step in injected_steps[:-1])
+    joined_start = "\n".join(injected_steps)
+    assert "Fix Antigravity compaction dealing." in injected_steps[-1]
+    assert real_sources[0].read_text(encoding="utf-8").splitlines()[0] in joined_start
+    assert real_sources[-1].read_text(encoding="utf-8").splitlines()[0] in joined_start
+    assert handle_hook(pre_tool_payload) == {"decision": "allow"}
     assert agy_hook_fast_path(pre_tool_payload) == {"decision": "allow"}
 
-    # 3. Append a CHECKPOINT record to transcript.jsonl (simulating Antigravity compaction):
-    #    fast-path MUST return None (busting cache), PreInvocation MUST inject a fresh CompactedDeal
-    #    with Tristan's verbatim prompt, and PreToolUse MUST deny ordinary tools again!
+    # 2. Mid-invocation CHECKPOINT caught first by PreToolUse: fast-path busts, PreToolUse
+    #    denies with ALL remaining dealt paths upfront (zero 5-file cap), allows reading
+    #    even the last dealt file directly, and allows comms/wake/stop tools.
     with transcript.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps({
             "step_index": 42,
@@ -833,11 +770,86 @@ def test_antigravity_rule_gate_deals_on_start_and_re_deals_after_checkpoint_comp
         }) + "\n")
 
     assert agy_hook_fast_path(pre_tool_payload) is None
-    redeal = handle_hook({**base, "hookEventName": "PreInvocation"})
-    redeal_text = redeal["injectSteps"][0]["systemMessage"]["systemMessage"]
-    assert "2026-11-24T04:42:47Z" in redeal_text
-    assert "Fix Antigravity compaction dealing." in redeal_text
+    denied = handle_hook(pre_tool_payload)
+    assert denied["decision"] == "deny"
+    assert "2026-11-24T04:42:47Z" in denied["reason"]
+    for source in real_sources:
+        assert str(source.resolve()) in denied["reason"]
+
+    # Comm/watch/emergency tools stay open during a read deal.
+    assert handle_hook({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"id": "2", "name": "call_mcp_tool", "args": {"ServerName": "comms", "ToolName": "comms_send"}},
+    }) == {"decision": "allow"}
+    assert handle_hook({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"id": "3", "name": "run_command", "args": {"CommandLine": "python3 comms_mcp.py wake-on /tmp/x.log"}},
+    }) == {"decision": "allow"}
+    assert handle_hook({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"id": "4", "name": "run_command", "args": {"CommandLine": "agent-comms-hooks stop --from comms-a --why test"}},
+    }) == {"decision": "allow"}
+
+    # Reading the very last dealt file is permitted immediately (no 5-file batch lock),
+    # and a failed read_file still does NOT count as read.
+    last_source = real_sources[-1].resolve()
+    assert handle_hook({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"id": "r-last", "name": "read_file", "args": {"Path": str(last_source)}},
+    }) == {"decision": "allow"}
+    handle_hook({
+        **base,
+        "hookEventName": "PostToolUse",
+        "error": "permission denied",
+        "toolCall": {"id": "r-last", "name": "read_file", "args": {"Path": str(last_source)}},
+    })
     assert handle_hook(pre_tool_payload)["decision"] == "deny"
+
+    # 3. The immediately following PreInvocation injects all remaining unread files directly
+    #    via injectSteps and opens the gate with zero read_file calls!
+    recovered = handle_hook({**base, "hookEventName": "PreInvocation"})
+    recovered_steps = [step["systemMessage"]["systemMessage"] for step in recovered["injectSteps"]]
+    assert len(recovered_steps) >= len(real_sources) + 1
+    assert "Fix Antigravity compaction dealing." in recovered_steps[-1]
+    assert handle_hook(pre_tool_payload) == {"decision": "allow"}
+    assert agy_hook_fast_path(pre_tool_payload) == {"decision": "allow"}
+
+    # 4. CHECKPOINT caught directly by PreInvocation injects fresh and opens immediately.
+    with transcript.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({
+            "step_index": 88,
+            "source": "SYSTEM",
+            "type": "CHECKPOINT",
+            "status": "DONE",
+            "created_at": "2026-11-24T05:10:00Z",
+            "content": "Second summary",
+        }) + "\n")
+    assert agy_hook_fast_path(pre_tool_payload) is None
+    redeal = handle_hook({**base, "hookEventName": "PreInvocation"})
+    redeal_steps = [step["systemMessage"]["systemMessage"] for step in redeal["injectSteps"]]
+    assert "2026-11-24T05:10:00Z" in redeal_steps[-1]
+    assert "Fix Antigravity compaction dealing." in redeal_steps[-1]
+    assert handle_hook(pre_tool_payload) == {"decision": "allow"}
+
+    # 5. When mode=off, a compaction CHECKPOINT injects nothing.
+    deal_path = transcript.with_suffix(".deal.json")
+    deal_doc = json.loads(deal_path.read_text(encoding="utf-8"))
+    deal_doc["mode"] = "off"
+    deal_path.write_text(json.dumps(deal_doc), encoding="utf-8")
+    with transcript.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({
+            "step_index": 120,
+            "source": "SYSTEM",
+            "type": "CHECKPOINT",
+            "status": "DONE",
+            "created_at": "2026-11-24T06:00:00Z",
+            "content": "Third summary",
+        }) + "\n")
+    assert handle_hook({**base, "hookEventName": "PreInvocation"}) == {}
 
 
 def test_comms_mcp_cloud_agy_hook_fallback_deals_and_redeals_on_checkpoint(tmp_path: Path) -> None:
@@ -850,8 +862,8 @@ def test_comms_mcp_cloud_agy_hook_fallback_deals_and_redeals_on_checkpoint(tmp_p
     (repo / "src/agent_comms/team/rules").mkdir(parents=True)
     paper = repo / "src/agent_comms/team/paper/semantic-completeness/01.md"
     rule = repo / "src/agent_comms/team/rules/spine.md"
-    paper.write_text("# Paper\nBody.\n", encoding="utf-8")
-    rule.write_text("# Spine\nBody.\n", encoding="utf-8")
+    paper.write_text("# Paper\nPaper body.\n", encoding="utf-8")
+    rule.write_text("# Spine\nRule body.\n", encoding="utf-8")
 
     transcript = tmp_path / "conv" / "transcript.jsonl"
     transcript.parent.mkdir(parents=True)
@@ -879,26 +891,17 @@ def test_comms_mcp_cloud_agy_hook_fallback_deals_and_redeals_on_checkpoint(tmp_p
 
     base = {"transcriptPath": str(transcript), "cwd": str(repo), "workspacePaths": [str(repo)]}
     started = invoke({**base, "hookEventName": "SessionStart"})
-    assert str(paper.resolve()) in started["injectSteps"][0]["systemMessage"]["systemMessage"]
-    assert invoke({
-        **base,
-        "hookEventName": "PreToolUse",
-        "toolCall": {"name": "run_command", "args": {"CommandLine": "pytest"}},
-    })["decision"] == "deny"
-
-    for dealt in (paper, rule):
-        invoke({
-            **base,
-            "hookEventName": "PostToolUse",
-            "toolCall": {"name": "read_file", "args": {"Path": str(dealt)}},
-        })
+    started_msgs = [s["systemMessage"]["systemMessage"] for s in started["injectSteps"]]
+    assert "Paper body." in "\n".join(started_msgs)
+    assert "Rule body." in "\n".join(started_msgs)
     assert invoke({
         **base,
         "hookEventName": "PreToolUse",
         "toolCall": {"name": "run_command", "args": {"CommandLine": "pytest"}},
     }) == {"decision": "allow"}
 
-    # Compaction CHECKPOINT re-closes the cloud gate and injects verbatim user words.
+    # Mid-invocation CHECKPOINT caught by PreToolUse denies with ALL unread paths upfront,
+    # and the next PreInvocation injects them and reopens the gate.
     with transcript.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps({
             "step_index": 99,
@@ -909,12 +912,21 @@ def test_comms_mcp_cloud_agy_hook_fallback_deals_and_redeals_on_checkpoint(tmp_p
             "content": "Compacted summary",
         }) + "\n")
 
+    denied = invoke({
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"name": "run_command", "args": {"CommandLine": "pytest"}},
+    })
+    assert denied["decision"] == "deny"
+    assert str(paper.resolve()) in denied["reason"]
+    assert str(rule.resolve()) in denied["reason"]
+
     redeal = invoke({**base, "hookEventName": "PreInvocation"})
-    msg = redeal["injectSteps"][0]["systemMessage"]["systemMessage"]
-    assert "2026-11-24T04:55:00Z" in msg
-    assert "Cloud compaction test." in msg
+    redeal_msgs = [s["systemMessage"]["systemMessage"] for s in redeal["injectSteps"]]
+    assert "2026-11-24T04:55:00Z" in redeal_msgs[-1]
+    assert "Cloud compaction test." in redeal_msgs[-1]
     assert invoke({
         **base,
         "hookEventName": "PreToolUse",
         "toolCall": {"name": "run_command", "args": {"CommandLine": "pytest"}},
-    })["decision"] == "deny"
+    }) == {"decision": "allow"}
