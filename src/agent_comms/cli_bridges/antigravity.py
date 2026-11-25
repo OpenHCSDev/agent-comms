@@ -10,6 +10,7 @@ from agent_comms.cli_bridges.antigravity_transcript import (
     RunningAntigravity,
 )
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
+from agent_comms.cli_bridges.goal_semantics import AntigravityGoalHarness
 from agent_comms.cli_bridges.history import AntigravityHistory
 from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate
 from agent_comms.cli_bridges.shared import LineMonitorBridge, Options, run_bridge
@@ -25,6 +26,7 @@ class AntigravityBridge(RecentAntigravityWindow, AntigravityHistory, LineMonitor
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
     state_directory = Path(".local/state/antigravity-comms-inbox")
+    goal_harness = AntigravityGoalHarness
 
     @classmethod
     def environment_session(cls) -> str:

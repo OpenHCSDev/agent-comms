@@ -184,7 +184,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository, installe
             request=request, review_at=RecordedEventTime(now + 3600), order=order,
         )
     comms.goals.update_goal("worker", SetGoalAction(
-        text=ProblemGoalOrder.text, order=ProblemGoalOrder(), goal_id=generation,
+        text="P1: Repair P1\nP2: Repair P2", order=ProblemGoalOrder(), goal_id=generation,
     ))
     inputs = InputDispositions(comms.root)
     inputs.record(UNRESOLVED_INPUT_KEY, seq=None, owner="worker", claim_scope=1,

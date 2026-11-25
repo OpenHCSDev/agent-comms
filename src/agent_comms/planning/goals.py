@@ -526,7 +526,8 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def todos(self, goals: GoalWorkSource, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[GoalAssignment, ...]:
         return ()
 
-    def goal_text(self, goal: Goal) -> str:
+    def goal_text(self, goal: Goal, todos: Sequence[GoalAssignment] = ()) -> str:
+        del todos
         return goal.text
 
     def progress(self, goal: Goal, todos: Sequence[GoalAssignment]) -> str:
@@ -557,9 +558,15 @@ class UnorderedGoalOrder(GoalOrder):
 
 @dataclass(frozen=True)
 class ProblemGoalOrder(GoalOrder):
-    """A unit's one Goal groups its canonical Todo assignments, not copied orders."""
+    """A unit's one Goal derives its text and instructions from its assigned Todos."""
 
-    text: ClassVar[str] = "Complete the assigned problems."
+    @classmethod
+    def derived_text(cls, todos: Sequence[GoalAssignment]) -> str:
+        """Derive real goal text from assigned problems rather than a generic placeholder."""
+        lines = tuple(summary for todo in todos if (summary := todo.goal_summary().strip()))
+        if not lines:
+            raise ValueError("A problem Goal requires at least one assigned problem.")
+        return "\n".join(lines)
 
     def require_completion(self, goal: Goal, goals: GoalWorkSource, owner: ThreadIncarnation) -> None:
         """Every assigned problem is delivered or closed; the Goal then completes.
@@ -585,8 +592,9 @@ class ProblemGoalOrder(GoalOrder):
     def instructions(self, todos: Sequence[GoalAssignment]) -> str:
         return "\n\n".join(text for todo in todos for text in todo.goal_instructions())
 
-    def goal_text(self, goal: Goal) -> str:
-        return self.text
+    def goal_text(self, goal: Goal, todos: Sequence[GoalAssignment] = ()) -> str:
+        lines = tuple(summary for todo in todos if (summary := todo.goal_summary().strip()))
+        return "\n".join(lines) if lines else goal.text
 
     def require_edit(self) -> None:
         raise GoalRefused("A problem Goal's text is derived from its assigned problems.")
@@ -841,8 +849,8 @@ class Goal(RecordMember, GoalDeclaration):
         settlement(store, permit, self, turn).dispatch_sync(self.state)
 
     def instructions_for(self, goals: GoalWorkSource, owner: ThreadIncarnation) -> tuple[str, ...]:
-        return (self.render_instructions(self.order.instructions(
-            self.order.todos(goals, owner, self.id))),)
+        todos = self.order.todos(goals, owner, self.id)
+        return (self.render_instructions(self.order.instructions(todos), todos),)
 
     def reported_id(self) -> GoalId:
         return self.id
@@ -937,8 +945,10 @@ class Goal(RecordMember, GoalDeclaration):
     def captured(self) -> GoalCheckpoint:
         return PresentGoalCheckpoint(self.revision_key)
 
-    def render_instructions(self, orders_text: str) -> str:
-        return "\n\n".join(part for part in (self.order.goal_text(self), orders_text) if part)
+    def render_instructions(
+        self, orders_text: str, todos: Sequence[GoalAssignment] = (),
+    ) -> str:
+        return "\n\n".join(part for part in (self.order.goal_text(self, todos), orders_text) if part)
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:

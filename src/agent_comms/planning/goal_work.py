@@ -34,6 +34,9 @@ class GoalAssignment(ABC):
     __slots__ = ()
 
     @abstractmethod
+    def goal_summary(self) -> str: ...
+
+    @abstractmethod
     def goal_instructions(self) -> tuple[str, ...]: ...
 
     @abstractmethod

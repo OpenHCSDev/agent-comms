@@ -65,6 +65,9 @@ class GoalTurnProjection[Execution, Turn](ABC):
     @abstractmethod
     def active_turn_execution(self, turn: Turn) -> Execution: ...
 
+    @abstractmethod
+    def external_turn_execution(self) -> Execution: ...
+
 
 class GoalGenerationProjection[Execution](ABC):
     @abstractmethod

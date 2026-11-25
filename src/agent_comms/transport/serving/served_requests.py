@@ -45,6 +45,7 @@ from agent_comms.planning.goal_actions import (
     GoalAction,
     GoalPrecondition,
     OwnerInvocable,
+    RetryGoalAction,
     SetGoalAction,
 )
 from agent_comms.planning.goal_history import RecordedGoalHistory
@@ -441,6 +442,7 @@ class ServedUpdateGoalRuntimeRequest(
 
 class ServedRetryGoalRuntimeRequest(
     ServedGoalRevisionRuntimeRequest,
+    ServedHeldGoalChange,
     RetryGoalRuntimeRequest,
 ):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> GoalReply:
@@ -448,6 +450,12 @@ class ServedRetryGoalRuntimeRequest(
             ctx.session, self.goal_id, self.expected_revision
         )
         return GoalReply(goal)
+
+    def held_action(self, thread: Thread) -> GoalAction:
+        return RetryGoalAction(expect=self.held_precondition(thread))
+
+    def held_reply(self, comms: Comms, goal: GoalDeclaration) -> DeclaredReply:
+        return GoalReply(goal.require())
 
 
 class ServedSetGoalRuntimeRequest(

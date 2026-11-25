@@ -56,7 +56,7 @@ def test_first_assignment_keeps_accepted_owner_input_but_pause_stops_it():
 def test_order_revision_keeps_the_granted_authority():
     """An assigned or replaced problem order revises the goal; the running turn keeps working."""
     order_goal_id = GoalId.mint()
-    granted = Goal(ProblemGoalOrder.text, order_goal_id, published_seq=0, order=ProblemGoalOrder())
+    granted = Goal("P1: Repair the held workflow", order_goal_id, published_seq=0, order=ProblemGoalOrder())
     permission = TurnGoalPermission(OwnerGoalPermission(granted.authority))
     ordered = replace(granted, revision=granted.revision + 1, progress="")
     OrdinaryGoalRule.require(permission, ordered)
@@ -78,7 +78,7 @@ def test_problem_goal_progress_retains_the_owner_report():
 
     policy = ProblemGoalOrder()
     goal = Goal(
-        ProblemGoalOrder.text, GoalId.mint(), published_seq=0,
+        "P379: Continue the paid training pod.", GoalId.mint(), published_seq=0,
         progress="Continue the paid training pod.", order=policy,
     )
     assert policy.progress(goal, (DeliveredOrder(),)) == (

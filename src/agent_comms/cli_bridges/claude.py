@@ -12,6 +12,7 @@ from agent_comms.cli_bridges import (
 )
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.claude_transcript import RecentClaudeWindow, RunningClaude
+from agent_comms.cli_bridges.goal_semantics import ClaudeGoalHarness
 from agent_comms.cli_bridges.history import ClaudeHistory
 from agent_comms.cli_bridges.hook_session import SessionHook
 from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate
@@ -35,6 +36,7 @@ class ClaudeBridge(RecentClaudeWindow, ClaudeHistory, LineMonitorBridge):
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
     state_directory = Path('.local/state/claude-comms-inbox')
+    goal_harness = ClaudeGoalHarness
 
     @classmethod
     def environment_session(cls) -> str:

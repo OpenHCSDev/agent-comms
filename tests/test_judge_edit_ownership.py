@@ -75,7 +75,7 @@ def test_a_send_back_leaves_the_edits_it_does_not_name_unjudged(two_orders):
     recorded_edit(ctx, ToolCallId("sent-call"), str(checkout["P1"] / "sent.py"), "SENT = 'cited'")
     current = ctx.comms.goals.todos.get("P1")
     ctx.comms.goals.update_goal("worker", SetGoalAction(
-        text=ProblemGoalOrder.text, order=ProblemGoalOrder(), goal_id=current.held().generation))
+        text=current.goal_summary(), order=ProblemGoalOrder(), goal_id=current.held().generation))
     colleague = ctx.comms.registry.require(ctx.actor_name).incarnation
     reissued = ThreadCaller(ctx.actor_name).invoke(CommsVerdictTool(problem="P1", operation=SendBackVerdict(
         current.revision, colleague, current.held(), ToolCallId("sent-call"),

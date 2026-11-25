@@ -580,6 +580,14 @@ class Thread(
         default_factory=UnobservedTools, kw_only=True
     )
 
+    def goal_turn_execution(self, source, turns):
+        """Native threads read their stored turn record; external CLIs override with live activity."""
+        return self.turn_record.read_in(turns).execution(source)
+
+    def goal_runnable_execution(self, source):
+        """Native runnable goals wait for the native scheduler; external CLIs report live work."""
+        return source.native_runnable()
+
     def observing_tools(self, offered: OfferedTools) -> Thread:
         """Fill this incarnation; observations cannot manufacture a restart."""
         if self.offered == offered or not self.offered.filled_by(offered):
@@ -1152,6 +1160,14 @@ class ExternalThread(Thread):
     def answering_binding(self, lease: ThreadOwnerBinding) -> ThreadOwnerBinding:
         """No native runtime serves a CLI; the bus holds its goal and wakes it."""
         return BusHeldThreadOwnerBinding()
+
+    def goal_turn_execution(self, source, turns):
+        """External CLIs report live work through observed activity rather than native turn records."""
+        del turns
+        return source.external_turn_execution()
+
+    def goal_runnable_execution(self, source):
+        return source.external_turn_execution()
 
     def presentation(self, status: ThreadStatus, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:

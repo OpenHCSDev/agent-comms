@@ -16,6 +16,7 @@ import aiohttp
 
 from agent_comms.cli_bridges.runtime_updates import EarlierItems
 from agent_comms.cli_bridges.codex_connection import CodexConnection
+from agent_comms.cli_bridges.goal_semantics import CodexGoalHarness
 from agent_comms.cli_bridges.codex_protocol import (
     BusInput,
     CodexDraining,
@@ -97,6 +98,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
 class CodexBridge(CodexAppServer, DirectDeliveryBridge[CodexOptions]):
     state_directory = Path('.local/state/codex-comms-inbox')
     reconnect_seconds: ClassVar[float] = 1.0
+    goal_harness = CodexGoalHarness
 
     def __init__(self, options: CodexOptions, address: SessionBinding, db: sqlite3.Connection) -> None:
         TranscriptBridge.__init__(self, options, address, db)

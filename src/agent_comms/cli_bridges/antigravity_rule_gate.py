@@ -17,10 +17,16 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, cast
 
-from agent_comms.cli_bridges.antigravity_transcript import AntigravityJsonLines
+from agent_comms.cli_bridges.antigravity_transcript import (
+    AntigravityJsonLines,
+    AntigravityTranscript,
+)
+from agent_comms.cli_bridges.goal_semantics import AntigravityGoalHarness, GoalCursorState
+from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.comms import client_wire
+from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.projects.repo import Repo
 from agent_comms.storage.store_files import AtomicFile
@@ -42,6 +48,8 @@ from agent_comms_hooks.shell_commands import EmergencyHookStop
 from agent_comms_hooks.skill import DeckReader
 
 _CHECKPOINT_SUFFIX = ".agy-checkpoint.json"
+_GOAL_CURSOR_NAME = ".agy-goal-cursor.json"
+_BOUND_THREAD_NAME = ".agy-thread.json"
 _MAX_READ_LINES = 800
 _MAX_READ_BYTES = 46_080
 # Antigravity truncates an individual injected systemMessage around ~48.9 KB; splitting
@@ -435,6 +443,70 @@ class AntigravityRuleGate(DealtRuleGate):
             )
         return (*chunks, "\n\n".join(part for part in parts if part))
 
+    @property
+    def goal_cursor_path(self) -> Path:
+        return self.artifact_dir / _GOAL_CURSOR_NAME
+
+    @property
+    def bound_thread_path(self) -> Path:
+        return self.artifact_dir / _BOUND_THREAD_NAME
+
+    def bound_thread_name(self) -> str:
+        """Resolve the bus thread bound to this Antigravity conversation, if any."""
+        try:
+            raw = json.loads(self.bound_thread_path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict) and isinstance(raw.get("thread"), str) and raw["thread"].strip():
+                return raw["thread"].strip()
+        except (OSError, ValueError):
+            pass
+        if self.transcript_path != Path():
+            conversation_id = AntigravityTranscript.conversation_id_of(self.transcript_path)
+            if conversation_id:
+                try:
+                    recorded = WatchClaim(conversation_id).recorded()
+                    if recorded.thread:
+                        return recorded.thread
+                except (OSError, ValueError):
+                    pass
+        return ""
+
+    def inject_goal_context(self, *, force: bool = False) -> tuple[str, ...]:
+        """Inject the bound thread's live bus goal on startup, compaction, or goal change."""
+        thread_name = self.bound_thread_name()
+        if not thread_name:
+            return ()
+        try:
+            with client_wire() as comms:
+                snapshot = comms.registry.snapshot()
+                if thread_name not in snapshot.threads:
+                    return ()
+                thread = snapshot.threads[thread_name]
+                cursor, message = AntigravityGoalHarness.render_goal_context(comms, thread)
+        except (OSError, ValueError, RuntimeError, KeyError, sqlite3.Error):
+            return ()
+        previous = GoalCursorState.read(self.goal_cursor_path)
+        if not force and cursor == previous:
+            return ()
+        cursor.write(self.goal_cursor_path)
+        return (message,)
+
+    def continue_goal_on_stop(self) -> bool:
+        """Wake the bound thread through its bus inbox if its goal remains active on stop."""
+        thread_name = self.bound_thread_name()
+        if not thread_name:
+            return False
+        try:
+            with client_wire() as comms:
+                snapshot = comms.registry.snapshot()
+                if thread_name not in snapshot.threads:
+                    return False
+                thread = snapshot.threads[thread_name]
+                return AntigravityGoalHarness.continue_on_stop(
+                    cast(Messaging, comms.messaging), thread, 0,
+                )
+        except (OSError, ValueError, RuntimeError, KeyError, sqlite3.Error):
+            return False
+
     def inject_deal(self, *, startup: bool = False) -> tuple[str, ...]:
         """Inject dealt sources directly on `SessionStart` / `PreInvocation` so static papers
         and rules arrive in context with zero tool-call round-trips."""
@@ -447,20 +519,20 @@ class AntigravityRuleGate(DealtRuleGate):
         if not self.record.exists():
             messages = self._deal_injected(StartedDeal(), repos)
             self._save_cursor(step, created_at, size)
-            return messages
+            return (*messages, *self.inject_goal_context(force=True))
         if step > cursor.checkpoint_step:
             trigger: CompactionDeal = (
                 CompactedDeal(created_at) if created_at else UnstampedCompactionDeal()
             )
             messages = self._deal_injected(trigger, repos)
             self._save_cursor(step, created_at, size)
-            return messages
+            return (*messages, *self.inject_goal_context(force=True))
         messages = self._inject_pending_unread()
         if startup:
             self._save_cursor(step, created_at, size)
-            return messages
+            return (*messages, *self.inject_goal_context(force=True))
         self._save_cursor(cursor.checkpoint_step, cursor.checkpoint_at, size)
-        return messages
+        return (*messages, *self.inject_goal_context(force=False))
 
     def check_deal(self, *, startup: bool = False) -> str:
         """Deal without injection (used by `PreToolUse`, which cannot return `injectSteps`)."""
@@ -565,6 +637,13 @@ class AntigravityPostToolUseEvent(AntigravityHookEvent, declared_name="PostToolU
         args = _mapping_value(call, "args")
         AntigravityToolMeaning.of(tool_name).completed(gate, args)
         gate.refresh_cursor()
+        return {}
+
+
+class AntigravityAfterAgentEvent(AntigravityHookEvent, declared_name="AfterAgent"):
+    def run(self, gate: AntigravityRuleGate, payload: Mapping[str, object]) -> dict[str, object]:
+        del payload
+        gate.continue_goal_on_stop()
         return {}
 
 
