@@ -854,6 +854,40 @@ def test_antigravity_rule_gate_injects_on_start_and_recovers_checkpoint_compacti
     assert handle_hook({**base, "hookEventName": "PreInvocation"}) == {}
 
 
+def test_antigravity_non_team_workspace_caches_bypass_in_fast_path(tmp_path: Path) -> None:
+    """Non-team workspaces cache a bypass cursor so subsequent hooks stay on the ~15 ms stdlib
+    fast path instead of importing Core on every tool call; switching workspaces busts it."""
+    non_team = tmp_path / "scratch-other"
+    non_team.mkdir()
+    team = tmp_path / "team-repo"
+    (team / "src/agent_comms/team/rules").mkdir(parents=True)
+    transcript = tmp_path / "brain" / "conv-bypass" / ".system_generated/logs/transcript.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text("", encoding="utf-8")
+
+    base = {
+        "conversationId": "conv-bypass",
+        "transcriptPath": str(transcript),
+        "artifactDirectoryPath": str(tmp_path / "brain" / "conv-bypass"),
+        "workspacePaths": [str(non_team)],
+        "cwd": str(non_team),
+    }
+    pre_tool = {
+        **base,
+        "hookEventName": "PreToolUse",
+        "toolCall": {"id": "1", "name": "run_command", "args": {"CommandLine": "ls"}},
+    }
+    assert agy_hook_fast_path(pre_tool) is None
+    assert handle_hook({**base, "hookEventName": "SessionStart"}) == {}
+    assert agy_hook_fast_path(pre_tool) == {"decision": "allow"}
+    assert agy_hook_fast_path({**base, "hookEventName": "PreInvocation"}) == {}
+    assert agy_hook_fast_path({**base, "hookEventName": "PostToolUse"}) == {}
+
+    # Switching to a team workspace invalidates the cached bypass immediately.
+    moved = {**pre_tool, "cwd": str(team), "workspacePaths": [str(team)]}
+    assert agy_hook_fast_path(moved) is None
+
+
 def test_comms_mcp_cloud_agy_hook_fallback_deals_and_redeals_on_checkpoint(tmp_path: Path) -> None:
     import subprocess
     import sys

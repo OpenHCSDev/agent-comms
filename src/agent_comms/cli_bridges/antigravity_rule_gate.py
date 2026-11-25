@@ -122,6 +122,8 @@ class AntigravityCheckpointCursor:
     transcript_size: int = 0
     gate_open: bool = False
     deal_mtime_ns: int = 0
+    bypass: bool = False
+    workspace_key: tuple[str, ...] = ()
 
     @classmethod
     def read(cls, path: Path) -> AntigravityCheckpointCursor:
@@ -131,12 +133,20 @@ class AntigravityCheckpointCursor:
             return cls()
         if not isinstance(raw, Mapping):
             return cls()
+        raw_ws = raw.get("workspace_key")
+        workspace_key = (
+            tuple(item for item in raw_ws if isinstance(item, str))
+            if isinstance(raw_ws, list | tuple)
+            else ()
+        )
         return cls(
             checkpoint_step=int(raw.get("checkpoint_step", -1)),
             checkpoint_at=str(raw.get("checkpoint_at", "")),
             transcript_size=int(raw.get("transcript_size", 0)),
             gate_open=bool(raw.get("gate_open", False)),
             deal_mtime_ns=int(raw.get("deal_mtime_ns", 0)),
+            bypass=bool(raw.get("bypass", False)),
+            workspace_key=workspace_key,
         )
 
     def write(self, path: Path) -> None:
@@ -149,6 +159,8 @@ class AntigravityCheckpointCursor:
                     "transcript_size": self.transcript_size,
                     "gate_open": self.gate_open,
                     "deal_mtime_ns": self.deal_mtime_ns,
+                    "bypass": self.bypass,
+                    "workspace_key": list(self.workspace_key),
                 }
             ).encode("utf-8")
         )
@@ -339,6 +351,15 @@ class AntigravityRuleGate(DealtRuleGate):
         except FileNotFoundError:
             return 0
 
+    def _workspace_key(self) -> tuple[str, ...]:
+        return (str(self.cwd), *(str(path) for path in self.workspace_paths))
+
+    def _save_bypass_cursor(self) -> None:
+        AntigravityCheckpointCursor(
+            bypass=True,
+            workspace_key=self._workspace_key(),
+        ).write(self.checkpoint_cursor_path)
+
     def _save_cursor(self, step: int, at: str, size: int) -> None:
         AntigravityCheckpointCursor(
             checkpoint_step=step,
@@ -418,6 +439,7 @@ class AntigravityRuleGate(DealtRuleGate):
         and rules arrive in context with zero tool-call round-trips."""
         repos = self.team_repositories()
         if not self.in_team_workspace(repos):
+            self._save_bypass_cursor()
             return ()
         cursor = AntigravityCheckpointCursor.read(self.checkpoint_cursor_path)
         step, created_at, size = self.latest_checkpoint()
@@ -443,6 +465,7 @@ class AntigravityRuleGate(DealtRuleGate):
         """Deal without injection (used by `PreToolUse`, which cannot return `injectSteps`)."""
         repos = self.team_repositories()
         if not self.in_team_workspace(repos):
+            self._save_bypass_cursor()
             return ""
         cursor = AntigravityCheckpointCursor.read(self.checkpoint_cursor_path)
         step, created_at, size = self.latest_checkpoint()
