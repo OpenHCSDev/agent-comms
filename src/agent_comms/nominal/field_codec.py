@@ -1215,11 +1215,11 @@ class CapturedJson:
     """An already encoded leaf: its representation owns the complete JSON value."""
 
 
-class CapturedJsonObject(dict, CapturedJson):
+class CapturedJsonObject(CapturedJson, dict):
     """Object spelling remains usable by the existing inline-field operation."""
 
 
-class CapturedJsonArray(list, CapturedJson):
+class CapturedJsonArray(CapturedJson, list):
     """Array spelling remains JSON while its contents stay one represented leaf."""
 
 
