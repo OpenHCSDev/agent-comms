@@ -26,7 +26,7 @@ from agent_comms.execution.provider_records import (
 from agent_comms.execution.tool_results import NoToolDiff
 from agent_comms.execution.tracked_turn import AnsweredTrackedTerminal, PendingTrackedTerminal
 from agent_comms.execution.turn_item import ProviderResponseId
-from agent_comms.execution.turn_usage import UsageAccount
+from agent_comms.pi_counts import UsageAccount
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     ExternalNullMember,

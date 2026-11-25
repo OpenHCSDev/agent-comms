@@ -14,10 +14,11 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 from agent_comms.cli_bridges.codex_records import CodexRolloutProvenance
 from agent_comms.cli_verbs import cli_command
+from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult, TargetEditResult
 from agent_comms.comms import Comms
 from agent_comms.execution.child_process import NoProcess, ProcessState
@@ -34,12 +35,16 @@ from agent_comms.execution.turn_context import (
     Sha256Digest,
     TurnContext,
 )
+from agent_comms.projects.repository_sources import RepositorySource
+from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.registry.thread_results import ThreadImported
 from agent_comms.messaging.history_result import HistoryPageResult
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument,
+    FieldCodec,
+    Normalize,
     PathText,
     RecordMember,
     WireForm,
@@ -50,7 +55,7 @@ from agent_comms.nominal.lifecycle_capability import Complete
 from agent_comms.planning.goals import Goal
 from agent_comms.planning.orders import Todo
 from agent_comms.presentation import ThreadRecord, ThreadView
-from agent_comms.projects.checkouts import Checkout, CheckoutStart
+from agent_comms.projects.checkouts import Checkout, CheckoutStart, RepositoryReads
 from agent_comms.projects.head_review import PullRequestHead
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.shell_effects import (
@@ -64,10 +69,7 @@ from agent_comms.registry.thread_model import ThreadModel
 from agent_comms.registry.thread_settings import ContextEditPolicy
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.typed_table import SQLiteSchemaDifference, StoreRewrite
-
-if TYPE_CHECKING:
-    from agent_comms.cli_support.prepared_checkout import PreparedCheckoutCliCommand
-
+from agent_comms.transport.tool_caller import ThreadCaller
 
 def _duration_seconds(value: str) -> float:
     match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)(s|m|h|d|w)", value.strip().lower())
@@ -515,6 +517,42 @@ class CheckoutOperation(DeclaredFamily, affix="CheckoutOperation"):
     @classmethod
     @abstractmethod
     def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult: ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class PreparedCheckoutCliCommand(CliCommand):
+    caller: Annotated[
+        ThreadCaller,
+        Normalize(FieldCodec.encode),
+        Argument(
+            flags=("--from",),
+            options={"type": ThreadCaller, "help": "Calling thread"},
+        ),
+    ]
+    operation: Annotated[type[CheckoutOperation], Argument(flags=("operation",))]
+    source_checkout: Annotated[
+        tuple[Annotated[Path, PathText], ...],
+        Argument(flags=("--source",), options={"nargs": 1,
+                 "help": "Exact owned checkout to transfer or retire; required for transfer"}),
+    ] = ()
+
+    @abstractmethod
+    def declared_destination(self, rule: StorageRule, thread: Thread) -> Path: ...
+
+    def destination(self, ctx: Comms, thread: Thread) -> Path:
+        rule = ctx.registry.storage_rule
+        return rule.reused_checkout(thread, self.source(ctx, thread).github,
+                                    self.declared_destination(rule, thread), RepositoryReads())
+
+    @abstractmethod
+    def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant: ...
+
+    @abstractmethod
+    def source(self, ctx: Comms, thread: Thread) -> RepositorySource: ...
+
+    def apply(self, ctx: Comms) -> CliResult:
+        thread = ctx.registry.require(self.caller.own_thread())
+        return self.operation.apply(self, ctx, thread)
 
 
 class AddCheckoutOperation(CheckoutOperation):

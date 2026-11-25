@@ -93,7 +93,6 @@ from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.execution.turn_output import TurnOutput
 from agent_comms.execution.turn_phase import NativePhaseChanged, SettlingStatsPhase, TurnPhase
 from agent_comms.execution.turn_stats import StatsRequest
-from agent_comms.execution.turn_usage import UsageAccount
 from agent_comms.execution.turn_watchdog import (
     DEFAULT_MODEL_WAIT,
     ProgressWatchdog,
@@ -102,6 +101,7 @@ from agent_comms.execution.turn_watchdog import (
 )
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import InputId, MalformedRecord
+from agent_comms.pi_counts import UsageAccount
 from agent_comms.pi_payloads import AssistantMessage, UserMessage
 from agent_comms.team.rule_deal import DealDelivery
 from agent_comms.transport.native_tool_transport import (

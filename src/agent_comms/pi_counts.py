@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.execution.agent_event import AgentEvent
@@ -27,7 +27,6 @@ from agent_comms.nominal.field_codec import (
 
 if TYPE_CHECKING:
     from agent_comms.execution.backend import TurnSession
-    from agent_comms.execution.turn_usage import UsageAccount
 
 
 class PiCountWire(AcceptsNull):
@@ -125,6 +124,30 @@ class PiCount(AcceptsNull, ExternalJsonShape, WireValue):
 @dataclass(frozen=True)
 class UnreportedCount(NullMember, PiCount):
     pass
+
+
+@dataclass
+class UsageAccount:
+    used: PiCount = field(default_factory=UnreportedCount)
+    size: PiCount = field(default_factory=UnreportedCount)
+    confirmed: PiCount = field(default_factory=UnreportedCount)
+    provisional: bool = False
+
+    def invalidate(self) -> None:
+        self.used = self.confirmed = UnreportedCount()
+        self.provisional = False
+
+    def observe(self, tokens: PiCount) -> None:
+        self.used = tokens
+        self.provisional = True
+
+    def confirm(self, tokens: PiCount) -> None:
+        self.used = self.confirmed = tokens
+        self.provisional = False
+
+    def rollback(self) -> None:
+        self.used = self.confirmed
+        self.provisional = False
 
 
 @dataclass(frozen=True)

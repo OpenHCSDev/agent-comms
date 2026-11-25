@@ -42,6 +42,7 @@ from agent_comms.execution.selected.claim import (
     publish_selected_resource_claim,
     write_selected_claimed_file,
 )
+from agent_comms.execution.selected.record_selected_terminal import record_selected_terminal
 from agent_comms.execution.turn_context import InstructionFile
 from agent_comms.messaging.envelope_claim_transitions import (
     ExistingFileClaim,
@@ -211,19 +212,6 @@ def consume_selected_slot(store: Coordination, slot_id: SlotId, call_id: ToolCal
         raise SelectedToolBusy() from error
     except sqlite3.Error as error:
         raise SelectedToolDenied("Selected tool consumption UNKNOWN; do not retry") from error
-
-
-def record_selected_terminal(
-    coordination_path: Path, slot_id: SlotId, call_id: ToolCallId,
-) -> None:
-    """Only a committed terminal acknowledgement lets the tool return success."""
-    try:
-        with Coordination(str(coordination_path)) as store, store.session.writing() as db:
-            SelectedToolSlot.require(db, slot_id=slot_id).acknowledge(db, call_id)
-    except CoordinationBeginUnavailable:
-        raise  # Nothing was written, so the acknowledgement is not UNKNOWN.
-    except sqlite3.Error as error:
-        raise SelectedToolDenied("Selected tool terminal acknowledgement UNKNOWN; no retry") from error
 
 
 def selected_tool_mode_for_owner(

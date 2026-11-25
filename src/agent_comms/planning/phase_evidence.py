@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, ClassVar, cast, get_args, get_origin
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 from nominal_refactor_advisor.foreign_family import FunctionDefinition
 
+from agent_comms.ast_field_decoders import capture_names, variadic_parameters
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout, CheckoutHistory
@@ -737,22 +738,22 @@ class ScopeBindings(ast.NodeVisitor):
         """A lambda's locals do not bind names in its enclosing scope."""
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
-        if node.name is not None:
-            self.names.add(node.name)
+        for capture_name in capture_names(node):
+            self.names.add(capture_name)
         self.generic_visit(node)
 
     def visit_MatchAs(self, node: ast.MatchAs) -> None:
-        if node.name is not None:
-            self.names.add(node.name)
+        for capture_name in capture_names(node):
+            self.names.add(capture_name)
         self.generic_visit(node)
 
     def visit_MatchStar(self, node: ast.MatchStar) -> None:
-        if node.name is not None:
-            self.names.add(node.name)
+        for capture_name in capture_names(node):
+            self.names.add(capture_name)
 
     def visit_MatchMapping(self, node: ast.MatchMapping) -> None:
-        if node.rest is not None:
-            self.names.add(node.rest)
+        for capture_name in capture_names(node):
+            self.names.add(capture_name)
         self.generic_visit(node)
 
     def visit_Global(self, node: ast.Global) -> None:
@@ -802,7 +803,7 @@ class ClassChecks(ast.NodeVisitor):
         arguments = (*node.args.posonlyargs, *node.args.args)
         if (node in self._methods and not node.decorator_list
             and node.name in ("__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__")
-            and len(arguments) == 2 and node.args.vararg is None and node.args.kwarg is None
+            and len(arguments) == 2 and not variadic_parameters(node.args)
             and not node.args.kwonlyargs
             and not any({"isinstance", "NotImplemented", "*"} & scope for scope in self._scopes)):
             for statement in node.body:
