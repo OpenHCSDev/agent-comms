@@ -83,8 +83,22 @@ class NotificationWindow(TaggedUnion, affix=""):
         return batched(items, NotificationSelection.window_limit)
 
     def activity_names(self) -> frozenset[str]:
-        return frozenset(name for items in self.outcomes.values()
-                         for item in items for name in item.activity_names())
+        return frozenset(
+            (
+                *(
+                    name
+                    for items in self.outcomes.values()
+                    for item in items
+                    for name in item.activity_names()
+                ),
+                *(
+                    recipient.canonical_thread
+                    for read in self.reads
+                    for page in read.selection.pages
+                    for recipient in page.recipients
+                ),
+            )
+        )
 
     @abstractmethod
     def changed(self, notifications: NotificationPass, earlier: RevisionChanges) -> bool: ...
