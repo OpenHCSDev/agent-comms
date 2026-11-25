@@ -2,17 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Collection
 from dataclasses import dataclass
-from typing import (
-    TYPE_CHECKING,
-    TypedDict,
-)
+from typing import TypedDict
 
 from agent_comms.nominal.field_codec import GoalId, NullMember, SingleFieldValue
 from agent_comms.planning.goals import GoalDeclaration
-
-if TYPE_CHECKING:
-    from agent_comms.planning.goal_history import RecordedGoalRevision
-
+from agent_comms.planning.recorded_goal_revision import RecordedGoalRevision
 
 class FailureKey(TypedDict, total=False):
     """The attempt ledger columns a scope narrows a failure read by."""
