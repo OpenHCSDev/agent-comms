@@ -5485,6 +5485,10 @@ class Todo(TodoStoreRows, TypedTable, GoalAssignment):
     def judged_calls(self) -> tuple[ToolCallId, ...]:
         return self.history.facts_for(self.id).judged_calls
 
+    def goal_summary(self) -> str:
+        """One-line objective naming this problem and its defect."""
+        return f"{self.id}: {self.text}"
+
     def goal_instructions(self) -> tuple[str, ...]:
         """The original pending order contributes one instruction, every other order none."""
         return tuple(item.order.instructions(item)

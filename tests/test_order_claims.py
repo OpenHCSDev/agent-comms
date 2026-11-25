@@ -98,7 +98,7 @@ def working(ctx) -> Todo:
     """The holder works P1 under its own problem goal."""
     original = ctx.comms.goals.todos.get("P1")
     ctx.comms.goals.update_goal("worker", SetGoalAction(
-        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
+        text=original.goal_summary(), order=ProblemGoalOrder(),
         goal_id=original.held().generation,
     ))
     return original

@@ -163,13 +163,21 @@ class GoalExecutionSource(
         return CompletedExecution(self.goal.id)
 
     def turn_execution(self) -> GoalExecutionControls:
-        return self.turn.execution(self)
+        return self.owner.goal_turn_execution(self, self.turns)
+
+    def external_turn_execution(self) -> GoalExecutionControls:
+        if self.agents.is_working(self.owner.incarnation, self.snapshot):
+            return RunningExecution(self.goal.id)
+        return self.native_runnable()
 
     def unresolved(self) -> GoalExecutionControls:
         return AttemptUnresolvedExecution(self.goal.id)
 
-    def runnable(self) -> GoalExecutionControls:
+    def native_runnable(self) -> GoalExecutionControls:
         return RunnableExecution(self.goal.id)
+
+    def runnable(self) -> GoalExecutionControls:
+        return self.owner.goal_runnable_execution(self)
 
     def failed(self, evidence: FailedTurnEvidence) -> GoalExecutionControls:
         return AttemptFailedExecution(self.goal.id, evidence)
@@ -288,10 +296,11 @@ class Goals(
         """Capture held work from the goal store against one current registry cut."""
         return HeldOrders.of(self.todos, self.registry.snapshot())
 
-    def fork_goal(self, parent: Thread, child: Thread) -> Goal:
-        """Create a teammate's child goal from its parent's active work."""
-        text = ('\n'.join(goal.text for goal in parent.goal.active())
-                or f'Coordinate assigned work for {parent.name}.')
+    def fork_goal(self, parent: Thread, child: Thread) -> GoalDeclaration:
+        """Inherit the parent's active goal or the child's declared task; never invent boilerplate."""
+        text = "\n".join(goal.text for goal in parent.goal.active()) or "\n".join(child.task.texts()).strip()
+        if not text:
+            return child.goal
         return SetGoalAction(text=text).create(GoalActionContext(self, child))
 
     def record_order_review(self, holder: Assignment, current: Todo,
@@ -436,10 +445,10 @@ class Goals(
         """The native wake carries the same effective lifecycle as every goal reader."""
         snapshot = self.snapshot_for(owner, self.registry.snapshot(), self.waits.resolve)
         current_goal = next((WakeGoalContext(
-            text=goal.order.goal_text(goal), execution=snapshot.execution,
-            progress=goal.order.progress(
-                goal, goal.order.todos(self, owner.incarnation, goal.id)),
-        ) for goal in snapshot.goal), NoWakeGoalContext())
+            text=goal.order.goal_text(goal, todos), execution=snapshot.execution,
+            progress=goal.order.progress(goal, todos),
+        ) for goal in snapshot.goal
+            for todos in (goal.order.todos(self, owner.incarnation, goal.id),)), NoWakeGoalContext())
         return WakeWorkContext(
             name=owner.name, title=owner.title, tags=tuple(sorted(owner.tags)),
             original_assignment=owner.task, current_goal=current_goal,

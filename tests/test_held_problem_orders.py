@@ -101,7 +101,7 @@ def test_held_goal_replacement_is_a_preserved_refusal_without_writes(held_team):
     comms = ctx.comms
     todo = comms.goals.todos.get("P1")
     goal = comms.goals.update_goal("worker", SetGoalAction(
-        text=ProblemGoalOrder.text, order=ProblemGoalOrder(), goal_id=todo.held().generation,
+        text=todo.goal_summary(), order=ProblemGoalOrder(), goal_id=todo.held().generation,
     ))
     for action in (ClearGoalAction(), SetGoalAction(text="Replace the held work")):
         with pytest.raises(GoalRefused) as denied:

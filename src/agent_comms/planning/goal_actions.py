@@ -678,10 +678,13 @@ class ProblemOrderGoalAction(
         store = ctx.goals.open_goal_store()
         generation = store.require_generation(goal.id)
         generation.lifecycle.continue_work(store, generation, OrderDecision(self.order.id))
+        text = ProblemGoalOrder.derived_text(
+            ctx.goals.todos.for_goal(ctx.thread.incarnation, goal.id)
+        )
         revision = goal.revision + 1
-        return replace(goal, order=ProblemGoalOrder(), text=ProblemGoalOrder.text, progress="",
+        return replace(goal, order=ProblemGoalOrder(), text=text, progress="",
                        revision=revision, mention_source=bind_goal_mentions(
-                           ProblemGoalOrder.text, goal.id, revision, ctx.thread,
+                           text, goal.id, revision, ctx.thread,
                            ctx.goals.registry.snapshot()))
 
     def require_ready(self, ctx: GoalActionContext) -> None:
@@ -699,9 +702,12 @@ class ProblemOrderGoalAction(
 
     def create(self, ctx: GoalActionContext) -> Goal:
         self.require_ready(ctx)
-        fresh = SetGoalAction(text=ProblemGoalOrder.text, order=ProblemGoalOrder())
-        self.reserve(ctx, fresh.goal_id)
-        return fresh.create(ctx)
+        goal_id = GoalId.mint()
+        self.reserve(ctx, goal_id)
+        text = ProblemGoalOrder.derived_text(
+            ctx.goals.todos.for_goal(ctx.thread.incarnation, goal_id)
+        )
+        return SetGoalAction(text=text, order=ProblemGoalOrder(), goal_id=goal_id).create(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -18,12 +18,12 @@ from typing import (
 )
 
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+from agent_comms.cli_bridges.goal_semantics import ClaudeGoalHarness
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.cli_bridges.shared import Binding
 from agent_comms.comms import Comms
 from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.task_attachments.owner_notices import GoalWakeNotice
 from agent_comms.team.rule_deal import MeantStore, RuleDeal, SessionAudit
 from agent_comms.team.standing import UnownedWheelSpin
 from agent_comms_hooks import ClaudeTranscriptHook, HookRecord
@@ -224,14 +224,9 @@ class StopHook(ClaudeTranscriptHook):
         thread = snapshot.born(self.binding.owner.require_recorded().lookup)
         deaf_watch = WatchClaim(self.session_id).deaf()
         deaf = (deaf_watch.line(),) if deaf_watch is not None else ()
-        # The bus goal is the session's goal: while it is active the turn keeps going. The kick
-        # rides the Ready edge this stop hook already sits on, sent as a bus message the watch
-        # reader delivers and the owner sees on the bus — not a local stop-block a bridged
-        # harness drops, and not Core's heartbeat. It stops after idle_turns_asked turns in a row
-        # that changed nothing, so an idle session goes quiet instead of spinning.
-        held = GoalWakeNotice.reasons(thread)
-        if held and self.idle_turns < self.idle_turns_asked:
-            GoalWakeNotice.send(cast(Messaging, self.comms.messaging), thread, held)
+        ClaudeGoalHarness.continue_on_stop(
+            cast(Messaging, self.comms.messaging), thread, self.idle_turns,
+        )
         if reasons := (*deaf, *self.deferred()):
             self.output.line(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))
 

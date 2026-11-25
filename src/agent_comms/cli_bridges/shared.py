@@ -53,6 +53,7 @@ from agent_comms.cli_bridges.harness_delivery_states import (
     TakingLedger,
     UnconfirmedOutcome,
 )
+from agent_comms.cli_bridges.goal_semantics import ExternalGoalHarness, InboxGoalHarness
 from agent_comms.cli_bridges.monitor import (
     BRIDGE_FAILURES,
     BridgeExit,
@@ -1611,6 +1612,8 @@ class WatchRecordStore(ExternalStore):
 
 class TranscriptBridge(PublishesToBus, CliBridge[BridgeOptions]):
     """A CLI with an event subscription also publishes whole transcript items."""
+
+    goal_harness: ClassVar[type[ExternalGoalHarness]] = InboxGoalHarness
 
     @property
     def transcript_thread(self) -> str:
