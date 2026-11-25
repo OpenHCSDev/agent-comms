@@ -25,6 +25,7 @@ from agent_comms.execution.native_arguments import TurnHost
 from agent_comms.execution.root_runtime import RootRuntimeStore
 from agent_comms.execution.worker import (
     hand_the_gil_back_quickly,
+    limit_allocator_arenas,
     lower_priority,
     open_every_file_this_host_may_need,
 )
@@ -82,6 +83,7 @@ async def run() -> None:
 async def run_host(comms: Comms, listener_fd: int) -> None:
     """Own the root's host, not whichever unit happened to launch it first."""
     try:
+        limit_allocator_arenas()
         lower_priority()
         open_every_file_this_host_may_need()
         hand_the_gil_back_quickly()

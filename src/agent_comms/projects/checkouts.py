@@ -6,13 +6,17 @@ import os
 import re
 import shutil
 import string
+import struct
+import sys
 from abc import (
     ABC,
     abstractmethod,
 )
+from array import array
 from bisect import bisect_left, bisect_right
 from collections.abc import (
     Callable,
+    Iterable,
     Iterator,
     Mapping,
 )
@@ -39,10 +43,8 @@ from immutables import Map, MapMutation
 from agent_comms.errors import MissingSourceLine
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
-    DeclaredWireType,
     FieldCodec,
     GitCommitText,
-    JsonValue,
     PathText,
     PresentMember,
     SingleFieldValue,
@@ -1054,7 +1056,22 @@ class RepositoryReads:
         return self._worktree_histories[checkout.path]
 
 
-@dataclass(frozen=True)
+def _pack_positions(positions: Iterable[int]) -> bytes:
+    packed = array("I", positions)
+    if sys.byteorder != "little":
+        packed.byteswap()
+    return packed.tobytes()
+
+
+def _unpack_positions(raw: bytes) -> array[int]:
+    packed = array("I")
+    packed.frombytes(raw)
+    if sys.byteorder != "little":
+        packed.byteswap()
+    return packed
+
+
+@dataclass(frozen=True, slots=True)
 class GitCommit:
     """The commit facts needed by ancestry and order progress, decoded once."""
 
@@ -1107,9 +1124,13 @@ class CommitMessages:
     words: ClassVar[re.Pattern[str]] = re.compile(f"[{''.join(sorted(word))}]+")
 
     def __init__(self, commits: tuple[GitCommit, ...]) -> None:
-        self.lowered = tuple(commit.message.lower() for commit in commits)
+        self._commits = commits
         self.shas = tuple(commit.sha for commit in commits)
         self._named: dict[str, frozenset[str]] = {}
+
+    @cached_property
+    def lowered(self) -> tuple[str, ...]:
+        return tuple(commit.message.lower() for commit in self._commits)
 
     @cached_property
     def text(self) -> str:
@@ -1138,18 +1159,17 @@ class CommitMessages:
         """Only an index actually read by the old cut is carried into a fresh cut."""
         return self if CommitMessages.word_names.attrname in self.__dict__ else NoCommitMessages()
 
-    def cache_postings(
+    def packed_postings(
         self, positions: Mapping[str, int],
-    ) -> tuple[CommitWordPosting, ...]:
-        """Encode the acquired index in the cache's positional representation."""
+    ) -> dict[str, bytes]:
+        """Encode the acquired index in the cache's packed uint32 positional representation."""
         if CommitMessages.word_names.attrname in self.__dict__:
-            return tuple(
-                CommitWordPosting(
-                    word,
-                    tuple(sorted(positions[sha] for sha in posting if sha in positions)),
+            return {
+                word: _pack_positions(
+                    sorted(positions[sha] for sha in posting if sha in positions)
                 )
                 for word, posting in sorted(self.word_names.items())
-            )
+            }
         postings: dict[str, set[int]] = {}
         for sha, message in zip(self.shas, self.lowered):
             position = positions.get(sha)
@@ -1157,39 +1177,50 @@ class CommitMessages:
                 continue
             for word in set(self.words.findall(message)):
                 postings.setdefault(word, set()).add(position)
-        return tuple(
-            CommitWordPosting(word, tuple(sorted(indexes)))
+        return {
+            word: _pack_positions(sorted(indexes))
             for word, indexes in sorted(postings.items())
-        )
+        }
 
     @classmethod
-    def _updated_postings(
+    def _updated_packed_postings(
         cls,
-        previous: Mapping[str, str],
-        current: Mapping[str, str],
-        retained: tuple[CommitWordPosting, ...],
+        previous_commits: tuple[GitCommit, ...],
+        current_commits: tuple[GitCommit, ...],
+        retained: Mapping[str, bytes],
         positions: Mapping[str, int],
-    ) -> tuple[CommitWordPosting, ...]:
-        """Apply only changed commit messages to retained positional postings."""
-        postings = {posting.word: posting.positions for posting in retained}
+    ) -> dict[str, bytes]:
+        """Apply only changed commit messages to retained packed positional postings."""
+        previous_by_sha = {commit.sha: commit for commit in previous_commits}
+        current_by_sha = {commit.sha: commit for commit in current_commits}
+        postings = dict(retained)
         edits: dict[str, set[int]] = {}
-        for sha in set(previous).union(current):
-            if previous.get(sha) == current.get(sha):
+        for sha in previous_by_sha.keys() | current_by_sha.keys():
+            previous_commit = previous_by_sha.get(sha)
+            current_commit = current_by_sha.get(sha)
+            if previous_commit is current_commit:
                 continue
-            before = set(cls.words.findall(previous[sha])) if sha in previous else set()
-            after = set(cls.words.findall(current[sha])) if sha in current else set()
+            previous_text = "" if previous_commit is None else previous_commit.message.lower()
+            current_text = "" if current_commit is None else current_commit.message.lower()
+            if previous_commit is not None and current_commit is not None and previous_text == current_text:
+                continue
+            before = set(cls.words.findall(previous_text)) if previous_commit is not None else set()
+            after = set(cls.words.findall(current_text)) if current_commit is not None else set()
             position = positions.get(sha)
             for word in before ^ after:
-                posting = edits.setdefault(word, set(postings.get(word, ())))
+                if word not in edits:
+                    existing = postings.get(word)
+                    edits[word] = set(_unpack_positions(existing)) if existing is not None else set()
                 if word in after and position is not None:
-                    posting.add(position)
+                    edits[word].add(position)
                 elif position is not None:
-                    posting.discard(position)
-        postings.update((word, tuple(sorted(posting))) for word, posting in edits.items())
-        return tuple(
-            CommitWordPosting(word, tuple(posting))
-            for word, posting in sorted(postings.items()) if posting
-        )
+                    edits[word].discard(position)
+        for word, edited in edits.items():
+            if edited:
+                postings[word] = _pack_positions(sorted(edited))
+            else:
+                postings.pop(word, None)
+        return {word: raw for word, raw in postings.items() if raw}
 
     def following(self, commits: tuple[GitCommit, ...]) -> CommitMessages:
         """New source messages share immutable postings, never a mutable answer cache."""
@@ -1263,19 +1294,19 @@ class RetainedCommitMessages(CommitMessages):
                 del result[word]
         return result.finish()
 
-    def cache_postings(
+    def packed_postings(
         self, positions: Mapping[str, int],
-    ) -> tuple[CommitWordPosting, ...]:
-        """Apply changed messages directly to retained positional postings.
+    ) -> dict[str, bytes]:
+        """Apply changed messages directly to retained packed positional postings.
 
         The cache already owns compact posting positions. Expanding those positions into
         nested immutable SHA maps merely to collapse them back to positions made a one-commit
         worker restart rebuild the entire index.
         """
-        return self._updated_postings(
-            self._earlier.messages_by_sha,
-            self.messages_by_sha,
-            self._earlier.cache_postings(positions),
+        return self._updated_packed_postings(
+            self._earlier._commits,
+            self._commits,
+            self._earlier.packed_postings(positions),
             positions,
         )
 
@@ -1463,15 +1494,13 @@ class CapturedCommitGraph(CommitGraph):
 
 
 class RestoredCommitMessages(CommitMessages):
-    """A persisted index resolves only the posting this process actually asks for."""
+    """A persisted index unpacks only the exact-word posting this process actually asks for."""
 
     def __init__(
-        self, commits: tuple[GitCommit, ...], postings: tuple[CommitWordPosting, ...],
+        self, commits: tuple[GitCommit, ...], postings: Mapping[str, bytes],
     ) -> None:
         super().__init__(commits)
-        self._commits = commits
         self._postings = postings
-        self._positions = {posting.word: posting.positions for posting in postings}
 
     def following(self, commits: tuple[GitCommit, ...]) -> CommitMessages:
         if commits == self._commits:
@@ -1479,60 +1508,74 @@ class RestoredCommitMessages(CommitMessages):
         if CommitMessages.word_names.attrname in self.__dict__:
             return super().following(commits)
         positions = {commit.sha: index for index, commit in enumerate(commits)}
-        previous = dict(zip(self.shas, self.lowered))
-        current = {commit.sha: commit.message.lower() for commit in commits}
-        updated = self._updated_postings(
-            previous, current, self.cache_postings(positions), positions,
+        updated = self._updated_packed_postings(
+            self._commits, commits, self.packed_postings(positions), positions,
         )
-        return RestoredCommitMessages(commits, updated)
+        return RestoredCommitMessages(commits, MappingProxyType(updated))
 
     def acquired_index(self) -> CommitMessages:
         return self
 
-    def cache_postings(
+    def packed_postings(
         self, positions: Mapping[str, int],
-    ) -> tuple[CommitWordPosting, ...]:
-        """Remap retained positions without expanding them into SHA maps."""
-        return tuple(CommitWordPosting(
-            posting.word,
-            tuple(sorted(positions[sha] for old in posting.positions
-                         if (sha := self.shas[old]) in positions)),
-        ) for posting in self._postings)
+    ) -> dict[str, bytes]:
+        """Remap retained packed positions without expanding them into SHA maps or boxed ints."""
+        remap = [positions.get(sha, -1) for sha in self.shas]
+        result: dict[str, bytes] = {}
+        for word, raw in self._postings.items():
+            remapped = array("I")
+            previous = -1
+            ordered = True
+            for old in _unpack_positions(raw):
+                new = remap[old]
+                if new >= 0:
+                    if new <= previous:
+                        ordered = False
+                    previous = new
+                    remapped.append(new)
+            if not remapped:
+                continue
+            if not ordered:
+                remapped = array("I", sorted(remapped))
+            if sys.byteorder != "little":
+                remapped.byteswap()
+            result[word] = remapped.tobytes()
+        return result
 
     def naming(self, token: str) -> frozenset[str]:
         token = token.lower()
         if token not in self._named:
-            self._named[token] = (
-                frozenset(self.shas[position] for position in self._positions.get(token, ()))
-                if self.words.fullmatch(token)
-                else frozenset(self._occurrences(token))
-            )
+            if self.words.fullmatch(token):
+                raw = self._postings.get(token)
+                self._named[token] = (
+                    frozenset(self.shas[position] for position in _unpack_positions(raw))
+                    if raw is not None
+                    else frozenset()
+                )
+            else:
+                self._named[token] = frozenset(self._occurrences(token))
         return self._named[token]
 
     @cached_property
     def word_names(self) -> Map[str, Map[str, None]]:
         return Map(
-            (word, Map(dict.fromkeys(self.shas[position] for position in positions)))
-            for word, positions in self._positions.items())
+            (word, Map(dict.fromkeys(self.shas[position] for position in _unpack_positions(raw))))
+            for word, raw in self._postings.items())
 
 
-@dataclass(frozen=True)
-class CommitWordPosting:
-    """One derived exact-word posting retained with its commit messages."""
-
-    word: str
-    positions: tuple[int, ...]
-
-
-@dataclass(frozen=True)
-class GitHistorySnapshot(DeclaredWireType):
+@dataclass(frozen=True, slots=True)
+class GitHistorySnapshot:
     """A restart-safe derived graph whose complete supplying source remains recoverable."""
 
-    wire_type: ClassVar[object] = JsonValue
+    _magic: ClassVar[bytes] = b"ACGH\x00\x00\x00\x02"
+    _header_struct: ClassVar[struct.Struct] = struct.Struct("<I")
+    _commit_struct: ClassVar[struct.Struct] = struct.Struct("<BHdI")
+    _posting_struct: ClassVar[struct.Struct] = struct.Struct("<II")
+
     source: GitGraphCacheSource
     heads: tuple[Annotated[str, GitCommitText], ...]
     commits: tuple[GitCommit, ...]
-    postings: tuple[CommitWordPosting, ...]
+    postings: Mapping[str, bytes]
 
     def __post_init__(self) -> None:
         commits = {commit.sha for commit in self.commits}
@@ -1541,15 +1584,17 @@ class GitHistorySnapshot(DeclaredWireType):
         ordered = tuple(sorted(commits))
         if any(not self.resolves_once(ordered, head) for head in self.heads):
             raise ValueError("Each cached Git revision must resolve to one cached commit")
-        words: set[str] = set()
-        for posting in self.postings:
-            if posting.word in words or not CommitMessages.words.fullmatch(posting.word):
+        count = len(self.commits)
+        for word, raw in self.postings.items():
+            if not CommitMessages.words.fullmatch(word):
                 raise ValueError("Cached Git message postings must have distinct exact words")
-            if (tuple(sorted(set(posting.positions))) != posting.positions
-                    or any(position < 0 or position >= len(self.commits)
-                           for position in posting.positions)):
-                raise ValueError("Cached Git message postings must index cached commits")
-            words.add(posting.word)
+            if len(raw) % 4 != 0:
+                raise ValueError("Cached Git message postings must carry packed uint32 positions")
+            previous = -1
+            for position in _unpack_positions(raw):
+                if position <= previous or position >= count:
+                    raise ValueError("Cached Git message postings must index cached commits")
+                previous = position
 
     @staticmethod
     def resolves_once(commits: tuple[str, ...], revision: str) -> bool:
@@ -1562,51 +1607,124 @@ class GitHistorySnapshot(DeclaredWireType):
                  or not commits[position + 1].startswith(revision))
         )
 
-    def to_wire(self) -> JsonValue:
-        return [
-            1,
+    def to_bytes(self) -> bytes:
+        header = FieldCodec.compact([
             FieldCodec.encode(self.source, GitGraphCacheSource),
             list(self.heads),
-            [[commit.sha, list(commit.parents), commit.at, commit.message]
-             for commit in self.commits],
-            [[posting.word, list(posting.positions)] for posting in self.postings],
-        ]
+        ]).encode("utf-8")
+        out = bytearray()
+        out += self._magic
+        out += self._header_struct.pack(len(header))
+        out += header
+        out += self._header_struct.pack(len(self.commits))
+        pack_commit = self._commit_struct.pack
+        for commit in self.commits:
+            sha_bytes = commit.sha.encode("ascii")
+            parent_bytes = tuple(parent.encode("ascii") for parent in commit.parents)
+            message_bytes = commit.message.encode("utf-8")
+            out += pack_commit(len(sha_bytes), len(parent_bytes), commit.at, len(message_bytes))
+            out += sha_bytes
+            for parent in parent_bytes:
+                out.append(len(parent))
+                out += parent
+            out += message_bytes
+        out += self._header_struct.pack(len(self.postings))
+        pack_posting = self._posting_struct.pack
+        for word, raw in sorted(self.postings.items()):
+            word_bytes = word.encode("ascii")
+            out += pack_posting(len(word_bytes), len(raw))
+            out += word_bytes
+            out += raw
+        return bytes(out)
 
     @classmethod
-    def from_wire(cls, data: object) -> GitHistorySnapshot:
-        if (not isinstance(data, list) or len(data) != 5
-                or not isinstance(data[0], int) or isinstance(data[0], bool) or data[0] != 1):
-            raise ValueError("Git history cache must have supported versioned fields")
-        source = FieldCodec.decode(GitGraphCacheSource, data[1])
-        raw_heads, raw_commits, raw_postings = data[2:]
-        if not all(isinstance(value, list) for value in (raw_heads, raw_commits, raw_postings)):
-            raise ValueError("Git history cache collections must be arrays")
+    def from_bytes(
+        cls,
+        data: bytes,
+        expected_source: GitGraphSource | None = None,
+    ) -> GitHistorySnapshot | None:
+        view = memoryview(data)
+        total = len(view)
+        magic_len = len(cls._magic)
+        if total < magic_len + cls._header_struct.size or bytes(view[:magic_len]) != cls._magic:
+            raise ValueError("Git history cache must have supported versioned header")
+        offset = magic_len
+        (header_len,) = cls._header_struct.unpack_from(view, offset)
+        offset += cls._header_struct.size
+        if offset + header_len + cls._header_struct.size > total:
+            raise ValueError("Git history cache header is truncated")
+        header = FieldCodec.parse(bytes(view[offset:offset + header_len]).decode("utf-8"))
+        offset += header_len
+        if not isinstance(header, list) or len(header) != 2 or not isinstance(header[1], list):
+            raise ValueError("Git history cache header is malformed")
+        source = FieldCodec.decode(GitGraphCacheSource, header[0])
+        if expected_source is not None and source.graph_source() != expected_source:
+            return None
+        raw_heads = header[1]
         if any(not isinstance(value, str) for value in raw_heads):
             raise ValueError("Git history cache heads must be commit text")
         heads = tuple(GitCommitText.from_text(value) for value in raw_heads)
+        (commit_count,) = cls._header_struct.unpack_from(view, offset)
+        offset += cls._header_struct.size
         commits: list[GitCommit] = []
-        for row in raw_commits:
-            if not isinstance(row, list) or len(row) != 4 or not isinstance(row[1], list):
-                raise ValueError("Git history cache commit rows are malformed")
-            sha, parents, at, message = row
-            if (not isinstance(sha, str) or any(not isinstance(parent, str) for parent in parents)
-                    or isinstance(at, bool) or not isinstance(at, (int, float))
-                    or not isinstance(message, str)):
-                raise ValueError("Git history cache commit facts are malformed")
-            commits.append(GitCommit(
-                GitCommitText.from_text(sha),
-                tuple(GitCommitText.from_text(parent) for parent in parents),
-                float(at), message,
-            ))
-        postings: list[CommitWordPosting] = []
-        for row in raw_postings:
-            if (not isinstance(row, list) or len(row) != 2
-                    or not isinstance(row[0], str) or not isinstance(row[1], list)
-                    or any(isinstance(position, bool) or not isinstance(position, int)
-                           for position in row[1])):
-                raise ValueError("Git history cache posting rows are malformed")
-            postings.append(CommitWordPosting(row[0], tuple(row[1])))
-        return cls(source, heads, tuple(commits), tuple(postings))
+        interned_shas: dict[str, str] = {}
+        unpack_commit = cls._commit_struct.unpack_from
+        commit_header_size = cls._commit_struct.size
+        for _ in range(commit_count):
+            if offset + commit_header_size > total:
+                raise ValueError("Git history cache commit row is truncated")
+            sha_len, parent_count, at, message_len = unpack_commit(view, offset)
+            offset += commit_header_size
+            if offset + sha_len > total:
+                raise ValueError("Git history cache commit sha is truncated")
+            sha_raw = GitCommitText.from_text(bytes(view[offset:offset + sha_len]).decode("ascii"))
+            sha = interned_shas.setdefault(sha_raw, sha_raw)
+            offset += sha_len
+            if parent_count == 0:
+                parents: tuple[str, ...] = ()
+            else:
+                parent_list: list[str] = []
+                for _ in range(parent_count):
+                    if offset >= total:
+                        raise ValueError("Git history cache commit parent is truncated")
+                    parent_len = view[offset]
+                    offset += 1
+                    if offset + parent_len > total:
+                        raise ValueError("Git history cache commit parent sha is truncated")
+                    parent_raw = GitCommitText.from_text(
+                        bytes(view[offset:offset + parent_len]).decode("ascii")
+                    )
+                    parent_list.append(interned_shas.setdefault(parent_raw, parent_raw))
+                    offset += parent_len
+                parents = tuple(parent_list)
+            if offset + message_len > total:
+                raise ValueError("Git history cache commit message is truncated")
+            message = bytes(view[offset:offset + message_len]).decode("utf-8")
+            offset += message_len
+            commits.append(GitCommit(sha, parents, at, message))
+        if offset + cls._header_struct.size > total:
+            raise ValueError("Git history cache posting count is truncated")
+        (posting_count,) = cls._header_struct.unpack_from(view, offset)
+        offset += cls._header_struct.size
+        postings: dict[str, bytes] = {}
+        unpack_posting = cls._posting_struct.unpack_from
+        posting_header_size = cls._posting_struct.size
+        for _ in range(posting_count):
+            if offset + posting_header_size > total:
+                raise ValueError("Git history cache posting header is truncated")
+            word_len, raw_len = unpack_posting(view, offset)
+            offset += posting_header_size
+            if offset + word_len + raw_len > total:
+                raise ValueError("Git history cache posting payload is truncated")
+            word = bytes(view[offset:offset + word_len]).decode("ascii")
+            offset += word_len
+            if word in postings:
+                raise ValueError("Cached Git message postings must have distinct exact words")
+            postings[word] = bytes(view[offset:offset + raw_len])
+            offset += raw_len
+        if offset != total:
+            raise ValueError("Git history cache has unexpected trailing bytes")
+        return cls(source, heads, tuple(commits), MappingProxyType(postings))
 
     @classmethod
     def capturing(
@@ -1619,7 +1737,7 @@ class GitHistorySnapshot(DeclaredWireType):
         positions = {commit.sha: position for position, commit in enumerate(graph.values())}
         return cls(
             GitGraphCacheSource.capturing(source), heads, tuple(graph.values()),
-            messages.cache_postings(positions),
+            MappingProxyType(messages.packed_postings(positions)),
         )
 
     def graph(self) -> CapturedCommitGraph:
@@ -1643,7 +1761,7 @@ class GitHistoryCache:
     """One atomic current graph per Git common directory; never a version pile."""
 
     maximum_bytes: ClassVar[int] = 64 * 1024 * 1024
-    relative_path: ClassVar[Path] = Path("agent-comms/history.json")
+    relative_path: ClassVar[Path] = Path("agent-comms/history.bin")
 
     def __init__(self, repository: Path) -> None:
         self.path = repository / self.relative_path
@@ -1653,11 +1771,12 @@ class GitHistoryCache:
         try:
             if self.path.stat().st_size > self.maximum_bytes:
                 return None
-            decoded = FieldCodec.decode(
-                GitHistorySnapshot, FieldCodec.parse(self.path.read_text()))
-        except (OSError, TypeError, ValueError):
+            decoded = GitHistorySnapshot.from_bytes(
+                self.path.read_bytes(), expected_source=source,
+            )
+        except (OSError, TypeError, ValueError, UnicodeError, struct.error):
             return None
-        if decoded.source.graph_source() != source:
+        if decoded is None:
             return None
         self._retained = _RetainedHistoryCut(
             decoded.source.graph_source(), decoded.heads, decoded.commits,
@@ -1673,10 +1792,10 @@ class GitHistoryCache:
         try:
             # store_files reaches process launch, which already imports Checkout.
             from agent_comms.storage.store_files import AtomicFile
-            encoded = FieldCodec.compact(FieldCodec.encode(snapshot, GitHistorySnapshot))
-            if len(encoded.encode("utf-8")) > self.maximum_bytes:
+            encoded = snapshot.to_bytes()
+            if len(encoded) > self.maximum_bytes:
                 return
-            AtomicFile(self.path).write_text(encoded)
+            AtomicFile(self.path).write_bytes(encoded)
         except OSError:
             # This derived acceleration never owns whether the source can be answered.
             return
