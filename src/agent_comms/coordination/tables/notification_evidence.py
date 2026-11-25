@@ -8,19 +8,18 @@ from typing import Annotated
 from agent_comms.coordination.schema import CoordinatorRow
 from agent_comms.storage.typed_table import (
     Column,
-    FrozenColumn,
     MutationCapability,
     RowMutation,
+    SingletonRow,
     SQLiteSchemaObject,
     WithoutRowid,
 )
 
 
 @dataclass(frozen=True)
-class NotificationEvidenceRevision(CoordinatorRow, WithoutRowid):
+class NotificationEvidenceRevision(CoordinatorRow, WithoutRowid, SingletonRow):
     """Monotone revision of only the rows used by notification projections."""
 
-    singleton: Annotated[int, FrozenColumn(primary_key=True, check="singleton = 1")] = 1
     revision: Annotated[int, Column(check="revision > 0")] = 1
 
 
