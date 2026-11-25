@@ -47,7 +47,7 @@ from agent_comms.execution.turn_failure import (
     NativePiTerminalFailure,
 )
 from agent_comms.execution.turn_output import TurnOutput
-from agent_comms.execution.turn_usage import UsageAccount
+from agent_comms.pi_counts import UsageAccount
 from agent_comms.execution.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
 from agent_comms.execution.pi_events import ContextCommitted, InputCommitted
 from agent_comms.nominal.declared_family import DeclaredFamily

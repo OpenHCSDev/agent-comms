@@ -25,7 +25,7 @@ from agent_comms.execution.turn_goal_permission import InactiveGoalPermission, T
 from agent_comms.execution.turn_inbox import SteerInputPolicy
 from agent_comms.execution.turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
 from agent_comms.execution.turn_output import TurnOutput
-from agent_comms.execution.turn_usage import UsageAccount
+from agent_comms.pi_counts import UsageAccount
 from agent_comms.execution.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.nominal.field_codec import InputId, TurnId

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Never
 
+from agent_comms.execution.selected.record_selected_terminal import record_selected_terminal
 from agent_comms.execution.turn_goal_permission import TurnGoalPermission
 from agent_comms.messaging.envelope_claim_transitions import FileClaimPath
 from agent_comms.nominal.field_codec import InputId, SlotId, ToolCallId
@@ -324,7 +325,6 @@ class CodingCall(NativeToolCall):
     def commit_terminal(
         self, is_error: bool, coordination_path: Path, input_id: InputId, round_number: int
     ) -> None:
-        from agent_comms.execution.selected.tool_broker import record_selected_terminal
 
         slot = self.slot(input_id, round_number)
         record_selected_terminal(coordination_path, slot, self.call_id)

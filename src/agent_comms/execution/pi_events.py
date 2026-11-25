@@ -74,6 +74,7 @@ from agent_comms.pi_payloads import (
     ProviderRetryOutcome,
     ReportedCompaction,
     ReportedFlag,
+    SnapshotAttestation,
     StreamedMessage,
     UnreportedUsage,
 )
@@ -81,7 +82,6 @@ from agent_comms.transport.tool_declaration import ToolDeclaration
 
 if TYPE_CHECKING:
     from agent_comms.execution.backend import TurnSession
-    from agent_comms.execution.native_attestation import NativeAttestation
 
 
 @dataclass(frozen=True)
@@ -775,7 +775,7 @@ class ResponseOutcome(DeclaredFamily, DeclaredWireType, affix="ResponseOutcome")
     def validate_payload(cls, error: ReportedText | PiOmitted) -> None:
         pass
 
-    def conflicts_attestation(self, data: PiResponseData, attestation: NativeAttestation) -> bool:
+    def conflicts_attestation(self, data: PiResponseData, attestation: SnapshotAttestation) -> bool:
         return False
 
     def proves_idle(self, response: Response) -> bool:
@@ -857,7 +857,7 @@ class SucceededResponseOutcome(ResponseOutcome):
     def proves_idle(self, response: Response) -> bool:
         return not response.require_data().session_busy
 
-    def conflicts_attestation(self, data: PiResponseData, attestation: NativeAttestation) -> bool:
+    def conflicts_attestation(self, data: PiResponseData, attestation: SnapshotAttestation) -> bool:
         return data.conflicts_attestation(attestation)
 
     def apply_command(

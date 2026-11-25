@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -121,7 +122,15 @@ class KnownSessionAttestation(NativeAttestation):
 
     @property
     def diagnostic_evidence(self):
-        return {"session_id": self.identity.session_id, "session_file": self.identity.session_file}
+        return {
+                    field.name: getattr(
+                        self.identity,
+                        field.name,
+                    )
+                    for field in dataclasses.fields(
+                        NativeSessionIdentity
+                    )
+                }
 
 
     def conflicts(self, data: NativeSessionSnapshot) -> bool:

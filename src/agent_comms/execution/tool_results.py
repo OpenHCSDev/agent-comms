@@ -4,15 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from difflib import unified_diff
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 from urllib.parse import quote
 
 from pydantic import JsonValue
 
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import NullMember
-
-if TYPE_CHECKING:
-    from agent_comms.transcript.transcript_events import SentTranscript
 
 SENT_MESSAGE_MIME = "application/vnd.agent-comms.sent-message+json"
 
@@ -89,7 +87,7 @@ class ToolDiff:
 
 def tool_result_content(
     tool_call_id: str, output: str, diff: ToolDiff | NoToolDiff = NoToolDiff(),
-    sent_message: SentTranscript | NoSentMessage = NoSentMessage(),
+    sent_message: DeclaredFamily | NoSentMessage = NoSentMessage(),
 ) -> list[dict[str, JsonValue]]:
     """Use ACP's embedded text resource for patches with original hunk positions.
 
