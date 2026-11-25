@@ -30,8 +30,8 @@ from agent_comms.cli_bridges.inbox_watch_client import (
     FollowedTranscript,
     InboxSocket,
     session_transcript,
-    wait_for_log_growth,
 )
+from agent_comms.cli_bridges.wait_log import wait_for_log_growth, wait_for_log_growth_sync
 from agent_comms.cli_bridges.harness_delivery_states import (
     AcknowledgedReceipt,
     DeliveredOutcome,
@@ -375,6 +375,11 @@ async def test_antigravity_persistent_watch_confirms_pty_double_cr_sync_and_asyn
     # Truncating the log (e.g. `: > watch.log` on watch restart) resets the cursor to 0.
     watch_log.write_bytes(b"after-truncate\r\n")
     assert await asyncio.wait_for(wait_for_log_growth(watch_log), timeout=5) == "after-truncate\n"
+
+    # Synchronous inotify path shares the exact same cursor and CRLF normalization.
+    with watch_log.open("ab") as fh:
+        fh.write(b"sync-line\r\r\n")
+    assert wait_for_log_growth_sync(watch_log) == "sync-line\n"
 
     async with TestServer(connector.application(), port=port) as server:
         async with TestClient(server) as client:

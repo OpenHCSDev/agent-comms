@@ -432,7 +432,7 @@ def cmd_wake_on(args: argparse.Namespace) -> int:
     if args.offset is not None:
         wait_args.extend(["--offset", str(args.offset)])
     if watch_bin:
-        return subprocess.run([watch_bin, *wait_args]).returncode
+        os.execv(watch_bin, [watch_bin, *wait_args])
     root = _find_agent_comms_root(args.repo)
     uv_bin = shutil.which("uv")
     if root is not None and uv_bin:

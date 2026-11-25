@@ -11,7 +11,6 @@ an empty inbox or an idle session.
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import base64
 import hashlib
@@ -70,6 +69,7 @@ from agent_comms.ui_model.observation_wire import (
     WEBSOCKET_CONNECT_TIMEOUT,
     WEBSOCKET_HEARTBEAT_SECONDS,
 )
+from agent_comms_hooks.inbox_watch import main as dispatch_inbox_watch
 
 
 class PrintLedger:
@@ -690,110 +690,14 @@ class InboxSocket:
         await self.deliver(frame, socket)
 
 
-_PTY_CRLF_RE = re.compile(r"\r+\n")
-
-
-def _log_cursor_path(target: Path) -> Path:
-    return target.with_name(f"{target.name}.cursor")
-
-
-def _read_log_cursor(cursor_path: Path) -> tuple[int, int] | None:
-    try:
-        raw = json.loads(cursor_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(raw, dict):
-        return None
-    inode = raw.get("inode")
-    offset = raw.get("offset")
-    if isinstance(inode, int) and isinstance(offset, int) and offset >= 0:
-        return (inode, offset)
-    return None
-
-
-def _write_log_cursor(cursor_path: Path, inode: int, offset: int) -> None:
-    tmp = cursor_path.with_name(f".{cursor_path.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps({"inode": inode, "offset": offset}), encoding="utf-8")
-    os.replace(tmp, cursor_path)
-
-
-async def wait_for_log_growth(path: Path, *, offset: int | None = None) -> str:
-    """Wait via Bus.watch_sources for a persistent watch log to grow, then return the
-    newly appended text with PTY CR/LF normalized to LF so downstream monitors decode it.
-
-    When `offset` is omitted, a sidecar `<log>.cursor` tracks `(inode, offset)` so messages
-    written between consecutive `--wait-log` invocations are delivered immediately rather than
-    silently skipped (and never stranded as unconfirmed `emitted` deliveries).
-    """
-    target = path.expanduser()
-    cursor_path = _log_cursor_path(target)
-    async with aclosing(Bus.watch_sources(FileSource(target))) as changes:
-        await anext(changes)
-        while not target.exists():
-            await anext(changes)
-        stat = target.stat()
-        cur_inode = stat.st_ino
-        if offset is not None:
-            pos = offset
-        else:
-            saved = _read_log_cursor(cursor_path)
-            if saved is None:
-                pos = stat.st_size
-                _write_log_cursor(cursor_path, cur_inode, pos)
-            elif saved[0] != cur_inode or stat.st_size < saved[1]:
-                pos = 0
-            else:
-                pos = saved[1]
-        while True:
-            stat = target.stat()
-            cur = stat.st_size
-            if stat.st_ino != cur_inode or cur < pos:
-                cur_inode = stat.st_ino
-                pos = 0
-            if cur > pos:
-                with target.open("rb") as fh:
-                    fh.seek(pos)
-                    raw = fh.read()
-                new_pos = pos + len(raw)
-                if offset is None:
-                    _write_log_cursor(cursor_path, cur_inode, new_pos)
-                text = raw.decode("utf-8", errors="replace")
-                return _PTY_CRLF_RE.sub("\n", text).replace("\r", "\n")
-            await anext(changes)
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("url", nargs="?", help="The one-use URL comms_watch returned")
-    parser.add_argument(
-        "--transcript",
-        type=Path,
-        default=None,
-        help="Explicit Antigravity transcript.jsonl path to stream alongside the inbox watch",
-    )
-    parser.add_argument(
-        "--wait-log",
-        type=Path,
-        default=None,
-        help="Wait event-driven for a persistent watch log to grow, print new lines, and exit 0",
-    )
-    parser.add_argument(
-        "--offset",
-        type=int,
-        default=None,
-        help="Starting byte offset for --wait-log (default: current file size)",
-    )
-    args = parser.parse_args()
-    if args.wait_log is not None:
-        chunk = asyncio.run(wait_for_log_growth(args.wait_log, offset=args.offset))
-        sys.stdout.write(chunk)
-        sys.stdout.flush()
-        sys.exit(0)
-    if not args.url:
-        parser.error("the following arguments are required: url (or pass --wait-log PATH)")
+def run_watch_url(url: str, transcript: Path | None = None) -> None:
     exports = Path.home() / ".local" / "state" / "claude-comms-inbox" / "cloud" / "messages"
-    socket = InboxSocket(args.url, exports, session_transcript(args.transcript))
+    socket = InboxSocket(url, exports, session_transcript(transcript))
     ended = asyncio.run(socket.carried())
     if line := ended.line():
         print(line, flush=True)
     sys.exit(ended.exit_code)
+
+
+def main() -> None:
+    dispatch_inbox_watch()
