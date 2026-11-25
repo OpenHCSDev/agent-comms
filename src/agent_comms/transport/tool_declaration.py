@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, fields
@@ -106,6 +107,55 @@ class PlainContextRows(ContextRows):
 
     def rows(self, text: str) -> tuple[tuple[int, str], ...]:
         return tuple(enumerate(text.split('\n'), start=1))
+
+
+class AntigravityContextRows(ContextRows):
+    """Antigravity's `read_file` prints `Showing lines a-b of c` followed by `N: line`."""
+
+    showing_header: ClassVar[re.Pattern[str]] = re.compile(r"^Showing lines \d+-\d+ of \d+$")
+
+    def rows(self, text: str) -> tuple[tuple[int, str], ...]:
+        lines = text.split("\n")
+        start = next(
+            (index + 1 for index, line in enumerate(lines) if self.showing_header.match(line)),
+            0,
+        )
+        rows: list[tuple[int, str]] = []
+        for row in lines[start:]:
+            number, colon, rest = row.partition(":")
+            if not (colon and number.isdecimal() and (rest == "" or rest.startswith(" "))):
+                if row in ("", "(no newline at end of file)"):
+                    continue
+                break
+            rows.append((int(number), rest[1:] if rest.startswith(" ") else rest))
+        consecutive = all(
+            later[0] == earlier[0] + 1
+            for earlier, later in zip(rows, rows[1:], strict=False)
+        )
+        return tuple(rows) if consecutive else ()
+
+
+class AntigravityCommandContextRows(PlainContextRows):
+    """Antigravity's `run_command` wraps stdout after `Command output:\\n` and before `Log: file://...`."""
+
+    marker: ClassVar[str] = "Command output:\n"
+    log_trailer: ClassVar[re.Pattern[str]] = re.compile(r"\nLog: file://.*$", re.DOTALL)
+    crlf: ClassVar[re.Pattern[str]] = re.compile(r"\r+\n")
+
+    @classmethod
+    def extract_output(cls, text: str) -> str:
+        """Return the normalized stdout body from an Antigravity command completion record."""
+        normalized = cls.crlf.sub("\n", text).replace("\r", "\n")
+        offset = normalized.find(cls.marker)
+        if offset < 0:
+            return ""
+        body = normalized[offset + len(cls.marker):]
+        body = cls.log_trailer.sub("", body)
+        return body.removesuffix("</SYSTEM_MESSAGE>").rstrip("\n")
+
+    def rows(self, text: str) -> tuple[tuple[int, str], ...]:
+        output = self.extract_output(text)
+        return super().rows(output) if output else ()
 
 
 @dataclass(frozen=True)
