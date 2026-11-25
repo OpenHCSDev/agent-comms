@@ -18,6 +18,7 @@ import re
 import select
 import shutil
 import signal
+import socket
 import stat
 import subprocess
 import sys
@@ -838,6 +839,10 @@ class Platform(DeclaredFamily, affix="Platform"):
         if not signalled and self.matches(leader):
             raise RuntimeError(f"Live process {leader.pid} was not signalled")
 
+    def configure_client_socket(self, sock: socket.socket) -> None:
+        """Keep a client TCP socket from hanging silently on a half-open network switch."""
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+
     def parent_death_binding(self) -> int:
         """Darwin has no parent-death signal: its exec gate binds no launcher."""
         return 0
@@ -855,6 +860,18 @@ class LinuxProcessRecord:
 
 
 class LinuxPlatform(PidfdHandles, Platform):
+    CLIENT_KEEPALIVE_IDLE_SECONDS: ClassVar[int] = 10
+    CLIENT_KEEPALIVE_INTERVAL_SECONDS: ClassVar[int] = 3
+    CLIENT_KEEPALIVE_COUNT: ClassVar[int] = 2
+    CLIENT_TCP_USER_TIMEOUT_MS: ClassVar[int] = 5_000
+
+    def configure_client_socket(self, sock: socket.socket) -> None:
+        super().configure_client_socket(sock)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, self.CLIENT_KEEPALIVE_IDLE_SECONDS)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, self.CLIENT_KEEPALIVE_INTERVAL_SECONDS)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, self.CLIENT_KEEPALIVE_COUNT)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT, self.CLIENT_TCP_USER_TIMEOUT_MS)
+
     @contextmanager
     def native_image(self, address: ctypes.c_void_p) -> Generator[BufferedReader]:
         # glibc's main-image filename aliases argv[0]; setproctitle changes it.

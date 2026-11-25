@@ -65,6 +65,11 @@ from agent_comms.execution.launch_runtime import RunningSource
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.watched import FileSource
+from agent_comms.ui_model.observation_wire import (
+    WEBSOCKET_CLIENT_TIMEOUT,
+    WEBSOCKET_CONNECT_TIMEOUT,
+    WEBSOCKET_HEARTBEAT_SECONDS,
+)
 
 
 class PrintLedger:
@@ -639,8 +644,11 @@ class InboxSocket:
             return RuntimeReplaced()
         stage: SocketStage = Dialing()
         try:
-            async with ClientSession() as session, session.ws_connect(
-                url, proxy=self.proxy, heartbeat=25.0
+            async with ClientSession(timeout=WEBSOCKET_CONNECT_TIMEOUT) as session, session.ws_connect(
+                url,
+                proxy=self.proxy,
+                heartbeat=WEBSOCKET_HEARTBEAT_SECONDS,
+                timeout=WEBSOCKET_CLIENT_TIMEOUT,
             ) as socket:
                 stage = Open()
                 self.redials.told = self.redials.told.opened()

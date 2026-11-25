@@ -5,17 +5,22 @@ of handshake each against ts-gaming; a dropped one surfaced as a crashed worker.
 
 import http.client
 import json
+import socket
 import threading
+import time
 import urllib.error
 
 import pytest
 from yarl import URL
 
 from agent_comms.coordination.errors import CoordinationReadUnavailable
+from agent_comms.execution.child_process import LinuxPlatform, Platform
 from agent_comms.nominal.field_codec import RootId
 from agent_comms.transport.connector_profile import (
     BearerSecret,
     HttpsMcpEndpoint,
+    ReachedRoute,
+    ResolvedRoute,
     UiCredential,
     UiGrantId,
 )
@@ -23,6 +28,7 @@ from agent_comms.transport.remote_core import RemoteCoreAccess
 from agent_comms.transport.request import ConnectionDropped
 from agent_comms.transport.tools.channels import CommsChannelsTool
 from agent_comms.transport.tools.orders import CommsEmergencyReleaseTool
+from agent_comms.ui_model.observation_wire import WEBSOCKET_CONNECT_TIMEOUT
 
 REPLY = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {
     "content": [{"type": "text", "text": "{}"}], "isError": False, "structuredContent": {"read": True}}}).encode()
@@ -39,7 +45,7 @@ class DroppingConnection:
     """A kept connection the server closed while idle: its first answer never comes."""
 
     def __init__(self, drops: int) -> None:
-        self.drops, self.sent = drops, 0
+        self.drops, self.sent, self.closed = drops, 0, 0
 
     def request(self, method, path, body, headers) -> None:
         self.sent += 1
@@ -51,7 +57,7 @@ class DroppingConnection:
         return Reply()
 
     def close(self) -> None:
-        pass
+        self.closed += 1
 
 
 def access_over(connection: DroppingConnection) -> RemoteCoreAccess:
@@ -119,3 +125,46 @@ def test_a_thread_keeps_its_connection_and_another_thread_gets_its_own():
 
     assert access.connections.connection is here
     assert elsewhere[0] is not here
+
+
+def test_reset_connections_closes_kept_socket_before_next_request():
+    connection = DroppingConnection(drops=0)
+    access = access_over(connection)
+
+    assert access.post(CommsChannelsTool()) == {"read": True}
+    assert connection.closed == 0
+
+    access.reset_connections()
+    assert access.post(CommsChannelsTool()) == {"read": True}
+    assert connection.closed == 1
+    assert connection.sent == 2
+
+
+def test_idle_connection_closes_before_reuse():
+    connection = DroppingConnection(drops=0)
+    access = access_over(connection)
+
+    assert access.post(CommsChannelsTool()) == {"read": True}
+    assert connection.closed == 0
+    access.connections.last_used = time.monotonic() - (access.keepalive_idle_seconds + 1.0)
+
+    assert access.post(CommsChannelsTool()) == {"read": True}
+    assert connection.closed == 1
+
+
+def test_platform_configures_client_tcp_keepalive_and_user_timeout():
+    platform = Platform.current()
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+        platform.configure_client_socket(client)
+        assert client.getsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE) != 0
+        if isinstance(platform, LinuxPlatform):
+            assert client.getsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE) == LinuxPlatform.CLIENT_KEEPALIVE_IDLE_SECONDS
+            assert client.getsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL) == LinuxPlatform.CLIENT_KEEPALIVE_INTERVAL_SECONDS
+            assert client.getsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT) == LinuxPlatform.CLIENT_KEEPALIVE_COUNT
+            assert client.getsockopt(socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT) == LinuxPlatform.CLIENT_TCP_USER_TIMEOUT_MS
+
+
+async def test_endpoint_routes_bound_observation_session_connect_timeout():
+    for route in (ResolvedRoute(), ReachedRoute("127.0.0.1")):
+        async with route.socket_session() as session:
+            assert session.timeout == WEBSOCKET_CONNECT_TIMEOUT

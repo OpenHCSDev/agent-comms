@@ -5,7 +5,7 @@ import socket
 import time
 from dataclasses import dataclass
 
-from aiohttp import web
+from aiohttp import ClientTimeout, web
 from aiohttp.test_utils import TestServer
 from yarl import URL
 
@@ -133,5 +133,48 @@ async def test_a_silent_observation_socket_ends_on_its_heartbeat(monkeypatch) ->
             assert peer.ending != ObservationRetired()
         finally:
             release.set()
+            peer.connection.close()
+            peer.retire()
+
+
+async def test_a_stalled_upgrade_times_out_and_resets_connections() -> None:
+    """A silent TCP listener that never answers the WebSocket upgrade fails within the route's
+    connect timeout and invalidates kept HTTPS connections instead of hanging 300s."""
+    resets: list[int] = []
+
+    @dataclass(frozen=True)
+    class FastTimeoutRoute(ResolvedRoute):
+        def socket_session(self, *, timeout=None, ssl=None):
+            return super().socket_session(
+                timeout=ClientTimeout(total=None, connect=0.4, sock_connect=0.4, sock_read=0.4),
+                ssl=ssl,
+            )
+
+    @dataclass(frozen=True)
+    class TrackingSource(TestConnectorSource):
+        def reset_connections(self) -> None:
+            resets.append(1)
+
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+        source = TrackingSource(
+            Endpoint(URL(f"http://127.0.0.1:{port}/mcp")),
+            Credential("t"),
+            route=FastTimeoutRoute(),
+        )
+        peer = source.observation_peer(ViewerEnd)
+        accepted, _ = listener.accept()
+        try:
+            started = time.monotonic()
+            await asyncio.to_thread(peer.join)
+            elapsed = time.monotonic() - started
+            assert not peer.thread.is_alive()
+            assert elapsed < 3.0
+            assert peer.ending != ObservationRetired()
+            assert resets == [1]
+        finally:
+            accepted.close()
             peer.connection.close()
             peer.retire()

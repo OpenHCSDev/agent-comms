@@ -9,6 +9,7 @@ import json
 import socket
 import ssl
 import threading
+import time
 import urllib.error
 from dataclasses import dataclass, replace
 from functools import cached_property
@@ -49,6 +50,8 @@ from agent_comms.transport.request import (
 )
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms.ui_model.observation_wire import (
+    STREAM_CONNECT_TIMEOUT,
+    WEBSOCKET_CLIENT_TIMEOUT,
     WEBSOCKET_HEARTBEAT_SECONDS,
     WEBSOCKET_MAX_MESSAGE_BYTES,
     EncodedConnection,
@@ -148,12 +151,15 @@ class ConnectorObservationPeer(ObservationPeer):
             async with self.route.socket_session() as session, session.ws_connect(
                 self.url, headers={"Authorization": f"Bearer {access.credential.token}"},
                 ssl=access.tls, heartbeat=self.heartbeat_seconds,
+                timeout=WEBSOCKET_CLIENT_TIMEOUT,
                 max_msg_size=WEBSOCKET_MAX_MESSAGE_BYTES,
             ) as remote:
                 self.ending = await relay_frames(local, remote)
+            access.reset_connections()
         except (OSError, aiohttp.ClientError) as error:
             # Connecting is the boundary: the connector refused or could not be reached.
             self.ending = ConnectorUnreachable(error)
+            access.reset_connections()
         finally:
             local.close()
 
@@ -197,15 +203,56 @@ class ConnectorClient(UiConnectionProfile, ObservationSource):
     def observation_peer(self, codec: type[EncodedConnection]) -> ConnectorObservationPeer:
         return ConnectorObservationPeer(self, codec)
 
+    def reset_connections(self) -> None:
+        """Drop kept transport connections so the next request dials fresh."""
+
+
+class ConnectionEpoch:
+    """Monotonic generation shared across a client's threads and synced into read workers."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.value = 0
+
+    def bump(self) -> int:
+        with self._lock:
+            self.value += 1
+            return self.value
+
+    def advance_to(self, target: int) -> None:
+        with self._lock:
+            if target > self.value:
+                self.value = target
+
 
 class ThreadConnection(threading.local):
-    """This thread's HTTPS connection to one connector, kept open between its calls; a closed one
-    reopens on its next request."""
+    """This thread's HTTPS connection to one connector, kept open between its calls; a closed,
+    reset, or idle one reopens on its next request."""
 
-    def __init__(self, profile: UiConnectionProfile, context: ssl.SSLContext, timeout: float) -> None:
+    def __init__(
+        self,
+        profile: UiConnectionProfile,
+        context: ssl.SSLContext,
+        timeout: float,
+        epoch: ConnectionEpoch,
+    ) -> None:
         # The profile's route owns how its endpoint is reached: a tailnet-only endpoint is
         # dialed at the address its holder reached it on (connector_profile.EndpointRoute).
         self.connection = profile.connection(context, timeout)
+        self.generation = epoch.value
+        self.last_used = 0.0
+
+    def prepare(self, generation: int, idle_seconds: float, now: float) -> http.client.HTTPSConnection:
+        """Close this thread's socket before reusing it if a reset or idle window elapsed."""
+        idle = self.last_used > 0.0 and (now - self.last_used) >= idle_seconds
+        if self.generation != generation or idle:
+            self.connection.close()
+            self.generation = generation
+            self.last_used = 0.0
+        return self.connection
+
+    def mark_used(self, now: float) -> None:
+        self.last_used = now
 
 
 class RemoteCoreAccess(
@@ -215,7 +262,7 @@ class RemoteCoreAccess(
     call needs, and the server still decides scope, expiry and revocation."""
 
     timeout_seconds = 30
-
+    keepalive_idle_seconds: ClassVar[float] = 60.0
 
     def call[R: ToolResult](self, request: ToolRequest[R]) -> R:
         return FieldCodec.decode(request.result_type(), request.posted(self))
@@ -225,8 +272,16 @@ class RemoteCoreAccess(
         return {"Authorization": f"Bearer {self.credential.token}", "Content-Type": "application/json"}
 
     @cached_property
+    def connection_epoch(self) -> ConnectionEpoch:
+        return ConnectionEpoch()
+
+    @cached_property
     def connections(self) -> ThreadConnection:
-        return ThreadConnection(self, self.tls, self.timeout_seconds)
+        return ThreadConnection(self, self.tls, self.timeout_seconds, self.connection_epoch)
+
+    def reset_connections(self) -> None:
+        """Invalidate kept HTTPS connections across every thread so the next call dials fresh."""
+        self.connection_epoch.bump()
 
     def post[R: ToolResult](self, request: ToolRequest[R]) -> dict[str, JsonValue]:
         """One posted tools/call and its reply; a dropped connection is the request's to answer."""
@@ -251,16 +306,21 @@ class RemoteCoreAccess(
         """One JSON-RPC message posted on this thread's kept connection, and its reply's bytes.
         A dropped connection may be a restarted connector, which may serve other tools."""
         body = FieldCodec.compact(FieldCodec.encode(envelope)).encode()
-        connection = self.connections.connection
+        thread_connection = self.connections
+        connection = thread_connection.prepare(
+            self.connection_epoch.value, self.keepalive_idle_seconds, time.monotonic(),
+        )
         try:
             connection.request("POST", self.endpoint.url.raw_path_qs, body, self.headers)
             response = connection.getresponse()
             payload = response.read()
         except (OSError, http.client.HTTPException) as error:
             connection.close()
+            thread_connection.last_used = 0.0
             self.forget_served()
             raise ConnectionDropped(
                 f"The connection to {self.endpoint.url.host} dropped: {error}") from error
+        thread_connection.mark_used(time.monotonic())
         if response.status >= 400:
             raise urllib.error.HTTPError(
                 str(self.endpoint.url), response.status, response.reason, response.headers,
@@ -293,7 +353,7 @@ class RemoteCoreAccess(
         called = request.called()
         envelope = ToolsCallMessage(jsonrpc="2.0", id=call_id, params=replace(
             called, meta={**called.meta, "progressToken": call_id}))
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=self.tls)) as session:
+        async with self.route.socket_session(timeout=STREAM_CONNECT_TIMEOUT, ssl=self.tls) as session:
             cancelled = asyncio.Event()
             watcher = asyncio.create_task(self.cancel_when_stopped(session, request, call_id, cancelled))
             try:

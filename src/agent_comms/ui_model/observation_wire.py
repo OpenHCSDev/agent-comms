@@ -19,14 +19,26 @@ from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
 from typing import ClassVar, Protocol
 
-from aiohttp import WSMsgType
+from aiohttp import ClientTimeout, ClientWSTimeout, WSMsgType
 
 from agent_comms.coordination.errors import CoordinationError, ReadAgain
 from agent_comms.execution.child_process import RelayEnding
 from agent_comms.nominal.field_codec import FieldCodec
 
-WEBSOCKET_HEARTBEAT_SECONDS: float = 25.0
+WEBSOCKET_HEARTBEAT_SECONDS: float = 10.0
 """How often a connector WebSocket pings its peer; a dead half-open socket closes when pong misses."""
+WEBSOCKET_CONNECT_TIMEOUT: ClientTimeout = ClientTimeout(
+    total=None, connect=10.0, sock_connect=10.0, sock_read=10.0,
+)
+"""Bounds TCP/TLS dial and HTTP 101 upgrade; aiohttp clears read_timeout once upgraded."""
+STREAM_CONNECT_TIMEOUT: ClientTimeout = ClientTimeout(
+    total=None, connect=10.0, sock_connect=10.0,
+)
+"""Bounds TCP/TLS dial on long-lived SSE streams without cutting off idle reads."""
+WEBSOCKET_CLIENT_TIMEOUT: ClientWSTimeout = ClientWSTimeout(
+    ws_receive=None, ws_close=2.0,
+)
+"""Long-lived WebSocket with bounded close so retiring a dead half-open peer never stalls 10s."""
 WEBSOCKET_MAX_MESSAGE_BYTES: int = 64 * 1024 * 1024
 """Frame size ceiling for connector WebSockets (sidebars and transcripts exceed aiohttp's 4 MiB default)."""
 
