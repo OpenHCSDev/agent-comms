@@ -372,14 +372,36 @@ class ClaudeToolDraft(ToolDraft):
     ) -> tuple[TranscriptEvent, ...]:
         return (*self.events, self.call.ended(text, ok, record.position, record.timestamp))
 
+    def read_results_for(
+        self,
+        observed_record: ObservedMonitor,
+        text: str,
+        ok: bool,
+        reading: frozenset[str],
+        source_turn: SourceTurn,
+    ) -> tuple[RuntimeUpdate, ...]:
+        """What a Read showed the model, beside the paths other Reads in this session still
+        have open. A failed Read showed no file but ends its call."""
+        observed = ReadResultObserved if ok else FailedReadObserved
+        return tuple(
+            observed(
+                path,
+                text,
+                observed_record,
+                reading,
+                source_turn=source_turn,
+                layout=self.call.context_rows,
+            )
+            for path in self.call.context_read_paths()
+        )
+
     def read_results(self, record: TimedRecord, text: str, ok: bool,
                      reading: frozenset[str], source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
         """What a Read showed the model, timed by its own result record, beside the paths other
         Reads in this session still have open. A failed Read showed no file but ends its call."""
-        observed = ReadResultObserved if ok else FailedReadObserved
-        return tuple(observed(path, text, ObservedMonitor(record.uuid, record.timestamp), reading,
-                              source_turn=source_turn, layout=self.call.context_rows)
-                     for path in self.call.context_read_paths())
+        return self.read_results_for(
+            ObservedMonitor(record.uuid, record.timestamp), text, ok, reading, source_turn
+        )
 
 
 class ClaudeTurn(ABC):

@@ -29,7 +29,13 @@ from agent_comms.transport.native_tools import (
     ReadTool,
     WriteTool,
 )
-from agent_comms.transport.tool_declaration import ContextRows, ReplacementEdit, ToolDeclaration
+from agent_comms.transport.tool_declaration import (
+    AntigravityCommandContextRows,
+    AntigravityContextRows,
+    ContextRows,
+    ReplacementEdit,
+    ToolDeclaration,
+)
 
 
 @dataclass(frozen=True)
@@ -98,6 +104,17 @@ class DecodedToolCall(ToolCall):
 
 
 @dataclass(frozen=True)
+class LayoutToolCall(DecodedToolCall):
+    """A decoded tool whose runtime formats file contents in its own ContextRows layout."""
+
+    layout: ContextRows
+
+    @property
+    def context_rows(self) -> ContextRows:
+        return self.layout
+
+
+@dataclass(frozen=True)
 class PatchedToolCall(DecodedToolCall):
     """An edit that reports the patch it made."""
 
@@ -155,6 +172,17 @@ class CliCommandArguments(CliToolArguments):
         return BashTool(call_id=call_id, command=self.command)
 
 
+class AntigravityCommandArguments(CliCommandArguments):
+    cli_names = ("run_command",)
+    command: str = Field(validation_alias=AliasChoices("CommandLine", "command"))
+
+    def call(self, call_id: ToolCallId) -> DecodedToolCall:
+        base = super().call(call_id)
+        return LayoutToolCall(
+            base.id, base.name, base.arguments, base.tool, AntigravityCommandContextRows()
+        )
+
+
 class CliPatternArguments(CliToolArguments):
     """A search; its scope is optional, so the search record's own codec reads it."""
 
@@ -181,6 +209,17 @@ class CliReadArguments(CliPathArguments):
 
     def record(self, *, call_id: ToolCallId) -> ReadTool:
         return ReadTool(call_id=call_id, path=self.path)
+
+
+class AntigravityReadArguments(CliReadArguments):
+    cli_names = ("read_file",)
+    path: str = Field(validation_alias=AliasChoices("Path", "file_path", "filePath"))
+
+    def call(self, call_id: ToolCallId) -> DecodedToolCall:
+        base = super().call(call_id)
+        return LayoutToolCall(
+            base.id, base.name, base.arguments, base.tool, AntigravityContextRows()
+        )
 
 
 class CliReplacement(WireModel):

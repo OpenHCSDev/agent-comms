@@ -1,6 +1,7 @@
 """Antigravity JSONL transcript records decoded into Core's RuntimeUpdate stream."""
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from abc import ABC, abstractmethod
@@ -10,7 +11,7 @@ from typing import ClassVar
 
 from pydantic import Field, JsonValue
 
-from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
+from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame, ClaudeToolDraft
 from agent_comms.cli_bridges.cli_protocol import HistoryRecord, TaggedWire
 from agent_comms.cli_bridges.runtime_updates import (
     ActiveItem,
@@ -22,14 +23,13 @@ from agent_comms.cli_bridges.runtime_updates import (
     StartedItem,
     StatusUpdate,
     Summarized,
-    ToolDraft,
     TurnStarted,
 )
 from agent_comms.cli_bridges.shared import (
     MonitorObservation,
     ObservedMonitor,
 )
-from agent_comms.cli_bridges.tool_calls import ToolCall
+from agent_comms.cli_bridges.tool_calls import CliToolArguments, ToolCall
 from agent_comms.cli_bridges.wire_models import WireModel
 from agent_comms.execution.runtime_observations import TranscriptModelUsage
 from agent_comms.execution.turn_item import NamedSourceTurn, NativeItemId, NativeTurnId
@@ -38,6 +38,7 @@ from agent_comms.nominal.field_codec import TimestampText, ToolCallId, Transcrip
 from agent_comms.pi_counts import ReportedCount, UnreportedCount
 from agent_comms.registry.thread_model import ThreadModel
 from agent_comms.storage.recorded_time import EventTime
+from agent_comms.transport.tool_declaration import AntigravityCommandContextRows
 from agent_comms.transcript.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
@@ -63,12 +64,25 @@ class AntigravityToolCallWire(WireModel):
     name: str
     args: dict[str, JsonValue] = Field(default_factory=dict)
 
+    def decoded_args(self) -> dict[str, JsonValue]:
+        """Antigravity serializes string tool arguments as JSON-quoted literals in `transcript.jsonl`."""
+        decoded: dict[str, JsonValue] = {}
+        for key, value in self.args.items():
+            if isinstance(value, str) and len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+                try:
+                    unquoted = json.loads(value)
+                except json.JSONDecodeError:
+                    unquoted = value
+                decoded[key] = unquoted if isinstance(unquoted, str) else value
+            else:
+                decoded[key] = value
+        return decoded
+
 
 @dataclass
-class AntigravityToolDraft(ToolDraft):
+class AntigravityToolDraft(ClaudeToolDraft):
     """One open Antigravity tool call waiting for its matching `GENERIC` completion step."""
 
-    call: ToolCall
     item_id: NativeItemId
 
 
@@ -223,7 +237,11 @@ class PlannerResponseRecord(AntigravityRecord, declared_name="PLANNER_RESPONSE")
         for index, raw_call in enumerate(self.tool_calls):
             call_id = ToolCallId(f"agy-{self.step_index}-{index}")
             item_id = NativeItemId(f"agy-tool-{self.step_index}-{index}")
-            call = ToolCall(id=call_id, name=raw_call.name, arguments=dict(raw_call.args))
+            arguments = raw_call.decoded_args()
+            call = CliToolArguments.decode(
+                ToolCall(id=call_id, name=raw_call.name, arguments=arguments),
+                arguments,
+            )
             start_event: ToolStartTranscript = call.started(self.position, ts)
             draft = AntigravityToolDraft(
                 started_at=EventTime.capture(ts),
@@ -254,6 +272,9 @@ class PlannerResponseRecord(AntigravityRecord, declared_name="PLANNER_RESPONSE")
         return tuple(emitted)
 
 
+_BACKGROUND_TASK_MARKER = "Tool is running as a background task with task id:"
+
+
 class GenericStepRecord(AntigravityRecord, declared_name="GENERIC"):
     """Tool execution update (`RUNNING`, `DONE`, or `ERROR`)."""
 
@@ -264,25 +285,42 @@ class GenericStepRecord(AntigravityRecord, declared_name="GENERIC"):
         turn_id = session.turn_id
         ts = self.timestamp
         if self.status == "RUNNING":
-            if session.pending_tools:
-                head = session.pending_tools[0]
+            if not session.pending_tools:
+                return ()
+            if _BACKGROUND_TASK_MARKER in self.content:
+                # A backgrounded run_command detaches here and finishes later via SYSTEM_MESSAGE;
+                # retiring it keeps sibling read_file/run_command completions aligned.
+                draft = session.pending_tools.popleft()
+                events = (*draft.events, draft.call.ended(self.content, True, self.position, ts))
                 return (
-                    ActiveItem(
-                        turn_id,
-                        head.item_id,
-                        ToolRunningPhase(tools=((head.call.id, head.call.title),)),
-                    ),
+                    FinishedItem(turn_id=turn_id, item_id=draft.item_id, events=events),
+                    ActiveItem(turn_id, draft.item_id, ModelWaitPhase()),
                 )
-            return ()
+            head = session.pending_tools[0]
+            return (
+                ActiveItem(
+                    turn_id,
+                    head.item_id,
+                    ToolRunningPhase(tools=((head.call.id, head.call.title),)),
+                ),
+            )
         ok = self.status != "ERROR"
         body = self.error if (not ok and self.error) else self.content
         observations = _monitor_observations(self, body, session, open_turn=False) if ok else ()
         if session.pending_tools:
             draft = session.pending_tools.popleft()
             events = (*draft.events, draft.call.ended(body, ok, self.position, ts))
+            reading = frozenset(
+                path
+                for pending in session.pending_tools
+                for path in pending.call.context_read_paths()
+            )
+            observed = ObservedMonitor(_record_id(self), ts)
+            reads = draft.read_results_for(observed, body, ok, reading, NamedSourceTurn(turn_id))
             return (
                 FinishedItem(turn_id=turn_id, item_id=draft.item_id, events=events),
                 ActiveItem(turn_id, draft.item_id, ModelWaitPhase()),
+                *reads,
                 *observations,
             )
         if not ok and body:
@@ -313,21 +351,10 @@ class CheckpointRecord(AntigravityRecord, declared_name="CHECKPOINT"):
         return (Summarized(self.content),) if self.content else ()
 
 
-_COMMAND_OUTPUT_MARKER = "Command output:\n"
-_LOG_TRAILER_RE = re.compile(r"\nLog: file://.*$", re.DOTALL)
-_CRLF_RE = re.compile(r"\r+\n")
-
-
-def _extract_command_output(content: str) -> str:
-    """Return the normalized stdout body from an Antigravity command completion record."""
-    normalized = _CRLF_RE.sub("\n", content).replace("\r", "\n")
-    marker = normalized.find(_COMMAND_OUTPUT_MARKER)
-    if marker < 0:
-        return ""
-    body = normalized[marker + len(_COMMAND_OUTPUT_MARKER) :]
-    body = _LOG_TRAILER_RE.sub("", body)
-    body = body.removesuffix("</SYSTEM_MESSAGE>")
-    return body.rstrip("\n")
+def _record_id(record: AntigravityRecord) -> TranscriptRecordId:
+    return TranscriptRecordId(
+        str(uuid.uuid5(uuid.NAMESPACE_URL, f"antigravity:{record.step_index}:{record.created_at}"))
+    )
 
 
 def _monitor_observations(
@@ -337,7 +364,7 @@ def _monitor_observations(
     *,
     open_turn: bool,
 ) -> tuple[RuntimeUpdate, ...]:
-    output = _extract_command_output(content)
+    output = AntigravityCommandContextRows.extract_output(content)
     if not output:
         return ()
     frames = tuple(
@@ -348,10 +375,7 @@ def _monitor_observations(
     if not frames:
         return ()
     turn_id = session.open_turn(record.step_index) if open_turn else session.turn_id
-    record_id = TranscriptRecordId(
-        str(uuid.uuid5(uuid.NAMESPACE_URL, f"antigravity:{record.step_index}:{record.created_at}"))
-    )
-    observed = ObservedMonitor(record_id, record.timestamp)
+    observed = ObservedMonitor(_record_id(record), record.timestamp)
     source_turn = NamedSourceTurn(turn_id)
     observations = tuple(
         MonitorObservation(frame, observed, source_turn=source_turn) for frame in frames

@@ -207,7 +207,7 @@ def test_antigravity_offline_and_online_history_decode_transcript(
     events = [event for u in updates if isinstance(u, FinishedItem) for event in u.events]
     assert any(isinstance(e, UserTranscript) and e.text == "Fix the bus bridge friction" for e in events)
     assert any(isinstance(e, ThinkingTranscript) for e in events)
-    assert any(isinstance(e, ToolStartTranscript) and e.tool_name == "run_command" for e in events)
+    assert any(isinstance(e, ToolStartTranscript) and e.tool_name == "bash" for e in events)
     assert any(isinstance(e, ToolEndTranscript) and e.ok and "4 passed" in e.text for e in events)
     assert any(
         isinstance(e, AssistantTranscript) and "Added AntigravityHarness" in e.text for e in events
@@ -971,3 +971,184 @@ def test_comms_mcp_cloud_agy_hook_fallback_deals_and_redeals_on_checkpoint(tmp_p
         "hookEventName": "PreToolUse",
         "toolCall": {"name": "run_command", "args": {"CommandLine": "pytest"}},
     }) == {"decision": "allow"}
+
+
+async def test_antigravity_read_file_and_cat_confirm_multipart_watch_deliveries(
+    tmp_path: Path, comms: Comms, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Multi-part watch exports (`read-file`) confirm via Antigravity `read_file` (even beside
+    a backgrounded sibling `run_command`) and via `run_command` `cat`."""
+    comms.registry.declare(ExternalThread("claude-ai", frozenset(), Checkout(comms.root)))
+    comms.registry.declare(NativeThread("sender", frozenset(), Checkout(comms.root)))
+    store = ConnectorStore.at(tmp_path / "auth")
+    port = unused_port()
+    connector = Connector(store, f"http://127.0.0.1:{port}", comms.root)
+
+    conv_id = "cccccccc-dddd-eeee-ffff-111111111111"
+    transcript = (
+        tmp_path
+        / ".gemini/antigravity-cli/brain"
+        / conv_id
+        / ".system_generated/logs/transcript.jsonl"
+    )
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text(_sample_antigravity_lines()[0] + "\n", encoding="utf-8")
+
+    # Indented multi-line bodies exceed one inline Monitor event and export to private files.
+    body_read_file = "\n".join([
+        "Multi-part report read via read_file:",
+        "  - item one with enough text to force file export",
+        "",
+        "  - item two after a blank line",
+        "final line of read_file message",
+    ])
+    body_cat = "\n".join([
+        "Multi-part report read via run_command cat:",
+        "  - indented line one",
+        "  - indented line two",
+        "final line of cat message",
+    ])
+
+    async with TestServer(connector.application(), port=port) as server:
+        async with TestClient(server) as client:
+            with store.granted("test") as token:
+                resp = await client.post(
+                    "/mcp",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {"name": "comms_watch", "arguments": {"fork": {"name": "agy-multipart"}}},
+                    },
+                )
+                reply = await resp.json()
+                assert not reply["result"]["isError"], reply
+                url = str(client.make_url(URL(reply["result"]["structuredContent"]["url"]).path))
+
+                exports_dir = tmp_path / "messages"
+                watch = asyncio.create_task(
+                    InboxSocket(
+                        url,
+                        exports_dir,
+                        AntigravityFollowedTranscript(transcript),
+                    ).carried()
+                )
+                try:
+                    await asyncio.sleep(0.2)
+                    msg_read = comms.messaging.send("sender", "agy-multipart", body_read_file).message
+                    msg_cat = comms.messaging.send("sender", "agy-multipart", body_cat).message
+
+                    export_read = exports_dir / f"{msg_read.seq}-{msg_read.message_id}.txt"
+                    export_cat = exports_dir / f"{msg_cat.seq}-{msg_cat.message_id}.txt"
+                    async with asyncio.timeout(15):
+                        while not (export_read.is_file() and export_cat.is_file()):
+                            capsys.readouterr()
+                            await asyncio.sleep(0.05)
+
+                    read_lines = export_read.read_text(encoding="utf-8").splitlines()
+                    numbered = "\n".join(f"{idx}: {line}" for idx, line in enumerate(read_lines, 1))
+                    cat_raw = export_cat.read_text(encoding="utf-8")
+
+                    # Turn 1: backgrounded run_command (wake-on) in parallel with read_file.
+                    steps = [
+                        {
+                            "step_index": 20,
+                            "source": "MODEL",
+                            "type": "PLANNER_RESPONSE",
+                            "status": "DONE",
+                            "created_at": "2026-11-25T18:10:00Z",
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "name": "run_command",
+                                    "args": {
+                                        "CommandLine": json.dumps("agent-comms-inbox-watch --wait-log /tmp/w.log"),
+                                        "IsDaemon": "false",
+                                    },
+                                },
+                                {
+                                    "name": "read_file",
+                                    "args": {"Path": json.dumps(str(export_read))},
+                                },
+                            ],
+                        },
+                        {
+                            "step_index": 21,
+                            "source": "MODEL",
+                            "type": "GENERIC",
+                            "status": "RUNNING",
+                            "created_at": "2026-11-25T18:10:01Z",
+                            "content": (
+                                "Created At: 2026-11-25T18:10:01-05:00\n"
+                                "Tool is running as a background task with task id: conv/task-21"
+                            ),
+                        },
+                        {
+                            "step_index": 22,
+                            "source": "MODEL",
+                            "type": "GENERIC",
+                            "status": "DONE",
+                            "created_at": "2026-11-25T18:10:02Z",
+                            "content": (
+                                "Created At: 2026-11-25T18:10:01-05:00\n"
+                                "Completed At: 2026-11-25T18:10:02-05:00\n"
+                                f"Showing lines 1-{len(read_lines)} of {len(read_lines)}\n"
+                                f"{numbered}"
+                            ),
+                        },
+                        # Turn 2: run_command cat of the second export file.
+                        {
+                            "step_index": 23,
+                            "source": "MODEL",
+                            "type": "PLANNER_RESPONSE",
+                            "status": "DONE",
+                            "created_at": "2026-11-25T18:10:05Z",
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "name": "run_command",
+                                    "args": {"CommandLine": json.dumps(f"cat {export_cat}")},
+                                },
+                            ],
+                        },
+                        {
+                            "step_index": 24,
+                            "source": "MODEL",
+                            "type": "GENERIC",
+                            "status": "DONE",
+                            "created_at": "2026-11-25T18:10:06Z",
+                            "content": (
+                                "Created At: 2026-11-25T18:10:05-05:00\n"
+                                "Completed At: 2026-11-25T18:10:06-05:00\n"
+                                "Command exited with code 0.\n\n"
+                                f"Command output:\n{cat_raw}"
+                            ),
+                        },
+                    ]
+                    with transcript.open("a", encoding="utf-8") as fh:
+                        for step in steps:
+                            fh.write(json.dumps(step) + "\n")
+
+                    lookup = comms.registry.require("agy-multipart").incarnation.require_recorded().lookup
+                    async with asyncio.timeout(15):
+                        while True:
+                            with comms.registry.store.coordinator_reader.reader_snapshot() as db:
+                                r1 = HarnessDelivery.select(
+                                    db, bridge=RemoteWatchHistory,
+                                    recipient_lookup=lookup, message_id=msg_read.message_id,
+                                )
+                                r2 = HarnessDelivery.select(
+                                    db, bridge=RemoteWatchHistory,
+                                    recipient_lookup=lookup, message_id=msg_cat.message_id,
+                                )
+                            if (
+                                any(row.outcome is DeliveredOutcome and isinstance(row.monitor, ObservedMonitor) for row in r1)
+                                and any(row.outcome is DeliveredOutcome and isinstance(row.monitor, ObservedMonitor) for row in r2)
+                            ):
+                                break
+                            await asyncio.sleep(0.05)
+                finally:
+                    watch.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await watch
