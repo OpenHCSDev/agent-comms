@@ -31,7 +31,7 @@ from agent_comms.coordination.tables.executions import (
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId
 from agent_comms.nominal.lifecycle_capability import Failed
-from agent_comms.waking.wake_policy import FullWake, MessageAudience
+from agent_comms.waking.wake_policy import BoundedTriageWake, FullWake, MessageAudience
 from bus_record_fixture import OWNER_LOOKUP
 
 
@@ -186,3 +186,12 @@ def test_original_target_and_receipt_legality_is_owned_by_current_variants():
             FieldCodec.decode(ResponseState, damaged)
     with pytest.raises(ValueError):
         FieldCodec.decode(ResponseState, {**FieldCodec.encode(SilentResponse()), "seq": 1})
+
+
+def test_bound_assignment_projects_decision_verdict_and_binding_over_unengaged_defaults():
+    engaged = EngagedAssignment.build(BoundedTriageWake(), "execution-1", "requester")
+    assert engaged.mode == BoundedTriageWake()
+    assert engaged.verdict == "engage"
+    assert engaged.execution_id == "execution-1"
+    assert engaged.exact_target == "requester"
+    assert EngagedAssignment.load(BoundedTriageWake(), "engage", "execution-1", "requester") == engaged
