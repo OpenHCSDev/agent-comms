@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import ast
 import copy
+import hashlib
 import re
 from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from functools import cached_property
+from itertools import batched
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, ClassVar, cast, get_args, get_origin
 
@@ -187,6 +189,8 @@ class MainTree:
             source = content.decode()
             yield MainModule(name, source, ast.parse(source, filename=name))
 
+    blob_batch_size: ClassVar[int] = 128
+
     def module_bindings(self, paths: tuple[str, ...],
                         roots: tuple[str, ...]) -> Iterator[ModuleBindings]:
         """Per-blob declaration facts under their import roots, parsed only as requested."""
@@ -194,15 +198,14 @@ class MainTree:
         fresh = tuple((blob, name) for blob, name in blobs
                       if (roots, name) not in self.bindings
                       or not self.bindings[roots, name].retained(self))
-        contents = dict(zip((name for _, name in fresh),
-                            Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh)),
-                            strict=True))
-        for blob, name in blobs:
-            if name in contents:
-                tree = self.parse(name, blob, contents[name])
+        for batch in batched(fresh, self.blob_batch_size):
+            contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in batch))
+            for (blob, name), content in zip(batch, contents, strict=True):
+                tree = self.parse(name, blob, content)
                 key = (roots, name)
                 if key not in self.bindings or not self.bindings[key].retained(self):
                     self.bind(roots, name, blob, tree)
+        for _, name in blobs:
             yield self.bindings[roots, name]
 
     shared_roots: ClassVar[tuple[str, ...]] = ("src",)
@@ -233,11 +236,12 @@ class MainTree:
         blobs = self.selected(paths)
         fresh = tuple((blob, name) for blob, name in blobs
                       if name not in self.facts or not self.facts[name].retained(self))
-        contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh))
-        for (blob, name), content in zip(fresh, contents, strict=True):
-            tree = self.parse(name, blob, content)
-            if name not in self.facts or not self.facts[name].retained(self):
-                self.facts[name] = SourceFacts.of(name, blob, tree)
+        for batch in batched(fresh, self.blob_batch_size):
+            contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in batch))
+            for (blob, name), content in zip(batch, contents, strict=True):
+                tree = self.parse(name, blob, content)
+                if name not in self.facts or not self.facts[name].retained(self):
+                    self.facts[name] = SourceFacts.of(name, blob, tree)
         for _, name in blobs:
             yield self.facts[name]
 
@@ -866,7 +870,7 @@ class SourceScan(ClassChecks):
         super().visit(node)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SourceFacts:
     """One blob's whole-module facts that ``src``-wide evidence reads, from one parse: no tree
     keeps syntax, and the facts carry to later trees while the path holds this blob."""
@@ -941,7 +945,7 @@ class ParentsShared(MainEvidence):
         return "two members each for " + " ".join(named) + " on main"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class QualifiedName:
     """A module or class as Python imports it, one part per dotted segment."""
 
@@ -979,7 +983,7 @@ class QualifiedName:
         return ".".join(self.parts)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Declaration:
     """One declaring statement on main and the module path that holds it, so two declarations
     spelled alike stay two."""
@@ -990,12 +994,12 @@ class Declaration:
         return any(PurePosixPath(self.path).is_relative_to(path) for path in paths)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MemberAnswer:
-    """The exact location-free AST comparison answer, not the statement that supplied it."""
+    """The exact location-free AST comparison digest, not the statement that supplied it."""
 
     line: int
-    shape: str
+    shape: bytes
 
 
 class RosterValue(MroDispatch):
@@ -1102,7 +1106,7 @@ class LiteralRoster(MemberRoster):
         return MemberRoster(self.elements)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BodyAssignment:
     line: int
     targets: tuple[str, ...]
@@ -1118,7 +1122,7 @@ class BodyAssignment:
                 yield cls(statement.lineno, (ast.unparse(target),), RosterValue.of(value))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DeclaredClass(Declaration):
     name: str
     bases: tuple[QualifiedName, ...]
@@ -1136,7 +1140,7 @@ class DeclaredClass(Declaration):
                          for bound in BodyAssignment.of(statement)))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DeclaredFunction(Declaration):
     """A function's declaration location, never its deferred executable body."""
 
@@ -1376,7 +1380,10 @@ class ClassAnswers(ast.NodeVisitor):
 
     def record(self, name: str, member: ast.stmt) -> None:
         if name not in self.per_class:
-            self.found[name] = MemberAnswer(member.lineno, ast.dump(member))
+            self.found[name] = MemberAnswer(
+                member.lineno,
+                hashlib.blake2b(ast.dump(member).encode(), digest_size=16).digest(),
+            )
 
     def generic_visit(self, node: ast.AST) -> None:
         """Only the body's own statements declare members."""

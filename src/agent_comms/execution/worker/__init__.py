@@ -2,6 +2,7 @@
 
 This package holds only what the host sets on itself, so a launcher can import it and
 name the worker without importing the bus the worker serves."""
+import ctypes
 import os
 import resource
 import sys
@@ -11,6 +12,49 @@ OWNER_NICENESS = 10
 
 # How long a thread running Python keeps the GIL while another thread waits for it.
 GIL_SWITCH_INTERVAL = 0.0002
+
+# Linux glibc mallopt parameter capping per-thread arenas on the shared control host.
+GLIBC_M_ARENA_MAX = -8
+WORKER_ALLOCATOR_ARENAS = 2
+_LIBC: ctypes.CDLL | None = None
+
+
+def _glibc() -> ctypes.CDLL | None:
+    global _LIBC
+    if sys.platform != "linux":
+        return None
+    if _LIBC is None:
+        try:
+            _LIBC = ctypes.CDLL("libc.so.6")
+        except OSError:
+            return None
+    return _LIBC
+
+
+def limit_allocator_arenas() -> None:
+    """Cap glibc arenas before worker pool threads spawn so transient spikes stay bounded.
+
+    Without a cap, each asyncio pool thread acquires its own 64 MiB glibc arena and keeps
+    freed pages resident after a heartbeat pass even when live Python objects are tiny.
+    """
+    libc = _glibc()
+    if libc is None:
+        return
+    try:
+        libc.mallopt(GLIBC_M_ARENA_MAX, WORKER_ALLOCATOR_ARENAS)
+    except (AttributeError, OSError):
+        return
+
+
+def trim_allocator_heap() -> None:
+    """Return free glibc heap pages to the OS after a large periodic pass."""
+    libc = _glibc()
+    if libc is None:
+        return
+    try:
+        libc.malloc_trim(0)
+    except (AttributeError, OSError):
+        return
 
 
 def lower_priority() -> None:

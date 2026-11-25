@@ -14,6 +14,7 @@ from agent_comms.coordination.service_passes import ServicePassStore, TeamPass
 from agent_comms.execution.child_process import ReadWork
 from agent_comms.execution.turn_digests import OrderEditCountReadings
 from agent_comms.execution.watch_passes import PreparedWatchPass
+from agent_comms.execution.worker import trim_allocator_heap
 from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.messaging.revision_views import OwedAnswerView
 from agent_comms.planning.held_orders import HeldOrders
@@ -228,6 +229,7 @@ class TeamBoardAcquisition(
         self._answer_cuts = tuple(cuts)
         self.finish_pass()
         self.edit_count_readings.finish_pass()
+        trim_allocator_heap()
         return tuple(observed)
 
 
