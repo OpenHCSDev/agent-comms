@@ -813,7 +813,7 @@ class CoreReadAnswered(ReadOutcome):
         # and retirement cannot settle a waiter it can no longer find.
         try:
             value = FieldCodec.decode(pending.asked.operation.result_type(), self.wire)
-        except Exception as undecodable:
+        except (ValueError, TypeError, KeyError) as undecodable:
             process.reads.pop(self.request_id, None)
             pending.waiter.set_exception(undecodable)
             raise

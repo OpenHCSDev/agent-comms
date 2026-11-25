@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import sqlite3
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -321,7 +322,7 @@ class AntigravityRuleGate(DealtRuleGate):
         try:
             with client_wire() as comms:
                 return comms.registry.snapshot().team_project.unique_repositories()
-        except Exception:
+        except (OSError, ValueError, RuntimeError, sqlite3.Error):
             return ()
 
     def in_team_workspace(self, repos: tuple[Repo, ...]) -> bool:

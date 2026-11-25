@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 import time
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -15,7 +16,7 @@ from typing import Annotated
 from agent_comms.bus_context import BusViews, ThreadPresentationBatch
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.context_segments.retained import RetainedSegment
-from agent_comms.coordination.errors import StaleRevision
+from agent_comms.coordination.errors import DeferredRead, StaleRevision
 from agent_comms.errors import UnknownChannelError
 from agent_comms.execution.transcript_sources import TranscriptCursor
 from agent_comms.input_disposition import InputDispositions, ScopedInputDispositions
@@ -231,14 +232,14 @@ class ThreadPresentations(
                 if not captured.read.identity.thread.incarnation.current(self.snapshot):
                     raise StaleRevision("Thread source incarnation changed during presentation")
                 prepared[name] = ordinary, captured, captured.notification_selection()
-            except Exception as error:
+            except (OSError, sqlite3.Error, ValueError, RuntimeError, KeyError, DeferredRead) as error:
                 reads[name] = partial(self.failed_read, error)
         if not prepared:
             return reads
         try:
             held = self.prepare(selection
                                 for _ordinary, _captured, selection in prepared.values())
-        except Exception as error:
+        except (OSError, sqlite3.Error, ValueError, RuntimeError, KeyError, DeferredRead) as error:
             reads.update((name, partial(self.failed_read, error)) for name in prepared)
         else:
             reads.update((

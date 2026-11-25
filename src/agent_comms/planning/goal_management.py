@@ -14,7 +14,7 @@ from agent_comms.context_segments.wake_values import (
     WakeWorkContext,
     WakeWorkSource,
 )
-from agent_comms.coordination.errors import StaleFence
+from agent_comms.coordination.errors import DeferredRead, StaleFence
 from agent_comms.errors import (
     BirthChangedError,
     RelationViolationError,
@@ -270,7 +270,7 @@ class GoalPublicationRead:
                 self.goals.agents, self.turns,
             )
             return GoalChange.observed(current, previous)
-        except Exception as error:
+        except (OSError, sqlite3.Error, ValueError, RuntimeError, KeyError, DeferredRead) as error:
             return GoalReadFailed(error)
 
 

@@ -1571,7 +1571,7 @@ class TableSchema(ABC):
             if SQLiteColumnShape.only_constraints_differ(db, row):
                 try:
                     row.rebuild(db)
-                except Exception as carry_error:
+                except (sqlite3.Error, ValueError, TypeError, OSError) as carry_error:
                     raise type(carry_error)(
                         f"carry rebuild failed on {row.declared_name}: {carry_error}"
                     ) from carry_error
