@@ -356,7 +356,7 @@ def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):
     fork = command(comms, "judge", "show", "--fork", "review-fork")
     for result in (own, fork):
         assert result.returncode == 0, result.stderr
-        assert result.stdout.splitlines()[-1] == "1 unjudged"
+        assert result.stdout.splitlines()[-2:] == ["1 unjudged", "NO CHANGE show: thread_filter=all"]
         assert "parent-edit-0" in result.stdout
 
 
@@ -669,7 +669,7 @@ def test_ambiguous_pre_pr_work_never_picks_latest(edit_sources, tmp_path):
     shown = command(comms, "judge", "show", "--as", "colleague")
     assert shown.returncode == 0, shown.stderr
     assert calls[0][0] not in shown.stdout and calls[1][0] not in shown.stdout
-    assert shown.stdout.splitlines()[-1] == "0 unjudged"
+    assert shown.stdout.splitlines()[-2:] == ["0 unjudged", "NO CHANGE show: thread_filter=all"]
     assert all(not todo.judged_calls for todo in comms.goals.todos.board_history())
 
 

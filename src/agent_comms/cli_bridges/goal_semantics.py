@@ -16,54 +16,42 @@ from typing import ClassVar
 from agent_comms.comms import Comms
 from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
+from agent_comms.planning.goal_states import GoalState
 from agent_comms.registry.threads import Thread
 from agent_comms.storage.store_files import AtomicFile
 from agent_comms.task_attachments.owner_notices import GoalWakeNotice
 
 
-@dataclass(frozen=True, slots=True)
-class GoalCursorState:
+class GoalCursorState(DeclaredFamily, affix="GoalCursor"):
     """The last bus goal state surfaced to an external CLI session."""
-
-    thread: str = ""
-    goal_id: str = ""
-    revision: int = 0
-    state: str = ""
 
     @classmethod
     def read(cls, path: Path) -> GoalCursorState:
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return cls()
-        if not isinstance(raw, dict):
-            return cls()
-        thread = raw.get("thread")
-        goal_id = raw.get("goal_id")
-        revision = raw.get("revision")
-        state = raw.get("state")
-        if (
-            not isinstance(thread, str)
-            or not isinstance(goal_id, str)
-            or isinstance(revision, bool)
-            or not isinstance(revision, int)
-            or not isinstance(state, str)
-        ):
-            return cls()
-        return cls(thread=thread, goal_id=goal_id, revision=revision, state=state)
+            return FieldCodec.decode(cls, FieldCodec.parse(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError, TypeError):
+            return EmptyGoalCursor()
 
     def write(self, path: Path) -> None:
-        AtomicFile(path).write_text(
-            json.dumps(
-                {
-                    "thread": self.thread,
-                    "goal_id": self.goal_id,
-                    "revision": self.revision,
-                    "state": self.state,
-                },
-                sort_keys=True,
-            )
-        )
+        AtomicFile(path).write_text(json.dumps(FieldCodec.encode(self), sort_keys=True))
+
+
+@dataclass(frozen=True, slots=True)
+class EmptyGoalCursor(GoalCursorState):
+    """No bus goal has been surfaced for this thread yet."""
+
+    thread: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class TrackedGoalCursor(GoalCursorState):
+    """A concrete bus goal revision and state surfaced to an external CLI session."""
+
+    thread: str
+    goal_id: GoalId
+    revision: int
+    state: GoalState
 
 
 class WakesViaBusGoal:
@@ -125,11 +113,11 @@ class InjectsGoalContext:
             todos = goal.order.todos(comms.goals, thread.incarnation, goal.id)
             text = goal.order.goal_text(goal, todos)
             progress = goal.order.progress(goal, todos)
-            cursor = GoalCursorState(
+            cursor: GoalCursorState = TrackedGoalCursor(
                 thread=thread.name,
-                goal_id=str(goal.id),
+                goal_id=goal.id,
                 revision=goal.revision,
-                state=goal.state.declared_name,
+                state=goal.state,
             )
             lines = [
                 f"Bus goal for `{thread.name}` ({goal.id}, rev {goal.revision}, "
@@ -139,7 +127,7 @@ class InjectsGoalContext:
                 lines.append(f"Progress: {progress}")
             lines.append(cls.goal_sync_guidance(thread.name))
             return cursor, "\n".join(lines)
-        cursor = GoalCursorState(thread=thread.name, goal_id="", revision=0, state="none")
+        cursor = EmptyGoalCursor(thread=thread.name)
         return cursor, f"No bus goal set on `{thread.name}`. {cls.goal_sync_guidance(thread.name)}"
 
 
