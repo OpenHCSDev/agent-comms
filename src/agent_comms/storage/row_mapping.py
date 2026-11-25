@@ -11,9 +11,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Hashable, Iterable, Iterator, Mapping, MutableMapping, Set
 from dataclasses import dataclass, replace
 from types import MappingProxyType
-from typing import NoReturn, Self, cast
+from typing import ClassVar, NoReturn, Self, cast
 
 from immutables import Map
+from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +28,55 @@ class RowSlot[Value]:
 
 class SnapshotRows[Key, Value](MutableMapping[Key, Value], ABC):
     """Rows whose owner supplies edit, snapshot, selection and change operations."""
+
+    _boundary: ClassVar[type[MroDispatch]]
+    _equality: ClassVar[type[MroDispatch]]
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        if SnapshotRows not in cls.__bases__:
+            return
+        root = cls
+
+        class _Boundary(MroDispatch):
+            @handles(root)
+            def _owned(values: SnapshotRows[object, object]) -> SnapshotRows[object, object]:
+                return values
+
+            @handles(object)
+            def _plain(values: Mapping[object, object]) -> SnapshotRows[object, object]:
+                return root._from_mapping(values)
+
+        class _Equality(MroDispatch):
+            @handles(root)
+            def _same(other: SnapshotRows[object, object], current: SnapshotRows[object, object]) -> bool:
+                return not current.differing(other)
+
+            @handles(object)
+            def _mapping(other: Mapping[object, object], current: SnapshotRows[object, object]) -> bool:
+                return current._equals_plain_mapping(other)
+
+        cls._boundary = _Boundary
+        cls._equality = _Equality
+
+    @classmethod
+    def owning(cls, values: Mapping[Key, Value]) -> Self:
+        """Admit a plain mapping once; an owned revision already carries its evidence."""
+        return cast(Self, cls._boundary.handler_for(type(values))(values))
+
+    @classmethod
+    @abstractmethod
+    def _from_mapping(cls, values: Mapping[Key, Value]) -> Self: ...
+
+    def _equals_plain_mapping(self, other: Mapping[object, object]) -> bool:
+        return len(self) == len(other) and all(
+            key in other and self[key] == other[key] for key in self
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Mapping):
+            return NotImplemented
+        return bool(self._equality.handler_for(type(other))(other, self))
 
     @abstractmethod
     def copy(self) -> SnapshotRows[Key, Value]: ...
@@ -54,10 +104,7 @@ class RowMapping[Key: Hashable, Value](SnapshotRows[Key, Value]):
         self._next_position = len(values)
 
     @classmethod
-    def owning(cls, values: Mapping[Key, Value]) -> RowMapping[Key, Value]:
-        """Admit a plain mapping once; an owned revision already carries its evidence."""
-        if isinstance(values, RowMapping):
-            return values
+    def _from_mapping(cls, values: Mapping[Key, Value]) -> Self:
         return cls(values)
 
     def __getitem__(self, key: Key) -> Value:
@@ -166,11 +213,7 @@ class RowMapping[Key: Hashable, Value](SnapshotRows[Key, Value]):
             key=lambda key: (self._root[key] if key in self else earlier._root[key]).position,
         ))
 
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, RowMapping):
-            return not self.differing(other)
-        if not isinstance(other, Mapping):
-            return NotImplemented
+    def _equals_plain_mapping(self, other: Mapping[object, object]) -> bool:
         return len(self) == len(other) and all(
             key in other and slot.value == other[key]
             for key, slot in self._root.items()

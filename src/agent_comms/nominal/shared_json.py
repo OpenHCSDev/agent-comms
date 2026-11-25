@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field
 
+from metaclass_registry.mro_dispatch import MroDispatch, handles
 from pydantic import JsonValue
 from typing_extensions import TypeForm
 
@@ -63,13 +64,29 @@ class JsonObject(JsonNode, declared_name="object"):
 
 
 @dataclass
-class JsonCapture:
+class JsonCapture(MroDispatch):
     """Decode the raw JSON boundary once; aliases refer to earlier completed nodes."""
 
     nodes: list[JsonNode] = field(default_factory=list)
     sources: dict[int, tuple[object, int]] = field(default_factory=dict)
     active: set[int] = field(default_factory=set)
     interned: dict[tuple[object, ...], int] = field(default_factory=dict)
+
+    @handles(CapturedJson)
+    def _captured_node(self, value: JsonValue) -> JsonNode:
+        return JsonLiteral(value)
+
+    @handles(dict)
+    def _object_node(self, value: dict[str, JsonValue]) -> JsonNode:
+        return JsonObject({key: self.capture(item) for key, item in value.items()})
+
+    @handles(list)
+    def _array_node(self, value: list[JsonValue]) -> JsonNode:
+        return JsonArray(tuple(self.capture(item) for item in value))
+
+    @handles(object)
+    def _literal_node(self, value: JsonValue) -> JsonNode:
+        return JsonLiteral(value)
 
     def capture(self, value: JsonValue) -> int:
         identity = id(value)
@@ -79,14 +96,7 @@ class JsonCapture:
             raise MalformedRecord("A JSON document cannot contain a cycle")
         self.active.add(identity)
         try:
-            if isinstance(value, CapturedJson):
-                node = JsonLiteral(value)
-            elif isinstance(value, dict):
-                node = JsonObject({key: self.capture(item) for key, item in value.items()})
-            elif isinstance(value, list):
-                node = JsonArray(tuple(self.capture(item) for item in value))
-            else:
-                node = JsonLiteral(value)
+            node = self.handler_for(type(value))(self, value)
             key = node.content_key()
             if key in self.interned:
                 index = self.interned[key]

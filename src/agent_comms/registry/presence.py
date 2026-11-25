@@ -64,9 +64,7 @@ class PresenceRows(SnapshotRows[str, float]):
         self._names: RowMapping[str, object] = RowMapping()
 
     @classmethod
-    def owning(cls, values: Mapping[str, float]) -> PresenceRows:
-        if isinstance(values, PresenceRows):
-            return values
+    def _from_mapping(cls, values: Mapping[str, float]) -> Self:
         result = cls()
         result._values = RowMapping.owning(values).copy()
         result._scope = result._values.keyset()
@@ -129,13 +127,6 @@ class PresenceRows(SnapshotRows[str, float]):
         return frozenset(name for name in candidates
                          if (name in self) != (name in earlier)
                          or (name in self and self[name] != earlier[name]))
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, PresenceRows):
-            return not self.differing(other)
-        if not isinstance(other, Mapping):
-            return NotImplemented
-        return len(self) == len(other) and all(name in other and self[name] == other[name] for name in self)
 
     def presented(self, captured: PresenceCapture, scope: RowKeys[str]) -> PresenceRows:
         # Presence writes only add rows. A continuing file therefore needs coverage
