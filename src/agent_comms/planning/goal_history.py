@@ -15,20 +15,17 @@ from agent_comms.nominal.field_codec import (
     FieldCodec,
     HistoryExclude,
     MalformedRecord,
-    WireOmitDefault,
 )
 from agent_comms.planning.goal_ledger import FailedTurnEvidence
 from agent_comms.planning.goal_scope import GoalScope
 from agent_comms.planning.goals import GoalDeclaration, NoGoal
-from agent_comms.planning.owner_requests import NoRequestRevision, RequestRevision
+from agent_comms.planning.recorded_goal_revision import RecordedGoalRevision, RevisionKind
 from agent_comms.registry.registry_privacy import PrivateRegistry
 from agent_comms.storage.locked_store import DurableFile
 from agent_comms.storage.store_files import AtomicFile
 from agent_comms.storage.typed_table import (
-    Column,
     DurableTables,
     Index,
-    JsonStorage,
     ReconciledFile,
     RowidSequenced,
 )
@@ -98,10 +95,6 @@ class UncertainEntry(JournalState):
     """The registry proves neither endpoint of the intent."""
 
 
-class RevisionKind(DeclaredFamily, affix="Revision"):
-    """The declared reason a goal revision entered the journal."""
-
-
 class TransitionRevision(RevisionKind):
     """A journaled change from one goal declaration to another."""
 
@@ -112,28 +105,6 @@ class BaselineRevision(RevisionKind):
 
 class ObservedGapRevision(RevisionKind):
     """Observed endpoints without an attested intervening transition."""
-
-
-@dataclass(frozen=True, kw_only=True)
-class RequestHistory:
-    """Moved request data stays linked to its original history observation."""
-
-    request_before: Annotated[
-        RequestRevision, Column(storage=JsonStorage, nullable=True), WireOmitDefault(),
-    ] = NoRequestRevision()
-    request_after: Annotated[
-        RequestRevision, Column(storage=JsonStorage, nullable=True), WireOmitDefault(),
-    ] = NoRequestRevision()
-
-
-@dataclass(frozen=True)
-class RecordedGoalRevision(RequestHistory):
-    """A history entry's public fields; its owner key and journal state stay in the store."""
-    sequence: Annotated[int, Column(primary_key=True)]
-    kind: type[RevisionKind]
-    observed_at: float
-    before: Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
-    after: Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
 
 
 class JournalObserver(DeclaredFamily, affix="Observer"):
