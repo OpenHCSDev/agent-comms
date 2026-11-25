@@ -751,6 +751,8 @@ def test_antigravity_rule_gate_injects_on_start_and_recovers_checkpoint_compacti
     assert all(len(step.encode("utf-8")) <= 40_000 for step in injected_steps[:-1])
     joined_start = "\n".join(injected_steps)
     assert "Fix Antigravity compaction dealing." in injected_steps[-1]
+    assert "No audit is required" in injected_steps[-1]
+    assert "SessionAudit" not in injected_steps[-1]
     assert real_sources[0].read_text(encoding="utf-8").splitlines()[0] in joined_start
     assert real_sources[-1].read_text(encoding="utf-8").splitlines()[0] in joined_start
     assert handle_hook(pre_tool_payload) == {"decision": "allow"}

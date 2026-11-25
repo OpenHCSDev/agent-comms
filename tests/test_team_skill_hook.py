@@ -181,7 +181,8 @@ def test_light_prime_executes_through_the_resident_request(
     start = DeckStart.decode(request.payload)
     assert start.current().trigger == LightPrime.trigger()
     assert start.current().paths == tuple(path.resolve() for path in LightReader.sources())
-    assert str(start.audit) in reply.stdout
+    assert str(start.current().paths[0]) in reply.stdout
+    assert "No audit is required" in reply.stdout
 
 
 def unbound_session_start(transcript, source):
@@ -861,9 +862,15 @@ def test_the_full_audit_and_the_owners_words_open_the_gate(capsys, tmp_path, tea
 
 def test_the_deal_prints_its_template_once(
         tmp_path, capsys, team_session, team_bus, team_binding):
-    """The hook's order prints the one template; the first refusal does not print it again."""
+    """When audit is off no audit template is printed; when audit is required the deal prints
+    the template once and the first refusal does not print it again."""
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    off_said = start.take(team_bus, team_binding)
+    assert not any("{\n" in part for part in off_said)
+
+    start.configure(RuleGateSettings(audit=RequiredRuleCheckPolicy, audit_confirmation=OffRuleCheckPolicy))
     said = DeckStart.decode(hook_record(transcript, "SessionStart")).take(team_bus, team_binding)
     template = next(part for part in said if "{\n" in part)
     assert {"owner_words", "meant", "probes"} <= json.loads(template[template.index("{\n"):]).keys()
@@ -1045,7 +1052,8 @@ def test_a_subagent_compaction_deals_the_subagent_not_its_session(tmp_path, team
     assert result.returncode == 0, result.stderr
     assert main.audit.exists() and main.record.read_bytes() == dealt
     sub = DeckStart.of({**hook_record(transcript, "SessionStart"), "agent_id": "a9"})
-    assert sub.record.exists() and str(sub.audit) in result.stdout
+    assert sub.record.exists() and sub.audit.exists()
+    assert str(sub.current().paths[0]) in result.stdout
 
 
 def test_a_compaction_deal_opens_with_when_it_compacted(tmp_path, team_session, team_bus, team_binding):

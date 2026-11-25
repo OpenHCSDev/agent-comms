@@ -261,7 +261,7 @@ class DealDelivery(DeclaredFamily, affix="Delivery"):
             f"Read each of these {len(sources)} files in full with the Read tool before any other"
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them. Read all of them in dealt order"
-            f" in one parallel call, then answer the audit at {audit}: reading alone is passive."
+            f" in one parallel call. {record.audit.audit_step(audit)}"
             f" {self.open_meanwhile} This order is given once"
             " per session start or compaction; a short slice of them comes back inline every few"
             " tool calls.\n" + "\n".join(str(source) for source in sources)
@@ -346,7 +346,7 @@ class InjectedDelivery(DealDelivery):
             f"These {len(sources)} dealt files were injected directly into your system messages"
             " above, in dealt order, and count as read: they are every rule you follow and the"
             " sources they come from. Do not re-read them with a tool unless the gate names a"
-            f" file that changed. If an audit is required, answer it at {audit}."
+            f" file that changed. {record.audit.audit_step(audit)}"
             f" {self.open_meanwhile}"
         )
 
@@ -368,8 +368,8 @@ class SystemPromptDelivery(PreparedPrompt, DealDelivery):
         sources = record.paths
         return (
             f"These {len(sources)} files are in your system prompt, in this order, and count as"
-            " read: they are every rule you follow and the sources they come from. Before any"
-            f" other action, answer every rule in the audit at {audit}. {self.open_meanwhile} A"
+            " read: they are every rule you follow and the sources they come from."
+            f" {record.audit.audit_step(audit)} {self.open_meanwhile} A"
             " file that changed after your prompt was prepared is not covered: read that one with"
             " the Read tool. A short slice comes back inline every few tool calls.\n"
             + "\n".join(str(source) for source in sources)
@@ -675,6 +675,17 @@ class RuleCheckPolicy(DeclaredFamily, affix="RuleCheckPolicy"):
     def voice(cls, voice: Voice) -> Voice:
         return Mute()
 
+    @classmethod
+    def template(cls, deal: RuleDeal, due: AuditDue) -> str:
+        """When audit is off, omit the audit template so sessions do not write an unrequired audit."""
+        del deal, due
+        return ""
+
+    @classmethod
+    def audit_step(cls, audit: Path) -> str:
+        del audit
+        return "No audit is required; the gate is open once the dealt files are in context."
+
 
 class OffRuleCheckPolicy(RuleCheckPolicy):
     """Leave this check off without removing the dealt sources."""
@@ -695,6 +706,14 @@ class RequiredRuleCheckPolicy(RuleCheckPolicy):
     @classmethod
     def voice(cls, voice: Voice) -> Voice:
         return voice
+
+    @classmethod
+    def template(cls, deal: RuleDeal, due: AuditDue) -> str:
+        return deal.render_template_once(due)
+
+    @classmethod
+    def audit_step(cls, audit: Path) -> str:
+        return f"Before any other action, answer every rule in the audit at {audit}."
 
 
 class DealMode(DeclaredFamily, affix="DealMode"):
@@ -1303,6 +1322,10 @@ class RuleDeal(State, DealtCalls):
         return self.stem.with_suffix(".template-shown")
 
     def template_once(self, due: AuditDue) -> str:
+        """Render the audit template once per deal, only when this deal requires an audit."""
+        return self.current().audit.template(self, due)
+
+    def render_template_once(self, due: AuditDue) -> str:
         """The whole template once per deal: on 2026-10-30 a batch of 28 refused reads reprinted
         it 28 times, about 84k tokens, and the deal filled the context it was dealt to restore."""
         try:
