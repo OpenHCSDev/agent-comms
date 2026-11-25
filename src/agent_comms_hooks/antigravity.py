@@ -40,6 +40,18 @@ def _stem(payload: Mapping[str, object]) -> Path | None:
     return None
 
 
+def _workspace_key(payload: Mapping[str, object]) -> list[str]:
+    raw_cwd = payload.get("cwd")
+    cwd = str(Path(raw_cwd).expanduser()) if isinstance(raw_cwd, str) and raw_cwd else str(Path.cwd())
+    raw_ws = payload.get("workspacePaths")
+    workspaces = (
+        [str(Path(item).expanduser()) for item in raw_ws if isinstance(item, str) and item]
+        if isinstance(raw_ws, list | tuple)
+        else []
+    )
+    return [cwd, *workspaces]
+
+
 def _fast_path(payload: Mapping[str, object]) -> dict[str, object] | None:
     event = payload.get("hookEventName")
     if not isinstance(event, str) or event not in _FAST_EVENTS:
@@ -51,10 +63,19 @@ def _fast_path(payload: Mapping[str, object]) -> dict[str, object] | None:
     deal_path = stem.with_suffix(".deal.json")
     try:
         cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
-        deal_mtime_ns = deal_path.stat().st_mtime_ns
     except (OSError, json.JSONDecodeError):
         return None
-    if not isinstance(cursor, dict) or not cursor.get("gate_open"):
+    if not isinstance(cursor, dict):
+        return None
+    if cursor.get("bypass") is True and not deal_path.exists():
+        if cursor.get("workspace_key") == _workspace_key(payload):
+            return {"decision": "allow"} if event == "PreToolUse" else {}
+        return None
+    try:
+        deal_mtime_ns = deal_path.stat().st_mtime_ns
+    except OSError:
+        return None
+    if not cursor.get("gate_open"):
         return None
     if cursor.get("deal_mtime_ns") != deal_mtime_ns:
         return None
