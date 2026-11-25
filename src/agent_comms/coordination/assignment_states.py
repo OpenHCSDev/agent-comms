@@ -408,6 +408,10 @@ class AssignmentDecision:
         return self.decision.mode
 
     @property
+    def verdict(self):
+        return self.decision.verdict
+
+    @property
     def execution_id(self):
         return self.decision.execution_id
 
