@@ -175,9 +175,14 @@ class CatalogConfigOption(ConfigOption):
                 self.catalogs[key] = asyncio.create_task(self.discover(thread))
             catalog = self.catalogs[key]
             self.waiters[catalog] += 1
+        succeeded = False
+        cancelled = False
         try:
-            return await asyncio.shield(catalog)
+            result = await asyncio.shield(catalog)
+            succeeded = True
+            return result
         except asyncio.CancelledError:
+            cancelled = True
             # The shield keeps one waiter's cancellation from failing the others;
             # the last waiter to leave retires the discovery and reaps its child.
             if self.waiters[catalog] == 1:
@@ -186,12 +191,10 @@ class CatalogConfigOption(ConfigOption):
                     del self.catalogs[key]
                 await asyncio.gather(catalog, return_exceptions=True)
             raise
-        except Exception:
-            # A failed discovery is not a catalog to keep for the next form.
-            if self.catalogs.get(key) is catalog:
-                del self.catalogs[key]
-            raise
         finally:
+            if not succeeded and not cancelled and self.catalogs.get(key) is catalog:
+                # A failed discovery is not a catalog to keep for the next form.
+                del self.catalogs[key]
             self.waiters.subtract((catalog,))
             if not self.waiters[catalog]:
                 del self.waiters[catalog]
