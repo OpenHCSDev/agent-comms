@@ -49,6 +49,12 @@ class CpuRead(ReadRequest[CpuReply], declared_name="test_process_cpu_read"):
 
 
 @dataclass(frozen=True)
+class EpochRead(ReadRequest[CpuReply], declared_name="test_process_epoch_read"):
+    def posted(self, remote):
+        return {"produced_pid": os.getpid(), "checksum": remote.connection_epoch.value}
+
+
+@dataclass(frozen=True)
 class FailedRead(ReadRequest[CpuReply], declared_name="test_process_failed_read"):
     def posted(self, remote):
         raise ValueError("remote read failed")
@@ -149,6 +155,14 @@ def test_a_failed_read_remains_a_failure_and_does_not_retire_the_client(access):
     with pytest.raises(ValueError, match="remote read failed"):
         access.call(FailedRead())
     assert access.call(CpuRead()).produced_pid != os.getpid()
+
+
+def test_reset_connections_propagates_connection_epoch_to_read_workers(access):
+    before = access.call(EpochRead())
+    assert before.checksum == 0
+    access.reset_connections()
+    after = access.call(EpochRead())
+    assert after.checksum == 1
 
 
 def test_a_write_is_not_sent_to_a_child_or_replayed(access):

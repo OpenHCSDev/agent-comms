@@ -16,6 +16,7 @@ import aiohttp
 from aiohttp.abc import AbstractResolver, ResolveResult
 from yarl import URL
 
+from agent_comms.execution.child_process import Platform
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     Id128,
@@ -32,6 +33,7 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.storage.private_path import PrivateDirectoryRole, PrivateFileRole
 from agent_comms.storage.store_files import ExclusiveDirectoryAtomicFile
+from agent_comms.ui_model.observation_wire import WEBSOCKET_CONNECT_TIMEOUT
 
 
 class UiGrantId(Id128):
@@ -79,12 +81,26 @@ class HttpsMcpEndpoint(SingleFieldValue):
         """A connection to this endpoint's origin, which its validation made absolute."""
         match self.url.host:
             case str() as host:
-                return http.client.HTTPSConnection(
+                return ClientHttpsConnection(
                     host, self.url.port, context=context, timeout=timeout)
         raise MalformedRecord(f"The remote MCP endpoint {self.url} names no host.")
 
 
-class DialedConnection(http.client.HTTPSConnection):
+class ClientHttpsConnection(http.client.HTTPSConnection):
+    """An HTTPS client connection whose TCP socket detects half-open switches quickly."""
+
+    def connect_address(self) -> tuple[str, int]:
+        return (self.host, self.port)
+
+    def connect(self) -> None:
+        raw = socket.create_connection(
+            self.connect_address(), self.timeout, self.source_address,
+        )
+        Platform.current().configure_client_socket(raw)
+        self.sock = self._context.wrap_socket(raw, server_hostname=self.host)
+
+
+class DialedConnection(ClientHttpsConnection):
     """Dials one address while verifying the certificate of the name it was given.
 
     `http.client` resolves the host it verifies, which is the same name: on a tailnet whose
@@ -96,10 +112,8 @@ class DialedConnection(http.client.HTTPSConnection):
         super().__init__(host, port, **options)
         self.address = address
 
-    def connect(self) -> None:
-        raw = socket.create_connection((self.address, self.port), self.timeout,
-                                       self.source_address)
-        self.sock = self._context.wrap_socket(raw, server_hostname=self.host)
+    def connect_address(self) -> tuple[str, int]:
+        return (self.address, self.port)
 
 
 MCP_PATH = "/mcp"
@@ -149,9 +163,18 @@ class EndpointRoute(TaggedUnion, affix="Route"):
                    timeout: float) -> http.client.HTTPSConnection:
         """A connection to that endpoint by this route."""
 
-    @abstractmethod
-    def socket_session(self) -> aiohttp.ClientSession:
-        """The session an observation socket opens on, reaching the endpoint by this route."""
+    def socket_connector(self, *, ssl: ssl.SSLContext | None = None) -> aiohttp.TCPConnector:
+        """The TCP connector reaching the endpoint by this route."""
+        return aiohttp.TCPConnector(ssl=ssl if ssl is not None else True)
+
+    def socket_session(
+        self,
+        *,
+        timeout: aiohttp.ClientTimeout = WEBSOCKET_CONNECT_TIMEOUT,
+        ssl: ssl.SSLContext | None = None,
+    ) -> aiohttp.ClientSession:
+        """The session an observation or streamed request opens on, reaching the endpoint by this route."""
+        return aiohttp.ClientSession(connector=self.socket_connector(ssl=ssl), timeout=timeout)
 
     def reaches(self, address: str) -> bool:
         """Whether this route goes to that address, so a UI can tell that a profile it holds
@@ -167,9 +190,6 @@ class ResolvedRoute(NullMember, EndpointRoute):
     def connection(self, endpoint: HttpsMcpEndpoint, context: ssl.SSLContext,
                    timeout: float) -> http.client.HTTPSConnection:
         return endpoint.connection(context, timeout)
-
-    def socket_session(self) -> aiohttp.ClientSession:
-        return aiohttp.ClientSession()
 
 
 @dataclass(frozen=True)
@@ -187,9 +207,11 @@ class ReachedRoute(TaggedRecordMember, EndpointRoute):
                                         context=context, timeout=timeout)
         raise MalformedRecord(f"The remote MCP endpoint {endpoint.url} names no host.")
 
-    def socket_session(self) -> aiohttp.ClientSession:
-        return aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(resolver=PinnedResolver(self.address)))
+    def socket_connector(self, *, ssl: ssl.SSLContext | None = None) -> aiohttp.TCPConnector:
+        return aiohttp.TCPConnector(
+            resolver=PinnedResolver(self.address),
+            ssl=ssl if ssl is not None else True,
+        )
 
     def reaches(self, address: str) -> bool:
         return self.address == address

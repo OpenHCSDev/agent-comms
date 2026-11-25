@@ -30,9 +30,10 @@ def _initialize_remote(access: RemoteCoreAccess) -> None:
     _remote = access
 
 
-def _read_remote[R: ToolResult](request: ReadRequest[R]) -> R:
+def _read_remote[R: ToolResult](request: ReadRequest[R], generation: int = 0) -> R:
     # Select the transport implementation, not the parent's process dispatch.
     # The worker's profile still owns routing, credentials and retry semantics.
+    _remote.connection_epoch.advance_to(generation)
     return RemoteCoreAccess.call(_remote, request)
 
 
@@ -62,9 +63,9 @@ class RemoteReadProcess:
     def submit[T, **P](self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> Future[T]:
         return self.workers.submit(fn, *args, **kwargs)
 
-    def read[R: ToolResult](self, request: ReadRequest[R]) -> R:
+    def read[R: ToolResult](self, request: ReadRequest[R], generation: int = 0) -> R:
         with self._read_slots:
-            return self.submit(_read_remote, request).result()
+            return self.submit(_read_remote, request, generation).result()
 
     def decode[R](self, decode: Callable[[bytes], R], packet: bytes) -> R:
         return self.submit(decode, packet).result()
@@ -117,7 +118,7 @@ class ProcessRemoteCoreAccess(RemoteCoreAccess, MroDispatch):
 
     @handles(ReadRequest)
     def read_in_process[R: ToolResult](self, request: ReadRequest[R]) -> R:
-        return self.read_process.read(request)
+        return self.read_process.read(request, self.connection_epoch.value)
 
     @handles(ToolRequest)
     def call_in_place[R: ToolResult](self, request: ToolRequest[R]) -> R:
