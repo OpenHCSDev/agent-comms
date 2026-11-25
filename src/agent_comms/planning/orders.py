@@ -4039,9 +4039,7 @@ class HeadVerdict(HeadReview, declared_name=None):
     @classmethod
     def require_ok(cls, request: PullRequestHead) -> None:
         """The teammate's admin merge needs this exact head's recorded ok, nothing more."""
-        if not cls.allows_integration():
-            raise TodoError(
-                f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
+        raise TodoError(f'{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.')
 
     @contextmanager
     def recording(self, request: PullRequestHead, reviewer: str, subject: str) -> Iterator[None]:
@@ -4183,6 +4181,13 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
             raise TodoError(f"Source grows {growth.total:+d} code lines (limit {growth.limit}): "
                             f"{growth.listing()}. Delete the slop or accept with --growth.")
 
+    @classmethod
+    def require_ok(cls, request: PullRequestHead) -> None:
+        pass
+
+    def accepted_orderless_sources(self, record):
+        return (record.request,)
+
 
 @dataclass(frozen=True)
 class CarriedHeadVerdict(ReviewedHeadVerdict):
@@ -4302,7 +4307,7 @@ class HeadOrderLink(HeadReviewRelation, declared_name=None):
 @dataclass(frozen=True)
 class NoHeadOrder(HeadReviewOrder, HeadOrderLink):
     def accepted_orderless_sources(self, record: HeadReviewRecord) -> tuple[PullRequestHead, ...]:
-        return (record.request,) if record.verdict.allows_integration() else ()
+        return record.verdict.accepted_orderless_sources(record)
 
     def rejected(self, goals: ProblemGoals, record: HeadReviewRecord) -> None:
         """There is no holder to strike or wake."""
@@ -4592,12 +4597,12 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
     def head_reviews_among(cls, db: sqlite3.Connection, requests: Iterable[PullRequestHead]) -> dict[PullRequestHead, tuple[HeadReviewRecord, ...]]:
         """The caller's snapshot owns one indexed batch of exact-head decisions."""
         selected = tuple(dict.fromkeys(requests))
-        answers: dict[PullRequestHead, tuple[HeadReviewRecord, ...]] = {
-            request: () for request in selected
+        by_identity: dict[PullRequestHead, tuple[HeadReviewRecord, ...]] = {
+            request.identity: () for request in selected
         }
         table = f'"{cls.declared_name}"'
         for requested in cls.requested_keys(
-            db, tuple({"request": request} for request in selected),
+            db, tuple({"request": identity} for identity in by_identity),
         ):
             rows = cls.iterate(db.execute(
                 f"WITH {requested.values} "
@@ -4607,8 +4612,8 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
                 requested.bindings,
             ))
             for row in rows:
-                answers[row.record.request] = (row.record,)
-        return answers
+                by_identity[row.record.request.identity] = (row.record,)
+        return {request: by_identity[request.identity] for request in selected}
 
     @classmethod
     def latest_for_pull_request(

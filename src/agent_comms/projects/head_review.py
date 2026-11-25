@@ -955,6 +955,9 @@ class HeadReview(DeclaredFamily, affix="HeadReview"):
         if posted.returncode:
             raise ToolRefusedError(posted.stderr.strip() or f"Review status on {head} failed.")
 
+    def accepted_orderless_sources(self, record):
+        return ()
+
 
 @dataclass(frozen=True)
 class UnpromotedHeadReview(HeadReview):

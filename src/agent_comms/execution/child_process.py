@@ -268,8 +268,7 @@ class ProcessState(SubclassUnion, affix=""):
 
     def require_owner_startable(self) -> None:
         """Refuse if the process state does not allow starting an owner."""
-        if not self.allows_owner_start():
-            raise RelationViolationError('Retired session acquired another process')
+        raise RelationViolationError('Retired session acquired another process')
     @abstractmethod
     def allows_inactive_stop(self) -> bool: ...
 
@@ -386,6 +385,9 @@ class NoProcess(NullMember, ProcessState):
     def held_external_stop(self, release: Callable[[], None], name: str) -> str | None:
         """Nothing holds the endpoint, so the ordinary stop finishes it on the bus."""
         return name
+
+    def require_owner_startable(self) -> None:
+        pass
 
 
 @dataclass(frozen=True)

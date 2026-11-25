@@ -117,3 +117,6 @@ class PromotedHeadReview(MergeHeadReview):
             )
             raise
         return current.arm()
+
+    def accepted_orderless_sources(self, record):
+        return (record.request,)
