@@ -11,6 +11,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from agent_comms.cli_bridges.wait_log import wait_for_log_growth_sync
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -37,7 +39,6 @@ def main() -> None:
     )
     args = parser.parse_args()
     if args.wait_log is not None:
-        from agent_comms.cli_bridges.wait_log import wait_for_log_growth_sync
 
         chunk = wait_for_log_growth_sync(args.wait_log, offset=args.offset)
         sys.stdout.write(chunk)
