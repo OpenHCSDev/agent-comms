@@ -17,6 +17,7 @@ from agent_comms.planning.order_words import DirectiveText
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.threads import ExternalThread
+from agent_comms.transport.mcp_wire import AnsweredCall, StructuredAnsweredCall
 from agent_comms.transport.request import ToolRequest, tool_field
 from agent_comms.transport.tool_caller import (
     ForkCaller,
@@ -79,6 +80,13 @@ class ConnectorCaller(ToolCaller):
 
     def input_schema(self, tool: type[ToolRequest]) -> dict[str, JsonValue]:
         return FieldCodec.record_schema(tool)
+
+    def answered_call(
+        self, request: ServedRequest, comms: BusContext, acting: ToolCaller,
+    ) -> AnsweredCall:
+        """Run the request and carry both structuredContent and model-readable text."""
+        reply, board, text = request.answered_parts(comms, acting)
+        return AnsweredCall(reply, board, text)
 
 
 @dataclass(frozen=True)
@@ -143,6 +151,12 @@ class ScopedUiCaller(ConnectorCaller, NoThreadCaller):
         """Direct and connector invocation use the same namespace guard."""
         self.require_root(comms.root)
         return super().invoke(request, comms)
+
+    def answered_call(
+        self, request: ServedRequest, comms: BusContext, acting: ToolCaller,
+    ) -> AnsweredCall:
+        """Remote UI clients decode structuredContent alone; skip building an unused text copy."""
+        return StructuredAnsweredCall(request.replied(comms, acting), ())
 
 
 @dataclass(frozen=True)

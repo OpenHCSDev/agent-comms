@@ -232,6 +232,15 @@ class AnsweredCall:
 
 
 @dataclass(frozen=True)
+class StructuredAnsweredCall(AnsweredCall):
+    """A reply to a typed UI client that decodes structuredContent alone:
+    no LLM prose copy is built or carried alongside the declared record."""
+
+    def result(self) -> ToolsCallResult:
+        return ToolsCallResult((), False, self.reply)
+
+
+@dataclass(frozen=True)
 class ToolsCallResult(McpResult):
     """A tool's encoded reply, or its failed call encoded as an MCP error result."""
 

@@ -8,6 +8,7 @@ directly from `agent_comms.transport.mcp_wire` so they never pull `aiohttp.web`,
 from __future__ import annotations
 
 import asyncio
+import gzip
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
@@ -172,6 +173,21 @@ class McpMessage(DeclaredFamily, affix="Message"):
     def log_name(self) -> str:
         return self.declared_name
 
+    gzip_minimum_bytes: ClassVar[int] = 512
+
+    @classmethod
+    def json_response(cls, http: web.Request | None, payload: object) -> web.Response:
+        """Encode compact JSON and gzip-compress larger replies when the client accepts gzip."""
+        body = FieldCodec.compact(payload).encode("utf-8")
+        accept = http.headers.get("Accept-Encoding", "").lower() if http is not None else ""
+        if "gzip" in accept and len(body) >= cls.gzip_minimum_bytes:
+            return web.Response(
+                body=gzip.compress(body, compresslevel=1),
+                content_type="application/json",
+                headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"},
+            )
+        return web.Response(body=body, content_type="application/json")
+
     @abstractmethod
     async def answer(
         self, connector: McpServer, caller: ConnectorCaller, http: web.Request,
@@ -218,8 +234,8 @@ class McpRequest(McpMessage, declared_name=None):
     async def answer(
         self, connector: McpServer, caller: ConnectorCaller, http: web.Request,
     ) -> web.StreamResponse:
-        return web.json_response(
-            FieldCodec.encode(McpReply(self.id, await self.result(connector, caller)))
+        return self.json_response(
+            http, FieldCodec.encode(McpReply(self.id, await self.result(connector, caller)))
         )
 
     @abstractmethod
@@ -279,13 +295,14 @@ class NoProgress(NullMember, ProgressRequest):
         caller: ConnectorCaller,
         http: web.Request,
     ) -> web.StreamResponse:
-        return web.json_response(
+        return McpMessage.json_response(
+            http,
             FieldCodec.encode(
                 ToolsCallReply(
                     message.id,
                     await message.result(connector, caller, WireExportObserver()),
                 )
-            )
+            ),
         )
 
 

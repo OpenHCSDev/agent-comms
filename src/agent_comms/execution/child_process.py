@@ -842,8 +842,9 @@ class Platform(DeclaredFamily, affix="Platform"):
             raise RuntimeError(f"Live process {leader.pid} was not signalled")
 
     def configure_client_socket(self, sock: socket.socket) -> None:
-        """Keep a client TCP socket from hanging silently on a half-open network switch."""
+        """Keep a client TCP socket responsive (no Nagle + delayed-ACK stall) and detect half-open switches."""
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
     def parent_death_binding(self) -> int:
         """Darwin has no parent-death signal: its exec gate binds no launcher."""

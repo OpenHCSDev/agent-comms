@@ -601,6 +601,10 @@ class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], Connecto
     def empty(self) -> ConnectorGrants:
         return ConnectorGrants()
 
+    def caller_for(self, token: str) -> ConnectorCaller:
+        """Resolve one bearer without deep-copying the grants document on every HTTP request."""
+        return self._read_shared().caller_for(token)
+
     def thread_granted(self, thread: str) -> str:
         token = secrets.token_urlsafe(32)
         return self.update(lambda grants: DocumentChange(

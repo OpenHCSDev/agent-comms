@@ -1488,6 +1488,18 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
     def _read_current(self) -> DecodedDocument[T]:
         return self._decode_retained(self._copy_sources(self)[0])
 
+    def _read_shared(self) -> T:
+        """Read the cached document without copying; callers must treat the value as read-only."""
+        try:
+            revision = FileRevision.from_stat(self.path.stat())
+        except FileNotFoundError:
+            _read_cache.pop(self.path, None)
+            return self.empty()
+        return self._read_captured(
+            lambda: self._cached_value(revision, self._read_current),
+            lambda captured: captured.value,
+        )
+
     def read(self) -> T:
         try:
             revision = FileRevision.from_stat(self.path.stat())

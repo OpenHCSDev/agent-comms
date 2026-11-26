@@ -1050,8 +1050,7 @@ class Connector(ConnectorService, McpServer):
             acting, rest = caller.acting(arguments)
             caller.prepare_call(comms, acting)
             request = tool.decoded(comms, rest).bound(observer).served_by(self).asked_by(caller)
-            reply, board, text = request.answered_parts(comms, acting)
-            return AnsweredCall(reply, board, text)
+            return caller.answered_call(request, comms, acting)
 
     def cancel_call(self, request_id: JsonRpcId) -> None:
         """A cancel names a running observed call by its request id; any other call runs on."""
@@ -1362,7 +1361,7 @@ class Connector(ConnectorService, McpServer):
 
     def caller_for(self, token: str) -> ConnectorCaller:
         """Resolve the bearer and its root authority before reading any MCP message."""
-        caller = self.store.read().caller_for(token)
+        caller = self.store.caller_for(token)
         caller.require_root(self.root)
         return caller
 
