@@ -137,8 +137,7 @@ class AddressedRow(Addressed, BusRow, declared_name=None):
             f'WHERE sender IN ({", ".join("?" * len(senders))}) '
             f'AND target IN ({", ".join("?" * len(targets))}))',
             (*senders, *targets))
-        headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
-        return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
+        return BusCapability.at_sequences(db, tuple(FieldCodec.decode(int, seq) for seq, in positions))
 
     @classmethod
     def latest_sources(
@@ -360,9 +359,8 @@ class BusReader(
     def keyed_messages(self, publication_key: str) -> tuple[BusRecord, ...]:
         """Read at most the one original bound to this publication key."""
         with self.observing() as db:
-            headers = (BusRow.require(db, seq=seq) for seq in
-                       KeyedPublication.publication_sequences(db, publication_key))
-            return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
+            return BusCapability.at_sequences(
+                db, tuple(KeyedPublication.publication_sequences(db, publication_key)))
 
     def page(self, before: int, limit: int) -> tuple[BusRecord, ...]:
         with self.observing() as db:
@@ -400,8 +398,7 @@ class BusReader(
             rows = db.execute(
                 f'SELECT seq FROM "{Addressed.table.declared_name}" '
                 'WHERE target=? AND seq>? ORDER BY seq LIMIT ?', (target, after, limit))
-            headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
-            return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
+            return BusCapability.at_sequences(db, tuple(FieldCodec.decode(int, row[0]) for row in rows))
 
     def scoped_page(
         self, predicate: str, parameters: tuple[object, ...], *, lower: int = 0,
@@ -422,8 +419,7 @@ class BusReader(
                 f'ORDER BY seq {order} LIMIT ?',
                 (*parameters, lower, upper, *(kind.declared_name for kind in kinds), limit),
             )
-            headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
-            return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
+            return BusCapability.at_sequences(db, tuple(FieldCodec.decode(int, row[0]) for row in rows))
 
     def newest_per_conversation(
         self, predicate: str, parameters: tuple[object, ...], *, after: int, through: int,
@@ -610,8 +606,7 @@ class BusReader(
         with self.observing() as db:
             sequences = {row.seq for original in references
                          for row in AnsweredSource.select(db, original=original.seq)}
-            headers = (BusRow.require(db, seq=seq) for seq in sorted(sequences))
-            return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
+            return BusCapability.at_sequences(db, tuple(sorted(sequences)))
 
     def recipient_replies(
         self, keys: tuple[tuple[ThreadLookup, MessageReference], ...],

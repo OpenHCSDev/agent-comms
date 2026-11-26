@@ -1526,8 +1526,7 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
 
     @boundary_decoder
     def fits_wire(self, data: object) -> bool:
-        # Null handlers can change the structural null contract; leave that decision to decode.
-        return data is None or self.wire_structure.fits_wire(data)
+        return self.representation.fits_wire_value(data, self.structural, self.wire_structure)
 
     def fits_external(self, data: object) -> bool:
         # The representation reads through its wire structure, so an external read takes
@@ -1677,10 +1676,21 @@ class FieldRepresentation[T](MroDispatch, ABC, JsonSchemaOwner):
         return structural
 
     @classmethod
+    @boundary_decoder
+    def fits_wire_value(
+        cls, data: object, structural: DecoderPlan, wire_structure: DecoderPlan,
+    ) -> bool:
+        return structural.fits_wire(data) if data is None else wire_structure.fits_wire(data)
+
+    @classmethod
     def decode_field(cls, data: object, structural: ValueDecoder[T]) -> T:
         handler: Callable[[object, ValueDecoder[T]], T] = cls.handler_for(type(data))
-        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
+        try:
             return handler(data, structural)
+        except MalformedRecord:
+            raise
+        except ValueError as error:
+            raise MalformedRecord(f"Invalid {cls.__name__}: {error}") from error
 
     @handles(type(None))
     @classmethod
@@ -1769,6 +1779,13 @@ class StructuralRepresentation(FieldRepresentation):
 
 class AcceptsNull[T](FieldRepresentation[T]):
     """Null is this representation's input, not the structural target's."""
+
+    @classmethod
+    @boundary_decoder
+    def fits_wire_value(
+        cls, data: object, structural: DecoderPlan, wire_structure: DecoderPlan,
+    ) -> bool:
+        return data is None or wire_structure.fits_wire(data)
 
     @handles(type(None))
     @classmethod
@@ -1953,6 +1970,12 @@ class SubclassUnion(DeclaredFamily, AcceptsNull, MemberUnion):
     """An untagged wire family; each union declares its own root with affix=""."""
 
     @classmethod
+    def fits_wire_value(
+        cls, data: object, structural: DecoderPlan, wire_structure: DecoderPlan,
+    ) -> bool:
+        return wire_structure.fits_wire(data)
+
+    @classmethod
     def decodes_tagged_records(cls) -> bool:
         return False
 
@@ -2060,6 +2083,10 @@ class RecordTag(MroDispatch):
 
 class RecordMember(ExternalJsonShape, WireValue):
     """A wire union's record case uses the declared record codec."""
+
+    @classmethod
+    def encode(cls, value: object) -> dict[str, JsonValue]:
+        return FieldCodec.encode_record(value)
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
@@ -3566,28 +3593,50 @@ class _RealDecoder(_NumberDecoder[float]):
 
 
 
+def _validate_json_value(value: object) -> object:
+    value_type = type(value)
+    if value is None or value_type is str or value_type is bool or value_type is int:
+        return value
+    if value_type is dict:
+        for key, item in value.items():  # type: ignore[union-attr]
+            if type(key) is not str and not isinstance(key, str):
+                raise ValueError("Expected a JSON value with string keys and finite numbers")
+            _validate_json_value(item)
+        return value
+    if value_type is list:
+        for item in value:  # type: ignore[union-attr]
+            _validate_json_value(item)
+        return value
+    if value_type is float:
+        if not math.isfinite(value):  # type: ignore[arg-type]
+            raise ValueError("Expected a JSON value with string keys and finite numbers")
+        return value
+    if isinstance(value, str):
+        return str(value)
+    raise ValueError("Expected a JSON value with string keys and finite numbers")
+
+
 class _JsonValueRepresentation(FieldRepresentation[JsonValue]):
     """An opaque JSON declaration validates JSON, not Python object representations."""
 
-    @staticmethod
-    @lru_cache(maxsize=1)
-    def validator():
-        from pydantic import ConfigDict, TypeAdapter
-
-        return TypeAdapter(JsonValue, config=ConfigDict(allow_inf_nan=False))
-
     @classmethod
     def decode(cls, data):
-        with MalformedRecord.refusing("Expected a JSON value with string keys and finite numbers"):
-            return cls.validator().validate_python(data, strict=True)
+        try:
+            return _validate_json_value(data)
+        except ValueError as error:
+            raise MalformedRecord(
+                "Expected a JSON value with string keys and finite numbers"
+            ) from error
 
     @classmethod
     def encode(cls, value):
         # An in-process value that is not JSON is the caller's bug, not refused data.
         try:
-            return cls.validator().validate_python(value, strict=True)
+            return _validate_json_value(value)
         except ValueError as error:
-            raise TypeError("Expected a JSON value with string keys and finite numbers") from error
+            raise TypeError(
+                "Expected a JSON value with string keys and finite numbers"
+            ) from error
 
     @classmethod
     def schema(cls):
@@ -3605,13 +3654,16 @@ class _UndeclaredDecoder(_JsonValueRepresentation, ValueDecoder[JsonValue]):
 
     @classmethod
     def encode(cls, value: object) -> object:
-        if isinstance(value, type) and issubclass(value, DeclaredFamily):
-            return value.declared_name
-        if type(value) is dict:
+        value_type = type(value)
+        if value is None or value_type is str or value_type is bool or value_type is int:
+            return value
+        if value_type is dict:
             if all(type(key) is str for key in value):
                 return {key: cls.encode(item) for key, item in value.items()}
             return [[cls.encode(key), cls.encode(item)] for key, item in value.items()]
-        return compile_decoder(type(value)).encode(value)
+        if isinstance(value, type) and issubclass(value, DeclaredFamily):
+            return value.declared_name
+        return compile_decoder(value_type).encode(value)
 
     def compared(self, value: object) -> object:
         if isinstance(value, type):
@@ -3777,10 +3829,25 @@ class UnionDecoder[T](_ContextDecoder[T]):
             alternative.compile_comparison(compiled)
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
-        return self.decode_candidates(
-            data, lambda alternative: alternative.decode_bound(data, context),
-            fits=lambda alternative: alternative.fits_wire(data),
-        )
+        first_error = None
+        matched = False
+        try:
+            for alternative in self.alternatives:
+                if not alternative.fits_wire(data):
+                    continue
+                matched = True
+                try:
+                    return alternative.decode_bound(data, context)
+                except MalformedRecord as error:
+                    if first_error is None:
+                        first_error = error
+            if not matched:
+                raise self.shape_refusal(data)
+            raise MalformedRecord(
+                f"Value does not match {self.target}: {first_error}"
+            ) from first_error
+        finally:
+            first_error = None
 
     def shape_refusal(self, data: object) -> MalformedRecord:
         refusals = tuple(alternative.shape_refusal(data) for alternative in self.alternatives)

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import os
 from abc import abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Self
 
 from agent_comms.nominal.field_codec import NullMember, RecordMember, SubclassUnion
 
@@ -134,8 +135,20 @@ class FileRevision(RecordMember, FileObservation):
         return self.holds_cut(type(self).from_file(stream), self.size)
 
 
+class CapturedSource:
+    """A store capture released from its lock before decoding."""
+
+    __slots__ = ()
+
+    def detached_value[T](self, decode: Callable[[Self], T]) -> T:
+        return decode(self)
+
+    def shared_value[T](self, decode: Callable[[Self], T]) -> T:
+        return decode(self)
+
+
 @dataclass(frozen=True, slots=True)
-class DocumentBytes:
+class DocumentBytes(CapturedSource):
     """A file's revision and bytes from the same descriptor, before decoding."""
 
     revision: FileObservation

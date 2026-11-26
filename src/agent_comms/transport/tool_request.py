@@ -213,14 +213,14 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
         # A request decoded from the wire meets whichever caller arrived; the caller's own
         # invoke checks at runtime that it may apply this request (thread-only refusals).
         applied = self._applied(comms, caller)
-        return self.reply(FieldCodec.encode(applied.to_wire()), caller)
+        return self.reply(applied.to_wire(), caller)
 
     def answered_parts(
         self, comms: BusContext, caller: ToolCaller,
     ) -> tuple[dict[str, JsonValue], tuple[str, ...], str]:
         """Execute once and return (structured_reply, board_lines, compact_text)."""
         applied = self._applied(comms, caller)
-        reply = self.reply(FieldCodec.encode(applied.to_wire()), caller)
+        reply = self.reply(applied.to_wire(), caller)
         return reply, self.board(comms, caller), applied.compact_text()
 
     def started_in_background(self, comms: BusContext, caller: ToolCaller) -> BackgroundRunStarted:

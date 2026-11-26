@@ -169,8 +169,8 @@ class AnnotationsReply(DeclaredReply, WireValue):
 
     labels: tuple[ModelLabel, ...]
 
-    def to_wire(self) -> tuple[ModelLabel, ...]:
-        return self.labels
+    def to_wire(self) -> JsonValue:
+        return FieldCodec.encode(self.labels)
 
     @classmethod
     def from_wire(cls, data: list[JsonValue]) -> Self:

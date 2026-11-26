@@ -227,9 +227,9 @@ class CalibrationReport(CliResult):
         return {"question": FieldCodec.encode(self.question),
                 "classifier": FieldCodec.encode(self.classifier),
                 "reviewed": len(self.cases), "accuracy": self.accuracy,
-                "probability_frequencies": tuple(
+                "probability_frequencies": [
                     {**FieldCodec.encode(point), "frequency": point.frequency}
-                    for point in self.frequencies()),
+                    for point in self.frequencies()],
                 "cases": FieldCodec.encode(self.cases)}
 
 
