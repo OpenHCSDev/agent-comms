@@ -909,6 +909,13 @@ class BusFile(DurableFile):
         )
 
 
+class BusStoreFile(BusFile):
+    """Bus database location usable by route and launcher modules without importing Bus."""
+
+    __slots__ = ()
+    filename = "bus.sqlite3"
+
+
 class InputCaptureFile(RootFile):
     """A store participating in the original input capture's common source cut."""
 

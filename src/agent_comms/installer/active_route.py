@@ -26,7 +26,6 @@ from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.installer.reporting import RootWriter
-from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText, ScratchName
@@ -35,6 +34,7 @@ from agent_comms.storage.file_observation import (
     FileRevision,
     MissingFile,
 )
+from agent_comms.storage.locked_store import BusStoreFile
 from agent_comms.storage.private_path import (
     ObservedPath,
     OwnedDirectoryRole,
@@ -262,7 +262,7 @@ class ActiveRoute(CommsRoute, PublishedRoute):
     def rebound(self) -> ActiveRoute:
         """This route naming the bus its root holds now. A restore that copies the bus
         back gives it a new file identity, so the restored route names that one."""
-        return replace(self, bus_identity=RecordedBusIdentity.capture(Bus.path_in(self.root)))
+        return replace(self, bus_identity=RecordedBusIdentity.capture(BusStoreFile.path_in(self.root)))
 
     @classmethod
     def from_bytes(cls, raw: bytes, path: Path) -> ActiveRoute:
@@ -294,7 +294,7 @@ class ActiveRoute(CommsRoute, PublishedRoute):
     def selects_its_root(self) -> bool:
         """A route selects the database observed when it was published."""
         return self.root.is_dir() and self.bus_identity.matches(
-            ObservedPath.at(Bus.path_in(self.root)))
+            ObservedPath.at(BusStoreFile.path_in(self.root)))
 
     def observe_root(self) -> Path:
         if not self.selects_its_root():

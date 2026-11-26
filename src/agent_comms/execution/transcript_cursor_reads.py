@@ -13,3 +13,7 @@ class TranscriptRuntime(ABC):
 class MarksSourceRead[Cut](ABC):
     @abstractmethod
     def mark_read(self, viewer: str, source: str, through: int, cut: Cut) -> None: ...
+
+
+class TranscriptHistorySource(ABC):
+    """Abstract transcript source contract returned by RuntimeLocation.history_source."""

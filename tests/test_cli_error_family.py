@@ -10,7 +10,8 @@ import pytest
 from pydantic import ValidationError
 
 from agent_comms.cli_runtime import CliInvocation, _fail
-from agent_comms.cli_bridges.cli_protocol import WATCH_LINE, FailedCoreError, UnavailableCoreError
+from agent_comms.cli_bridges.cli_protocol import FailedCoreError, UnavailableCoreError, WatchLine
+from agent_comms.cli_bridges.wire_models import WireModel
 from agent_comms.cli_bridges.shared import Binding, GivenBinding, StoredBinding
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.nominal.field_codec import RecordProblems
@@ -19,6 +20,8 @@ from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.locked_store import SQLiteFile
 from journal_binding_cases import concurrent_bindings
+
+WATCH_LINE = WireModel.adapter(WatchLine.declared_union())
 
 
 @pytest.mark.parametrize('error,expected', [

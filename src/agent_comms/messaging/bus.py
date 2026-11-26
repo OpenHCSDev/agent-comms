@@ -71,7 +71,7 @@ from agent_comms.messaging.watched import Watched
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
 from agent_comms.storage.file_observation import FileIdentity, FileRevision
 from agent_comms.storage.locked_store import (
-    BusFile,
+    BusStoreFile,
     CompleteInputReader,
     FileStore,
     OpenSQLiteReadConnection,
@@ -681,12 +681,10 @@ class StoredBusReader(BusReader, SQLiteReader):
 
 
 class Bus(
-    FileStore, StoredBusReader, ReconciledFile, WalStore, CarriedWriter, BusFile,
+    FileStore, StoredBusReader, ReconciledFile, WalStore, CarriedWriter, BusStoreFile,
     CompleteInputReader, Watched, MessageWriter,
 ):
     """One SQLite transaction owns the sequence and all of a record's fields."""
-
-    filename = "bus.sqlite3"
 
     def received_after(self, lookup: ThreadLookup, after: int) -> bool:
         """Whether this recipient has a newer candidate; read one indexed metadata row."""

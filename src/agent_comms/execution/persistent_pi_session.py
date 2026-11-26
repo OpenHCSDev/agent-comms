@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from agent_comms.execution.child_process import ProcessState
 from agent_comms.execution.native_child import (
     BorrowedNative,
     EmptyNative,
@@ -26,6 +27,10 @@ class PersistentPiSession(
     @property
     def available(self) -> bool:
         return self.child_state.available
+
+    @property
+    def runtime_process(self) -> ProcessState:
+        return self.child_state.process_identity
 
     async def open(self, launch, *, reuse, startup, watchdog) -> PiSessionChild:
 

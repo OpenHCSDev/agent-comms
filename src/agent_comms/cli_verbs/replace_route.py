@@ -13,8 +13,8 @@ from agent_comms.installer.active_route import (
     active_route_path,
     route_new_bus,
 )
-from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
+from agent_comms.storage.locked_store import BusStoreFile
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -25,7 +25,7 @@ class ReplaceRouteCliCommand(CliCommand[RouteReplacedResult],
             "is kept beside the new one")
 
     def answer(self, root: Path) -> RouteReplacedResult:
-        route = ActiveRoute(root, RecordedBusIdentity.capture(Bus.path_in(root)))
+        route = ActiveRoute(root, RecordedBusIdentity.capture(BusStoreFile.path_in(root)))
         return RouteReplacedResult(str(root), route_new_bus(route, active_route_path()))
 
     def apply(self, ctx: Comms) -> RouteReplacedResult:
