@@ -68,6 +68,13 @@ class ThreadArchivedResult(RecordMember, TargetEditResult):
     archived: str
 
 
+@dataclass(frozen=True, slots=True)
+class ThreadDeleted(CliResult):
+    deleted: str
+    session_bytes_freed: int
+    detached_children: tuple[str, ...]
+
+
 @dataclass(frozen=True)
 class ThreadCreatedResult(RecordMember, TargetEditResult):
     created: str

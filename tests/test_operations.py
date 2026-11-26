@@ -18,7 +18,7 @@ from agent_comms.execution.native_entries import CompactionEntry, ModelChangeEnt
 from agent_comms.execution.pi_vocabulary import HighThinkingLevel
 from agent_comms.execution.runtime_observations import AgentInfo, ContextUsageObservation
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
+from agent_comms.cli_verbs.poll import CallingThreadTarget, NamedThreadTarget
 from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
 from agent_comms.messaging.channels import AnyChannel
 from agent_comms.messaging.message_page import PageBounds

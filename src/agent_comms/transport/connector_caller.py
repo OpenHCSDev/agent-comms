@@ -9,7 +9,7 @@ from typing import Annotated
 
 from pydantic import JsonValue
 
-from agent_comms.comms import Comms
+from agent_comms.bus_context import BusContext
 from agent_comms.messaging.bus_publication import DirectorOrigin
 from agent_comms.messaging.read_basis import OperatorOutcomes
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RootId
@@ -59,7 +59,7 @@ class ConnectorCaller(ToolCaller):
         """Only a UI grant observes the owner's UI; a thread grant calls tools."""
         raise GrantRefusedError("This grant cannot observe the UI; observation needs a UI grant.")
 
-    def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
+    def prepare_call(self, comms: BusContext, acting: ToolCaller) -> None:
         """A thread-free, unscoped caller has no membership to publish."""
 
     def exposed(self) -> dict[str, type[ServedRequest] | type[ConnectorTool]]:
@@ -85,7 +85,7 @@ class ConnectorCaller(ToolCaller):
 class ThreadConnectorCaller(ConnectorCaller, ThreadCaller):
     """A registered thread calling through MCP with its own grant."""
 
-    def ensure_registered(self, comms: Comms) -> None:
+    def ensure_registered(self, comms: BusContext) -> None:
         """Auto-declare this caller's thread if missing from the registry.
 
         A bus rebuild or store reset can leave the registry without this thread;
@@ -97,7 +97,7 @@ class ThreadConnectorCaller(ConnectorCaller, ThreadCaller):
                 ExternalThread(self.name, frozenset(), Checkout(comms.root))
             )
 
-    def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
+    def prepare_call(self, comms: BusContext, acting: ToolCaller) -> None:
         self.ensure_registered(comms)
         self.identity(comms)
         acting.join(comms, self.own_thread())
@@ -115,7 +115,7 @@ class ReadOnlyConnectorCaller(ConnectorCaller, NoThreadCaller):
     def exposed(self) -> dict[str, type[ServedRequest] | type[ConnectorTool]]:
         return {tool.declared_name: tool for tool in ServedRequest.members_with(ReadTool)}
 
-    def invoke(self, request: ServedRequest, comms: Comms) -> ToolResult:
+    def invoke(self, request: ServedRequest, comms: BusContext) -> ToolResult:
         request.require_read_only()
         return super().invoke(request, comms)
 
@@ -134,12 +134,12 @@ class ScopedUiCaller(ConnectorCaller, NoThreadCaller):
     def require_observation(self) -> None:
         """A UI grant, read-only or writable, observes the root it is scoped to."""
 
-    def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
+    def prepare_call(self, comms: BusContext, acting: ToolCaller) -> None:
         """Check the opened root before argument context reads."""
         self.require_root(comms.root)
         super().prepare_call(comms, acting)
 
-    def invoke(self, request: ServedRequest, comms: Comms) -> ToolResult:
+    def invoke(self, request: ServedRequest, comms: BusContext) -> ToolResult:
         """Direct and connector invocation use the same namespace guard."""
         self.require_root(comms.root)
         return super().invoke(request, comms)
@@ -174,7 +174,7 @@ class ForkingCaller(ThreadConnectorCaller):
     def input_schema(self, tool: type[ToolRequest]) -> dict[str, JsonValue]:
         return FieldCodec.record_schema(tool, ActingFork)
 
-    def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
+    def prepare_call(self, comms: BusContext, acting: ToolCaller) -> None:
         self.ensure_registered(comms)
         self.identity(comms)
         target = acting.own_thread()
@@ -193,7 +193,7 @@ class DirectorCaller(OperatorOutcomes, ForkingCaller):
     grant, and any existing independent CLI-inbox thread binds with its identity intact regardless
     of its historical parent."""
 
-    def require_directive(self, comms: Comms, body: str) -> None:
+    def require_directive(self, comms: BusContext, body: str) -> None:
         """A directive passes DirectiveText."""
         DirectiveText.require(body)
 

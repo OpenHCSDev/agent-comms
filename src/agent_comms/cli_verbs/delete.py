@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
-from agent_comms.cli_verbs.cli_commands import NameArgument
-from agent_comms.registry.thread_management import ThreadDeleted
+from agent_comms.cli_verbs.cli_commands import NameArgument, ThreadDeleted
 
 
 @dataclass(frozen=True, kw_only=True)
