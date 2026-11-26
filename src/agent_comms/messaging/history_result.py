@@ -29,13 +29,32 @@ class HistoryPageResult(CliResult, ToolResult):
         return {self.messages_key: [{**m.to_wire(), **m.display_metadata} for m in self.messages],
                 "before": FieldCodec.encode(self.before), "has_older": self.has_older}
 
+    def compact_header(self) -> str:
+        return f"History ({len(self.messages)} msgs)"
+
+    def compact_text(self) -> str:
+        header = self.compact_header()
+        if not self.messages:
+            return f"{header}: (empty)"
+        parts = [header, *(m.compact_text() for m in self.messages)]
+        if self.has_older and self.before is not None:
+            cursor = FieldCodec.compact(FieldCodec.encode(self.before))
+            parts.append(f"[more older: pass before={cursor}]")
+        return "\n\n".join(parts)
+
 
 class DmHistoryPageResult(HistoryPageResult):
     messages_key = "dm"
 
+    def compact_header(self) -> str:
+        return f"DM ({len(self.messages)} msgs)"
+
 
 class EverythingHistoryPageResult(HistoryPageResult):
     messages_key = "everything"
+
+    def compact_header(self) -> str:
+        return f"All ({len(self.messages)} msgs)"
 
 
 @dataclass(frozen=True)
@@ -45,6 +64,9 @@ class ChannelHistoryPageResult(HistoryPageResult):
     @classmethod
     def for_target(cls, name: str, messages: tuple[Message, ...], has_older: bool) -> Self:
         return cls(messages, has_older, name)
+
+    def compact_header(self) -> str:
+        return f"{self.channel} ({len(self.messages)} msgs)"
 
     def to_wire(self) -> dict[str, object]:
         return {**super().to_wire(), "channel": self.channel}

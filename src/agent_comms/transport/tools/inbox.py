@@ -19,6 +19,7 @@ from agent_comms.messaging.channels import AnyChannel
 from agent_comms.messaging.message_page import DisplayedMessagePage, InboxPage, PageBounds
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
+from agent_comms.nominal.compact_text import compact_format
 from agent_comms.nominal.field_codec import GoalId, NullMember, WireOmitDefault
 from agent_comms.planning.goal_waits import NoStandbyReview, StandbyReview
 from agent_comms.transport.request import tool_field
@@ -44,6 +45,25 @@ class InboxPageRead(ToolResult):
     standby_review: Annotated[StandbyReview | NoStandbyReview, WireOmitDefault()] = (
         NoStandbyReview()
     )
+
+    def compact_text(self) -> str:
+        parts: list[str] = []
+        if self.messages:
+            more = f", {self.remaining} more" if self.remaining else ""
+            parts.append(f"Inbox ({len(self.messages)} msgs{more})")
+            parts.extend(m.compact_text() for m in self.messages)
+        else:
+            parts.append("Inbox empty")
+        if self.unresolved_inputs:
+            parts.append(
+                f"Unresolved inputs: {len(self.unresolved_inputs)} "
+                "(use comms_input_delivery to inspect)"
+            )
+        if not isinstance(self.standby_review, NoStandbyReview):
+            rendered = compact_format(self.standby_review)
+            if rendered:
+                parts.append(rendered)
+        return "\n\n".join(parts)
 
 
 @dataclass(frozen=True)
@@ -128,6 +148,12 @@ class DeliveryAcknowledged(ToolResult):
 
     thread: str
     acknowledged: tuple[MessageReference, ...]
+
+    def compact_text(self) -> str:
+        if not self.acknowledged:
+            return f"Acked {self.thread}: none"
+        tail = f" (through {self.acknowledged[-1].name})"
+        return f"Acked {self.thread}: {len(self.acknowledged)} msgs{tail}"
 
 
 @dataclass(frozen=True, kw_only=True)

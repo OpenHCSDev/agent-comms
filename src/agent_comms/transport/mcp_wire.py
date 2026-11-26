@@ -218,12 +218,14 @@ class AnsweredCall:
 
     reply: dict[str, JsonValue]
     board: tuple[str, ...]
+    text: str = ""
 
     def result(self) -> ToolsCallResult:
-        """The rows ride as their own text after the reply, never inside it: structured
-        content stays exactly the declared result that remote cores decode."""
+        """Models read compact formatted text in content; structuredContent stays
+        exactly the declared result that remote cores decode."""
+        rendered = self.text if self.text else json.dumps(self.reply)
         return ToolsCallResult(
-            (TextContent(json.dumps(self.reply)), *(TextContent(line) for line in self.board)),
+            (TextContent(rendered), *(TextContent(line) for line in self.board)),
             False,
             self.reply,
         )

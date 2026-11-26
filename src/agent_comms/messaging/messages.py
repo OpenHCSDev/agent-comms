@@ -48,6 +48,7 @@ from agent_comms.messaging.response_policy import (
 import agent_comms.messaging.retained_task_facts as task_facts
 from agent_comms.messaging.task_attachment import NoTaskAttachment, TaskAttachment
 from agent_comms.nominal.class_fact import ClassFact
+from agent_comms.nominal.compact_text import CompactText
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     ClaimId,
@@ -988,12 +989,20 @@ class MessageInput(MessageClockSource, Addressed, ResponseMessageSource):
 
 
 @dataclass(frozen=True, slots=True)
-class Message(MessageInput, TurnOrigin['Message'], MessageReferenceRead):
+class Message(CompactText, MessageInput, TurnOrigin['Message'], MessageReferenceRead):
     """Declares one inter-thread message.
 
     The bus assigns ``seq`` (a monotonically increasing log position) at send
     time; the hash-derived ``message_id`` is identity only and is not ordered.
     """
+
+    def compact_text(self) -> str:
+        when = time.strftime("%H:%M", time.localtime(self.timestamp))
+        role = " (human)" if self.sender_role.declared_name == "user" else ""
+        header = f"{self.reference.name} · {self.sender}{role} -> {self.target} · {when}"
+        if self.answers:
+            header += " · re:" + ",".join(ref.name for ref in self.answers)
+        return f"{header}\n{self.body}"
 
     task: Annotated[
         TaskAttachment, WireOmitDefault(), WireOrder(12)

@@ -876,10 +876,10 @@ async def test_connector_lists_every_tool(client, store, comms):
     assert [tool["name"] for tool in listed] == list(family)
     assert [tool["annotations"]["readOnlyHint"] for tool in listed] == [
         issubclass(tool, ReadTool) for tool in family.values()]
-    # Every write tool says, from the one write marker, that claude-ai may act on its authorization.
+    # Every write tool says, from the one write marker, that the authorized caller may act without asking.
     writes = [tool["description"] for tool in listed if not tool["annotations"]["readOnlyHint"]]
     assert writes and all(description.endswith(ToolRequest.bus_effect) for description in writes)
-    assert all("claude-ai to call this without asking" in description for description in writes)
+    assert all("calling this without asking" in description for description in writes)
 
 
 async def test_the_short_address_lists_one_tool_per_area_and_runs_the_rest_through_them(

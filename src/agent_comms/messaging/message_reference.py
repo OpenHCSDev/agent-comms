@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from agent_comms.messaging.page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
 from agent_comms.nominal.class_fact import ClassFact
+from agent_comms.nominal.compact_text import CompactText
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class MessageReference(TypedRow, ProjectionSource):
+class MessageReference(CompactText, TypedRow, ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
@@ -41,6 +42,9 @@ class MessageReference(TypedRow, ProjectionSource):
     def name(self) -> str:
         """How a reader names this message: its bus position, then its identity."""
         return f"{self.seq}-{self.message_id}"
+
+    def compact_text(self) -> str:
+        return self.name
 
     @classmethod
     def named(cls, name: str) -> MessageReference:

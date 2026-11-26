@@ -187,14 +187,24 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
         """A request that asks nothing of the grant it arrived under runs the same under any."""
         return self
 
+    def _applied(self, comms: BusContext, caller: ToolCaller) -> ToolResult:
+        if self.background:
+            return self.started_in_background(comms, caller)
+        return caller.invoke(cast(ServedRequest, self), comms)
+
     def replied(self, comms: BusContext, caller: ToolCaller) -> dict[str, JsonValue]:
         # A request decoded from the wire meets whichever caller arrived; the caller's own
         # invoke checks at runtime that it may apply this request (thread-only refusals).
-        if self.background:
-            return self.reply(FieldCodec.encode(
-                self.started_in_background(comms, caller).to_wire()), caller)
-        applied = caller.invoke(cast(ServedRequest, self), comms)
+        applied = self._applied(comms, caller)
         return self.reply(FieldCodec.encode(applied.to_wire()), caller)
+
+    def answered_parts(
+        self, comms: BusContext, caller: ToolCaller,
+    ) -> tuple[dict[str, JsonValue], tuple[str, ...], str]:
+        """Execute once and return (structured_reply, board_lines, compact_text)."""
+        applied = self._applied(comms, caller)
+        reply = self.reply(FieldCodec.encode(applied.to_wire()), caller)
+        return reply, self.board(comms, caller), applied.compact_text()
 
     def started_in_background(self, comms: BusContext, caller: ToolCaller) -> BackgroundRunStarted:
         """Detach the apply as a background run: its result is the run's output, and the

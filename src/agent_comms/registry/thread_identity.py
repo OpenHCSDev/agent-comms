@@ -18,6 +18,7 @@ from agent_comms.messaging.response_policy import (
     ResponsePolicy,
 )
 from agent_comms.nominal.class_fact import ClassFact
+from agent_comms.nominal.compact_text import CompactText
 from agent_comms.nominal.declared_family import (
     DeclaredFamily,
     UniqueExternalSelector,
@@ -176,8 +177,11 @@ class UnreportedTools(ObservedTools):
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadIncarnation(JsonFlagRecord, WireValue):
+class ThreadIncarnation(CompactText, JsonFlagRecord, WireValue):
     value_flag: ClassVar[str] = "--thread-incarnation"
+
+    def compact_text(self) -> str:
+        return self.name
     def hands_out_released_work(self) -> bool:
         """Whether work this actor released goes to an idle unit without a teammate turn."""
         return False
