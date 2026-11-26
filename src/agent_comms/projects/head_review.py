@@ -959,6 +959,19 @@ class HeadReview(DeclaredFamily, affix="HeadReview"):
         return ()
 
 
+class AcceptedHeadReview(HeadReview, declared_name=None):
+    """A head review that permits integration (success status and orderless source authority)."""
+
+    state = "success"
+
+    @classmethod
+    def allows_integration(cls) -> bool:
+        return True
+
+    def accepted_orderless_sources(self, record):
+        return (record.request,)
+
+
 @dataclass(frozen=True)
 class UnpromotedHeadReview(HeadReview):
     context = "agent-comms/merge"
