@@ -46,7 +46,7 @@ from agent_comms.cli_bridges.harness_delivery_states import (
 )
 from agent_comms.cli_bridges.history import RemoteWatchHistory
 from agent_comms.cli_bridges.open_viewer import OpenViewer
-from agent_comms.cli_bridges.runtime_updates import RuntimeUpdate
+from agent_comms.cli_bridges.runtime_updates import AllTurnsEnded, RuntimeUpdate
 from agent_comms.cli_bridges.shared import MonitorReadFile, TranscriptConfirmsDelivery
 from agent_comms.comms import Comms, client_wire
 from agent_comms.coordination.coordinator import Coordination
@@ -229,6 +229,9 @@ class ActiveWatchDecoder:
     def window_ended(self) -> tuple[RuntimeUpdate, ...]:
         return self.state.phase.window_ended(self.state)
 
+    def turn_idle(self) -> tuple[RuntimeUpdate, ...]:
+        return AllTurnsEnded().during(self.state.phase)
+
 
 @dataclass(frozen=True)
 class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJsonLines):
@@ -292,11 +295,15 @@ class PushedTranscript(ReceivesWatchReports, TranscriptConfirmsDelivery, ClaudeJ
     async def stream_antigravity(self) -> None:
         self.active_decoder.use(AntigravityJsonLines())
 
+    async def turn_idle(self) -> tuple[RuntimeUpdate, ...]:
+        return self.active_decoder.turn_idle()
+
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         offset = 0
         async for frame in self.socket:
             if frame.type is WSMsgType.TEXT and frame.data.startswith(WatchReport.wire_prefix):
-                await WATCH_REPORT.validate_json(frame.data).received(self)
+                for update in await WATCH_REPORT.validate_json(frame.data).received(self):
+                    yield update
             elif frame.type is WSMsgType.TEXT and frame.data == WINDOW_ENDED:
                 # The same gate a local bridge opens after replaying its window: without it the
                 # reader stays in replay, so chat publishes and activity never does.

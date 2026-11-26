@@ -37,6 +37,7 @@ from aiohttp import (
 from aiohttp.helpers import get_env_proxy_for_url
 from yarl import URL
 
+from agent_comms.cli_bridges.antigravity_live import AntigravitySessionSupervisor
 from agent_comms.cli_bridges.antigravity_transcript import (
     AntigravityTranscript,
     RecentAntigravityWindow,
@@ -129,6 +130,9 @@ class TranscriptRoute(ABC):
     def ledger(self, state: Path) -> PrintLedger:
         return PrintLedger()
 
+    def on_delivery(self, line: str) -> None:
+        """Called whenever a bus message is pushed down this watch socket."""
+
 
 @dataclass(frozen=True)
 class LocalFileTranscriptRoute(TranscriptRoute):
@@ -166,6 +170,12 @@ class LocalFileTranscriptRoute(TranscriptRoute):
             offset = stream.tell()
         return offset
 
+    def on_window_ended(self) -> None:
+        """Called once the initial catch-up window has been sent."""
+
+    def on_lines_sent(self) -> None:
+        """Called whenever new live transcript lines were streamed."""
+
     async def sent(self, socket: ClientWebSocketResponse) -> None:
         for frame in self.opening_frames():
             await socket.send_str(frame)
@@ -175,9 +185,13 @@ class LocalFileTranscriptRoute(TranscriptRoute):
                 offset = self.history_start(stream, stream.seek(0, 2))
                 offset = await self.lines_sent(socket, stream, offset)
                 await socket.send_str(WINDOW_ENDED)
+                self.on_window_ended()
                 while True:
                     await anext(changes)
-                    offset = await self.lines_sent(socket, stream, offset)
+                    next_offset = await self.lines_sent(socket, stream, offset)
+                    if next_offset > offset:
+                        self.on_lines_sent()
+                    offset = next_offset
 
 
 @dataclass(frozen=True)
@@ -187,13 +201,43 @@ class FollowedTranscript(LocalFileTranscriptRoute, RecentClaudeWindow):
 
 @dataclass(frozen=True)
 class AntigravityFollowedTranscript(LocalFileTranscriptRoute, RecentAntigravityWindow):
-    """Antigravity's `transcript.jsonl`, announced as Antigravity before its lines stream."""
+    """Antigravity's `transcript.jsonl`, announced as Antigravity before its lines stream,
+    with live `ConversationService` run-state sync and self-healing pane wake recovery."""
+
+    supervisor: AntigravitySessionSupervisor = field(
+        default_factory=AntigravitySessionSupervisor.inactive
+    )
 
     def ledger_name(self) -> str:
         return AntigravityTranscript.conversation_id_of(self.source)
 
     def opening_frames(self) -> tuple[str, ...]:
         return (AntigravityWatch(printed=()).line(),)
+
+    def on_delivery(self, line: str) -> None:
+        self.supervisor.note_delivery(line)
+
+    def on_window_ended(self) -> None:
+        self.supervisor.note_window_ended()
+
+    def on_lines_sent(self) -> None:
+        self.supervisor.note_transcript_activity()
+
+    async def sent(self, socket: ClientWebSocketResponse) -> None:
+        monitor = (
+            asyncio.create_task(self.supervisor.run(socket))
+            if self.supervisor.active
+            else None
+        )
+        try:
+            await super().sent(socket)
+        finally:
+            if monitor is not None:
+                monitor.cancel()
+                try:
+                    await monitor
+                except asyncio.CancelledError:
+                    pass
 
 
 @dataclass(frozen=True)
@@ -206,18 +250,26 @@ class UnfoundTranscript(TranscriptRoute):
         print(f"{ClaudeMonitorFrame.WORK_UNFOUND_PREFIX}{self.reason}", flush=True)
 
 
+def _antigravity_route(source: Path) -> AntigravityFollowedTranscript:
+    conversation_id = AntigravityTranscript.conversation_id_of(source)
+    return AntigravityFollowedTranscript(
+        source=source,
+        supervisor=AntigravitySessionSupervisor.from_env(conversation_id),
+    )
+
+
 def session_transcript(transcript: Path | None = None, *, home: Path | None = None) -> TranscriptRoute:
     if transcript is not None:
         if not transcript.is_file():
             return UnfoundTranscript(f"FileNotFoundError: transcript not found: {transcript}")
-        return AntigravityFollowedTranscript(AntigravityTranscript.full_source(transcript))
+        return _antigravity_route(AntigravityTranscript.full_source(transcript))
     if os.environ.get("CLAUDE_CODE_SESSION_ID", "").strip():
         try:
             return FollowedTranscript(RunningClaude(WatchClaim.environment_session()).source)
         except (ValueError, KeyError, OSError) as failure:
             return UnfoundTranscript(f"{type(failure).__name__}: {failure}")
     try:
-        return AntigravityFollowedTranscript(RunningAntigravity.active(home=home).source)
+        return _antigravity_route(RunningAntigravity.active(home=home).source)
     except (ValueError, KeyError, OSError) as failure:
         return UnfoundTranscript(f"{type(failure).__name__}: {failure}")
 
@@ -582,6 +634,7 @@ class InboxSocket:
         _, line = delivery.frame.event(self.exports)
         self.ledger.record(delivery.message.reference)
         print(line, flush=True)
+        self.transcript.on_delivery(line)
         await socket.send_str(PrintedNow(printed=(delivery.message.reference,)).line())
         if delivery.files:
             await socket.send_str(FilesWanted(printed=(delivery.message.reference,)).line())
