@@ -3,9 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import RegisteredResult
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.registry.thread_text import SubagentRole
 
@@ -21,5 +20,5 @@ class ClaimSlotCliCommand(CliCommand[RegisteredResult], declared_name="claim-slo
         Argument(flags=("--role",), options={"help": "The harness's agent type"}),
     ]
 
-    def apply(self, ctx: Comms) -> RegisteredResult:
+    def apply(self, ctx: CliBus) -> RegisteredResult:
         return RegisteredResult(ctx.registry.claim_slot(self.parent, self.role, ctx.goals).name)

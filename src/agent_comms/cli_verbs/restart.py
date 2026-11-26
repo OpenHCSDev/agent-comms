@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_verbs.cli_command import TargetActionCommand
 from agent_comms.cli_verbs.cli_commands import _shell_words
 from agent_comms.cli_verbs.cli_result import TargetEditResult
 from agent_comms.cli_verbs.target_fields import TargetField
-from agent_comms.comms import Comms
 from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
     InheritedArguments,
@@ -67,6 +67,6 @@ class RestartCliCommand(TargetActionCommand[OwnersRestartedResult]):
         # Explicit CLI launch overrides are independent operator arguments.
         return ()
 
-    def apply(self, ctx: Comms) -> OwnersRestartedResult:
+    def apply(self, ctx: CliBus) -> OwnersRestartedResult:
         results = ctx.owners.restart_owners(self.name, agent_bin=self.agent_bin, agent_args=self.agent_args)
         return OwnersRestartedResult(results)

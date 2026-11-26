@@ -4,10 +4,10 @@ import dataclasses
 from dataclasses import dataclass
 from typing import Annotated
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_bridges.history import History
 from agent_comms.cli_support.conversation_limits import ConversationLimitsCliCommand
 from agent_comms.cli_verbs.cli_commands import _tags
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, Normalize
 from agent_comms.registry.thread_results import ImportDirectory, SourceDirectory, ThreadImported
 from agent_comms.registry.threads import KeptModel, ModelChoice
@@ -36,7 +36,7 @@ class ImportingCliCommand(ConversationLimitsCliCommand):
         Argument(flags=("--tags",)),
     ] = dataclasses.field(default_factory=frozenset)
 
-    def imported(self, ctx: Comms, history: History, name: str) -> ThreadImported:
+    def imported(self, ctx: CliBus, history: History, name: str) -> ThreadImported:
         return ctx.threads.import_thread(
             history, name=name, worktree=self.worktree, model=self.model, tags=self.tags,
             limits=self.limits,

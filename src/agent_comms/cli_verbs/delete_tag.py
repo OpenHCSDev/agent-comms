@@ -4,10 +4,10 @@ import dataclasses
 from dataclasses import dataclass, replace
 from typing import Annotated, Self
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.exact_tag import ExactTagCliCommand
 from agent_comms.cli_verbs.cli_command import MultipleTargets, TargetActionCommand
 from agent_comms.cli_verbs.target_fields import ChoiceTargetField
-from agent_comms.comms import Comms
 from agent_comms.messaging.tag_edits import (
     KeepThreadsTagDisposition,
     TagChangeResult,
@@ -47,5 +47,5 @@ class DeleteTagCliCommand(MultipleTargets, ExactTagCliCommand, TargetActionComma
         super().with_confirmation(confirmed)
         return replace(self, confirmed=confirmed)
 
-    def apply(self, ctx: Comms) -> TagChangeResult:
+    def apply(self, ctx: CliBus) -> TagChangeResult:
         return ctx.channels.delete_tag(self.name, disposition=self.disposition, confirmed=self.confirmed)

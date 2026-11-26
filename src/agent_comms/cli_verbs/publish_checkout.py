@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.home_checkout import HomeCheckoutCliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, GitCommitText, PathText
 from agent_comms.projects.checkout_publication import CheckoutPublication
 from agent_comms.projects.storage_projection import StorageProjection
@@ -28,7 +28,7 @@ class PublishCheckoutCliCommand(HomeCheckoutCliCommand, declared_name="publish-c
     previous: Annotated[Path, PathText, Argument(flags=("--previous",))]
     head: Annotated[str, GitCommitText, Argument(flags=("--head",))]
 
-    def apply(self, ctx: Comms) -> PublishedCheckoutResult:
+    def apply(self, ctx: CliBus) -> PublishedCheckoutResult:
         thread, checkout = self.home(ctx)
         rule = ctx.registry.storage_rule
         source = self.source.expanduser().absolute()

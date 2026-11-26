@@ -1,33 +1,18 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
-from contextlib import AbstractContextManager
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from inspect import iscoroutinefunction, signature
-from types import get_original_bases
-from typing import (
-    Annotated,
-    ClassVar,
-    Generic,
-    Self,
-    TextIO,
-    TypeVar,
-    cast,
-    get_args,
-    get_origin,
-)
+from typing import Annotated, ClassVar, Generic, Self, TypeVar
 
 from pydantic import JsonValue
 
 from agent_comms.cli_support.cli_failures import CLI_FAILURES
 from agent_comms.cli_verbs.cli_result import CliResult, ResultShower, TargetEditResult
-from agent_comms.cli_verbs.declared_verb import DeclaredCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.target_command_bindings import TargetCommandBindings
 from agent_comms.cli_verbs.target_fields import TargetField
 from agent_comms.config_option import CatalogChoice, ConfigCatalogSource
-from agent_comms.execution.launch_root import LaunchRoot
-from agent_comms.installer.active_route import ActiveRoute, CommsRoute
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.messaging.channel_targets import (
     ChannelSelection,
@@ -38,7 +23,6 @@ from agent_comms.messaging.channel_targets import (
     SurroundingChannel,
 )
 from agent_comms.messaging.channels import Channel
-from agent_comms.nominal.declared_family import ModuleMembers
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     FieldPlan,
@@ -59,49 +43,19 @@ from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
 
-class CliBus(ABC):
-    """The bus context CLI commands run against; Comms supplies the live composition root."""
-
-
-type BusOpener = Callable[[CommsRoute], AbstractContextManager[CliBus]]
-
-
 class ChannelBound(TargetBound):
     """A target-bound field supplies the surrounding channel scope."""
-
-
-class CliExecution[Answer: CliResult = CliResult](Command[CliBus, Answer]):
-    """The dispatcher contract, including methods selected through multiple inheritance."""
-
-    @abstractmethod
-    def execute(self, route: CliBusRoute, output: TextIO, open_bus: BusOpener) -> int:
-        """Execute against the selected route and write to the caller's stream."""
-
-    def __init_subclass__(cls) -> None:
-        super().__init_subclass__()
-        expected, actual = (
-            (iscoroutinefunction(method),
-             tuple((parameter.kind, parameter.default)
-                   for parameter in signature(method, follow_wrapped=False).parameters.values()))
-            for method in (CliExecution.execute, cls.execute)
-        )
-        if actual != expected:
-            raise TypeError(f"{cls.__qualname__}.execute{signature(cls.execute)} disagrees with "
-                            f"CliExecution.execute{signature(CliExecution.execute)}")
 
 
 Answer = TypeVar("Answer", bound=CliResult, covariant=True, default=CliResult)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CliCommand(
-    ModuleMembers,
-    DeclaredCommand,
-    CliExecution[Answer],
+class TargetCommand(
+    CliCommand[Answer],
     TargetCommandBindings[CliBus, Thread, ThreadStatus, SurroundingChannel, Checkout, RegistrySnapshot, CatalogAccess, ResolvedChannel],
     Generic[Answer],
-    affix='CliCommand',
-    discovery_package='agent_comms.cli_verbs',
+    declared_name=None,
 ):
     menu_label: ClassVar[str] = ""
 
@@ -115,7 +69,7 @@ class CliCommand(
         return self.default_menu_label()
 
     @classmethod
-    def selection_label[C: CliCommand](cls: type[C], commands: tuple[C, ...]) -> str:
+    def selection_label[C: TargetCommand](cls: type[C], commands: tuple[C, ...]) -> str:
         labels = tuple(dict.fromkeys(command.action_label() for command in commands))
         return labels[0] if len(labels) == 1 else cls.default_menu_label()
 
@@ -129,26 +83,9 @@ class CliCommand(
         return ()
 
     @classmethod
-    def catalog_declaration(cls) -> type[CliCommand]:
+    def catalog_declaration(cls) -> type[TargetCommand]:
         """Concrete thread/channel variants declare their shared menu operation."""
         return cls
-
-    @classmethod
-    def result_type(cls) -> type[Answer]:
-        """The result this command declares once, as the family's type argument in its own or
-        an inherited class header."""
-        commands = cls.__mro__[:cls.__mro__.index(CliCommand) + 1]
-        for declaration in commands:
-            for base in get_original_bases(declaration):
-                if get_origin(base) in commands:
-                    (answer,) = get_args(base)
-                    return cast(type[Answer], answer)
-        raise TypeError(f"{cls.__qualname__} declares no result in its class header")
-
-    @classmethod
-    def invocation(cls, *arguments: str) -> tuple[str, ...]:
-        """This command's invocation on the agent-comms command line."""
-        return (cls.declared_name, *arguments)
 
     @classmethod
     def selected_targets(cls, targets: tuple[CommandTarget, ...]) -> TargetSelection:
@@ -214,7 +151,7 @@ class CliCommand(
         catalog = (comms.channels.catalog.read()
                    if channel.requires_catalog() or any(item.needs_channel_state for item in selected) else NoCatalog())
         resolved_targets = tuple((name, name.resolve(snapshot, comms.bus.require_channel)) for name in available_targets)
-        grouped: dict[type[CliCommand], dict[CliCommand, None]] = {}
+        grouped: dict[type[TargetCommand], dict[TargetCommand, None]] = {}
         for member in target.command_members(cls):
             selected_channels = channel if member.channel_fields() else NoChannel()
             for name, resolved in resolved_targets:
@@ -258,23 +195,6 @@ class CliCommand(
                          for item in bound.channel_fields()), NoChannel())
         return TargetAction((bound,), target.destination_names, type(bound), channels)
 
-    def run(self, ctx: CliBus, output: TextIO) -> int:
-        """Run this command and write its declared result."""
-        return self.apply(ctx).write(output)
-
-    @classmethod
-    def published_launch(cls) -> LaunchRoot:
-        """The root a command reads when no --root is given."""
-
-        return ActiveRoute.published_launch()
-
-    def execute(self, route: CliBusRoute, output: TextIO, open_bus: BusOpener) -> int:
-        """Open the bus this command reads, then run it; a command that must act before
-        the bus opens overrides this."""
-
-        with open_bus(route) as comms:
-            return self.run(comms, output)
-
     @classmethod
     def editor_arguments(cls, values: Mapping[str, object]) -> dict[str, object]:
         return FieldCodec.editor_arguments(cls, values)
@@ -283,7 +203,7 @@ class CliCommand(
         return ''
 
     @classmethod
-    def selection_confirmation[C: CliCommand](cls: type[C], commands: tuple[C, ...]) -> str:
+    def selection_confirmation[C: TargetCommand](cls: type[C], commands: tuple[C, ...]) -> str:
         return '\n'.join(dict.fromkeys(warning for command in commands
                                       if (warning := command.confirmation())))
 
@@ -325,7 +245,7 @@ class CliCommand(
                              snapshot=snapshot, catalog=catalog)
 
 
-class ConfigurationCommand(CliCommand, declared_name=None):
+class ConfigurationCommand(TargetCommand, declared_name=None):
     """A command whose original parameters are the selected object's settings."""
 
     @classmethod
@@ -336,9 +256,9 @@ class ConfigurationCommand(CliCommand, declared_name=None):
 @dataclass(frozen=True)
 class TargetAction:
     """A selection keeps the bound commands, not a separate permission list."""
-    bound: tuple[CliCommand, ...]
+    bound: tuple[TargetCommand, ...]
     targets: tuple[str, ...]
-    declaration: type[CliCommand]
+    declaration: type[TargetCommand]
     channels: ChannelSelection = NoChannel()
 
     @property
@@ -357,7 +277,7 @@ class TargetAction:
 
     @property
     def confirmation(self) -> str:
-        groups: dict[type[CliCommand], list[CliCommand]] = {}
+        groups: dict[type[TargetCommand], list[TargetCommand]] = {}
         for command in self.bound:
             groups.setdefault(type(command), []).append(command)
         return '\n'.join(filter(None, (declaration.selection_confirmation(tuple(commands))
@@ -497,16 +417,16 @@ class TargetSelection(TaggedUnion, affix="Target"):
         if not self.targets:
             raise ValueError('Select at least one target')
 
-    def command_members(self, family: type[CliCommand]) -> tuple[type[CliCommand], ...]:
+    def command_members(self, family: type[TargetCommand]) -> tuple[type[TargetCommand], ...]:
         """Menu membership on one target: every member of the family."""
         return family.members_with(family)
 
-    def listed_declaration(self, member: type[CliCommand]) -> type[CliCommand]:
+    def listed_declaration(self, member: type[TargetCommand]) -> type[TargetCommand]:
         """The declaration a catalog lists for a member bound on this selection."""
         return member
 
     @abstractmethod
-    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: CliBus, arguments: Mapping[str, object],
+    def run[R: CliResult](self, declaration: type[TargetCommand[R]], comms: CliBus, arguments: Mapping[str, object],
             *, confirmed: bool, channel: ChannelSelection, project: Checkout,
             snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
         """Bind, authorize and apply the declaration on this selection."""
@@ -521,7 +441,7 @@ class OneTarget(TaggedRecordMember, TargetSelection):
         if len(self.targets) != 1:
             raise ValueError('This action requires a single target')
 
-    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: CliBus, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
+    def run[R: CliResult](self, declaration: type[TargetCommand[R]], comms: CliBus, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
         name, = self.targets
         resolved = name.resolve(snapshot, comms.bus.require_channel)
         bindings = tuple(bound for context in name.contexts(declaration, channel)
@@ -552,19 +472,19 @@ class TargetBatchSchedule:
 class TargetBatch(TaggedRecordMember, TargetSelection):
     """Every other selection: each target's failure is collected and a TargetBatchResult returns."""
 
-    def command_members(self, family: type[CliCommand]) -> tuple[type[CliCommand], ...]:
+    def command_members(self, family: type[TargetCommand]) -> tuple[type[TargetCommand], ...]:
         return family.members_with(MultipleTargets)
 
-    def listed_declaration(self, member: type[CliCommand]) -> type[CliCommand]:
+    def listed_declaration(self, member: type[TargetCommand]) -> type[TargetCommand]:
         return member.catalog_declaration()
 
-    def run[R: CliResult](self, declaration: type[CliCommand[R]], comms: CliBus, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
+    def run[R: CliResult](self, declaration: type[TargetCommand[R]], comms: CliBus, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> R | TargetBatchResult:
         declaration.require_batch()
-        declarations = (tuple(member for member in CliCommand.members_with(CliCommand)
+        declarations = (tuple(member for member in TargetCommand.members_with(TargetCommand)
                               if member.catalog_declaration() is declaration)
                         if declaration.catalog_declaration() is declaration else (declaration,))
         outcomes: list[tuple[int, TargetCompleted | TargetFailed]] = []
-        planned: dict[CliCommand, tuple[int, CommandTarget, SurroundingChannel]] = {}
+        planned: dict[TargetCommand, tuple[int, CommandTarget, SurroundingChannel]] = {}
         together: dict[type[AppliedTogether], list[tuple[int, CommandTarget, AppliedTogether]]] = {}
         for name in self.targets:
             try:
@@ -611,7 +531,7 @@ class TargetBatch(TaggedRecordMember, TargetSelection):
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
 
 
-class AppliedTogether(CliCommand[Answer]):
+class AppliedTogether(TargetCommand[Answer], declared_name=None):
     """A command whose bindings in one target batch are applied as one operation."""
 
     def apply(self, ctx: CliBus) -> Answer:
@@ -643,7 +563,7 @@ class TargetEdit(Command[CliBus, TargetEditResult | Channel]):
 
 @dataclass(frozen=True, kw_only=True)
 class TargetActionCommand[Result: TargetEditResult | Channel = TargetEditResult | Channel](
-    CliCommand[Result], declared_name=None,
+    TargetCommand[Result], declared_name=None,
 ):
     """A command a thread, channel or project menu offers. Its answer is one a remote UI
     decodes, and the menu's catalog lists exactly these members."""
@@ -659,7 +579,7 @@ class PinMenuLabel:
         return "Pin" if self.pinned else "Unpin"
 
     @classmethod
-    def selection_label(cls, commands: tuple[CliCommand, ...]) -> str:
+    def selection_label(cls, commands: tuple[TargetCommand, ...]) -> str:
         labels = tuple(dict.fromkeys(command.action_label() for command in commands))
         return labels[0] if len(labels) == 1 else "Pin / Unpin"
 

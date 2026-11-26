@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_commands import TeammatesResult
-from agent_comms.comms import Comms
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -13,7 +12,7 @@ class TeammatesCliCommand(CliCommand, declared_name="teammates"):
 
     help = "List the independent collaborators on this bus's team"
 
-    def apply(self, ctx: Comms) -> TeammatesResult:
+    def apply(self, ctx: CliBus) -> TeammatesResult:
         snapshot = ctx.registry.snapshot()
         return TeammatesResult(
             tuple(thread.name for thread in snapshot.team_project.colleagues(snapshot))

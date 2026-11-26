@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated, Self
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.cli_verbs.cli_command import TargetActionCommand
 from agent_comms.cli_verbs.cli_commands import ThreadTagsResult, _tag_text, _tags
-from agent_comms.comms import Comms
 from agent_comms.messaging.channel_targets import SurroundingChannel
 from agent_comms.nominal.field_codec import Argument, EditorFormat, Normalize
 from agent_comms.registry.catalog_document import CatalogAccess
@@ -29,9 +29,9 @@ class ThreadTagsCliCommand(NamedCliCommand, TargetActionCommand[ThreadTagsResult
     ]
 
     @classmethod
-    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel, *, catalog: CatalogAccess) -> tuple[Self, ...]:
+    def thread_bindings(cls, comms: CliBus, thread: Thread, status: ThreadStatus, channel: SurroundingChannel, *, catalog: CatalogAccess) -> tuple[Self, ...]:
         return (cls(name=thread.name, tags=thread.tags),)
 
-    def apply(self, ctx: Comms) -> ThreadTagsResult:
+    def apply(self, ctx: CliBus) -> ThreadTagsResult:
         thread = ctx.channels.replace_tags(self.name, self.tags)
         return ThreadTagsResult(thread.name, thread.tags)

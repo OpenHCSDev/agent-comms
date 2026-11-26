@@ -4,9 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-from agent_comms.cli_verbs.cli_command import BusOpener, CliCommand
+from agent_comms.cli_verbs.cli_verb import BusOpener, CliBus, CliCommand
 from agent_comms.cli_verbs.cli_commands import RouteReplacedResult
-from agent_comms.comms import Comms
 from agent_comms.installer.active_route import (
     ActiveRoute,
     CommsRoute,
@@ -28,7 +27,7 @@ class ReplaceRouteCliCommand(CliCommand[RouteReplacedResult],
         route = ActiveRoute(root, RecordedBusIdentity.capture(BusStoreFile.path_in(root)))
         return RouteReplacedResult(str(root), route_new_bus(route, active_route_path()))
 
-    def apply(self, ctx: Comms) -> RouteReplacedResult:
+    def apply(self, ctx: CliBus) -> RouteReplacedResult:
         return self.answer(ctx.root)
 
     def execute(self, route: CommsRoute, output: TextIO, open_bus: BusOpener) -> int:

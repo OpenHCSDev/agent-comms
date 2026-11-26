@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.checkout_grant import (
     CheckoutGrant,
     GoalCheckoutGrant,
     PreparedCheckoutCliCommand,
 )
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.projects.repository_sources import RepositorySource
 from agent_comms.projects.storage_rules import StorageRule
@@ -21,10 +21,10 @@ class GoalCheckoutCliCommand(PreparedCheckoutCliCommand, declared_name="goal-che
     help = "Create, repair or remove an isolated repository checkout for your own goal"
     repository: Annotated[RepositorySource, Argument(flags=("repository",))]
 
-    def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant:
+    def grant(self, ctx: CliBus, thread: Thread) -> CheckoutGrant:
         return GoalCheckoutGrant(thread, thread.goal.require())
 
-    def source(self, ctx: Comms, thread: Thread) -> RepositorySource:
+    def source(self, ctx: CliBus, thread: Thread) -> RepositorySource:
         return self.repository
 
     def declared_destination(self, rule: StorageRule, thread: Thread) -> Path:

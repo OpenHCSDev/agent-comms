@@ -16,15 +16,15 @@ from typing import TYPE_CHECKING
 from agent_comms.coordination.errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_arguments import NativeArguments
-from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.installer.native_package import (
     NativePackageError,
     VerifiedNativePackage,
     pinned_native_package,
 )
-from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import RootId
-from agent_comms.storage.locked_store import RegistryFile
+from agent_comms.storage.locked_store import BusRevisionReader, RegistryFile
+from agent_comms.storage.private_path import PrivateDirectoryRole
 
 if TYPE_CHECKING:
     from agent_comms.installer.active_route import CommsRoute
@@ -142,10 +142,10 @@ class PrivateNkLaunch(RootLaunch):
         If the private directory or checked bus root is missing, create no
         directory, registry or database and make no provider request.
         """
-        NativeSessionFiles.require_private_directory(self.validated_root)
+        PrivateDirectoryRole.require_private_tree(self.validated_root, NativePiUnavailable)
         from agent_comms.registry.registry_store import RegistryStore
 
-        Bus(Bus.path_in(self.validated_root)).revision()
+        BusRevisionReader.at(self.validated_root).revision()
         registry = RegistryStore(RegistryFile.path_in(self.validated_root))
         registry.privacy().require_root(
             self.wire_root_id, IdentityConflict("Native registry namespace changed"),

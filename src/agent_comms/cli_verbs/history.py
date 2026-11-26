@@ -4,8 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
-from agent_comms.comms import Comms
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import AnyChannel
 from agent_comms.messaging.history_result import DmHistoryPageResult, HistoryPageResult
@@ -46,7 +45,7 @@ class HistoryCliCommand(CliCommand):
         ),
     ] = ""
 
-    def apply(self, ctx: Comms) -> HistoryPageResult:
+    def apply(self, ctx: CliBus) -> HistoryPageResult:
         target = CommandTarget.named(self.target)
         bounds = PageBounds(self.before.older(), self.limit)
         page = ctx.views.history_page(target, bounds, viewer=self.me, sender=self.sender)

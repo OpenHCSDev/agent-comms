@@ -3,9 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 
 
@@ -18,6 +17,6 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
         False
     )
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: CliBus) -> CliResult:
         return ctx.views.retained_context(self.thread).export(
             self.output, overwrite=self.overwrite)

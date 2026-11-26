@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_verbs.cli_command import ConfigurationCommand
 from agent_comms.cli_verbs.cli_result import TargetEditResult
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, PathText, RecordMember
 from agent_comms.team.rule_deal import RuleDeal, RuleGateSettings, SessionRuleDeal
 
@@ -25,9 +25,9 @@ class RuleGateCommand(RuleGateSettings, ConfigurationCommand, declared_name=None
     help = "Configure this session's rule reads and refreshes"
 
     @abstractmethod
-    def deal(self, ctx: Comms) -> RuleDeal: ...
+    def deal(self, ctx: CliBus) -> RuleDeal: ...
 
-    def apply(self, ctx: Comms) -> RuleGateConfiguredResult:
+    def apply(self, ctx: CliBus) -> RuleGateConfiguredResult:
         deal = self.deal(ctx)
         deal.configure(RuleGateSettings.capture(self))
         return RuleGateConfiguredResult(deal.stem, RuleGateSettings.capture(deal.current()))
@@ -37,5 +37,5 @@ class RuleGateCommand(RuleGateSettings, ConfigurationCommand, declared_name=None
 class RuleGateCliCommand(RuleGateCommand, declared_name="rule-gate"):
     stem: Annotated[Path, PathText, Argument(flags=("stem",))]
 
-    def deal(self, ctx: Comms) -> RuleDeal:
+    def deal(self, ctx: CliBus) -> RuleDeal:
         return SessionRuleDeal(self.stem.resolve())

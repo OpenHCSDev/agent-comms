@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from itertools import dropwhile
 from typing import Self
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.cli_verbs.context import ContextCliCommand
-from agent_comms.comms import Comms
 from agent_comms.execution.turn_context import ContextManifest
 
 
@@ -20,7 +20,7 @@ class ContextOptionCliCommand(ContextCliCommand):
         """These commands are selected by the context parser's options."""
 
     @abstractmethod
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: CliBus) -> CliResult:
         """Inspect the context selected at the CLI boundary."""
 
 
@@ -36,7 +36,7 @@ class SelectedContextCliCommand(ContextOptionCliCommand):
     def selected_arguments(cls, args: argparse.Namespace) -> Self:
         return cls(thread=args.thread, turn=args.turn)
 
-    def manifests(self, ctx: Comms) -> Iterator[ContextManifest]:
+    def manifests(self, ctx: CliBus) -> Iterator[ContextManifest]:
         return dropwhile(lambda manifest: not manifest.turn.matches_generation(self.turn),
                          super().manifests(ctx))
 

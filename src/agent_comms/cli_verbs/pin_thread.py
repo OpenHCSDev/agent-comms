@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated, Self
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.cli_verbs.cli_command import ChannelBound, MultipleTargets, PinMenuLabel, TargetActionCommand
 from agent_comms.cli_verbs.cli_commands import ThreadPinnedResult
-from agent_comms.comms import Comms
 from agent_comms.messaging.channel_targets import SurroundingChannel
 from agent_comms.nominal.field_codec import Argument, TargetBound
 from agent_comms.registry.catalog_document import CatalogAccess
@@ -26,7 +26,7 @@ class PinThreadCliCommand(PinMenuLabel, MultipleTargets, NamedCliCommand, Target
     ] = False
 
     @classmethod
-    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel, *, catalog: CatalogAccess) -> tuple[Self, ...]:
+    def thread_bindings(cls, comms: CliBus, thread: Thread, status: ThreadStatus, channel: SurroundingChannel, *, catalog: CatalogAccess) -> tuple[Self, ...]:
         with comms.bus.opened_activity() as activity:
             return tuple(
                 cls(name=thread.name, channel=name,
@@ -35,6 +35,6 @@ class PinThreadCliCommand(PinMenuLabel, MultipleTargets, NamedCliCommand, Target
                 if catalog.require_channel(name, activity).matches(thread.tags)
             )
 
-    def apply(self, ctx: Comms) -> ThreadPinnedResult:
+    def apply(self, ctx: CliBus) -> ThreadPinnedResult:
         ctx.channels.set_thread_pinned(self.channel, self.name, self.pinned)
         return ThreadPinnedResult(self.name, self.pinned)

@@ -3,9 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import ToolCatalogResult
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize
 from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.transport.tool_declaration import NativeRequestTools
@@ -20,5 +19,5 @@ class ToolsCliCommand(CliCommand):
         Argument(flags=("--name",), options={"type": ThreadCaller, "help": "Calling thread"}),
     ] = NoThreadCaller()
 
-    def apply(self, ctx: Comms) -> ToolCatalogResult:
+    def apply(self, ctx: CliBus) -> ToolCatalogResult:
         return self.name.catalog(ctx, NativeRequestTools.catalog)

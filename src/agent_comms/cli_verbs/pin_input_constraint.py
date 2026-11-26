@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.constraint_pin import ConstraintPinnedResult, OriginalConstraintPin
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.execution.input_key import InputKey, InputKeyText
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.nominal.field_codec import Argument
@@ -19,7 +19,7 @@ class PinInputConstraintCliCommand(OriginalConstraintPin, declared_name="pin-inp
         Argument(flags=("--source",), options={"help": "Original durable input key"}),
     ]
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: CliBus) -> CliResult:
         source = InputDispositions(ctx.root).lookup(self.source).context_provenance().require_human_input()
         pin = ctx.messaging.pin_input_constraint(self.thread, source, worktree=self.worktree)
         return ConstraintPinnedResult(pin.reference, source)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TextIO
 
-from agent_comms.cli_verbs.cli_command import BusOpener, CliBus, CliCommand
+from agent_comms.cli_verbs.cli_verb import BusOpener, CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.root_runtime import RootRuntime

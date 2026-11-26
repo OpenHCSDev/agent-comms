@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agent_comms.bus_context import BusContext
-from agent_comms.cli_verbs.cli_command import CliBus
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.config_option import ConfigurationCatalogs
 from agent_comms.execution.context_assembly import ContextAssembly
 from agent_comms.execution.input_ingress import InputIngressContext

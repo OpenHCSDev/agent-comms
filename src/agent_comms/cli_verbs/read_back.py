@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-from agent_comms.cli_verbs.cli_command import BusOpener, CliBus, CliCommand
+from agent_comms.cli_verbs.cli_verb import BusOpener, CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.installer.active_route import CommsRoute
 from agent_comms.registry.registry_store import RegistryStore

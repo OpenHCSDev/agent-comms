@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from itertools import takewhile
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.context_option import SelectedContextCliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.execution.turn_context import ContextManifest
 
 
@@ -18,7 +18,7 @@ class RecordedContextManifests(CliResult):
 
 
 class TurnContextCliCommand(SelectedContextCliCommand):
-    def apply(self, ctx: Comms) -> RecordedContextManifests:
+    def apply(self, ctx: CliBus) -> RecordedContextManifests:
         selected = tuple(takewhile(lambda manifest: manifest.turn.matches_generation(self.turn),
                                    self.manifests(ctx)))
         if not selected:

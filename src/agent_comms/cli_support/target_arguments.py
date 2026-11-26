@@ -4,7 +4,7 @@ import dataclasses
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliCommand
 from agent_comms.messaging.channel_targets import NoChannel, SurroundingChannel
 from agent_comms.nominal.field_codec import Argument, Normalize
 from agent_comms.projects.checkouts import Checkout

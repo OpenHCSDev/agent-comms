@@ -5,9 +5,8 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.nominal.declared_family import UnknownFamilyMember
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.storage.locked_store import SQLiteFile
@@ -88,5 +87,5 @@ class StoreSchemaReports(CliResult):
 class SchemaReportCliCommand(CliCommand, declared_name="schema-report"):
     help = "Report declared DDL differences in existing SQLite stores (including retained copies)"
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: CliBus) -> CliResult:
         return StoreSchemaReports(StoreSchemaReport.scan(ctx))
