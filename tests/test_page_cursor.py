@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from agent_comms.cli import build_parser
+from agent_comms.cli_runtime import build_parser
 from agent_comms.messaging.page_traversal import (
     HistoryCursor,
     HistorySourceKey,

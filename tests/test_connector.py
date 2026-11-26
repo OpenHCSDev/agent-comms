@@ -1942,14 +1942,16 @@ def older_connector(monkeypatch):
 async def remote_access(
     client: TestClient, comms: Comms,
 ) -> tuple[RemoteCoreAccess, ForwardingConnection]:
-    access = RemoteCoreAccess(
-        HttpsMcpEndpoint(URL("https://core.example/mcp")),
-        UiCredential(UiGrantId("1" * 32), RootId("a" * 32), 2**31, BearerSecret("token")))
     token = await approved_token(client, comms)
     connection = ForwardingConnection(client, asyncio.get_running_loop(), token)
-    # The kept connection is per thread; the calls below run on a worker thread, so every
-    # thread is given this one.
-    access.__dict__["connections"] = SimpleNamespace(connection=connection)
+
+    class ForwardingRemoteAccess(RemoteCoreAccess):
+        def connection(self, context, timeout):
+            return connection
+
+    access = ForwardingRemoteAccess(
+        HttpsMcpEndpoint(URL("https://core.example/mcp")),
+        UiCredential(UiGrantId("1" * 32), RootId("a" * 32), 2**31, BearerSecret("token")))
     return access, connection
 
 

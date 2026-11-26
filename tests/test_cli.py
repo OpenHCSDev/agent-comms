@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli import CliInvocation, build_parser
+from agent_comms.cli_runtime import CliInvocation, build_parser
 from agent_comms.cli_bridges.shared import Send
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
 from agent_comms.cli_verbs.cli_command import (

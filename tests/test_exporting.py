@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.cli import CliInvocation
+from agent_comms.cli_runtime import CliInvocation
 from agent_comms.comms import Comms
 from agent_comms.errors import ExportDestinationExists, RelationViolationError
 from agent_comms.messaging.bus import Bus, ClaimRecord

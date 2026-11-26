@@ -16,7 +16,7 @@ import pytest
 from pydantic import JsonValue
 from transcript_record_fixture import transcript_record
 
-from agent_comms.cli import CliInvocation
+from agent_comms.cli_runtime import CliInvocation
 from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
 from agent_comms.cli_bridges.codex import CodexAppServer
 from agent_comms.cli_bridges.codex_connection import CodexConnection

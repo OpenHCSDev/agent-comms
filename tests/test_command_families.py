@@ -7,7 +7,7 @@ import json
 import pytest
 from acp.schema import PromptRequest, TextContentBlock
 
-from agent_comms.cli import CliInvocation, build_parser
+from agent_comms.cli_runtime import CliInvocation, build_parser
 from agent_comms.comms import wire
 from agent_comms.execution.native_arguments import (
     ConfiguredBinary,

@@ -1,6 +1,6 @@
 import sys
 
-from agent_comms.cli import CliInvocation
+from agent_comms.cli_runtime import CliInvocation
 from agent_comms.cli_bridges.runtime_updates import (
     AppendDraftItem,
     StartedItem,

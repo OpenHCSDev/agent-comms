@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 import pytest
 from transcript_record_fixture import transcript_record
 
-from agent_comms.cli import CliInvocation
+from agent_comms.cli_runtime import CliInvocation
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.runtime_updates import FinishedItem
 from agent_comms.cli_bridges.shared import Binding, Options, Serve, StoredBinding, Watch
