@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import threading
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
+from types import MappingProxyType
 from typing import Annotated, Self
 
 from pydantic import JsonValue
@@ -33,6 +36,7 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.nominal.shared_json import SharedJson
 from agent_comms.planning.plan_phase_base import Plan, PlanPhase
 from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.storage.file_observation import FileRevision
 from agent_comms.storage.locked_store import JsonDocument
 from agent_comms.task_attachments.disclosure_text import ViewFacts, ViewSectionFacts, ViewTable
 from agent_comms.task_attachments.team_pings import (
@@ -457,6 +461,19 @@ class RetainedTeamBoard:
 
 
 @dataclass(frozen=True)
+class _CachedBoardPublication:
+    """Process-local cache entry keyed by exact FileRevision of team_frames.json."""
+
+    revision: FileRevision
+    publication: TeamBoardPublication
+    packets: Mapping[ThreadIncarnation, tuple[TeamUpdate, ...]] | None = None
+
+
+_board_publication_lock = threading.Lock()
+_board_publication_cache: dict[Path, _CachedBoardPublication] = {}
+
+
+@dataclass(frozen=True)
 class TeamBoardPublicationStore(
     TeamBoardFile,
     JsonDocument[TeamBoardPublication],
@@ -472,6 +489,36 @@ class TeamBoardPublicationStore(
 
     def empty(self) -> TeamBoardPublication:
         return TeamBoardPublication()
+
+    def _stat_revision(self) -> FileRevision | None:
+        try:
+            return FileRevision.from_stat(self.path.stat())
+        except FileNotFoundError:
+            with _board_publication_lock:
+                _board_publication_cache.pop(self.path, None)
+            return None
+
+    def read(self) -> TeamBoardPublication:
+        revision = self._stat_revision()
+        if revision is None:
+            return self.empty()
+        with _board_publication_lock:
+            cached = _board_publication_cache.get(self.path)
+            if cached is not None and cached.revision == revision:
+                return cached.publication
+        publication = self._read_unlocked()
+        after = self._stat_revision()
+        if after == revision:
+            with _board_publication_lock:
+                _board_publication_cache[self.path] = _CachedBoardPublication(revision, publication)
+        return publication
+
+    def _publish_encoded_unlocked(self, encoded: JsonValue) -> None:
+        with _board_publication_lock:
+            _board_publication_cache.pop(self.path, None)
+        super()._publish_encoded_unlocked(encoded)
+        with _board_publication_lock:
+            _board_publication_cache.pop(self.path, None)
 
     @staticmethod
     def frame_records(frames: SharedJson) -> dict[ThreadIncarnation, JsonValue]:
@@ -527,13 +574,32 @@ class TeamBoardPublicationStore(
         publication: TeamBoardPublication | None = None,
     ) -> dict[ThreadIncarnation, tuple[TeamUpdate, ...]]:
         """Per-recipient packets derived from the one shared retained frame cut."""
+        revision: FileRevision | None = None
+        if publication is None:
+            revision = self._stat_revision()
+            if revision is None:
+                return {}
+            with _board_publication_lock:
+                cached = _board_publication_cache.get(self.path)
+                if cached is not None and cached.revision == revision:
+                    if cached.packets is not None:
+                        return dict(cached.packets)
+                    publication = cached.publication
+            if publication is None:
+                publication = self._read_unlocked()
         records = self.records(publication)
         packets = FieldCodec.record_key(TeamHudRecord, "packets")
         decoded = FieldCodec.decode_shared(
             tuple[tuple[TeamUpdate, ...], ...],
             [raw[packets] for raw in records.values()],
         )
-        return dict(zip(records, decoded, strict=True))
+        result = dict(zip(records, decoded, strict=True))
+        if revision is not None and self._stat_revision() == revision:
+            with _board_publication_lock:
+                _board_publication_cache[self.path] = _CachedBoardPublication(
+                    revision, publication, MappingProxyType(result),
+                )
+        return result
 
     @staticmethod
     def captured_frames(huds: tuple[TeamHud, ...]) -> SharedJson:

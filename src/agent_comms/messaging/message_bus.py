@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import threading
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import aclosing, contextmanager
 from dataclasses import dataclass
@@ -41,7 +42,12 @@ from agent_comms.registry.peer_relation import PeerRelation
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
+from agent_comms.storage.file_observation import FileIdentity, FileRevision
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
+
+
+_pending_counts_lock = threading.Lock()
+_pending_counts_cache: dict[tuple[Path, FileIdentity], HeldUnseenCounts] = {}
 
 
 @dataclass(frozen=True)
@@ -182,8 +188,17 @@ class MessageBus[Writes: Publisher](PublishedBus[Writes], BusReadSource):
                       for actor in set(actors.values())}
         seen = {actor: basis.document.cursor(actor, basis.registry, source)
                 for actor in deliveries}
-        counts = source.unseen_counts(basis.registry, deliveries, seen)
-        return {name: counts[actor] for name, actor in actors.items()}
+        identity = FileRevision.capture(self.bus.path).file_identity()
+        cache_key = (self.bus.path, identity) if isinstance(identity, FileIdentity) else None
+        held = HeldUnseenCounts()
+        if cache_key is not None:
+            with _pending_counts_lock:
+                held = _pending_counts_cache.get(cache_key, held)
+        updated = source.advanced_unseen_counts(held, basis.registry, deliveries, seen)
+        if cache_key is not None:
+            with _pending_counts_lock:
+                _pending_counts_cache[cache_key] = updated
+        return {name: updated.counts[actor] for name, actor in actors.items()}
 
     def pending_counts_opened(
         self, source: BusSnapshot, selection: CapturedSelection, *, conversations: Iterable[str] = (),

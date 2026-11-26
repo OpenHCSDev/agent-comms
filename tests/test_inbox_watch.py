@@ -33,7 +33,7 @@ from agent_comms.cli_bridges.claude_transcript import (
     ReconnectUrl,
 )
 from agent_comms.cli_bridges.harness_delivery_states import PrintLedgerId
-from agent_comms.cli_bridges.inbox_watch import OpenWatch
+from agent_comms.cli_bridges.inbox_watch import InboxWatch, OpenWatch
 from agent_comms.cli_bridges.inbox_watch_client import (
     RECONNECTS_ALONE,
     WAITS_FOR_MAINTENANCE,
@@ -55,6 +55,7 @@ from agent_comms.comms import Comms
 from agent_comms.transport.connector import Connector
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.execution.launch_runtime import InstalledSource, LaunchRuntime
+from agent_comms.messaging.agent_inbox import TakenInputStart
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.projects.checkouts import Checkout
@@ -1210,3 +1211,36 @@ def test_file_notice_lines_are_claimed_and_excluded_from_inline_bodies(comms: Co
     assert not ClaudeMonitorFrame.claims("File 0: shot.png (image/png, 10 bytes)")
     message = comms.messaging.send("sender", "cloud", f"hello\n{notice}").message
     assert not ClaudeMonitorFrame(message, ()).shows_safely_inline
+
+
+def test_inbox_watch_untaken_since_skips_irrelevant_targets_and_delivers_relevant_ones(
+    comms: Comms, monkeypatch,
+) -> None:
+    """Messages on channels a watched thread does not belong to must not trigger full
+    coordination-attached inbox scans, while direct messages and subscribed channels still deliver."""
+    comms.registry.declare(NativeThread("sender", frozenset({"other"}), Checkout(comms.root)))
+    comms.registry.declare(ExternalThread("cloud", frozenset(), Checkout(comms.root)))
+    comms.channels.create_tag("other")
+    watch = InboxWatch("cloud", comms.root, ReconnectUrl(url="ws://127.0.0.1/watch/x"))
+
+    seq, initial = watch.untaken_since(TakenInputStart(), -1)
+    assert initial == ()
+
+    # Post on a channel 'cloud' does not belong to: must skip CommsInboxTool.messages.
+    comms.messaging.send("sender", "#other", "unrelated traffic")
+    monkeypatch.setattr(
+        CommsInboxTool, "messages",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("scanned unrelated channel")),
+    )
+    seq2, skipped = watch.untaken_since(TakenInputStart(), seq)
+    assert skipped == () and seq2 > seq
+
+    # No new bus commit: must short-circuit before opening wire or scanning.
+    seq3, idle = watch.untaken_since(TakenInputStart(), seq2)
+    assert idle == () and seq3 == seq2
+
+    monkeypatch.undo()
+    direct = comms.messaging.send("sender", "cloud", "for cloud").message
+    seq4, delivered = watch.untaken_since(TakenInputStart(), seq3)
+    assert [item.message.reference for item in delivered] == [direct.reference]
+    assert seq4 == direct.reference.seq

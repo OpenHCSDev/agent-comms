@@ -502,7 +502,7 @@ class TeamUpdate(OwnerNotice, TeamObservation, PingLines, declared_name=None):
         from agent_comms.team.team_hud import TeamBoardPublicationStore
 
         store = TeamBoardPublicationStore.at(comms.root)
-        return store.packet_map(store.read()).get(recipient, ())
+        return store.packet_map().get(recipient, ())
 
     @classmethod
     def published(cls, comms: BusContext, recipient: ThreadIncarnation) -> tuple[TeamUpdate, ...]:
