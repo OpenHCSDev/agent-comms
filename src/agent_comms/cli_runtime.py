@@ -5,15 +5,21 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from contextlib import AbstractContextManager
+from importlib import import_module
 from typing import TextIO
 
 from agent_comms.cli import CLI_DESCRIPTION, format_top_level_help, is_top_level_help
 from agent_comms.cli_bridges.cli_arguments import CliArgumentParser, CliArguments, CliParserExit
 from agent_comms.cli_bridges.cli_protocol import CoreError
 from agent_comms.cli_support.cli_failures import CLI_FAILURES
-from agent_comms.comms import Comms
+from agent_comms.cli_verbs.cli_command import CliBus
 from agent_comms.execution.launch_root import LaunchRoot, started
-from agent_comms.installer.active_route import resolve_comms_route
+from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
+
+
+def _open_bus(route: CommsRoute) -> AbstractContextManager[CliBus]:
+    return import_module("agent_comms.comms").Comms.client(route)
 
 
 def _fail(error: BaseException, output: TextIO) -> int:
@@ -53,7 +59,7 @@ class CliInvocation:
         route = resolve_comms_route(args.root.resolve(lambda: launch_root).path)
         with LaunchRoot.from_path(route.root).selected():
             command = declaration.from_arguments(args)
-            return command.execute(route, output, Comms.client)
+            return command.execute(route, output, _open_bus)
 
     def invoke(self, arguments: Sequence[str], output: TextIO) -> int:
         """A call borrows its root; success, refusal and parser exit all restore it."""

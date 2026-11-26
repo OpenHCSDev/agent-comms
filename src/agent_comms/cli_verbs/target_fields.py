@@ -6,7 +6,7 @@ from typing import cast
 
 from pydantic import JsonValue
 
-from agent_comms.config_options import CatalogChoice, CatalogConfigOption, ConfigOptions
+from agent_comms.config_option import CatalogChoice, CatalogConfigOption, ConfigCatalogSource
 from agent_comms.nominal import field_codec
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.thread_model import CatalogSelection
@@ -56,7 +56,7 @@ class TargetField:
         """An unrestricted field does not declare a finite-choice editor."""
         return ()
 
-    async def prepare(self, catalogs: ConfigOptions, selection: object) -> TargetField:
+    async def prepare(self, catalogs: ConfigCatalogSource, selection: object) -> TargetField:
         return self
 
     def offered(self) -> tuple[CatalogChoice, ...]:
@@ -102,7 +102,7 @@ class ChoiceTargetField(TargetField):
     def with_offered(self, options: tuple[CatalogChoice, ...]) -> ChoiceTargetField:
         return replace(self, options=options)
 
-    async def prepare(self, catalogs: ConfigOptions,
+    async def prepare(self, catalogs: ConfigCatalogSource,
                       selection: object) -> ChoiceTargetField:
         decoder = field_codec.compile_decoder(self.annotation)
         options = (CatalogChoice(
@@ -137,7 +137,7 @@ class CatalogTargetField(ChoiceTargetField):
     def choice_value(self, value: object) -> str | None:
         return FieldCodec.decode(str | None, self.plan.value.decode_editor(value))
 
-    async def prepare(self, catalogs: ConfigOptions,
+    async def prepare(self, catalogs: ConfigCatalogSource,
                       selection: object) -> CatalogTargetField:
         catalog = catalogs.catalog_for(self.catalog)
         options = await catalog.display_choices(

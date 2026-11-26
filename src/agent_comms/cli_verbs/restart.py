@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from agent_comms.cli_verbs.cli_command import TargetActionCommand
-from agent_comms.cli_verbs.cli_commands import OwnersRestartedResult, _shell_words
+from agent_comms.cli_verbs.cli_commands import _shell_words
+from agent_comms.cli_verbs.cli_result import TargetEditResult
 from agent_comms.cli_verbs.target_fields import TargetField
 from agent_comms.comms import Comms
 from agent_comms.execution.native_arguments import (
@@ -13,14 +14,21 @@ from agent_comms.execution.native_arguments import (
     LaunchArguments,
     LaunchBinary,
 )
+from agent_comms.execution.owner_lifecycle import OwnerRestartResult
 from agent_comms.execution.restart_scope import AllOwners, RestartTarget
 from agent_comms.nominal.field_codec import (
     Argument,
     NamedArgumentGroup,
     Normalize,
+    RecordMember,
     TargetBound,
     WireName,
 )
+
+
+@dataclass(frozen=True)
+class OwnersRestartedResult(RecordMember, TargetEditResult):
+    restarted: tuple[OwnerRestartResult, ...]
 
 
 @dataclass(frozen=True, kw_only=True)

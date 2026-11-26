@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
+from agent_comms.cli_support.constraint_pin import ConstraintDroppedResult
 from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.cli_verbs.cli_commands import (
-    ConstraintDroppedResult,
     WorktreeArgument,
     _message_reference,
 )

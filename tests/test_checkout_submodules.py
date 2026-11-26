@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 import fixture_git
-from agent_comms.cli_verbs.cli_commands import OrderCheckoutGrant
+from agent_comms.cli_support.checkout_grant import OrderCheckoutGrant
 from agent_comms.comms import wire
 from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec, GoalId

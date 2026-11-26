@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.cli_verbs.checkpoint import CheckpointCliCommand
-from agent_comms.cli_verbs.cli_commands import (
+from agent_comms.cli_verbs.checkpoint import (
     CleanCheckpoint,
     PushedCheckpoint,
     PushUnknownCheckpoint,

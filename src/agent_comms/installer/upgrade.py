@@ -33,11 +33,10 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TextIO
 
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
 from agent_comms.cli_verbs.cli_command import CliCommand
-from agent_comms.cli_verbs.cli_commands import BusReadBack, StoreDifference
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.cli_verbs.planned_reconcile import PlannedReconcileCliCommand
-from agent_comms.cli_verbs.read_back import ReadBackCliCommand
-from agent_comms.cli_verbs.reconcile_stores import ReconcileStoresCliCommand
+from agent_comms.cli_verbs.read_back import BusReadBack, ReadBackCliCommand
+from agent_comms.cli_verbs.reconcile_stores import ReconcileStoresCliCommand, StoreDifference
 from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_verbs.target_action import TargetActionCliCommand

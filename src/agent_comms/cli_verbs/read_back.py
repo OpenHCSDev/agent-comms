@@ -4,11 +4,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-from agent_comms.cli_verbs.cli_command import BusOpener, CliCommand
-from agent_comms.cli_verbs.cli_commands import BusReadBack
-from agent_comms.comms import Comms
+from agent_comms.cli_verbs.cli_command import BusOpener, CliBus, CliCommand
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.installer.active_route import CommsRoute
 from agent_comms.registry.registry_store import RegistryStore
+
+
+@dataclass(frozen=True)
+class BusReadBack(CliResult):
+    """What a bus's registry holds that a carry must keep: its threads."""
+
+    threads: int
+
+    def lines(self) -> tuple[str, ...]:
+        """A read-back proves the carried bus reads; only an answered message proves an
+        agent works on it, and an install answers none."""
+        return (f"Read back: {self.threads} threads",
+                "No live agent has answered a message on this install yet")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -19,7 +31,7 @@ class ReadBackCliCommand(CliCommand[BusReadBack], declared_name="read-back"):
     def answer(self, root: Path) -> BusReadBack:
         return BusReadBack(len(RegistryStore.at(root).snapshot().threads))
 
-    def apply(self, ctx: Comms) -> BusReadBack:
+    def apply(self, ctx: CliBus) -> BusReadBack:
         return self.answer(ctx.root)
 
     def execute(self, route: CommsRoute, output: TextIO, open_bus: BusOpener) -> int:

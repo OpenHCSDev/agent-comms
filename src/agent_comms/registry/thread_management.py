@@ -14,7 +14,7 @@ from agent_comms.agent_backend import NewThreadBackend, RuntimeLocation
 from agent_comms.bus_context import BusThreads
 from agent_comms.cli_bridges.history import History
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.config_options import RunningSelection
+from agent_comms.config_option import RunningSelection
 from agent_comms.coordination.errors import CoordinationError
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (

@@ -1,9 +1,7 @@
 """Configuration owns its model and thinking catalogs."""
 
-import asyncio
 import os
-from abc import ABC, abstractmethod
-from collections import Counter
+from abc import abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import aclosing
 from dataclasses import dataclass, field
@@ -11,7 +9,13 @@ from functools import cached_property
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.coordination.errors import Refused
+from agent_comms.config_option import (
+    CatalogChoice,
+    CatalogConfigOption,
+    ConfigCatalogSource,
+    ConfigOption,
+    ConfigurationChanges,
+)
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.launch_runtime import LaunchRuntime, ThreadLaunch
 from agent_comms.execution.native_arguments import NativeArguments
@@ -20,25 +24,22 @@ from agent_comms.execution.pi_commands import (
     GetAvailableThinkingLevels,
     SetModel,
     SetThinkingLevel,
-    SettingCommand,
 )
-from agent_comms.execution.pi_vocabulary import ServiceTier, ThinkingChoice
+from agent_comms.execution.pi_vocabulary import ServiceTier
 from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.watched import FileSource
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import AcpSessionId, Description, FieldCodec, FieldPlan
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.registry.thread_model import CatalogSelection, CliInboxSelection, ThreadModel
+from agent_comms.registry.thread_model import CatalogSelection, CliInboxSelection
 from agent_comms.registry.thread_settings import (
-    ConfigurationSlot,
     ContextEditPolicy,
     ContextEditSetting,
     ModelSetting,
     ServiceTierSetting,
     ThinkingSetting,
-    ThreadSettings,
 )
 from agent_comms.registry.threads import (
     ChosenContextEdit,
@@ -49,187 +50,6 @@ from agent_comms.registry.threads import (
 )
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.project_request import ProjectRuntimeRequest
-
-
-class InvalidConfigChoice(ValueError):
-    """A configured value is not a member of its discovered catalog."""
-
-
-@dataclass(frozen=True, slots=True)
-class RunningSelection(CatalogSelection):
-    """What a thread runs: its stored choice, otherwise the model its runtime reports."""
-    thread: Thread
-    model: ThreadModel = field()
-
-    @property
-    def thinking_level(self) -> type[ThinkingChoice]:
-        return self.thread.thinking_level
-
-    @property
-    def service_tier(self) -> ServiceTier:
-        return self.thread.service_tier
-
-    @property
-    def context_edit_policy(self) -> ContextEditPolicy:
-        return self.thread.context_edit_policy
-
-    @property
-    def project_path(self) -> Path:
-        return self.thread.project_path
-
-
-@dataclass(frozen=True, slots=True)
-class CatalogChoice:
-    """A catalog value; only the ACP view needs a string for an unset value."""
-    name: str
-    value: str | None
-    description: str | None = None
-
-    @property
-    def editor_value(self) -> str:
-        return self.value if self.value is not None else ""
-
-
-class ConfigurationChanges[Configuration](ABC):
-    """The configuration writes an option asks its executing session to make."""
-
-    @abstractmethod
-    async def configure_thread(
-        self, configuration: Configuration, thread: Thread, command: SettingCommand,
-    ) -> None: ...
-
-    @abstractmethod
-    async def store_configuration(
-        self, thread: Thread, change: NextTurnConfiguration,
-    ) -> None: ...
-
-    @abstractmethod
-    async def switch_to_cli_inbox(self, thread: Thread) -> None: ...
-
-
-class ConfigOption(DeclaredFamily, affix="ConfigOption"):
-    category: ClassVar[str]
-
-    @classmethod
-    def declared_field(cls) -> FieldPlan:
-        selected, = (plan for plan in FieldCodec.field_plans(ThreadSettings)
-                     if any(issubclass(cls, slot.value)
-                            for slot in ConfigurationSlot.single(plan.annotation)))
-        return selected
-
-    @property
-    def title(self) -> str:
-        return self.declared_field().label
-
-    @property
-    def description(self) -> str:
-        return self.declared_field().setting(Description, "")
-
-    def current_value(self, thread: CatalogSelection) -> str | None:
-        plan = self.declared_field()
-        return FieldCodec.decode(str | None, plan.value.encode(plan.current(thread)))
-
-    @abstractmethod
-    async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]: ...
-
-
-    @abstractmethod
-    async def change(
-        self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
-    ) -> None: ...
-
-
-class CatalogConfigOption(ConfigOption):
-    """A selected option owns its catalog, auth revision and acquisition lock."""
-
-    @classmethod
-    def implementing(cls, role: type) -> type[CatalogConfigOption]:
-        member, = (member for member in cls.members_with(cls) if issubclass(member, role))
-        return member
-
-    def __init__(self, owner: ConfigOptions):
-        self.owner = owner
-        self.catalogs: dict[tuple[Path, tuple[str, ...]], asyncio.Task[list[CatalogChoice]]] = {}
-        self.waiters: Counter[asyncio.Task[list[CatalogChoice]]] = Counter()
-        self.auth: tuple[tuple[int, int], ...] | None = None
-        self.lock = asyncio.Lock()
-
-    @property
-    def current_auth(self) -> bool:
-        return self.auth == self.owner.launch.configuration.auth_revision()
-
-    def cache_key(self, thread: CatalogSelection) -> tuple[Path, tuple[str, ...]]:
-        return (thread.project_path, thread.model.native(self.owner.agent_args).argv)
-
-    async def choices(self, thread: CatalogSelection) -> list[CatalogChoice]:
-        async with self.lock:
-            if not self.current_auth:
-                self.catalogs.clear()
-                self.auth = self.owner.launch.configuration.auth_revision()
-            key = self.cache_key(thread)
-            if key not in self.catalogs:
-                # A successful empty catalogue is setup state, not a failed
-                # native process. Keep the existing unset choice reachable so
-                # the client can connect a provider before selecting a model.
-                self.catalogs[key] = asyncio.create_task(self.discover(thread))
-            catalog = self.catalogs[key]
-            self.waiters[catalog] += 1
-        succeeded = False
-        cancelled = False
-        try:
-            result = await asyncio.shield(catalog)
-            succeeded = True
-            return result
-        except asyncio.CancelledError:
-            cancelled = True
-            # The shield keeps one waiter's cancellation from failing the others;
-            # the last waiter to leave retires the discovery and reaps its child.
-            if self.waiters[catalog] == 1:
-                catalog.cancel()
-                if self.catalogs.get(key) is catalog:
-                    del self.catalogs[key]
-                await asyncio.gather(catalog, return_exceptions=True)
-            raise
-        finally:
-            if not succeeded and not cancelled and self.catalogs.get(key) is catalog:
-                # A failed discovery is not a catalog to keep for the next form.
-                del self.catalogs[key]
-            self.waiters.subtract((catalog,))
-            if not self.waiters[catalog]:
-                del self.waiters[catalog]
-
-    async def display_choices(self, thread: CatalogSelection, *, current: str | None) -> list[CatalogChoice]:
-        """Keep the editor's current value, distinct from its discovery context, reachable."""
-        choices = await self.choices(thread)
-        if current in {choice.value for choice in choices}:
-            return choices
-        name = "Not configured" if current is None else f"{current} (unavailable)"
-        return [CatalogChoice(name=name, value=current), *choices]
-
-
-    @abstractmethod
-    async def apply(
-        self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
-    ) -> None: ...
-
-    async def change(
-        self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
-    ) -> None:
-        try:
-            await self.validate(thread, value)
-        except InvalidConfigChoice as error:
-            raise Refused.invalid_params({"reason": str(error)}) from error
-        await self.apply(owner, thread, value)
-
-    def require_value(self, value: str | None, choices: list[CatalogChoice]) -> None:
-        if value not in {choice.value for choice in choices}:
-            valid = ", ".join(choice.editor_value for choice in choices)
-            raise InvalidConfigChoice(
-                f"{self.title} {value!r} is unavailable; choose one of: {valid}"
-            )
-
-    async def validate(self, thread: CatalogSelection, value: str) -> None:
-        self.require_value(value, await self.choices(thread))
 
 
 class ModelConfigOption(ModelSetting, CatalogConfigOption):
@@ -379,7 +199,7 @@ class DiscoveredModels(ModelCatalog):
 
 
 @dataclass(eq=False)
-class ConfigOptions:
+class ConfigOptions(ConfigCatalogSource):
     """Own one launch's settings and declared model and thinking catalogs."""
 
     launch: RetainedOwnerLaunch
@@ -445,11 +265,4 @@ class ConfigOptions:
                 await option.validate(thread, value)
 
 
-class ConfigurationCatalogs:
-    """A serving root retains the catalogs and their existing authentication invalidation."""
-
-    route: CommsRoute
-
-    @cached_property
-    def configuration_catalogs(self) -> ConfigOptions:
-        return ConfigOptions.for_route(self.route)
+ConfigOption._catalog_owner = ConfigOptions

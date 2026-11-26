@@ -1,4 +1,5 @@
 """The actual stored session fields and their configuration roles."""
+from abc import ABC
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Annotated, ClassVar
@@ -14,6 +15,10 @@ from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 
 class ConfigurationSlot(Catalog):
     """The role whose catalog and writer compose this stored field."""
+
+
+class SettingRequest(ABC):
+    """Runtime setting command implemented by Pi RPC SettingCommand."""
 
 
 class ModelSetting:

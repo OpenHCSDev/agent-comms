@@ -7,7 +7,8 @@ import pytest
 
 from agent_comms.cli_runtime import build_parser
 from agent_comms.cli_bridges.shared import UnobservedBridge
-from agent_comms.cli_verbs.cli_commands import BusReadBack, StoreDifference
+from agent_comms.cli_verbs.read_back import BusReadBack
+from agent_comms.cli_verbs.reconcile_stores import StoreDifference
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.errors import RelationViolationError, ThreadNotStoppedError
 from agent_comms.execution.launch_runtime import LaunchRuntime, RestoredRuntime

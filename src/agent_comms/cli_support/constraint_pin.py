@@ -7,7 +7,26 @@ from typing import Annotated
 
 from agent_comms.cli_verbs.cli_command import CliCommand
 from agent_comms.cli_verbs.cli_commands import WorktreeArgument
+from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.execution.input_origin import InputProvenance
+from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import Argument
+
+
+@dataclass(frozen=True)
+class ConstraintPinnedResult(CliResult):
+    pin: MessageReference
+    source: MessageReference | InputProvenance
+
+
+@dataclass(frozen=True)
+class ConstraintSupersededResult(CliResult):
+    supersession: MessageReference
+
+
+@dataclass(frozen=True)
+class ConstraintDroppedResult(CliResult):
+    drop: MessageReference
 
 
 @dataclass(frozen=True, kw_only=True)
