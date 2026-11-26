@@ -38,11 +38,18 @@ class HistoryCliCommand(CliCommand):
             options={"help": "Exclusive older-page cursor (JSON)", "type": json.loads},
         ),
     ] = NewestCursor()
+    sender: Annotated[
+        str,
+        Argument(
+            flags=("--from",),
+            options={"help": "Filter to one sender name, or 'human'/'owner' for verbatim owner turns"},
+        ),
+    ] = ""
 
     def apply(self, ctx: Comms) -> HistoryPageResult:
         target = CommandTarget.named(self.target)
         bounds = PageBounds(self.before.older(), self.limit)
-        page = ctx.views.history_page(target, bounds, viewer=self.me)
+        page = ctx.views.history_page(target, bounds, viewer=self.me, sender=self.sender)
         return target.history_result(
             ctx.bus.require_channel, DmHistoryPageResult, tuple(reversed(page.messages)), page.has_older,
         )

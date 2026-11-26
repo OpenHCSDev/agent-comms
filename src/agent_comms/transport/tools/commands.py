@@ -558,6 +558,13 @@ class CommsHistoryTool(ReadRequest[HistoryPageResult]):
     before: Annotated[
         PageCursor, *tool_field("Exclusive older-page cursor from the previous result")
     ] = NewestCursor()
+    sender: Annotated[
+        str,
+        *tool_field(
+            "Optional sender filter: thread name (e.g. 'user') or 'human'/'owner' "
+            "for verbatim human turns"
+        ),
+    ] = ""
 
 
 @dataclass(frozen=True, kw_only=True)

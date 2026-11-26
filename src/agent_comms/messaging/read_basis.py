@@ -1092,6 +1092,30 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
         )
 
 
+@dataclass(frozen=True, slots=True)
+class SenderDisplayScope(MessageDisplayScope):
+    """Narrow any display scope to messages authored by one declared set of sender names."""
+
+    scope: MessageDisplayScope
+    senders: frozenset[str]
+
+    @property
+    def index_targets(self) -> frozenset[str]:
+        return self.scope.index_targets
+
+    @property
+    def condition(self) -> tuple[str, tuple]:
+        inner_sql, inner_params = self.scope.condition
+        names = tuple(sorted(self.senders))
+        if not names:
+            return "0", ()
+        sender_sql = "{sender} IN (" + ",".join("?" for _ in names) + ")"
+        return f"({inner_sql}) AND {sender_sql}", (*inner_params, *names)
+
+    def includes(self, message: Message) -> bool:
+        return self.scope.includes(message) and message.sender in self.senders
+
+
 class TargetedDisplayScope(MessageDisplayScope, declared_name=None):
     """A display scope carrying explicit target names for route-index filtering."""
 
