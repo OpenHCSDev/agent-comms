@@ -9,9 +9,11 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, NullMember, WireExclude
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.team.vibe_check import ChokeholdReleased
 from agent_comms.transport.mcp_wire import AnsweredCall
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tool_request import ServedRequest
@@ -113,3 +115,23 @@ def test_comms_board_renders_live_board_when_no_heartbeat_frame_exists(comms: Co
     list_req = ServedRequest.member_named("comms_todo_list").decoded(comms, {})
     _, _, l_text = list_req.answered_parts(comms, caller)
     assert l_text == "No open problems"
+
+    hud_req = ServedRequest.member_named("comms_hud").decoded(comms, {})
+    h_reply, _, h_text = hud_req.answered_parts(comms, caller)
+    assert "Load: 0" in h_text
+    assert h_reply["teammate"]["name"] == "alpha"
+
+    load_req = ServedRequest.member_named("comms_team_load").decoded(comms, {})
+    load_reply, _, load_text = load_req.answered_parts(comms, caller)
+    assert "load 0" in load_text
+    assert load_reply["load"]["owed"] == 0
+
+    rules_req = ServedRequest.member_named("comms_standing_rules").decoded(comms, {})
+    _, _, rules_text = rules_req.answered_parts(comms, caller)
+    assert "Load: 0" in rules_text
+
+
+def test_chokehold_released_without_pattern_catalog_recitation(comms: Comms) -> None:
+    thread = comms.registry.declare(NativeThread("alpha", frozenset({"comms"}), Checkout(comms.root)))
+    reply = Message("alpha", "user", "Fixed the stuck build directly.", InfoKind, timestamp=100.0, seq=1)
+    assert len(ChokeholdReleased.judged(thread.incarnation, reply, ())) == 1

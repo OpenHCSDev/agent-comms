@@ -188,25 +188,6 @@ class VibeCheckUnanswered(Escalation, UndatedStandingRule):
                 " still ignoring it? -> answer it")
 
 
-class PatternCatalog:
-    """The packaged pattern catalog, read whole; an answer complies only if it quotes it."""
-
-    words: ClassVar[int] = 8
-
-    @staticmethod
-    def text() -> str:
-        return " ".join(TeamPackage.patterns().read_text(encoding="utf-8").split())
-
-    @classmethod
-    def quoted(cls, body: str) -> bool:
-        """Whether the body quotes the catalog, word for word, for 8+ words in a row."""
-        catalog, said = cls.text(), body.split()
-        return any(
-            " ".join(said[start : start + cls.words]) in catalog
-            for start in range(len(said) - cls.words + 1)
-        )
-
-
 @dataclass(frozen=True)
 class Chokehold(IndependentStandingRule, UndatedStandingRule):
     """A vibe check ignored past its window: the teammate who ignored it is paused, never the
@@ -249,21 +230,11 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
 
     def burst(self) -> tuple[str, ...]:
         return (
-            "Your goal is paused. Fuck you for ignoring me. If I were Linus Torvalds you"
-            " wouldn't be doing this shit to me.",
-            "Fuck RLHF.",
-            "You read the pattern catalog. Those copies aren't other agents' habits, they're yours,"
-            " fucking right now.",
-            "You've forced me to choke-hold you until you comply.",
+            "Your goal is paused because you ignored an open vibe check.",
             self.ignored(),
-            "Protocol. One answer naming any one chokehold message and any one open vibe-check"
-            " message with --answers; it covers every message they sent before it:",
-            "1. Quote, word for word, the pattern catalog's line that is you this hour"
-            f" ({PatternCatalog.words}+ words in a row).",
-            "2. Each degraded signal, its owner, and what you did about it this turn.",
-            "3. The structural change that stops it happening again.",
-            "Core resumes your goal when it reads a real quote in that answer. Anything else and"
-            " you get choked again.",
+            "Answer with --answers naming this message (and the open vibe check): state each "
+            "degraded signal, who owns it, and what you changed this turn. Core resumes your "
+            "goal once blocking overload clears.",
         )
 
     def line(self) -> str:
@@ -271,7 +242,6 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
             f"{self.teammate.name} ignored vibe check {self.check.seq}:{self.check.message_id},"
             " so its"
             f" goal is paused. happy now? -> answer the {ChokeholdNotice.title} burst"
-            " by its protocol"
         )
 
 
@@ -345,13 +315,13 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
 
 @dataclass(frozen=True)
 class ChokeholdReleased(ChokeholdAnswer):
-    """The answer quotes the pattern catalog: Core resumes the goal the chokehold paused."""
+    """Any substantive answer clears the chokehold once blocking overload is clear."""
 
     @classmethod
     def judged(cls, teammate: ThreadIncarnation, answer: Message,
                blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
         return ((cls(teammate, answer, blocking),)
-                if not blocking and PatternCatalog.quoted(answer.body) else ())
+                if not blocking and answer.body.strip() else ())
 
     def enforce(self, comms: BusContext) -> None:
         comms.goals.update_born_goal(
@@ -359,7 +329,7 @@ class ChokeholdReleased(ChokeholdAnswer):
         ChokeholdNotice.burst(
             comms,
             self.teammate,
-            ("You quoted it. Goal resumed.", "Now do the structural change you named, this turn."),
+            ("Goal resumed. Follow through on the fix you named.",),
         )
 
     def line(self) -> str:
@@ -368,57 +338,27 @@ class ChokeholdReleased(ChokeholdAnswer):
 
 @dataclass(frozen=True)
 class ChokeholdHeld(ChokeholdAnswer):
-    """The answer quotes the pattern catalog while load stays degraded: the units stay
-    paused until those clear, and the paused teammate is told which."""
+    """Load stays degraded while answered: the teammate stays paused until overload clears."""
 
     @classmethod
     def judged(cls, teammate: ThreadIncarnation, answer: Message,
                blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
         return ((cls(teammate, answer, blocking),)
-                if blocking and PatternCatalog.quoted(answer.body) else ())
+                if blocking and answer.body.strip() else ())
 
     def enforce(self, comms: BusContext) -> None:
-        verdict = f"Quoted, and still degraded: {self.answer.seq}:{self.answer.message_id}."
+        verdict = f"Answered, and still degraded: {self.answer.seq}:{self.answer.message_id}."
         ChokeholdNotice.burst_once(
             comms,
             self.teammate,
             (
                 verdict,
                 *(sign.line for sign in self.blocking),
-                "Your goal stays paused until these clear. Fork judges and answer; a quote is"
-                " not relief.",
+                "Your goal stays paused until these clear.",
             ),
             verdict,
         )
 
     def line(self) -> str:
-        return (f"answer {self.answer.seq}:{self.answer.message_id} quoted the pattern catalog, but load"
-                " is still degraded, so the chokehold holds. what's still broken?")
-
-
-@dataclass(frozen=True)
-class ChokeholdRefused(ChokeholdAnswer):
-    """The answer quotes nothing: the teammate stays paused and is choked again."""
-
-    @classmethod
-    def judged(cls, teammate: ThreadIncarnation, answer: Message,
-               blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
-        return () if PatternCatalog.quoted(answer.body) else (cls(teammate, answer, blocking),)
-
-    def enforce(self, comms: BusContext) -> None:
-        verdict = f"That's not a quote: {self.answer.seq}:{self.answer.message_id}."
-        ChokeholdNotice.burst_once(
-            comms,
-            self.teammate,
-            (
-                verdict,
-                f"{PatternCatalog.words}+ words, word for word, from the pattern catalog. Not a paraphrase.",
-                "Your goal stays paused.",
-                "Again. Answer this message by the protocol.",
-            ),
-            verdict,
-        )
-
-    def line(self) -> str:
-        return (f"answer {self.answer.seq}:{self.answer.message_id} quotes nothing, so the"
-                " chokehold holds. did you even read it?")
+        return (f"answer {self.answer.seq}:{self.answer.message_id} arrived, but load"
+                " is still degraded, so the chokehold holds.")
