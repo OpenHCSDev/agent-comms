@@ -9,11 +9,12 @@ from typing import get_type_hints
 
 import pytest
 
-from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.planning.goals import OrderCheck
 from agent_comms.planning.orders import VerdictAudience
 from agent_comms.projects.repo import Repo
 from agent_comms.storage.recorded_time import RecordedEventTime
+from agent_comms.team.judge import FixText, RoastText
 from agent_comms.team.order import (
     EndVerb,
     InstallVerb,
@@ -169,7 +170,7 @@ def test_problem_and_send_share_field_refusals_and_record_only_valid_documents(p
         unplanned_reason='This isolated workflow verifies order recording rather than advancing the production plan.')
     path = ctx.root / 'order.json'
     wrong_fields = (
-        (('defect',), 'short', 'defect'),
+        (('defect',), '', 'defect'),
         (('why_stupid',), '', 'why_stupid'),
         (('order', 'scope'), {'kind': 'fix', 'shape': {'parents': [], 'members': []}}, 'parents'),
         (('order', 'check', 'command'), 'git checkout main', 'checkout'),
@@ -212,3 +213,15 @@ def test_problem_and_send_share_field_refusals_and_record_only_valid_documents(p
             assert ctx.comms.goals.todos.get(created.id).strike_count == 1
             main(['send', 'worker', str(path)], ctx)
             assert ctx.comms.goals.todos.get(created.id).strike_count == 1
+
+
+def test_concise_order_prose_and_judge_roast_fix_do_not_require_word_counts_or_magic_strings(pr_team):
+    planned = order(pr_team.repos[0])
+    concise = OrderFile(planned, "Copied slop breaks sync.", "Two stores disagree.")
+    assert concise.problems_found(clean=False) == []
+    assert RoastText.from_text("duplicate state") == "duplicate state"
+    assert FixText.from_text("inherit Base") == "inherit Base"
+    with pytest.raises(MalformedRecord):
+        RoastText.from_text("   ")
+    with pytest.raises(MalformedRecord):
+        FixText.from_text("")

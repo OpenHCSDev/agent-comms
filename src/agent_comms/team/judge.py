@@ -48,7 +48,6 @@ from agent_comms.nominal.field_codec import (
     RecordProblems,
 )
 from agent_comms.planning.order_words import (
-    BluntText,
     DirectiveText,
     GrowthReason,
     StrikeReason,
@@ -386,32 +385,8 @@ class PullRequestReview(ReviewSubject):
                 '--pr', 'review this PR outside the batch'))
 
 
-class WordedText(BoundedText):
-    """Free text that must say at least its number of words. FieldCodec decodes every option
-    of a verb at once, so every short text is refused in the same refusal."""
-
-    words: ClassVar[int]
-    says: ClassVar[str]
-
-    @classmethod
-    def refusal(cls) -> MalformedRecord:
-        return MalformedRecord(f"{cls.says} ({cls.words}+ words)")
-
-    @classmethod
-    def problems(cls, value: str) -> dict[str, str]:
-        return ({'words': str(cls.refusal()) + '; fix: supply the required words'}
-                if len(value.split()) < cls.words else {})
-
-    @classmethod
-    def from_text(cls, value: str) -> str:
-        value = super().from_text(value)
-        if problems := cls.problems(value):
-            raise RecordProblems(problems)
-        return value
-
-
 class ReasonText(BoundedText):
-    """VerdictReason owns how many words a reason takes and which words it may not use."""
+    """VerdictReason owns any wording constraint on recorded verdict reasons."""
 
     @classmethod
     def from_text(cls, value: str) -> str:
@@ -420,23 +395,23 @@ class ReasonText(BoundedText):
         return value
 
 
-class RoastText(WordedText):
-    words = 12
-    says = "name the duplicated fact and its owner, with because"
+class NonBlankText(BoundedText):
+    """Non-blank bounded text for review fields without arbitrary word-count gates."""
 
     @classmethod
-    def problems(cls, value: str) -> dict[str, str]:
-        because = ({} if re.search(r'\bbecause\b', value)
-                   else {'because': str(cls.refusal()) + '; fix: explain the defect with because'})
-        refused = BluntText.wording_refusal(value)
-        blunt = ({} if refused is None
-                 else {'blunt': refused + '; fix: name why the work is stupid, not a gentle suggestion'})
-        return super().problems(value) | because | blunt
+    def from_text(cls, value: str) -> str:
+        text = super().from_text(value)
+        if not text.strip():
+            raise MalformedRecord("must not be empty")
+        return text
 
 
-class FixText(WordedText):
-    words = 8
-    says = "name the owner and the replacing shape"
+class RoastText(NonBlankText):
+    """Non-empty explanation of the defect and its owner."""
+
+
+class FixText(NonBlankText):
+    """Non-empty description of the owning replacement."""
 
 
 @dataclass(frozen=True, kw_only=True)

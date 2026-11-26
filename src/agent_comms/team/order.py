@@ -486,9 +486,6 @@ class OrderFile:
             problems.append('defect: fix: describe what fails')
         if not self.why_stupid.strip():
             problems.append('why_stupid: fix: explain why this design is wrong')
-        if re.search(r'\bslop\b', self.prose, re.I) and not self.slop:
-            problems.append('slop: fix: supply one slop item matching this JSON schema: '
-                            + json.dumps(FieldCodec.record_schema(Slop)))
         return problems
 
     def resolved(self, finding: ProblemFinding) -> OrderFile:
@@ -526,12 +523,6 @@ class OrderFile:
                     reference.require_exists(self.order.source_roots(context.project), self.order.cited_revision)
             except MalformedRecord as error:
                 problems.append(f'{error}; fix: cite an existing source line')
-        body = '\n'.join((self.prose, *self.order.edits, self.order.report))
-        if any((check.directory / reference.file).resolve().is_relative_to(
-                   check.directory / 'tools/') for reference in references) and not all(
-                said in body for said in ('--root tools', '--root src')):
-            problems.append('the order changes tools/: say "NRA gate with --root tools and with '
-                            '--root src, each as its own command"')
         return problems
 
     def assignment_refusals(self, context: TeamContext, unit: str,
