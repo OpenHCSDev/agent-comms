@@ -1,7 +1,7 @@
 """Configuration owns its model and thinking catalogs."""
 
 import os
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import aclosing
 from dataclasses import dataclass, field
@@ -14,8 +14,9 @@ from agent_comms.config_option import (
     CatalogConfigOption,
     ConfigCatalogSource,
     ConfigOption,
-    ConfigurationChanges,
+    InvalidConfigChoice,
 )
+from agent_comms.coordination.errors import Refused
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.launch_runtime import LaunchRuntime, ThreadLaunch
 from agent_comms.execution.native_arguments import NativeArguments
@@ -39,6 +40,7 @@ from agent_comms.registry.thread_settings import (
     ContextEditSetting,
     ModelSetting,
     ServiceTierSetting,
+    SettingRequest,
     ThinkingSetting,
 )
 from agent_comms.registry.threads import (
@@ -52,7 +54,42 @@ from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.project_request import ProjectRuntimeRequest
 
 
-class ModelConfigOption(ModelSetting, CatalogConfigOption):
+class ConfigurationChanges[Configuration](ABC):
+    """The configuration writes an option asks its executing session to make."""
+
+    @abstractmethod
+    async def configure_thread(
+        self, configuration: Configuration, thread: Thread, command: SettingRequest,
+    ) -> None: ...
+
+    @abstractmethod
+    async def store_configuration(
+        self, thread: Thread, change: NextTurnConfiguration,
+    ) -> None: ...
+
+    @abstractmethod
+    async def switch_to_cli_inbox(self, thread: Thread) -> None: ...
+
+
+class SessionConfigOption(CatalogConfigOption, declared_name=None):
+    """A catalog-backed session option that also applies changes to a Thread."""
+
+    @abstractmethod
+    async def apply(
+        self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
+    ) -> None: ...
+
+    async def change(
+        self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
+    ) -> None:
+        try:
+            await self.validate(thread, value)
+        except InvalidConfigChoice as error:
+            raise Refused.invalid_params({"reason": str(error)}) from error
+        await self.apply(owner, thread, value)
+
+
+class ModelConfigOption(ModelSetting, SessionConfigOption):
 
 
 
@@ -79,7 +116,7 @@ class ModelConfigOption(ModelSetting, CatalogConfigOption):
         await choice.apply_acp(owner, self.owner, thread, SetModel)
 
 
-class ThinkingLevelConfigOption(ThinkingSetting, CatalogConfigOption):
+class ThinkingLevelConfigOption(ThinkingSetting, SessionConfigOption):
 
 
 
@@ -107,7 +144,7 @@ class ThinkingLevelConfigOption(ThinkingSetting, CatalogConfigOption):
         )
 
 
-class ServiceTierConfigOption(ServiceTierSetting, CatalogConfigOption):
+class ServiceTierConfigOption(ServiceTierSetting, SessionConfigOption):
 
 
     # ACP carries only its declared categories and salvages any other to None.
@@ -128,7 +165,7 @@ class ServiceTierConfigOption(ServiceTierSetting, CatalogConfigOption):
         )
 
 
-class ContextEditConfigOption(ContextEditSetting, CatalogConfigOption):
+class ContextEditConfigOption(ContextEditSetting, SessionConfigOption):
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
         return [
             CatalogChoice(name=policy.value.replace("_", " ").title(), value=policy.value)
@@ -204,7 +241,7 @@ class ConfigOptions(ConfigCatalogSource):
 
     launch: RetainedOwnerLaunch
     route: CommsRoute
-    catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = field(default_factory=dict, init=False)
+    catalogs: dict[type[SessionConfigOption], SessionConfigOption] = field(default_factory=dict, init=False)
 
     @cached_property
     def agent_args(self) -> NativeArguments:
@@ -249,11 +286,11 @@ class ConfigOptions(ConfigCatalogSource):
             **ProjectRuntimeRequest.native_environment(thread, self.route.root, snapshot),
         }
 
-    def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
-        member = CatalogConfigOption.implementing(member)
-        if member not in self.catalogs:
-            self.catalogs[member] = member(self)
-        return self.catalogs[member]
+    def catalog_for(self, member: type[CatalogConfigOption]) -> SessionConfigOption:
+        resolved = SessionConfigOption.implementing(member)
+        if resolved not in self.catalogs:
+            self.catalogs[resolved] = resolved(self)
+        return self.catalogs[resolved]
 
 
     async def validate(self, thread: CatalogSelection) -> None:

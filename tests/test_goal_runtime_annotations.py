@@ -22,7 +22,7 @@ from agent_comms.agent_runtime import PublishesTranscript, ReadsHistory
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.cli_bridges.history import History
 from agent_comms.comms import Comms
-from agent_comms.config_options import ConfigOption, ConfigOptions
+from agent_comms.config_options import ConfigOption, ConfigOptions, SessionConfigOption
 from agent_comms.context_segments.wake_values import WakeWorkContext
 from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.execution.context_assembly import ContextAssembly
@@ -231,7 +231,7 @@ def test_generation_failure_read_names_its_stored_row() -> None:
 @pytest.mark.parametrize(
     "state",
     (AcpEventConsumer, AcpToolAction, AgentCommsUpdate, LiveQueueScope, PromptRequest, QueueScope,
-     GoalScheduler, ConfigOption, ConfigOptions, SessionConfigOptions,
+     GoalScheduler, ConfigOption, ConfigOptions, SessionConfigOption, SessionConfigOptions,
      InputDrain, FollowingInputs, OwnerFollowingInputs, TrackedTurnSession, PrivateSendClaim,
      SessionLifecycle, AttachedSessionLifecycle, TurnRunner, AcpSelectedWriteAuthority,
      CommsAgent, SdkSessionConnection,
@@ -265,7 +265,7 @@ def test_declared_method_annotations_resolve(state: type) -> None:
 
 
 def test_configuration_change_contract_keeps_its_launcher_type() -> None:
-    source = get_origin(get_type_hints(ConfigOption.change)["owner"])
+    source = get_origin(get_type_hints(SessionConfigOption.change)["owner"])
     assert get_type_hints(source.configure_thread)["configuration"] is source.__type_params__[0]
 
 
