@@ -115,6 +115,36 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     FILE_NOTICE = re.compile(r'^File \d+ of \d+-[0-9a-f]{12} ')
     """A watch client's per-file arrival notice printed after its message event."""
 
+    WATCHING = "Watching your inbox; each message arrives as an event."
+    RECONNECTS_ALONE = "This watch reconnects on its own after a network reset."
+    WAITS_FOR_MAINTENANCE = (
+        "The bus is under maintenance, as during an install; this watch waits for "
+        "it and reconnects on its own."
+    )
+    RUNTIME_REPLACED = (
+        "Core was reinstalled, and this watch was running the old runtime, so it has "
+        "stopped. Call comms_watch and start this again to watch on the new one."
+    )
+    WATCH_STOPPED = (
+        "This thread was stopped on the bus. Do not call comms_watch again now: tell the "
+        "person in one line that you were stopped, then stop. This session stays; when "
+        "someone wakes it, connect again."
+    )
+    WATCH_DROPPED_PREFIX = "Your inbox watch "
+    WORK_UNFOUND_PREFIX = "Your work will not show on the bus: "
+    WORK_STOPPED_PREFIX = "Your work stopped reaching the bus: "
+    WATCH_NOTICE_PREFIXES = (
+        WATCHING,
+        RECONNECTS_ALONE,
+        WAITS_FOR_MAINTENANCE,
+        RUNTIME_REPLACED,
+        WATCH_STOPPED,
+        WATCH_DROPPED_PREFIX,
+        WORK_UNFOUND_PREFIX,
+        WORK_STOPPED_PREFIX,
+    )
+    """Watch client lifecycle lines printed to the same log stream as messages."""
+
     @classmethod
     def file_saved_notice(cls, position: int, message: MessageReference, path: Path,
                           mime_type: str, size: int) -> str:
@@ -242,7 +272,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     @classmethod
     def claims(cls, line: str) -> bool:
         """Whether the transcript decoder reads this line as one of ours rather than body text."""
-        return (line.startswith((MonitorProtocolFrame.wire_prefix, cls.HEADER_PREFIX))
+        return (line.startswith((MonitorProtocolFrame.wire_prefix, cls.HEADER_PREFIX, *cls.WATCH_NOTICE_PREFIXES))
                 or cls.FILE_NOTICE.match(line) is not None)
 
     @classmethod

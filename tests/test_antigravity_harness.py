@@ -24,6 +24,7 @@ from agent_comms_hooks.antigravity import (
 )
 from agent_comms_hooks.hook_switch import StartVerb, StopVerb
 from agent_comms_hooks.skill import DeckReader
+from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame, MonitorShown
 from agent_comms.cli_bridges.history import OfflineHistory, OnlineHistory
 from agent_comms.cli_bridges.inbox_watch_client import (
     AntigravityFollowedTranscript,
@@ -1163,3 +1164,34 @@ async def test_antigravity_read_file_and_cat_confirm_multipart_watch_deliveries(
                     watch.cancel()
                     with pytest.raises(asyncio.CancelledError):
                         await watch
+
+
+def test_antigravity_prefers_sibling_full_transcript_over_compact(tmp_path):
+    logs = tmp_path / ".gemini" / "antigravity-cli" / "brain" / "conv-123" / ".system_generated" / "logs"
+    logs.mkdir(parents=True)
+    compact = logs / "transcript.jsonl"
+    compact.write_text('{"step_index":1,"type":"USER_INPUT","content":"hi"}\n', encoding="utf-8")
+
+    only_compact = session_transcript(compact)
+    assert isinstance(only_compact, AntigravityFollowedTranscript)
+    assert only_compact.source == compact
+    assert only_compact.ledger_name() == "conv-123"
+
+    full = logs / "transcript_full.jsonl"
+    full.write_text('{"step_index":1,"type":"USER_INPUT","content":"hi"}\n', encoding="utf-8")
+    route = session_transcript(compact)
+    assert isinstance(route, AntigravityFollowedTranscript)
+    assert route.source == full
+    assert route.ledger_name() == "conv-123"
+    assert AntigravityTranscript.full_source(compact) == full
+    assert RunningAntigravity("conv-123", home=tmp_path).source == full
+
+
+def test_monitor_decode_does_not_swallow_watch_lifecycle_notices():
+    header = "Comms in · #model · antigravity (external agent) · reply to #model · 7563-5e9e867e872f"
+    body = "First line\nSecond line"
+    event = f"{header}\n{body}\n{ClaudeMonitorFrame.RUNTIME_REPLACED}\n{ClaudeMonitorFrame.WATCHING}"
+    frames = ClaudeMonitorFrame.decode_event(event)
+    shown = [frame for frame in frames if isinstance(frame, MonitorShown)]
+    assert len(shown) == 1
+    assert shown[0].lines == (header, "First line", "Second line")
