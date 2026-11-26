@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_commands import (
+from agent_comms.cli_support.checkout_grant import (
     CheckoutGrant,
     OrderCheckoutGrant,
     PreparedCheckoutCliCommand,

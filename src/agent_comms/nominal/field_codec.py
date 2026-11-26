@@ -1623,6 +1623,25 @@ class FieldRepresentation[T](MroDispatch, ABC, JsonSchemaOwner):
     field_plan: ClassVar[type[FieldPlan]] = DeclaredFieldPlan
     decoder: ClassVar[type[_RepresentedDecoder]] = _RepresentedDecoder
 
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        mro_bases = [base for base in cls.__bases__ if issubclass(base, MroDispatch)]
+        if len(mro_bases) == 1:
+            base = mro_bases[0]
+            base_decls = getattr(base, "_handler_declarations", None)
+            if base_decls is not None:
+                base_mro = base.__mro__
+                added = tuple(owner for owner in cls.__mro__ if owner not in base_mro)
+                if all(
+                    not any(getattr(value, "__handled_classes__", ()) for value in owner.__dict__.values())
+                    and not any(name in owner.__dict__ for name, _ in base_decls)
+                    for owner in added
+                ):
+                    super(MroDispatch, cls).__init_subclass__(**kwargs)
+                    cls._handler_declarations = base_decls
+                    cls._handler_names = {}
+                    return
+        super().__init_subclass__(**kwargs)
+
     @classmethod
     def sql_checks(cls, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
         """Constraints on a stored column, already quoted by its SQL owner."""

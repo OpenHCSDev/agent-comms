@@ -6,11 +6,26 @@ from pathlib import Path
 from typing import Annotated
 
 from agent_comms.cli_support.store_reconcile import StoreReconcileCliCommand
-from agent_comms.cli_verbs.cli_commands import PlannedStoresResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.storage.locked_store import LiveFilesRequest
 from agent_comms.storage.typed_table import ExternalStore, ReconciledFile, StoreRewrite
+
+
+@dataclass(frozen=True)
+class PlannedStoresResult(CliResult):
+    """Target-only rewrite plans; outgoing reconcile replies remain unchanged."""
+
+    rewrites: tuple[StoreRewrite, ...]
+
+    @property
+    def rewritten(self) -> tuple[Path, ...]:
+        return tuple(rewrite.path for rewrite in self.rewrites)
+
+    @property
+    def backup_files(self) -> tuple[Path, ...]:
+        return tuple(path for rewrite in self.rewrites for path in rewrite.backup_files())
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -6,7 +6,7 @@ from typing import Annotated
 
 from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.cli_verbs.cli_command import CliCommand
-from agent_comms.cli_verbs.cli_commands import MergeReviewResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, MalformedRecord
 from agent_comms.planning.orders import StoredHeadReview
@@ -16,6 +16,11 @@ from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks import ToolRefusedError
 from agent_comms_hooks.queue_bypass import QueueBypass, QueueBypassGuard
+
+
+@dataclass(frozen=True)
+class MergeReviewResult(CliResult):
+    heads: tuple[PullRequestHead, ...]
 
 
 class ReviewedMerge:

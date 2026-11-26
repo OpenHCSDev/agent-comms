@@ -22,6 +22,7 @@ from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_input_proof import NativeContextProof, NativeInputCommit
 from agent_comms.execution.native_pi import NativePiRpcLaunch
+from agent_comms.registry.thread_settings import SettingRequest
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.pi_wire import PiOmitted, PiRequestId, RequestId
 from agent_comms.execution.provider_records import ReportedText
@@ -381,7 +382,7 @@ class InterruptSteering(PiCommand):
     ] = PiOmitted()
 
 
-class SettingCommand(CatalogQuery):
+class SettingCommand(SettingRequest, CatalogQuery):
     response_payload = EmptyData
 
     @property

@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.cli_runtime import CliInvocation
-from agent_comms.cli_verbs.cli_commands import ConstraintPinnedResult
+from agent_comms.cli_support.constraint_pin import ConstraintPinnedResult
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.execution.input_key import AcpInputKey
 from agent_comms.execution.session_file import RegistrySessionLocation

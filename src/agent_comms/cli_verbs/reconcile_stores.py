@@ -5,9 +5,33 @@ from pathlib import Path
 from typing import Annotated
 
 from agent_comms.cli_support.store_reconcile import StoreReconcileCliCommand
-from agent_comms.cli_verbs.cli_commands import ReconciledStoresResult, StoreDifference
-from agent_comms.nominal.field_codec import Argument
-from agent_comms.storage.typed_table import HeldBusFile, NoPractice, Practice, ReconciledFile
+from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.nominal.field_codec import Argument, PathText
+from agent_comms.storage.typed_table import (
+    HeldBusFile,
+    NoPractice,
+    Practice,
+    ReconciledFile,
+    SQLiteSchemaDifference,
+)
+
+
+@dataclass(frozen=True)
+class StoreDifference:
+    """One schema object a reconcile rebuilt a store for."""
+
+    path: Annotated[Path, PathText]
+    difference: SQLiteSchemaDifference
+
+
+@dataclass(frozen=True)
+class ReconciledStoresResult(CliResult):
+    """The bus files whose schema the reconcile changed, relative to the bus root, and the
+    objects that made each one differ. An outgoing runtime's reply names no differences: the
+    installer's restore (installer/upgrade.py restore_stores) decodes it with this class."""
+
+    rewritten: tuple[Annotated[Path, PathText], ...]
+    differences: tuple[StoreDifference, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)

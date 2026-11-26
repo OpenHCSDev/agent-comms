@@ -16,12 +16,12 @@ from acp.schema import (
 )
 
 from agent_comms.comms import Comms
-from agent_comms.config_options import (
+from agent_comms.config_option import (
     CatalogConfigOption,
-    ConfigOptions,
     ConfigurationChanges,
     InvalidConfigChoice,
 )
+from agent_comms.config_options import ConfigOptions
 from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import IdentityConflict, Refused
 from agent_comms.execution.child_process import join_retirement

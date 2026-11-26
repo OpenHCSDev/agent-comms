@@ -9,20 +9,61 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from agent_comms.cli_verbs.cli_command import CliCommand
-from agent_comms.cli_verbs.cli_commands import (
-    CoreContextInspection,
-    CoreSegmentText,
-    NativeContextInspection,
-    NativeSourceSpans,
-)
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.context_store import LATEST_CONTEXT, ContextManifestCursor
 from agent_comms.coordination.errors import Refused
-from agent_comms.execution.turn_context import ContextManifest, NextContextTurn, TurnContext
+from agent_comms.execution.turn_context import (
+    ContextManifest,
+    ContextSegment,
+    ContributionCoordinates,
+    NextContextTurn,
+    Provenance,
+    ProviderContext,
+    Sha256Digest,
+    TurnContext,
+)
 from agent_comms.nominal.field_codec import Argument, FieldCodec
 from agent_comms.pi_payloads import NativeContextData
 from agent_comms.transport.owner_connection import OwnerConnection, socket_path
+
+
+@dataclass(frozen=True)
+class CoreSegmentText:
+    kind: type[ContextSegment]
+    provenance: tuple[Provenance, ...]
+    text: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextInspectionInput:
+    """The supplied input, core context and segments a context inspection reads."""
+
+    input_supplied: bool
+    core_context: TurnContext
+    segments: tuple[CoreSegmentText, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CoreContextInspection(ContextInspectionInput, CliResult):
+    """Current core contributors; native_error says why the native base is absent."""
+    scope: str
+    native_error: str
+
+
+@dataclass(frozen=True)
+class NativeSourceSpans(Sha256Digest):
+    segment: int
+    spans: tuple[ContributionCoordinates, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class NativeContextInspection(ContextInspectionInput, CliResult):
+    """The next native base together with the current core contributors."""
+    scope: str
+    native_manifest: tuple[ContextSegment, ...]
+    native_provider_context: ProviderContext
+    native_source_spans: tuple[NativeSourceSpans, ...]
 
 
 @dataclass(frozen=True, kw_only=True)

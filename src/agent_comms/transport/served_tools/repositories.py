@@ -5,7 +5,7 @@ from __future__ import annotations
 import shlex
 from pathlib import Path
 
-from agent_comms.cli_verbs.cli_commands import CheckoutGrant
+from agent_comms.cli_support.checkout_grant import CheckoutGrant
 from agent_comms.cli_verbs.tool import InvokeCliCommand
 from agent_comms.comms import Comms
 from agent_comms.projects.repository_name import RepositoryName

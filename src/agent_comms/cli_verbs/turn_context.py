@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from itertools import takewhile
 
 from agent_comms.cli_support.context_option import SelectedContextCliCommand
-from agent_comms.cli_verbs.cli_commands import RecordedContextManifests
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
+from agent_comms.execution.turn_context import ContextManifest
+
+
+@dataclass(frozen=True)
+class RecordedContextManifests(CliResult):
+    manifests: tuple[ContextManifest, ...]
+    text_recorded: bool
 
 
 class TurnContextCliCommand(SelectedContextCliCommand):

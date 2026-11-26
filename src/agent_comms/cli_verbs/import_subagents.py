@@ -6,10 +6,16 @@ from typing import Annotated
 
 from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
 from agent_comms.cli_support.importing import ImportingCliCommand
-from agent_comms.cli_verbs.cli_commands import SubagentsImportedResult
+from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, PathText
+from agent_comms.registry.thread_results import ThreadImported
 from agent_comms_hooks import SubagentId
+
+
+@dataclass(frozen=True)
+class SubagentsImportedResult(CliResult):
+    imported: tuple[ThreadImported, ...]
 
 
 @dataclass(frozen=True, kw_only=True)

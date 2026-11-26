@@ -25,7 +25,7 @@ from agent_comms.cli_verbs.cli_result import CliResult, ResultShower, TargetEdit
 from agent_comms.cli_verbs.declared_verb import DeclaredCommand
 from agent_comms.cli_verbs.target_command_bindings import TargetCommandBindings
 from agent_comms.cli_verbs.target_fields import TargetField
-from agent_comms.config_options import CatalogChoice, ConfigOptions
+from agent_comms.config_option import CatalogChoice, ConfigCatalogSource
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.active_route import ActiveRoute, CommsRoute
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
@@ -243,11 +243,11 @@ class CliCommand(
             if not entry.setting(TargetBound, False)
         )
 
-    def catalog_selection(self, catalogs: ConfigOptions) -> object:
+    def catalog_selection(self, catalogs: ConfigCatalogSource) -> object:
         """The context used to discover this command's field choices."""
         return self
 
-    async def prepare_fields(self, catalogs: ConfigOptions) -> tuple[TargetField, ...]:
+    async def prepare_fields(self, catalogs: ConfigCatalogSource) -> tuple[TargetField, ...]:
         selection = self.catalog_selection(catalogs)
         return tuple([await item.prepare(catalogs, selection) for item in self.editable_fields])
 
@@ -345,7 +345,7 @@ class TargetAction:
     def editable_fields(self) -> tuple[TargetField, ...]:
         return self.bound[0].editable_fields
 
-    async def prepared(self, catalogs: ConfigOptions) -> PreparedTargetAction:
+    async def prepared(self, catalogs: ConfigCatalogSource) -> PreparedTargetAction:
         """Core's host prepares the fields; a remote editor receives what it offered."""
         fields = await self.bound[0].prepare_fields(catalogs)
         return PreparedTargetAction(self.bound, self.targets, self.declaration, self.channels,

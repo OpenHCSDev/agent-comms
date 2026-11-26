@@ -4,18 +4,53 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.cli_verbs.cli_command import CliCommand
-from agent_comms.cli_verbs.cli_commands import (
-    CleanCheckpoint,
-    FailedCheckpoint,
-    NameArgument,
-    PushedCheckpoint,
-    PushUnknownCheckpoint,
-    RefusedCheckpoint,
-)
+from agent_comms.cli_verbs.cli_commands import NameArgument
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.comms import Comms
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
+
+
+@dataclass(frozen=True)
+class CheckpointResult(CliResult, DeclaredFamily, affix="Checkpoint"):
+    """What one checkpoint did with a thread's uncommitted work."""
+
+    family_discriminator = "checkpoint"
+    thread: str
+    branch: str
+
+
+@dataclass(frozen=True)
+class CleanCheckpoint(CheckpointResult):
+    """The worktree had nothing uncommitted."""
+
+
+@dataclass(frozen=True)
+class PushedCheckpoint(CheckpointResult):
+    commit: str
+
+
+@dataclass(frozen=True)
+class StoppedCheckpoint(CheckpointResult, declared_name=None):
+    """A checkpoint that stopped before a named push, and why."""
+
+    reason: str
+
+
+@dataclass(frozen=True)
+class RefusedCheckpoint(StoppedCheckpoint):
+    """The declared worktree is not a git worktree."""
+
+
+@dataclass(frozen=True)
+class FailedCheckpoint(StoppedCheckpoint):
+    """The commit failed."""
+
+
+@dataclass(frozen=True)
+class PushUnknownCheckpoint(StoppedCheckpoint):
+    """The commit exists locally; the push could not be named."""
 
 
 def declared_submodules(worktree: Path) -> frozenset[str]:

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_verbs.cli_commands import GoalCheckoutGrant
+from agent_comms.cli_support.checkout_grant import GoalCheckoutGrant
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.goal_actions import ClearGoalAction, SetGoalAction
