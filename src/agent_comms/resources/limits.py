@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.projects.storage_rules import StorageRule
+from agent_comms.projects.storage_floor import StorageFloor
 from agent_comms.resources.limit import (
     Act,
     Attention,
@@ -92,7 +92,7 @@ class HomeDiskLimit(DiskLimit):
 
     @property
     def critical_bytes(self) -> int:
-        return StorageRule.load(self.root).floor_gib * GIB
+        return int(StorageFloor.read_floor_gib(self.root) * GIB)
 
 
 @dataclass(frozen=True)

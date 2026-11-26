@@ -54,6 +54,7 @@ from agent_comms.messaging.read_basis import (
     DMDisplayIdentity,
     DMDisplayScope,
     MessageDisplayScope,
+    SenderDisplayScope,
     NamedViewer,
     NoDisplaySelection,
     SelectedDisplay,
@@ -252,6 +253,41 @@ class ChannelHistory(HistoryView):
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         return self.scope
+
+
+@dataclass(frozen=True, slots=True)
+class SenderFilteredHistory(HistoryView):
+    """Wrap any history view to keep only messages sent by one sender or the human owner."""
+
+    inner: HistoryView
+    sender: str
+
+    @property
+    def viewer(self) -> DisplayViewer:
+        return self.inner.viewer
+
+    def _sender_names(self, snapshot: RegistryProvenance) -> frozenset[str]:
+        selected = self.sender.strip()
+        if selected.lower() in ("human", "owner"):
+            owners = {
+                name
+                for name, thread in snapshot.threads.items()
+                if thread.role.declared_name == "user"
+            }
+            if not owners:
+                owners = {"user"}
+            aliases = {
+                alias for alias, canonical in snapshot.aliases.items() if canonical in owners
+            }
+            return frozenset(owners | aliases)
+        canonical = snapshot.aliases.get(selected, selected)
+        aliases = {
+            alias for alias, target in snapshot.aliases.items() if target == canonical
+        }
+        return frozenset({selected, canonical, *aliases})
+
+    def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
+        return SenderDisplayScope(self.inner.capture(snapshot), self._sender_names(snapshot))
 
 
 @dataclass(frozen=True, slots=True)

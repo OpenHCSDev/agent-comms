@@ -1012,6 +1012,7 @@ class ServedCommsHistoryTool(
             me=caller.history_viewer(self.participant),
             limit=self.limit,
             before=self.before,
+            sender=self.sender,
         ).apply(comms)
 
 

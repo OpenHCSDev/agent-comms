@@ -42,6 +42,8 @@ from agent_comms.messaging.historical_views import (
     DMDisplayHistory,
     DMHistory,
     HistorySource,
+    HistoryView,
+    SenderFilteredHistory,
 )
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_notification import (
@@ -384,9 +386,13 @@ class HistoryViews(HistoryReadSource, BusViews):
         )
 
     def history_page(self, target: CommandTarget, bounds: PageBounds = NEWEST_PAGE,
-                     *, viewer: DisplayViewer = AnonymousViewer()) -> MessagePage:
+                     *, viewer: DisplayViewer = AnonymousViewer(), sender: str = "") -> MessagePage:
         """The decoded target selects its scope and participant requirements."""
-        view = target.history_view(viewer, self.bus.require_channel, ChannelHistory, DMHistory)
+        view: HistoryView = target.history_view(
+            viewer, self.bus.require_channel, ChannelHistory, DMHistory,
+        )
+        if sender.strip():
+            view = SenderFilteredHistory(view, sender.strip())
         return view.page(self.presentation, bounds)
 
     def attach_history(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
