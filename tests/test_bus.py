@@ -370,7 +370,7 @@ def test_producer_digest_reads_routing_not_send_checks():
     assert {
         name for member in members[ClaimNoticeKind]
         for name in BusRouteCounts.bound_names(member)
-    } == {"conversation_message", "route_rows"}
+    } == {"is_conversation_message", "route_rows"}
 
 
 def test_projection_freshness_follows_its_producing_source(bus):

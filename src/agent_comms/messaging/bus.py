@@ -330,7 +330,9 @@ class BusReader(
             return tuple(decoded[seq] for seq in wanted if seq in decoded)
 
     def lookup(self, seq: int) -> BusRecord:
-        return self.records((seq,))[0]
+        for record in self.records((seq,)):
+            return record
+        raise RelationViolationError(f"Unknown bus sequence: {seq}")
 
     def deliveries_at(self, sequences: Iterable[int]) -> tuple[Delivered, ...]:
         """A public history row cannot stand in for a frozen delivery."""
@@ -343,7 +345,7 @@ class BusReader(
         raise RelationViolationError("Bus sequence has no frozen delivery")
 
     def delivery(self, seq: int) -> Delivered:
-        return self.deliveries_at((seq,))[0]
+        return self.frozen_delivery(self.lookup(seq))
 
     def message_reference(self, message_id: MessageId) -> MessageReference:
         """Resolve one content identity; absent or ambiguous identities are refused."""
