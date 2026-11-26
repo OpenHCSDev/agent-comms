@@ -545,6 +545,24 @@ class VerifiedNativePackage:
     def cli(self) -> Path:
         return self.path / "dist/cli.js"
 
+    def require_command(self, command: str, owner_launcher: Path) -> None:
+        """Accept only ``pi`` or a validated native launcher belonging to this build."""
+        stack_launcher = MANIFEST.parent / "bin" / "pi-native"
+        executable = (
+            Path(shutil.which(command) or command).resolve(strict=True)
+            if command != "pi"
+            else None
+        )
+        allowed = (
+            owner_launcher.resolve(),
+            stack_launcher.resolve(),
+            self.cli.resolve(),
+        )
+        if executable is not None and executable not in allowed:
+            raise NativePiUnavailable(
+                "Configured command is not a validated native Pi launcher"
+            )
+
     def node(self, *imports: str) -> tuple[str, ...]:
         """Node running this CLI behind the import fence, then the named dist modules."""
         modules = ("agent-comms-import-fence.mjs", *imports)

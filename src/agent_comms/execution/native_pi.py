@@ -185,17 +185,7 @@ class NativePiRpcLaunch:
         name this installation's entrypoint, its pinned CLI, or the source stack
         launcher; execution always uses the verified native package.
         """
-        stack_launcher = MANIFEST.parent / "bin" / "pi-native"
-        executable = (
-            Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
-        )
-        allowed = (
-            Path(NativeArguments.owner_launcher(runtime)).resolve(),
-            stack_launcher.resolve(),
-            package.cli.resolve(),
-        )
-        if executable is not None and executable not in allowed:
-            raise NativePiUnavailable("Configured command is not a validated native Pi launcher")
+        package.require_command(command, Path(NativeArguments.owner_launcher(runtime)))
 
     @classmethod
     def package_for_command(
@@ -205,9 +195,7 @@ class NativePiRpcLaunch:
 
         The launch is the caller's root's; without one, this process's selection.
         """
-        package = resolve_comms_route(root).launch().launched_package()
-        cls._command_selection(command, runtime, package)
-        return package
+        return resolve_comms_route(root).package_for_command(command, runtime)
 
     @classmethod
     def catalog(

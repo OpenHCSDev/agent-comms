@@ -21,7 +21,10 @@ from metaclass_registry.mro_dispatch import MroDispatch, handles
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import Platform
 from agent_comms.execution.launch_root import LaunchRoot
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.private_nk_entrypoint import PrivateNkLaunch, RootLaunch
+from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.installer.reporting import RootWriter
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
@@ -151,6 +154,14 @@ class CommsRoute(ABC):
     def launch(self) -> RootLaunch:
         """This root's launch, decoded from its marker and this installation's pin."""
         return RootLaunch.derive(self)
+
+    def package_for_command(
+        self, command: str, runtime: LaunchRuntime,
+    ) -> VerifiedNativePackage:
+        """Acquire this route's verified native Pi package after validating ``command``."""
+        package = self.launch().launched_package()
+        package.require_command(command, Path(NativeArguments.owner_launcher(runtime)))
+        return package
 
 
 @dataclass(frozen=True, slots=True)

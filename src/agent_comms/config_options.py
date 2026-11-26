@@ -15,7 +15,6 @@ from agent_comms.coordination.errors import Refused
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.launch_runtime import LaunchRuntime, ThreadLaunch
 from agent_comms.execution.native_arguments import NativeArguments
-from agent_comms.execution.native_pi import NativePiRpcLaunch
 from agent_comms.execution.pi_commands import (
     GetAvailableModels,
     GetAvailableThinkingLevels,
@@ -398,9 +397,7 @@ class ConfigOptions:
     @cached_property
     def package(self) -> VerifiedNativePackage:
         """The verified artifact, acquired when a catalog or configuration first runs Pi."""
-        return NativePiRpcLaunch.package_for_command(
-            self.launch.binary, LaunchRuntime.running(), self.route.root,
-        )
+        return self.route.package_for_command(self.launch.binary, LaunchRuntime.running())
 
     @classmethod
     def configured(cls) -> ConfigOptions:
