@@ -32,11 +32,11 @@ from agent_comms.transport.owner_connection import (
 )
 from agent_comms.transport.runtime_request import AttachedResultRuntimeRequest
 from agent_comms.transport.tool_declaration import ToolDeclaration
-from agent_comms.transport.tool_request import ThreadReadTool
+from agent_comms.transport.tool_request import ServedToolDiscovery, ThreadReadTool
 from agent_comms.transport.tool_result import ToolResult
 
 
-class BusRead[Result](ToolDeclaration):
+class BusRead[Result](ServedToolDiscovery, ToolDeclaration):
     """One operation owns its arguments and its read; the boundary supplies authority."""
 
     @abstractmethod
