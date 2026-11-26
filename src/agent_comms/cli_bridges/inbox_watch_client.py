@@ -203,14 +203,14 @@ class UnfoundTranscript(TranscriptRoute):
     reason: str
 
     async def sent(self, socket: ClientWebSocketResponse) -> None:
-        print(f"Your work will not show on the bus: {self.reason}", flush=True)
+        print(f"{ClaudeMonitorFrame.WORK_UNFOUND_PREFIX}{self.reason}", flush=True)
 
 
 def session_transcript(transcript: Path | None = None, *, home: Path | None = None) -> TranscriptRoute:
     if transcript is not None:
         if not transcript.is_file():
             return UnfoundTranscript(f"FileNotFoundError: transcript not found: {transcript}")
-        return AntigravityFollowedTranscript(transcript)
+        return AntigravityFollowedTranscript(AntigravityTranscript.full_source(transcript))
     if os.environ.get("CLAUDE_CODE_SESSION_ID", "").strip():
         try:
             return FollowedTranscript(RunningClaude(WatchClaim.environment_session()).source)
@@ -262,7 +262,7 @@ class WatchDropped(WatchEnd):
     exit_code = 1
 
     def line(self) -> str:
-        return (f"Your inbox watch {self.reason}. You are off the bus: call comms_watch and start "
+        return (f"{ClaudeMonitorFrame.WATCH_DROPPED_PREFIX}{self.reason}. You are off the bus: call comms_watch and start "
                 "this again.")
 
     async def settled(self, watch: InboxSocket) -> WatchEnd:
@@ -341,9 +341,7 @@ class WatchStopped(WatchEnd):
     exit_code = 0
 
     def line(self) -> str:
-        return ("This thread was stopped on the bus. Do not call comms_watch again now: tell the "
-                "person in one line that you were stopped, then stop. This session stays; when "
-                "someone wakes it, connect again.")
+        return ClaudeMonitorFrame.WATCH_STOPPED
 
 
 @dataclass(frozen=True)
@@ -354,15 +352,13 @@ class RuntimeReplaced(BackToModel):
     each time. Only a watch started anew runs the new runtime, so this one goes back to the model."""
 
     def line(self) -> str:
-        return ("Core was reinstalled, and this watch was running the old runtime, so it has "
-                "stopped. Call comms_watch and start this again to watch on the new one.")
+        return ClaudeMonitorFrame.RUNTIME_REPLACED
 
 
-WATCHING = "Watching your inbox; each message arrives as an event."
-RECONNECTS_ALONE = "This watch reconnects on its own after a network reset."
+WATCHING = ClaudeMonitorFrame.WATCHING
+RECONNECTS_ALONE = ClaudeMonitorFrame.RECONNECTS_ALONE
 """Said when the connector hands over a reconnect URL; the URL itself is never shown."""
-WAITS_FOR_MAINTENANCE = ("The bus is under maintenance, as during an install; this watch waits for "
-                         "it and reconnects on its own.")
+WAITS_FOR_MAINTENANCE = ClaudeMonitorFrame.WAITS_FOR_MAINTENANCE
 """Said once, when a maintenance wait begins."""
 
 
@@ -460,7 +456,7 @@ class ReconnectWith(HeldReconnect):
     async def redialed(self, watch: InboxSocket, dropped: WatchDropped) -> WatchEnd:
         watch.redials.held = NoReconnect()
         if not watch.redials.has_room(time.monotonic()):
-            print(f"Your inbox watch {dropped.reason}, and it has reset "
+            print(f"{ClaudeMonitorFrame.WATCH_DROPPED_PREFIX}{dropped.reason}, and it has reset "
                   f"{watch.redials.most} times in {watch.redials.window_seconds} s; giving the "
                   "reconnect back to you.", flush=True)
             return dropped
@@ -622,7 +618,7 @@ class InboxSocket:
         try:
             await self.transcript.sent(socket)
         except (ClientError, OSError, ConnectionError) as failure:
-            print(f"Your work stopped reaching the bus: {type(failure).__name__}: {failure}", flush=True)
+            print(f"{ClaudeMonitorFrame.WORK_STOPPED_PREFIX}{type(failure).__name__}: {failure}", flush=True)
 
     @property
     def proxy(self) -> URL | None:

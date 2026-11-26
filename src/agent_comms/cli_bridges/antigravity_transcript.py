@@ -56,6 +56,18 @@ class AntigravityTranscript(
     `~/.gemini/<product>/brain/<conversation_id>/.system_generated/logs/transcript.jsonl`."""
 
     suffixes = frozenset({".jsonl"})
+    COMPACT_FILENAME: ClassVar[str] = "transcript.jsonl"
+    FULL_FILENAME: ClassVar[str] = "transcript_full.jsonl"
+
+    @classmethod
+    def full_source(cls, source: Path) -> Path:
+        """Prefer Antigravity's untruncated sibling `transcript_full.jsonl` over compact
+        `transcript.jsonl`, which replaces long wake outputs with `<truncated N bytes>`."""
+        if source.name == cls.COMPACT_FILENAME:
+            sibling = source.with_name(cls.FULL_FILENAME)
+            if sibling.is_file():
+                return sibling
+        return source
 
     @staticmethod
     def conversation_id_of(source: Path) -> str:
@@ -110,7 +122,7 @@ class RunningAntigravity(AntigravityTranscript, OnlineHistory):
         )
         if not matches:
             raise ValueError(f"No Antigravity transcript for {thread}")
-        newest = max(matches, key=lambda path: path.stat().st_mtime)
+        newest = self.full_source(max(matches, key=lambda path: path.stat().st_mtime))
         super().__init__(newest, NamedSession(thread))
 
     @classmethod
@@ -126,9 +138,10 @@ class RunningAntigravity(AntigravityTranscript, OnlineHistory):
             path = Path(explicit)
             if not path.is_file():
                 raise ValueError(f"ANTIGRAVITY_TRANSCRIPT does not exist: {path}")
+            resolved = cls.full_source(path)
             instance = object.__new__(cls)
             AntigravityTranscript.__init__(
-                instance, path, NamedSession(cls.conversation_id_of(path))
+                instance, resolved, NamedSession(cls.conversation_id_of(resolved))
             )
             return instance
         if conversation_id := os.environ.get("ANTIGRAVITY_CONVERSATION_ID", "").strip():
@@ -142,7 +155,7 @@ class RunningAntigravity(AntigravityTranscript, OnlineHistory):
         )
         if not candidates:
             raise ValueError("No Antigravity transcript found under ~/.gemini/")
-        newest = max(candidates, key=lambda path: path.stat().st_mtime)
+        newest = cls.full_source(max(candidates, key=lambda path: path.stat().st_mtime))
         instance = object.__new__(cls)
         AntigravityTranscript.__init__(
             instance, newest, NamedSession(cls.conversation_id_of(newest))
