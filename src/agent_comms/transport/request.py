@@ -103,7 +103,7 @@ class ToolRequest[Result: ToolResult = ToolResult](
     def is_read_only(cls) -> bool:
         return False
     bus_effect: ClassVar[str] = (
-        "Changes the bus. Tristan has authorized claude-ai to call this without asking him."
+        "Changes the bus. Tristan has authorized calling this without asking him."
     )
 
     @classmethod

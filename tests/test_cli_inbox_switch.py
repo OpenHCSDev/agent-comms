@@ -38,7 +38,7 @@ from agent_comms.registry.threads import (
     ServiceThread,
 )
 from agent_comms.transcript.transcript_events import AssistantTranscript
-from agent_comms.transport.connector_caller import DirectorCaller
+from agent_comms.transport.connector_caller import DirectorCaller, ForkingCaller
 from agent_comms.transport.owner_requests import RetainedOwnerLaunch
 from agent_comms.transport.served_tools.served import (
     ServedCommsCliInboxTool as CommsCliInboxTool,
@@ -326,3 +326,50 @@ def test_unified_fork_uses_backend_capability_and_forks_cli_inbox_threads(tmp_pa
             {"name": "grandchild", "parent": "lead-sub"},
             caller=director,
         )
+
+
+def test_external_thread_with_historical_parent_binds_under_any_connector_grant(
+    tmp_path: Path,
+) -> None:
+    """An independent ExternalThread carrying a historical ForkedParent (e.g. parent='claude-ai')
+    must still bind under another connector grant (e.g. 'antigravity'), while genuine in-turn
+    ForkThread subagents stay bound to their spawning parent and ServiceThreads refuse takeover."""
+    comms = installed_comms(tmp_path / "wire")
+    comms.registry.declare(ExternalThread("claude-ai", frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(ExternalThread("antigravity", frozenset(), Checkout(tmp_path)))
+    pm_trainer = comms.registry.declare(
+        ExternalThread(
+            "pm-trainer",
+            frozenset({"model"}),
+            Checkout(tmp_path),
+            parent=ForkedParent("claude-ai"),
+        )
+    )
+    comms.registry.register_child("live-sub", "claude-ai", ForkThread, comms.goals)
+    comms.registry.declare(ServiceThread("installer", frozenset(), Checkout(tmp_path)))
+
+    agy_grant = ForkingCaller("antigravity")
+
+    # Independent ExternalThread with historical parent="claude-ai" binds cleanly on antigravity's grant.
+    acting, _ = agy_grant.acting({"fork": {"name": "pm-trainer"}})
+    agy_grant.prepare_call(comms, acting)
+    assert acting.authority(comms).incarnation == pm_trainer.incarnation
+    assert isinstance(acting.identity(comms), PeerIdentity)
+    comms.registry.declare(ExternalThread("peer", frozenset({"model"}), Checkout(tmp_path)))
+    sent = invoke_tool(
+        comms,
+        "comms_send",
+        {"to": "peer", "body": "Attached from antigravity"},
+        caller=acting,
+    )
+    assert sent["message"]["routing"]["reply"]["sender"] == "pm-trainer"
+
+    # Genuine in-turn ForkThread child of claude-ai stays bound to claude-ai's grant.
+    sub_acting, _ = agy_grant.acting({"fork": {"name": "live-sub"}})
+    with pytest.raises(RelationViolationError, match="not a child of"):
+        agy_grant.prepare_call(comms, sub_acting)
+
+    # Non-executable ServiceThread still refuses takeover.
+    svc_acting, _ = agy_grant.acting({"fork": {"name": "installer"}})
+    with pytest.raises(ToolRefusedError, match="not an independent CLI-inbox thread"):
+        agy_grant.prepare_call(comms, svc_acting)
