@@ -42,6 +42,7 @@ from agent_comms.cli_bridges.antigravity_transcript import (
     RecentAntigravityWindow,
     RunningAntigravity,
 )
+from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.claude_transcript import (
     WATCH_DEFERRED,
     WATCH_REPLACED,
@@ -609,12 +610,12 @@ class InboxSocket:
         data = base64.b64decode(arriving.read_text(encoding="ascii"))
         arriving.unlink()
         if hashlib.sha256(data).hexdigest() != part.sha256:
-            print(f"File {part.position} of {part.message.name} ({part.name}) did not arrive "
-                  "whole and was not kept; comms_message_file still reads it.", flush=True)
+            print(ClaudeMonitorFrame.file_corrupt_notice(
+                part.position, part.message, part.name), flush=True)
         else:
             path.write_bytes(data)
-            print(f"File {part.position} of {part.message.name} is on your disk: {path} "
-                  f"({part.mime_type}, {part.size} bytes). Read that path to see it.", flush=True)
+            print(ClaudeMonitorFrame.file_saved_notice(
+                part.position, part.message, path, part.mime_type, part.size), flush=True)
         await asyncio.sleep(self.batch_gap_seconds)
 
     async def publishing(self, socket: ClientWebSocketResponse) -> None:
