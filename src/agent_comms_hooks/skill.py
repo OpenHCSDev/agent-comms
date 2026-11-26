@@ -289,11 +289,24 @@ class DeckStart(DealtDeck):
     def of(cls, record: Mapping[str, object], **context: object) -> DeckStart:
         return (SubagentDeckStart if cls.raised_by_subagent(record) else cls).decode(record, **context)
 
+    def owner_bus_recall(
+        self, comms: Comms, snapshot: RegistrySnapshot, thread_name: str,
+    ) -> tuple[str, ...]:
+        """Tristan's last verbatim bus messages for this bound thread, injected on deals."""
+        thread = snapshot.threads.get(thread_name)
+        if thread is None:
+            return ()
+        words = comms.bus.owner_bus_words(thread, snapshot)
+        return (words,) if words else ()
+
     def take(self, comms: Comms, binding: Binding, number: int = 0) -> tuple[str, ...]:
         """The captured resident identity admits the shared reader at one registry cut."""
         snapshot = comms.registry.snapshot()
         snapshot.born(binding.owner.require_recorded().lookup)
-        return self.taken(DeckReader(), number, comms, snapshot)
+        dealt = self.taken(DeckReader(), number, comms, snapshot)
+        if not dealt:
+            return ()
+        return (*dealt, *self.owner_bus_recall(comms, snapshot, binding.owner.name))
 
     def taken(self, reader: DeckReader, number: int, comms: Comms,
               snapshot: RegistrySnapshot) -> tuple[str, ...]:
@@ -303,7 +316,8 @@ class DeckStart(DealtDeck):
         """The owner-selected variant, dealt through the same bound resident context."""
         snapshot = comms.registry.snapshot()
         snapshot.born(binding.owner.require_recorded().lookup)
-        return self.dealt(prime.reader(), prime.trigger(), comms, snapshot)
+        dealt = self.dealt(prime.reader(), prime.trigger(), comms, snapshot)
+        return (*dealt, *self.owner_bus_recall(comms, snapshot, binding.owner.name))
 
     def delivery(self) -> DealDelivery:
         """A session claude_launch started holds the deal in its system prompt; any other reads

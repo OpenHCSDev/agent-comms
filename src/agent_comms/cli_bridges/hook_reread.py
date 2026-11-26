@@ -22,6 +22,12 @@ class SliceReminder(DeckStart):
 
     every: ClassVar[int] = 5
 
+    def owner_bus_recall(
+        self, comms: Comms, snapshot: RegistrySnapshot, thread_name: str,
+    ) -> tuple[str, ...]:
+        """Mid-turn reminder slices do not repeat the full owner bus history block."""
+        return ()
+
     def taken(self, reader: DeckReader, number: int, comms: Comms,
               snapshot: RegistrySnapshot) -> tuple[str, ...]:
         deck = self.deck(reader)

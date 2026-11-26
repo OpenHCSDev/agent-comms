@@ -266,20 +266,24 @@ class SenderFilteredHistory(HistoryView):
     def viewer(self) -> DisplayViewer:
         return self.inner.viewer
 
+    @staticmethod
+    def human_senders(snapshot: RegistryProvenance) -> frozenset[str]:
+        owners = {
+            name
+            for name, thread in snapshot.threads.items()
+            if thread.role.declared_name == "user"
+        }
+        if not owners:
+            owners = {"user"}
+        aliases = {
+            alias for alias, canonical in snapshot.aliases.items() if canonical in owners
+        }
+        return frozenset(owners | aliases)
+
     def _sender_names(self, snapshot: RegistryProvenance) -> frozenset[str]:
         selected = self.sender.strip()
         if selected.lower() in ("human", "owner"):
-            owners = {
-                name
-                for name, thread in snapshot.threads.items()
-                if thread.role.declared_name == "user"
-            }
-            if not owners:
-                owners = {"user"}
-            aliases = {
-                alias for alias, canonical in snapshot.aliases.items() if canonical in owners
-            }
-            return frozenset(owners | aliases)
+            return self.human_senders(snapshot)
         canonical = snapshot.aliases.get(selected, selected)
         aliases = {
             alias for alias, target in snapshot.aliases.items() if target == canonical
