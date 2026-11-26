@@ -6,10 +6,18 @@ import json
 from pathlib import Path
 
 import pytest
+from aiohttp import ClientSession, web
 from aiohttp.test_utils import TestClient, TestServer, unused_port
 from yarl import URL
 
 from agent_comms.cli_bridges.antigravity import AntigravityBridge
+from agent_comms.cli_bridges.antigravity_live import (
+    AntigravityConversationApi,
+    AntigravitySessionSupervisor,
+    IdleRunState,
+    PaneWakeTarget,
+    RunningRunState,
+)
 from agent_comms.cli_bridges.antigravity_rule_gate import (
     AntigravityReadFileTool,
     handle_hook,
@@ -1195,3 +1203,154 @@ def test_monitor_decode_does_not_swallow_watch_lifecycle_notices():
     shown = [frame for frame in frames if isinstance(frame, MonitorShown)]
     assert len(shown) == 1
     assert shown[0].lines == (header, "First line", "Second line")
+
+
+async def test_antigravity_run_state_idle_retires_quota_aborted_turn_and_recovers_pane(
+    tmp_path: Path, comms: Comms, capsys
+) -> None:
+    """When Antigravity aborts a turn on quota exhaustion without writing a closing record
+    to `transcript.jsonl`, `AntigravitySessionSupervisor` queries `ConversationService/GetConversation`,
+    emits `TurnIdle` so the bus retires the stuck turn to `IDLE`, waits out the quota banner once
+    (keyed by Error ID so stale scrollback never loops), and pokes the idle empty `>` prompt."""
+    conv_id = "ae453ade-1dd3-4346-98a3-802cb52cf344"
+    logs = tmp_path / ".gemini" / "antigravity-cli" / "brain" / conv_id / ".system_generated" / "logs"
+    logs.mkdir(parents=True)
+    transcript = logs / "transcript.jsonl"
+    # Transcript ends on SYSTEM_MESSAGE (wake from --wait-log) with NO closing PLANNER_RESPONSE,
+    # reproducing the exact quota-abort transcript tail that left comms-a stuck in agy-turn-13745.
+    wake_step = {
+        "step_index": 13745,
+        "source": "SYSTEM",
+        "type": "SYSTEM_MESSAGE",
+        "status": "DONE",
+        "created_at": "2026-11-26T17:28:18Z",
+        "content": (
+            "Command output:\n"
+            "Comms in · #comms · user (human) · reply to #comms · 8336-ea57aa362561\n"
+            "ping\n"
+        ),
+    }
+    transcript.write_text(json.dumps(wake_step) + "\n", encoding="utf-8")
+
+    # Fake local Antigravity ConversationService HTTP+JSON server.
+    ls_state = {"runState": "RUN_STATE_IDLE"}
+
+    async def get_conversation(request: web.Request) -> web.Response:
+        assert request.headers.get("x-antigravity-csrf-token") == "csrf-test"
+        body = await request.json()
+        assert body["conversationId"] == conv_id
+        return web.json_response({"id": conv_id, "state": {"runState": ls_state["runState"]}})
+
+    ls_app = web.Application()
+    ls_app.router.add_post("/product.v1.ConversationService/GetConversation", get_conversation)
+
+    class _FakePane(PaneWakeTarget):
+        QUOTA_MIN_SECONDS = 0.05
+        QUOTA_BUFFER_SECONDS = 0.0
+
+        def __init__(self) -> None:
+            self.tail = (
+                "⚠ Individual quota reached. Please upgrade your subscription.\n"
+                "Resets in 0m1s.\n"
+                "Error ID: dd512e66-13746\n"
+                "────────────────\n"
+                ">\n"
+                "────────────────\n"
+            )
+            self.pokes: list[str] = []
+
+        async def capture_tail(self) -> str:
+            return self.tail
+
+        async def poke(self, message: str) -> bool:
+            self.pokes.append(message)
+            ls_state["runState"] = "RUN_STATE_RUNNING"
+            return True
+
+    comms.registry.declare(ExternalThread("comms-a-test", frozenset(), Checkout(comms.root)))
+    comms.registry.declare(NativeThread("sender", frozenset(), Checkout(comms.root)))
+    store = ConnectorStore.at(tmp_path / "auth")
+    connector_port = unused_port()
+    ls_port = unused_port()
+    connector = Connector(store, f"http://127.0.0.1:{connector_port}", comms.root)
+
+    async with TestServer(ls_app, port=ls_port), TestServer(connector.application(), port=connector_port) as server:
+        async with TestClient(server) as client:
+            with store.granted("test") as token:
+                resp = await client.post(
+                    "/mcp",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {"name": "comms_watch", "arguments": {"fork": {"name": "comms-a-test"}}},
+                    },
+                )
+                reply = await resp.json()
+                watch_url = str(client.make_url(URL(reply["result"]["structuredContent"]["url"]).path))
+
+                pane = _FakePane()
+                # Override quota retry to tiny delay for fast deterministic test.
+                pane_cls_orig = _FakePane.quota_retry_info
+                assert pane.prompt_is_empty(pane.tail) is True
+                assert pane.prompt_is_empty("> typing something") is False
+                quota = PaneWakeTarget.quota_retry_info(
+                    "⚠ Individual quota reached.\nResets in 9m45s.\nError ID: dd512e66-13746\n>\n"
+                )
+                assert quota is not None and quota[0] == 9 * 60 + 45 + 15.0
+                assert "Error ID: dd512e66-13746" in quota[1]
+
+                _FakePane.quota_retry_info = classmethod(
+                    lambda cls, text: (0.08, "Error ID: dd512e66-13746") if "quota reached" in text else None
+                )
+                try:
+                    supervisor = AntigravitySessionSupervisor(
+                        probe=AntigravityConversationApi(
+                            address=f"127.0.0.1:{ls_port}",
+                            csrf_token="csrf-test",
+                            conversation_id=conv_id,
+                        ),
+                        wake=pane,
+                        poll_interval=0.05,
+                        wake_grace=0.05,
+                        retry_backoff=(0.1,),
+                    )
+                    route = AntigravityFollowedTranscript(source=transcript, supervisor=supervisor)
+                    watch = asyncio.create_task(
+                        InboxSocket(watch_url, tmp_path / "exports", route).carried()
+                    )
+                    try:
+                        # 1. Even though transcript ended on SYSTEM_MESSAGE (TurnStarted),
+                        #    GetConversation reports RUN_STATE_IDLE so TurnIdle retires the turn!
+                        async with asyncio.timeout(10):
+                            while True:
+                                observed = comms.agents.activity_of(
+                                    "comms-a-test", snapshot=comms.registry.snapshot()
+                                )
+                                if observed.state is ActivityState.IDLE:
+                                    break
+                                await asyncio.sleep(0.05)
+
+                        # 2. A new bus message arrives while idle at the quota banner:
+                        #    supervisor waits out the quota banner once and pokes the pane
+                        #    without looping forever on the same Error ID.
+                        comms.messaging.send("sender", "comms-a-test", "are you back?")
+                        async with asyncio.timeout(10):
+                            while not pane.pokes:
+                                capsys.readouterr()
+                                await asyncio.sleep(0.05)
+                        assert "Quota reset" in pane.pokes[0]
+                        assert ls_state["runState"] == "RUN_STATE_RUNNING"
+
+                        # 3. Verify API decodes both IdleRunState and RunningRunState cleanly.
+                        async with ClientSession(trust_env=False) as http:
+                            assert await supervisor.probe.run_state(http) is RunningRunState
+                            ls_state["runState"] = "RUN_STATE_IDLE"
+                            assert await supervisor.probe.run_state(http) is IdleRunState
+                    finally:
+                        watch.cancel()
+                        with pytest.raises(asyncio.CancelledError):
+                            await watch
+                finally:
+                    _FakePane.quota_retry_info = pane_cls_orig

@@ -157,6 +157,10 @@ class ReceivesWatchReports(ABC):
     async def stream_antigravity(self) -> None:
         """The client streams Antigravity `transcript.jsonl` records on this socket."""
 
+    @abstractmethod
+    async def turn_idle(self) -> tuple[RuntimeUpdate, ...]:
+        """The client's live run-state API reported the harness idle; retire any open turn."""
+
 
 class ReconnectUrl(WireModel):
     """The connector's one frame that is not a message: where this watch's client reconnects
@@ -260,9 +264,10 @@ class WatchReport(WatchReportFields, TaggedWire, ABC, affix="", declared_name=No
     def line(self) -> str:
         return self.model_dump_json()
 
-    async def received(self, pushed: ReceivesWatchReports) -> None:
+    async def received(self, pushed: ReceivesWatchReports) -> tuple[RuntimeUpdate, ...]:
         """Each printed message's attempt is emitted: shown or about to be, never sent again."""
         await pushed.emitted(frozenset(self.printed))
+        return ()
 
 
 class PrintedNow(WatchReport, declared_name='printed'):
@@ -274,18 +279,20 @@ class PrintedLedger(LedgerFields, WatchReport, declared_name='ledger'):
     ledger's own id. Once it is in, an attempt this ledger took and still unconfirmed provably
     never reached a Monitor and may go again."""
 
-    async def received(self, pushed: ReceivesWatchReports) -> None:
+    async def received(self, pushed: ReceivesWatchReports) -> tuple[RuntimeUpdate, ...]:
         await super().received(pushed)
         pushed.reported.arrived(self.ledger)
+        return ()
 
 
 class ReconnectsAlone(WatchReport, declared_name='reconnects'):
     """This client re-dials a reset socket itself, so it can take a ReconnectUrl frame. A client
     that never says so gets only messages, which is all an older client can decode."""
 
-    async def received(self, pushed: ReceivesWatchReports) -> None:
+    async def received(self, pushed: ReceivesWatchReports) -> tuple[RuntimeUpdate, ...]:
         await super().received(pushed)
         await pushed.reconnectable()
+        return ()
 
 
 class FilesWanted(WatchReport, declared_name='files'):
@@ -293,15 +300,25 @@ class FilesWanted(WatchReport, declared_name='files'):
     session's disk: send their bytes as WatchedFilePart frames. A client that never says so
     gets only messages, which is all an older client can decode."""
 
-    async def received(self, pushed: ReceivesWatchReports) -> None:
+    async def received(self, pushed: ReceivesWatchReports) -> tuple[RuntimeUpdate, ...]:
         await pushed.files_wanted(frozenset(self.printed))
+        return ()
 
 
 class AntigravityWatch(WatchReport, declared_name='antigravity'):
     """This watch client streams Antigravity `transcript.jsonl` records instead of Claude JSONL."""
 
-    async def received(self, pushed: ReceivesWatchReports) -> None:
+    async def received(self, pushed: ReceivesWatchReports) -> tuple[RuntimeUpdate, ...]:
         await pushed.stream_antigravity()
+        return ()
+
+
+class TurnIdle(WatchReport, declared_name='turn_idle'):
+    """The harness's live run-state API reported the session idle while its transcript had no
+    closing record (e.g. quota exhaustion, API error, or cancellation)."""
+
+    async def received(self, pushed: ReceivesWatchReports) -> tuple[RuntimeUpdate, ...]:
+        return await pushed.turn_idle()
 
 
 WATCH_REPORT = WireModel.adapter(WatchReport.declared_union())
