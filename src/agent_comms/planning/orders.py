@@ -85,6 +85,7 @@ from agent_comms.planning.goals import CheckedCommit, OrderCheck
 from agent_comms.planning.order_phase import OrderPhase, UnplannedPhase
 from agent_comms.planning.order_runs import ApplicationOrderRun, OrderRun
 from agent_comms.planning.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
+from agent_comms.planning.todo_store_file import TodoStoreFile
 from agent_comms.planning.order_words import (
     DirectiveText,
     GrowthReason,
@@ -6233,7 +6234,7 @@ class RecordMergedTodo(RecordsAssignmentHistory, TodoCommand, declared_name=None
 
 
 @dataclass(frozen=True, slots=True)
-class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments, DirectiveWriter):
+class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments, DirectiveWriter, TodoStoreFile):
     """One SQLite row owns both todo state and its exclusive assignment.
 
     Assignment identity and revision deduplicate known operations. An uncertain
@@ -6246,7 +6247,6 @@ class TodoStore(OwnerRequestStore, TodoHistory, GoalAssignments, DirectiveWriter
         return RegistryStore.at(self.root).snapshot()
 
     root: Path
-    filename: ClassVar[str] = "todos.sqlite3"
     tables = TodoStoreRows
 
     @contextmanager
