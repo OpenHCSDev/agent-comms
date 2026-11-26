@@ -126,6 +126,7 @@ from agent_comms.registry.thread_text import (
     ThreadText,
 )
 from agent_comms.storage.locked_store import DurableFile, PatternFile
+from agent_comms_hooks import ToolRefusedError
 
 
 class ThreadCommandAvailability:
@@ -1049,6 +1050,13 @@ class Thread(
         """Settle answered remote deliveries when an external thread replies."""
         pass
 
+    def join_forking_caller(self, join_child: Callable[[], None]) -> None:
+        """How a connector ForkingCaller binds onto this already-registered thread."""
+        del join_child
+        raise ToolRefusedError(
+            f"Thread {self.name!r} is not an independent CLI-inbox thread."
+        )
+
 
 class NativeThread(Thread):
     __slots__ = ()
@@ -1087,6 +1095,13 @@ class NativeThread(Thread):
                          turns: Mapping[StoredTurnRecord, TurnDeclaration]) -> ObservedActivity:
         """A running native owner displays its current turn phase."""
         return self.turn_record.read_in(turns).project_activity(activity)
+
+    def join_forking_caller(self, join_child: Callable[[], None]) -> None:
+        del join_child
+        raise ToolRefusedError(
+            f"Thread {self.name!r} runs on Native Pi; "
+            "call comms_cli_inbox first to take it over from a CLI/MCP session."
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1180,6 +1195,11 @@ class ExternalThread(Thread):
     def settle_answered_remote_deliveries(self, answers, caller, committed):
         caller._settle_answered_remote_deliveries(self, answers, committed.timestamp)
 
+    def join_forking_caller(self, join_child: Callable[[], None]) -> None:
+        """An independent CLI-inbox thread binds under any connector grant, regardless of
+        which grant originally created it."""
+        del join_child
+
 
 class ServiceThread(NoChannelInbox, Thread):
     """A platform publisher has neither a prompt executor nor a CLI bridge."""
@@ -1217,6 +1237,10 @@ class SubagentThread(ExternalThread, declared_name="subagent_execution"):
     def independent_threads(self) -> tuple[Thread, ...]:
         """A genuine in-turn child acts through its parent, not as another session."""
         return ()
+
+    def join_forking_caller(self, join_child: Callable[[], None]) -> None:
+        """An in-turn child stays bound to its spawning parent's grant."""
+        join_child()
 
     as_external_endpoint = Thread.as_external_endpoint
 

@@ -10,7 +10,6 @@ from typing import Annotated
 from pydantic import JsonValue
 
 from agent_comms.comms import Comms
-from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.bus_publication import DirectorOrigin
 from agent_comms.messaging.read_basis import OperatorOutcomes
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RootId
@@ -180,29 +179,19 @@ class ForkingCaller(ThreadConnectorCaller):
         self.identity(comms)
         target = acting.own_thread()
         if target != self.own_thread() and target in comms.registry:
-            existing = comms.registry.require(target)
-            if not existing.is_fork:
-                if not existing.independent_threads():
-                    raise ToolRefusedError(
-                        f"Thread {existing.name!r} is not an independent CLI-inbox thread."
-                    )
-                try:
-                    ExternalThread.stored(existing)
-                except RelationViolationError as error:
-                    raise ToolRefusedError(
-                        f"Thread {existing.name!r} runs on Native Pi; "
-                        "call comms_cli_inbox first to take it over from a CLI/MCP session."
-                    ) from error
-                return
+            comms.registry.require(target).join_forking_caller(
+                lambda: acting.join(comms, self.own_thread())
+            )
+            return
         acting.join(comms, self.own_thread())
 
 
 @dataclass(frozen=True)
 class DirectorCaller(OperatorOutcomes, ForkingCaller):
-    """claude-ai speaks for the owner, so its sends carry the director origin, which records each
-    message to a thread as a directive like the owner's own. Each remote session on this grant
-    names itself with the fork argument: an unused name is registered as claude-ai's child, and
-    an existing independent CLI-inbox thread's name binds onto that thread with its identity intact."""
+    """Owner-typed connector grant whose sends carry the director origin. Each remote session
+    on this grant names itself with the fork argument: an unused name is registered under the
+    grant, and any existing independent CLI-inbox thread binds with its identity intact regardless
+    of its historical parent."""
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A directive passes DirectiveText."""
