@@ -366,29 +366,46 @@ async def test_antigravity_persistent_watch_confirms_pty_double_cr_sync_and_asyn
     transcript.parent.mkdir(parents=True)
     transcript.write_text(_sample_antigravity_lines()[0] + "\n", encoding="utf-8")
 
-    # Event-driven wait_for_log_growth wakes on append, normalizes PTY \r\n -> \n,
-    # and persists a sidecar cursor so messages written between calls are never dropped.
+    # Event-driven wait_for_log_growth delivers unread startup lines on a fresh log,
+    # wakes on append, normalizes PTY \r\n -> \n, and persists a sidecar cursor so
+    # messages written between calls (even if a caller passes --offset EOF) are never dropped.
+    fresh_log = tmp_path / "fresh.log"
+    fresh_log.write_bytes(b"startup-burst\r\n")
+    assert await asyncio.wait_for(wait_for_log_growth(fresh_log), timeout=5) == "startup-burst\n"
+
     watch_log = tmp_path / "watch.log"
     watch_log.write_bytes(b"initial\r\n")
-    waiter = asyncio.create_task(wait_for_log_growth(watch_log))
+    waiter = asyncio.create_task(wait_for_log_growth(watch_log, offset=watch_log.stat().st_size))
     await asyncio.sleep(0.1)
     with watch_log.open("ab") as fh:
         fh.write(b"line-one\r\r\nline-two\r\n")
     assert await asyncio.wait_for(waiter, timeout=5) == "line-one\nline-two\n"
 
-    # A burst written while no waiter is armed is returned immediately on the next call.
+    # A burst written while no waiter is armed is returned immediately even if the caller
+    # passes --offset at EOF (preventing mid-turn message skips like #model 8405/8412).
     with watch_log.open("ab") as fh:
         fh.write(b"burst-between-arms\r\n")
-    assert await asyncio.wait_for(wait_for_log_growth(watch_log), timeout=5) == "burst-between-arms\n"
+    assert (
+        await asyncio.wait_for(
+            wait_for_log_growth(watch_log, offset=watch_log.stat().st_size), timeout=5
+        )
+        == "burst-between-arms\n"
+    )
 
-    # Truncating the log (e.g. `: > watch.log` on watch restart) resets the cursor to 0.
+    # Truncating the log (e.g. `: > watch.log` on watch restart) resets the cursor to 0
+    # even when --offset is passed at the post-truncation EOF.
     watch_log.write_bytes(b"after-truncate\r\n")
-    assert await asyncio.wait_for(wait_for_log_growth(watch_log), timeout=5) == "after-truncate\n"
+    assert (
+        await asyncio.wait_for(
+            wait_for_log_growth(watch_log, offset=watch_log.stat().st_size), timeout=5
+        )
+        == "after-truncate\n"
+    )
 
     # Synchronous inotify path shares the exact same cursor and CRLF normalization.
     with watch_log.open("ab") as fh:
         fh.write(b"sync-line\r\r\n")
-    assert wait_for_log_growth_sync(watch_log) == "sync-line\n"
+    assert wait_for_log_growth_sync(watch_log, offset=watch_log.stat().st_size) == "sync-line\n"
 
     async with TestServer(connector.application(), port=port) as server:
         async with TestClient(server) as client:
