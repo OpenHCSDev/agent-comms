@@ -768,9 +768,15 @@ class CarriedFile(DurableFile, WrittenFile):
     __slots__ = ()
 
     @classmethod
-    @abstractmethod
     def require_maintenance_open_at(cls, path: Path) -> None:
         """Refuse the writers this kind's maintenance policy holds out of ``path``."""
+        maintenance_at = cls.maintenance_at(path)
+        cls._require_maintenance_open_at_step(path, maintenance_at)
+
+    @classmethod
+    @abstractmethod
+    def _require_maintenance_open_at_step(cls, path: Path, maintenance_at) -> None:
+        ...
 
     @classmethod
     def maintenance_at(cls, path: Path) -> MaintenanceBarrier:
@@ -786,8 +792,8 @@ class HolderWrittenFile(CarriedFile):
     __slots__ = ()
 
     @classmethod
-    def require_maintenance_open_at(cls, path: Path) -> None:
-        cls.maintenance_at(path).assert_open_unlocked()
+    def _require_maintenance_open_at_step(cls, path: Path, maintenance_at) -> None:
+        maintenance_at.assert_open_unlocked()
 
 
 class DrainSettledFile(CarriedFile):
@@ -797,8 +803,8 @@ class DrainSettledFile(CarriedFile):
     __slots__ = ()
 
     @classmethod
-    def require_maintenance_open_at(cls, path: Path) -> None:
-        cls.maintenance_at(path).assert_drained_writes_open_unlocked()
+    def _require_maintenance_open_at_step(cls, path: Path, maintenance_at) -> None:
+        maintenance_at.assert_drained_writes_open_unlocked()
 
 
 class CarriedDocument[T](LockedStore[T], HolderWrittenFile, declared_name=None):

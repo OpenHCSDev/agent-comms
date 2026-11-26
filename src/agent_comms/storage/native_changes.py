@@ -142,8 +142,13 @@ class ChangeSource(ABC):
             directory = directory.parent
         return directory
 
+    def native_watches(self) -> Iterable[NativeWatch]:
+        directory = self.observed_directory()
+        yield from self._native_watches_step(directory)
+
     @abstractmethod
-    def native_watches(self) -> Iterable[NativeWatch]: ...
+    def _native_watches_step(self, directory) -> Iterable[NativeWatch]:
+        ...
 
 
 class FileSource(ChangeSource):
@@ -156,10 +161,8 @@ class FileSource(ChangeSource):
     def includes(self, path: Path) -> bool:
         return path == self.path
 
-    def native_watches(self) -> Iterable[NativeWatch]:
-        # Parent entries cover atomic replacement and missing paths, never
-        # unrelated files' MODIFY/ATTRIB/CLOSE_WRITE (notably SQLite SHM).
-        yield DirectoryWatch.observed(self.observed_directory(), _ENTRIES | _SELF)
+    def _native_watches_step(self, directory) -> Iterable[NativeWatch]:
+        yield DirectoryWatch.observed(directory, _ENTRIES | _SELF)
         for revision in FileRevision.capture(self.path).revisions():
             yield NativeWatch(self.path, revision.identity, self.inode_events)
 
@@ -178,8 +181,7 @@ class DirectorySource(ChangeSource):
     def includes(self, path: Path) -> bool:
         return path == self.path or path.parent == self.path
 
-    def native_watches(self) -> Iterable[NativeWatch]:
-        directory = self.observed_directory()
+    def _native_watches_step(self, directory) -> Iterable[NativeWatch]:
         mask = _MASK if directory == self.path else _ENTRIES | _SELF
         yield DirectoryWatch.observed(directory, mask)
 
