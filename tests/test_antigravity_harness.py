@@ -763,6 +763,17 @@ def test_antigravity_rule_gate_injects_on_start_and_recovers_checkpoint_compacti
     assert handle_hook(pre_tool_payload) == {"decision": "allow"}
     assert agy_hook_fast_path(pre_tool_payload) == {"decision": "allow"}
 
+    # Tool output mentioning "CHECKPOINT" (e.g. ML checkpoints or source text) must stay on
+    # the fast path instead of triggering a full Core import on every tool call.
+    with transcript.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({
+            "step_index": 41,
+            "source": "TOOL",
+            "type": "TOOL_RESULT",
+            "content": 'saved "CHECKPOINT" weights to disk',
+        }) + "\n")
+    assert agy_hook_fast_path(pre_tool_payload) == {"decision": "allow"}
+
     # 2. Mid-invocation CHECKPOINT caught first by PreToolUse: fast-path busts, PreToolUse
     #    denies with ALL remaining dealt paths upfront (zero 5-file cap), allows reading
     #    even the last dealt file directly, and allows comms/wake/stop tools.

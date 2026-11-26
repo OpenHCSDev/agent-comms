@@ -52,6 +52,22 @@ def _workspace_key(payload: Mapping[str, object]) -> list[str]:
     return [cwd, *workspaces]
 
 
+def _has_checkpoint_record(chunk: bytes) -> bool:
+    """Only an actual Antigravity CHECKPOINT record busts the fast path, not tool output text."""
+    if _CHECKPOINT_MARKER not in chunk:
+        return False
+    for line in chunk.splitlines():
+        if _CHECKPOINT_MARKER not in line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            return True
+        if isinstance(record, Mapping) and record.get("type") == "CHECKPOINT":
+            return True
+    return False
+
+
 def _fast_path(payload: Mapping[str, object]) -> dict[str, object] | None:
     event = payload.get("hookEventName")
     if not isinstance(event, str) or event not in _FAST_EVENTS:
@@ -90,7 +106,7 @@ def _fast_path(payload: Mapping[str, object]) -> dict[str, object] | None:
             if size > prev:
                 with transcript.open("rb") as fh:
                     fh.seek(prev)
-                    if _CHECKPOINT_MARKER in fh.read(size - prev):
+                    if _has_checkpoint_record(fh.read(size - prev)):
                         return None
                 cursor["transcript_size"] = size
                 cursor_path.write_text(json.dumps(cursor), encoding="utf-8")
