@@ -107,6 +107,9 @@ class InstalledBuild(ABC):
         """Each given repository this build carries, with its recorded commit; none by default."""
         return ()
 
+    def short_label(self) -> str:
+        return "not installed"
+
     @classmethod
     def read(cls) -> InstalledBuild:
         """The current runtime pointer is the boundary: absent, nothing is installed."""
@@ -161,6 +164,11 @@ class RecordedBuildIdentity(BuildIdentity, InstalledBuild):
             *(f"{record.repository.to_wire()} {record.commit}" for record in self.commits),
             str(self.interpreter),
         ))
+
+    def short_label(self) -> str:
+        if not self.commits:
+            return "installed (no recorded repos)"
+        return ", ".join(f"{record.repository.name}@{record.commit[:9]}" for record in self.commits)
 
     def recorded(self) -> RecordedBuildIdentity:
         try:

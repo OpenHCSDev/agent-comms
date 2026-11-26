@@ -8,8 +8,13 @@ from typing import Annotated
 from pydantic import JsonValue
 
 from agent_comms.bus_context import BusContext
-from agent_comms.coordination.service_passes import ServicePassStore
+from agent_comms.coordination.service_passes import (
+    BoardUnavailable,
+    ServicePassStore,
+    ServiceReading,
+)
 from agent_comms.errors import TodoError
+from agent_comms.installer.build_identity import InstalledBuild
 from agent_comms.execution.turn_bound import LastTurns, TurnBound, TurnsSince
 from agent_comms.execution.turn_digests import (
     ActivityTurnView,
@@ -89,10 +94,25 @@ from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
 
+def _compact_todo_line(todo: Todo, installed: InstalledBuild | None = None) -> str:
+    holder = todo.holder or "unassigned"
+    state = todo.order.declared_name
+    extra = ""
+    if installed is not None:
+        inst = todo.order.installed_line(installed)
+        if inst:
+            extra = f" · {inst}"
+    strikes = f" · strikes:{todo.strike_count}" if todo.strike_count else ""
+    return f"{todo.id} [{holder} · {state}{extra}{strikes}] {todo.text}"
+
+
 @dataclass(frozen=True)
 class TodoChanged(ToolResult):
     todo: Todo
     strike_count: int
+
+    def compact_text(self) -> str:
+        return _compact_todo_line(self.todo)
 
 
 @dataclass(frozen=True)
@@ -100,21 +120,43 @@ class TodoList(ToolResult):
     todos: tuple[Todo, ...]
     progress: dict[str, OrderProgress] = field(default_factory=dict)
 
+    def compact_text(self) -> str:
+        if not self.todos:
+            return "No open problems"
+        lines: list[str] = []
+        for todo in self.todos:
+            line = _compact_todo_line(todo)
+            prog = self.progress.get(todo.id)
+            if prog is not None:
+                line += f" ({prog.declared_name})"
+            lines.append(line)
+        return "\n".join(lines)
+
 
 @dataclass(frozen=True)
 class ProblemOrdered(ToolResult):
     goal: Goal
     todos: tuple[Todo, ...]
 
+    def compact_text(self) -> str:
+        ids = ", ".join(t.id for t in self.todos)
+        return f"Ordered {ids}\n{self.goal.compact_text()}"
+
 
 @dataclass(frozen=True)
 class ProblemClosed(ToolResult):
     todo: Todo
 
+    def compact_text(self) -> str:
+        return f"Closed {self.todo.id}: {self.todo.text}"
+
 
 @dataclass(frozen=True)
 class ProblemNumberReserved(ToolResult):
     problem: str
+
+    def compact_text(self) -> str:
+        return f"Reserved problem {self.problem}"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -267,17 +309,55 @@ class TeamBoard(ToolResult):
 
     lines: tuple[str, ...]
 
+    def compact_text(self) -> str:
+        return "\n".join(self.lines)
+
+    @classmethod
+    def live(cls, comms: BusContext) -> TeamBoard:
+        """Read a live board directly from bus stores when no heartbeat frame exists for this caller."""
+        lines: list[str] = []
+        passes = ServicePassStore.at(comms.root).read()
+        for notice in ServiceReading(services=passes).service_status:
+            lines.append(notice)
+        installed = InstalledBuild.read()
+        lines.append(f"Installed: {installed.short_label()}")
+        snapshot = comms.registry.snapshot()
+        active = sorted(
+            snapshot.active_threads(snapshot.active_candidates()),
+            key=lambda thread: thread.name,
+        )
+        lines.append(f"Active teammates ({len(active)}):")
+        for thread in active:
+            status = snapshot.status(thread.name).declared_name
+            tags = " " + ",".join(f"#{tag}" for tag in sorted(thread.tags)) if thread.tags else ""
+            goal = thread.goal.compact_text()
+            goal_bit = f" — {goal.splitlines()[0]}" if goal != "No goal" else ""
+            lines.append(f"  {thread.name} [{status}]{tags}{goal_bit}")
+        todos = tuple(comms.goals.todos.board())
+        if todos:
+            lines.append(f"Open problems ({len(todos)}):")
+            for todo in todos:
+                lines.append(f"  {_compact_todo_line(todo, installed)}")
+        else:
+            lines.append("Open problems: none")
+        return cls(tuple(lines))
+
 
 @dataclass(frozen=True, kw_only=True)
 class CommsBoardTool(ShortListed, WorkArea, BoardReadTool):
     label = "Team board"
     description = (
-        "Read the team board as text: what needs action, stalls, PRs nobody owns, idle work "
-        "and each teammate's card. comms_hud returns the records under it."
+        "Read the team board as text: installed build, active teammates and goals, "
+        "open problems/PRs, and any heartbeat alerts."
     )
 
     def apply(self, comms: BusContext, caller: ToolCaller) -> TeamBoard:
-            return TeamBoard(TeamBoardPublicationStore.read_for(comms, caller.subject(self.thread)).frame)
+        try:
+            return TeamBoard(
+                TeamBoardPublicationStore.read_for(comms, caller.subject(self.thread)).frame
+            )
+        except BoardUnavailable:
+            return TeamBoard.live(comms)
 
 
 @dataclass(frozen=True, kw_only=True)
