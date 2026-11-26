@@ -45,6 +45,20 @@ def recorded_history(
         )
 
 
+def test_team_cli_help_answers_without_importing_runtime() -> None:
+    checkout = Path(__file__).resolve().parents[1]
+    started = time.monotonic()
+    result = subprocess.run(
+        (sys.executable, "-c", "from agent_comms.team.cli import main; main()", "--help"),
+        cwd=checkout, env={**os.environ, "PYTHONPATH": str(checkout / "src")},
+        capture_output=True, text=True, timeout=10,
+    )
+    elapsed = time.monotonic() - started
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "usage: agent-comms-team {judge,order,request,tool-watch}" in result.stdout
+    assert elapsed < 1.0, f"team cli --help took {elapsed:.3f}s"
+
+
 def test_team_verb_answers_under_five_seconds(
     comms: Comms, tmp_path: Path, configured_repository: Callable[[Comms], Team],
 ) -> None:

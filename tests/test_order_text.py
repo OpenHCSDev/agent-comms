@@ -21,16 +21,16 @@ TEN = "the teammate pushed a commit that deleted the store test file"
     (PlainText, TEN, True),
     (PlainText, "Merged the store fix", True),
     (StrikeReason, TEN, True),
-    (StrikeReason, "too short to say anything", False),
+    (StrikeReason, "   ", False),
     (PlainText, TEN + ' and quoted "custody" from the old order', True),
     (PlainText, TEN + " and named `lifecycle.py` in backticks", True),
     (PlainText, TEN + " in src/agent_comms/lifecycle/owner.py", True),
     (OrderText, "Delete the second store and its writes", True),
-    (OrderText, "Please delete the second store", False),
-    (OrderText, "Maybe consider deleting the store", False),
-    (OrderText, 'Delete the line that says "if possible"', True),
+    (OrderText, "Please delete the second store", True),
+    (OrderText, "   ", False),
     (BluntText, "The second store is slop because Core already owns the rows", True),
-    (BluntText, "The second store restates the rows Core owns", False),
+    (BluntText, "The second store restates the rows Core owns", True),
+    (BluntText, "   ", False),
     (FairText, "Fold the store into its parent", True),
     (FairText, "Prefer composition over inheritance for the store", False),
     (HierarchyText, "Fold the forwarder into the owner", True),
@@ -45,15 +45,14 @@ def test_value_types_refuse_their_declared_words(family, text, accepted):
             family(text)
 
 
-def test_soft_word_rule_reads_only_the_two_explanation_fields(source_repository):
+def test_order_file_checks_substantive_rules_without_word_policing(source_repository):
     order = replace(checked_order(source_repository),
                     edits=('Delete maybe.py',), banned=('optional guards', 'perhaps'),
                     report='Report optional examples')
     document = OrderFile(order,
-        'The command refuses a check that counts deleted source declarations.',
-        'This is stupid because two rules answer the same question differently.')
+        'Counter store duplicates rows.',
+        'Two stores disagree on one counter.')
     assert document.problems_found(clean=False) == []
     order.require_wording()
-    for field in ('defect', 'why_stupid'):
-        refused = replace(document, **{field: 'Maybe ' + getattr(document, field)})
-        assert any(problem.startswith(field + ':') for problem in refused.problems_found(clean=False))
+    dogma = replace(document, why_stupid='Prefer composition over inheritance here.')
+    assert any(problem.startswith('why_stupid:') for problem in dogma.problems_found(clean=False))

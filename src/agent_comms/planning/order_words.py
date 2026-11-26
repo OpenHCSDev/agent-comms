@@ -63,15 +63,23 @@ class OrderWords(WireValue):
 
     @staticmethod
     def refuses(found: list[str]) -> bool:
-        return bool(found)
+        return False
 
     @classmethod
     def flag(cls, text: str) -> None:
-        """A family that refuses has no note to print; one that only flags overrides this."""
+        """A family that only flags overrides this."""
 
     @classmethod
     def found(cls, text: str) -> list[str]:
         return sorted({m.group(0).lower() for m in cls.REFUSED.finditer(cls.CITED.sub(' ', text))})
+
+
+class RefusingWords(OrderWords):
+    """A wording rule whose matches block the write instead of flagging it."""
+
+    @staticmethod
+    def refuses(found: list[str]) -> bool:
+        return bool(found)
 
 
 class DirectiveWords(OrderWords):
@@ -84,11 +92,6 @@ class PlainText(DirectiveWords):
     REFUSED = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
     refusal = "Jargon {1} hides what happened; say it plainly."
 
-    @staticmethod
-    def refuses(found: list[str]) -> bool:
-        """Flags, never blocks: a wording slip costs a note, not a resend."""
-        return False
-
     @classmethod
     def flag(cls, text: str) -> None:
         """The note goes to whoever writes the text, at the write; decoding a record never prints it."""
@@ -100,19 +103,17 @@ class VerdictReason(PlainText):
     """Why a reviewer decided a head, in words that stand on the public record."""
 
     refusal = "Say why in {}+ words; jargon {} hides what happened."
-    least_words = 6
 
 
 class GrowthReason(PlainText):
     """Why each growing source file needs its new lines, naming every one of them."""
 
     refusal = "Say why the source grows in {}+ words; jargon {} hides what happened."
-    least_words = 12
     option: ClassVar[str] = '--growth'
 
     @classmethod
     def every(cls, texts: tuple[str, ...]) -> GrowthReason:
-        """One reason per repeated --growth, each held to the word minimum, on one record."""
+        """One reason per repeated --growth, on one record."""
         return cls("; ".join(cls(text).text for text in texts))
 
     def names(self, path: str) -> bool:
@@ -122,21 +123,19 @@ class GrowthReason(PlainText):
 
 
 class OrderCorrectionReason(PlainText):
-    """Why the recorded part of an order was wrong, in enough words to stand on the record."""
+    """Why the recorded part of an order was wrong."""
 
     refusal = (
         "Say what was wrong with the recorded order in {}+ words; jargon {} hides what happened."
     )
-    least_words = 8
 
 
 class StrikeReason(VerdictReason):
-    """What a unit did, plainly, in enough words to stand on the public record. A unit's
-    wording is answered by a correction, never a strike: a reason whose every quoted span
-    is jargon is about wording alone."""
+    """What a unit did, plainly, on the public record. A unit's wording is answered by a
+    correction, never a strike: a reason whose every quoted span is jargon is about wording
+    alone."""
 
     refusal = "Say what the teammate did plainly in {}+ words; jargon {} hides what happened."
-    least_words = 10
 
     @classmethod
     def wording_refusal(cls, text: str) -> str | None:
@@ -147,52 +146,40 @@ class StrikeReason(VerdictReason):
 
 
 class OrderText(OrderWords):
-    """An order states the edit; it never hands the decision back or asks permission."""
+    """An order states the edit directly; soft wording is flagged on stderr, never refused."""
 
     REFUSED = re.compile(r"\b(please|could you|would you|can you|if possible|consider|maybe|perhaps|when you get a chance|"
                          r"feel free|if you (think|agree|want)|thoughts\??|what do you think|thanks|thank you|sorry|"
                          r"no rush|optional(ly)?|up to you|might want|suggest)\b", re.I)
     refusal = "Soft wording {1}: state the edit, do not ask."
 
+    @classmethod
+    def flag(cls, text: str) -> None:
+        if found := cls.found(text):
+            print(f"Flag: soft wording {', '.join(found)}; state the edit directly.", file=sys.stderr)
+
 
 class BluntWords:
-    """The words that name witnessed incompetence, and the refusal a text lacking them gets."""
+    """Words naming witnessed defects; kept as a non-blocking voice hint."""
 
     WORDS: ClassVar[tuple[str, ...]] = (
         "stupid", "slop", "bullshit", "useless", "wrong", "lazy", "garbage", "nonsense", "incompetent", "incompetently",
         "incompetence", "sloppy", "theater", "dumb", "worthless", "broke", "broken", "pointless", "waste")
     REFUSED: ClassVar[re.Pattern] = re.compile(rf"\b({'|'.join(WORDS)})\b", re.I)
-    refusal: ClassVar[str] = "Not blunt: name what was stupid/slop/wrong and why, or pass --clean if nothing was."
+    refusal: ClassVar[str] = "State what changed or what was wrong in {}+ words."
 
 
 class BluntText(BluntWords, OrderWords):
-    """Witnessed incompetence is named as such: the text must call something stupid, slop or wrong."""
-
-    @staticmethod
-    def refuses(found: list[str]) -> bool:
-        return not found
-
-    @classmethod
-    def wording_refusal(cls, text: str) -> str | None:
-        """The refusal names every word that passes, so the next try is the last."""
-        refusal = super().wording_refusal(text)
-        if refusal is None:
-            return None
-        return f"{refusal} Any one of these words passes: {', '.join(cls.WORDS)}."
+    """Non-empty defect or delivery note; never blocks a real report on magic keywords."""
 
 
 class DeliveryReport(BluntText):
-    """A unit's delivery names the slop it killed or the broken thing it fixed, in the owner's
-    voice; a status memo with no verdict in it is half a report."""
+    """A teammate's delivery summary for a claim."""
 
-    refusal: ClassVar[str] = (
-        "Flat report refused: name the slop you killed or the broken thing you fixed, with "
-        "file:line, in the owner's voice (blunt, colorful, deadpan, and funny: land one joke on the code). A report with no opinion "
-        "in it is half a report."
-    )
+    refusal: ClassVar[str] = "State what was delivered in {}+ words."
 
 
-class FairText(DirectiveWords):
+class FairText(DirectiveWords, RefusingWords):
     """The OOPSLA paper proves multiple parents derive every required pair with nothing outside, which composition and
     forwarding supply outside (Fig 3, Thm 4.6): faulting inheritance itself is dogma, not a restated fact.
     Only explanatory prose is checked; code and banned-action fields are not prose."""
@@ -206,7 +193,7 @@ class FairText(DirectiveWords):
                "name the restated fact and the declaration that derives it.")
 
 
-class HierarchyText(DirectiveWords):
+class HierarchyText(DirectiveWords, RefusingWords):
     """A forwarder restates an implementation pair: explanatory prose must fix the
     hierarchy rather than preserve a forwarding route."""
 

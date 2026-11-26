@@ -136,9 +136,11 @@ def test_pathname_handoff_publishes_without_completing_the_held_work(held_team):
     assert comms.goals.todos.get(original.id) == original
 
 
-def test_delivery_report_refuses_a_flat_status_memo():
-    with pytest.raises(ToolRefusedError, match="name the slop you killed"):
-        DeliveryReport("Ready at abc; check 13 -> 0; tests pass")
+def test_delivery_report_requires_non_empty_text_without_keyword_gate():
+    with pytest.raises(ToolRefusedError):
+        DeliveryReport("   ")
+    factual = "Ready at abc; check 13 -> 0; tests pass"
+    assert DeliveryReport(factual).text == factual
     blunt = "Killed the string slop at turn_watchdog.py:137; the typed state answers it now."
     assert DeliveryReport(blunt).text == blunt
 

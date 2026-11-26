@@ -31,10 +31,13 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
+from agent_comms.cli_support.cli_failures import CLI_FAILURES
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination.errors import DeferredRead
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.launch_root import LaunchRoot, started
 from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.installer.active_route import ActiveRoute, resolve_comms_route
 from agent_comms.installer.reporting import ReportPublication
 from agent_comms.messaging.message_notification import MessageNotification
 from agent_comms.messaging.message_reference import MessageReference
@@ -479,12 +482,10 @@ class OrderFile:
                     for name, text in (('defect', self.defect), ('why_stupid', self.why_stupid))
                     for family in wording
                     if (error := family.refused(text))]
-        if len(self.defect.split()) < 8:
-            problems.append('defect: fix: describe what fails in at least eight words')
+        if not self.defect.strip():
+            problems.append('defect: fix: describe what fails')
         if not self.why_stupid.strip():
             problems.append('why_stupid: fix: explain why this design is wrong')
-        if not clean and (timid := BluntText.refused(self.prose)):
-            problems.append(timid + '; fix: name the defect in why_stupid, or use --clean')
         if re.search(r'\bslop\b', self.prose, re.I) and not self.slop:
             problems.append('slop: fix: supply one slop item matching this JSON schema: '
                             + json.dumps(FieldCodec.record_schema(Slop)))
@@ -1981,6 +1982,20 @@ class IdleVerb(OrderVerb):
         return self.unchanged(TeamRosterIdentity())
 
 
+
+
+def run_team_cli(tool_main, argv: list[str], root_option: Path | None) -> None:
+    """Resolve the bus root once and run the selected team tool under the shared refusal set."""
+    try:
+        root = LaunchRoot.startup(
+            argv,
+            lambda: LaunchRoot.from_path(root_option) if root_option else ActiveRoute.published_launch(),
+        )
+        started()
+        context = Team.read_root(resolve_comms_route(root.path).root)
+        tool_main(argv[1:], context)
+    except CLI_FAILURES as refused:
+        sys.exit(f'Refused: {refused}')
 
 
 def main(a, ctx: Team):
