@@ -238,3 +238,42 @@ class PullRequestUpdatePage:
     """Changed identities; the existing query decoder still owns PR state."""
     rows: tuple[PullRequestUpdate, ...]
     page_info: PageInfo
+
+
+@dataclass(frozen=True)
+class PullRequestClosureRow(DeclaredFamily, affix="ClosureRow"):
+    """Scalar PR update for ClosedPullRequestWatch, without check-rollup queries."""
+    number: int
+    updated: str
+
+    @cached_property
+    def updated_at(self) -> float:
+        return _github_time(self.updated)
+
+    def as_closed(self) -> tuple[ClosedUnmergedClosureRow, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class OpenOrMergedClosureRow(PullRequestClosureRow):
+    """Open or merged PR; carries no unmerged closed head."""
+
+
+@dataclass(frozen=True)
+class ClosedUnmergedClosureRow(PullRequestClosureRow):
+    """Closed without merging; supplies head and closed_at from the single list query."""
+    head: str
+    closed_at: str
+
+    @cached_property
+    def closed_time(self) -> float:
+        return _github_time(self.closed_at)
+
+    def as_closed(self) -> tuple[ClosedUnmergedClosureRow, ...]:
+        return (self,)
+
+
+@dataclass(frozen=True)
+class PullRequestClosurePage:
+    rows: tuple[PullRequestClosureRow, ...]
+    page_info: PageInfo
