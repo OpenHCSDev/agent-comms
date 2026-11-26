@@ -3,53 +3,25 @@
 import asyncio
 from abc import ABC, abstractmethod
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import ClassVar, Self
 
 from metaclass_registry.discovery import import_module_preserving_root_logging
 
-from agent_comms.coordination.errors import Refused
-from agent_comms.execution.pi_vocabulary import ServiceTier, ThinkingChoice
 from agent_comms.installer.active_route import CommsRoute
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import Description, FieldCodec, FieldPlan
-from agent_comms.registry.thread_model import CatalogSelection, ThreadModel
+from agent_comms.registry.thread_model import CatalogSelection
 from agent_comms.registry.thread_settings import (
     ConfigurationSlot,
-    ContextEditPolicy,
-    SettingRequest,
     ThreadSettings,
 )
-from agent_comms.registry.threads import NextTurnConfiguration, Thread
 
 
 class InvalidConfigChoice(ValueError):
     """A configured value is not a member of its discovered catalog."""
-
-
-@dataclass(frozen=True, slots=True)
-class RunningSelection(CatalogSelection):
-    """What a thread runs: its stored choice, otherwise the model its runtime reports."""
-    thread: Thread
-    model: ThreadModel = field()
-
-    @property
-    def thinking_level(self) -> type[ThinkingChoice]:
-        return self.thread.thinking_level
-
-    @property
-    def service_tier(self) -> ServiceTier:
-        return self.thread.service_tier
-
-    @property
-    def context_edit_policy(self) -> ContextEditPolicy:
-        return self.thread.context_edit_policy
-
-    @property
-    def project_path(self) -> Path:
-        return self.thread.project_path
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,23 +50,6 @@ class ConfigCatalogSource(ABC):
 
     @abstractmethod
     async def validate(self, thread: CatalogSelection) -> None: ...
-
-
-class ConfigurationChanges[Configuration](ABC):
-    """The configuration writes an option asks its executing session to make."""
-
-    @abstractmethod
-    async def configure_thread(
-        self, configuration: Configuration, thread: Thread, command: SettingRequest,
-    ) -> None: ...
-
-    @abstractmethod
-    async def store_configuration(
-        self, thread: Thread, change: NextTurnConfiguration,
-    ) -> None: ...
-
-    @abstractmethod
-    async def switch_to_cli_inbox(self, thread: Thread) -> None: ...
 
 
 class ConfigOption(DeclaredFamily, affix="ConfigOption"):
@@ -133,17 +88,12 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
     @abstractmethod
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]: ...
 
-    @abstractmethod
-    async def change(
-        self, owner: ConfigurationChanges[ConfigCatalogSource], thread: Thread, value: str
-    ) -> None: ...
-
 
 class CatalogConfigOption(ConfigOption):
     """A selected option owns its catalog, auth revision and acquisition lock."""
 
     @classmethod
-    def implementing(cls, role: type) -> type[CatalogConfigOption]:
+    def implementing(cls, role: type) -> type[Self]:
         member, = (member for member in cls.members_with(cls) if issubclass(member, role))
         return member
 
@@ -205,20 +155,6 @@ class CatalogConfigOption(ConfigOption):
             return choices
         name = "Not configured" if current is None else f"{current} (unavailable)"
         return [CatalogChoice(name=name, value=current), *choices]
-
-    @abstractmethod
-    async def apply(
-        self, owner: ConfigurationChanges[ConfigCatalogSource], thread: Thread, value: str
-    ) -> None: ...
-
-    async def change(
-        self, owner: ConfigurationChanges[ConfigCatalogSource], thread: Thread, value: str
-    ) -> None:
-        try:
-            await self.validate(thread, value)
-        except InvalidConfigChoice as error:
-            raise Refused.invalid_params({"reason": str(error)}) from error
-        await self.apply(owner, thread, value)
 
     def require_value(self, value: str | None, choices: list[CatalogChoice]) -> None:
         if value not in {choice.value for choice in choices}:

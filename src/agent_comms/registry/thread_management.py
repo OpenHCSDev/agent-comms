@@ -14,7 +14,6 @@ from agent_comms.agent_backend import NewThreadBackend, RuntimeLocation
 from agent_comms.bus_context import BusThreads
 from agent_comms.cli_bridges.history import History
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.config_option import RunningSelection
 from agent_comms.coordination.errors import CoordinationError
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (
@@ -36,6 +35,7 @@ from agent_comms.execution.owner_lifecycle import (
 )
 from agent_comms.execution.pi_vocabulary import (
     NoThinkingOverride,
+    ServiceTier,
     ThinkingChoice,
     ThinkingLevelField,
 )
@@ -63,6 +63,7 @@ from agent_comms.registry.thread_identity import (
     ThreadRole,
 )
 from agent_comms.registry.thread_model import (
+    CatalogSelection,
     DeclaredModel,
     ThreadModel,
     UndeclaredModel,
@@ -76,7 +77,7 @@ from agent_comms.registry.thread_results import (
     ThreadImported,
     ThreadTitleResult,
 )
-from agent_comms.registry.thread_settings import ThreadSettings
+from agent_comms.registry.thread_settings import ContextEditPolicy, ThreadSettings
 from agent_comms.registry.thread_status import NoBridgeThreadStatus, StoppedThreadStatus
 from agent_comms.registry.thread_text import ForkedParent, GivenThreadText, ThreadText
 from agent_comms.registry.threads import (
@@ -92,6 +93,29 @@ from agent_comms.storage.locked_store import PatternFile, RuntimeFile
 from agent_comms.transport.tool_declaration import NativeRequestTools
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks.process_claim import ClaimHeldError, ProcessSingleton
+
+
+@dataclass(frozen=True, slots=True)
+class RunningSelection(CatalogSelection):
+    """What a thread runs: its stored choice, otherwise the model its runtime reports."""
+    thread: Thread
+    model: ThreadModel = field()
+
+    @property
+    def thinking_level(self) -> type[ThinkingChoice]:
+        return self.thread.thinking_level
+
+    @property
+    def service_tier(self) -> ServiceTier:
+        return self.thread.service_tier
+
+    @property
+    def context_edit_policy(self) -> ContextEditPolicy:
+        return self.thread.context_edit_policy
+
+    @property
+    def project_path(self) -> Path:
+        return self.thread.project_path
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
