@@ -62,8 +62,13 @@ class TagDisposition(DeclaredFamily, affix="TagDisposition"):
         if not confirmed:
             raise ValueError(self.confirmation(name))
 
+    def confirmation(self, tags: tuple[str, ...]) -> str:
+        tag_names = self.tag_names(tags)
+        return self._confirmation_step(tags, tag_names)
+
     @abstractmethod
-    def confirmation(self, tags: tuple[str, ...]) -> str: ...
+    def _confirmation_step(self, tags: tuple[str, ...], tag_names) -> str:
+        ...
 
     @staticmethod
     def tag_names(tags: tuple[str, ...]) -> str:
@@ -81,9 +86,9 @@ class KeepThreadsTagDisposition(TagDisposition):
     def require_confirmed(self, name: tuple[str, ...], confirmed: bool) -> None:
         pass
 
-    def confirmation(self, tags: tuple[str, ...]) -> str:
+    def _confirmation_step(self, tags: tuple[str, ...], tag_names) -> str:
         return (
-            f"Remove {self.tag_names(tags)} from their threads? "
+            f"Remove {tag_names} from their threads? "
             "Threads, saved views and history remain."
         )
 
@@ -95,9 +100,9 @@ class KeepThreadsTagDisposition(TagDisposition):
 class ArchiveThreadsTagDisposition(TagDisposition):
     label = "Archive tagged threads; keep tag"
 
-    def confirmation(self, tags: tuple[str, ...]) -> str:
+    def _confirmation_step(self, tags: tuple[str, ...], tag_names) -> str:
         return (
-            f"Archive all stopped threads tagged with {self.tag_names(tags)}? "
+            f"Archive all stopped threads tagged with {tag_names}? "
             "Tags and history remain; active owners are refused."
         )
 
@@ -112,9 +117,9 @@ class ArchiveThreadsTagDisposition(TagDisposition):
 class DeleteThreadsTagDisposition(TagDisposition):
     label = "Delete tagged threads and remove tag"
 
-    def confirmation(self, tags: tuple[str, ...]) -> str:
+    def _confirmation_step(self, tags: tuple[str, ...], tag_names) -> str:
         return (
-            f"Delete ALL inactive threads tagged with {self.tag_names(tags)} and close all "
+            f"Delete ALL inactive threads tagged with {tag_names} and close all "
             "their views? Active owners are refused; retained history and uncertain inputs "
             "are preserved."
         )

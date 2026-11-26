@@ -25,19 +25,22 @@ class CompactionNotice(ABC):
     role: ClassVar[MessageRole] = NoticeRole()
 
     @property
+    def body(self) -> str:
+        clock = self.at.clock()
+        return self._body_step(clock)
+
     @abstractmethod
-    def body(self) -> str: ...
+    def _body_step(self, clock) -> str:
+        ...
 
 
 class IgnoredCompactionDeal(CompactionNotice):
-    @property
-    def body(self) -> str:
-        return (f"{self.owner.name} ignored the compaction deal at {self.at.clock()}: "
+    def _body_step(self, clock) -> str:
+        return (f"{self.owner.name} ignored the compaction deal at {clock}: "
                 f"first refused call was {self.tool}; call #{self.call_number}, refused.")
 
 
 class StartedRuleReading(CompactionNotice):
-    @property
-    def body(self) -> str:
-        return (f"{self.owner.name} finally read its first dealt rule at {self.at.clock()}: "
+    def _body_step(self, clock) -> str:
+        return (f"{self.owner.name} finally read its first dealt rule at {clock}: "
                 f"{self.tool}, call #{self.call_number} since this compaction.")
