@@ -175,6 +175,7 @@ from agent_comms.projects.git_errors import (
     UnavailableCommitError,
 )
 from agent_comms.projects.head_review import (
+    AcceptedHeadReview,
     HeadReview,
     HeadReviewOrder,
     HeadReviewRelation,
@@ -1177,9 +1178,9 @@ class PullRequests(RepositoryReads):
             '(if .closed then '
             f'del(.merge,.merged) + {{kind: "{ClosedListedPullRequest.declared_name}"}} else '
             '(if .draft then '
-            f'del(.merge,.merged) + {{kind: "{DraftListedPullRequest.declared_name}"}} else '
-            f'del(.merge,.merged) + {{kind: "{UnmergedListedPullRequest.declared_name}"}} end) end) else '
-            f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end) '
+            f'del(.merge,.merged,.closed_at) + {{kind: "{DraftListedPullRequest.declared_name}"}} else '
+            f'del(.merge,.merged,.closed_at) + {{kind: "{UnmergedListedPullRequest.declared_name}"}} end) end) else '
+            f'del(.closed_at) + {{kind: "{MergedListedPullRequest.declared_name}"}} end) '
             '| .updated as $updated | . + {status_contexts: [.head_statuses.nodes[].commit.status.contexts[]?.context], '
             'reviewable_times: [.created, .head_statuses.nodes[].commit.committedDate, '
             '.ready_events.nodes[].createdAt], '
@@ -1201,7 +1202,6 @@ class PullRequests(RepositoryReads):
             '+ [select(.merge_state == "BLOCKED") '
             f'| select([.head_statuses.nodes[].commit.status.contexts[]? | select(.context == "{HeadReview.context}" and .state == "SUCCESS")] | length == 0) '
             f'| {{kind: "{MissingReviewMergeBlock.declared_name}", at: .updated}}])}} '
-            f'| (if .kind == "{ClosedListedPullRequest.declared_name}" then . else del(.closed_at) end) '
             '| del(.draft,.closed,.created,.head_statuses,.ready_events,.auto,.merge_state))')
         if listed.returncode:
             raise WorkBranchError(
@@ -4130,10 +4130,9 @@ class QualifiedHeadVerdict(DecidedHeadVerdict):
 
 
 @dataclass(frozen=True)
-class ReviewedHeadVerdict(DecidedHeadVerdict):
+class ReviewedHeadVerdict(DecidedHeadVerdict, AcceptedHeadReview):
     """Accept an exact source for combination, never enqueue its individual PR."""
 
-    state = "success"
     verb = "Accepted"
     @classmethod
     def accepted_for_order_review(cls) -> bool:
@@ -4161,10 +4160,6 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         return True
 
     @classmethod
-    def allows_integration(cls) -> bool:
-        return True
-
-    @classmethod
     def grown(cls, reason: VerdictReason, growth: GrowthReason) -> ReviewedHeadVerdict:
         return GrownHeadVerdict(reason, growth)
 
@@ -4184,9 +4179,6 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
     @classmethod
     def require_ok(cls, request: PullRequestHead) -> None:
         pass
-
-    def accepted_orderless_sources(self, record):
-        return (record.request,)
 
 
 @dataclass(frozen=True)

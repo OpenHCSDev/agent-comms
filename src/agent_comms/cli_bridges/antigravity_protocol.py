@@ -66,17 +66,19 @@ class AntigravityToolCallWire(WireModel):
 
     def decoded_args(self) -> dict[str, JsonValue]:
         """Antigravity serializes string tool arguments as JSON-quoted literals in `transcript.jsonl`."""
-        decoded: dict[str, JsonValue] = {}
-        for key, value in self.args.items():
-            if isinstance(value, str) and len(value) >= 2 and value[0] == '"' and value[-1] == '"':
-                try:
-                    unquoted = json.loads(value)
-                except json.JSONDecodeError:
-                    unquoted = value
-                decoded[key] = unquoted if isinstance(unquoted, str) else value
-            else:
-                decoded[key] = value
-        return decoded
+        return {key: self._unquote(value) for key, value in self.args.items()}
+
+    @staticmethod
+    def _unquote(value: JsonValue) -> JsonValue:
+        if not isinstance(value, str):
+            return value
+        if not (value.startswith('"') and value.endswith('"')):
+            return value
+        try:
+            unquoted = json.loads(value)
+        except json.JSONDecodeError:
+            return value
+        return unquoted if isinstance(unquoted, str) else value
 
 
 @dataclass

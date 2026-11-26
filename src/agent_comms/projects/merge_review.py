@@ -9,6 +9,7 @@ from agent_comms.planning.goal_management import Goals
 from agent_comms.planning.orders import HeadReviewRecord, HeadVerdict
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.head_review import (
+    AcceptedHeadReview,
     HeadReview,
     IntegrationInput,
     MergeArm,
@@ -82,14 +83,8 @@ class MergeHeadReview(HeadReview, declared_name=None):
 
 
 @dataclass(frozen=True)
-class PromotedHeadReview(MergeHeadReview):
+class PromotedHeadReview(MergeHeadReview, AcceptedHeadReview):
     """A forge permission, never a persisted source-review verdict."""
-
-    state = "success"
-
-    @classmethod
-    def allows_integration(cls) -> bool:
-        return True
 
     def description(self, reviewer: str, subject: str) -> str:
         return f"Explicitly promoted by {reviewer} on {subject}"
@@ -117,6 +112,3 @@ class PromotedHeadReview(MergeHeadReview):
             )
             raise
         return current.arm()
-
-    def accepted_orderless_sources(self, record):
-        return (record.request,)
