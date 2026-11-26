@@ -35,7 +35,7 @@ def main() -> None:
         "--offset",
         type=int,
         default=None,
-        help="Starting byte offset for --wait-log (default: current file size)",
+        help="Starting byte offset for --wait-log (default: saved cursor, or 0 for a new log; never skips past a saved cursor)",
     )
     args = parser.parse_args()
     if args.wait_log is not None:

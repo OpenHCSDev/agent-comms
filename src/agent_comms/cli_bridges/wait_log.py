@@ -62,17 +62,17 @@ class LogGrowthState:
         stat = self.target.stat()
         if self.cur_inode is None:
             self.cur_inode = stat.st_ino
-            if self.offset is not None:
-                self.pos = self.offset
-            else:
-                saved = _read_log_cursor(self.cursor_path)
-                if saved is None:
-                    self.pos = stat.st_size
-                    _write_log_cursor(self.cursor_path, self.cur_inode, self.pos)
-                elif saved[0] != self.cur_inode or stat.st_size < saved[1]:
-                    self.pos = 0
+            saved = _read_log_cursor(self.cursor_path)
+            if saved is not None:
+                if saved[0] == self.cur_inode and saved[1] <= stat.st_size:
+                    self.pos = saved[1] if self.offset is None else min(self.offset, saved[1])
                 else:
-                    self.pos = saved[1]
+                    self.pos = 0
+            elif self.offset is not None:
+                self.pos = min(self.offset, stat.st_size)
+                _write_log_cursor(self.cursor_path, self.cur_inode, self.pos)
+            else:
+                self.pos = 0
         cur = stat.st_size
         if stat.st_ino != self.cur_inode or cur < self.pos:
             self.cur_inode = stat.st_ino
@@ -84,8 +84,7 @@ class LogGrowthState:
             raw = fh.read()
         new_pos = self.pos + len(raw)
         self.pos = new_pos
-        if self.offset is None:
-            _write_log_cursor(self.cursor_path, self.cur_inode, new_pos)
+        _write_log_cursor(self.cursor_path, self.cur_inode, new_pos)
         text = raw.decode("utf-8", errors="replace")
         return _PTY_CRLF_RE.sub("\n", text).replace("\r", "\n")
 
