@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -11,7 +12,6 @@ from agent_comms.bus_context import BusContext
 from agent_comms.coordination.service_passes import (
     BoardUnavailable,
     ServicePassStore,
-    ServiceReading,
 )
 from agent_comms.errors import TodoError
 from agent_comms.installer.build_identity import InstalledBuild
@@ -320,7 +320,7 @@ class TeamBoard(ToolResult):
         """Read a live board directly from bus stores when no heartbeat frame exists for this caller."""
         lines: list[str] = []
         passes = ServicePassStore.at(comms.root).read()
-        for notice in ServiceReading(services=passes).service_status:
+        for notice in passes.failure_lines(time.time()):
             lines.append(notice)
         installed = InstalledBuild.read()
         lines.append(f"Installed: {installed.short_label()}")

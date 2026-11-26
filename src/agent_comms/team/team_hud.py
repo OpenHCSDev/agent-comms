@@ -105,6 +105,26 @@ class UnreadableUsage(RateLimitReading):
 
 
 @dataclass(frozen=True)
+class LiveSnapshotUsage(RateLimitReading):
+    """Direct bus-store read; no Codex usage probe runs on a live snapshot."""
+
+    def line(self) -> str:
+        return "not probed"
+
+
+@dataclass(frozen=True)
+class LiveBusReading(ServiceReading):
+    """Direct read of live bus stores when no retained heartbeat frame exists."""
+
+    @projected(view=WireExclude)
+    def service_status(self) -> tuple[str, ...]:
+        return self.services.failure_lines(time.time())
+
+    def retained_status(self) -> str:
+        return "Live bus snapshot:"
+
+
+@dataclass(frozen=True)
 class CodexUsage:
     reading: RateLimitReading
 
@@ -197,7 +217,12 @@ class TeamLoad(ServiceReading):
         """Read live load directly from bus stores when no heartbeat frame exists for this caller."""
         passes = ServicePassStore.at(comms.root).read()
         todos = tuple(comms.goals.todos.board())
-        return cls(services=passes, load=OverloadDegradation.from_orders(todos, 0, 0))
+        return LiveTeamLoad(services=passes, load=OverloadDegradation.from_orders(todos, 0, 0))
+
+
+@dataclass(frozen=True)
+class LiveTeamLoad(LiveBusReading, TeamLoad):
+    """Live bus-store load snapshot; never mislabelled as a stale retained heartbeat frame."""
 
 
 @dataclass(frozen=True)
@@ -254,7 +279,7 @@ class TeamHud(TeamHudRecord):
         units = tuple(
             Teammate(
                 candidate.incarnation,
-                Moving if by_holder.get(candidate.name) else Idle,
+                Moving if by_holder.get(candidate.name) or candidate.goal.active().visible else Idle,
                 NoPendingClock(),
                 tuple(
                     TeamOrder(
@@ -277,13 +302,13 @@ class TeamHud(TeamHudRecord):
             for candidate in shown
         )
         passes = ServicePassStore.at(comms.root).read()
-        return cls(
+        return LiveTeamHud(
             teammate=owner,
             units=units,
             phases=(),
             load=OverloadDegradation.from_orders(todos, 0, 0),
             forks=(),
-            usage=CodexUsage(UnreadableUsage("live snapshot")),
+            usage=CodexUsage(LiveSnapshotUsage()),
             packets=(),
             open_pings=(),
             services=passes,
@@ -521,6 +546,20 @@ class TeamHud(TeamHudRecord):
 
     def load_reading(self) -> TeamLoad:
         return TeamLoad(self.load, services=self.services, heartbeat=self.heartbeat)
+
+
+@dataclass(frozen=True)
+class LiveTeamHud(LiveBusReading, TeamHud):
+    """Live bus-store HUD snapshot; shows live freshness and omits stale heartbeat warnings."""
+
+    def status(self, now: float) -> TeamStatus:
+        return TeamStatus(
+            self.load.total, self.load.timers_up, self.load.unjudged,
+            len(self.forks), self.usage.line(), "live",
+        )
+
+    def load_reading(self) -> TeamLoad:
+        return LiveTeamLoad(self.load, services=self.services, heartbeat=self.heartbeat)
 
 
 @dataclass(frozen=True)
