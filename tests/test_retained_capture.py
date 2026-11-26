@@ -8,7 +8,7 @@ from threading import Event
 
 import pytest
 
-from agent_comms.cli import build_parser
+from agent_comms.cli_runtime import build_parser
 from agent_comms.comms import Comms, wire
 from agent_comms.context_store import ContextStore
 from agent_comms.coordination.database import CoordinationStore

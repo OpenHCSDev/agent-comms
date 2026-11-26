@@ -8,7 +8,7 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-from agent_comms.cli import CliInvocation
+from agent_comms.cli_runtime import CliInvocation
 from agent_comms.cli_verbs.install import InstallCliCommand
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import (

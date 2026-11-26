@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli import build_parser
+from agent_comms.cli_runtime import build_parser
 from agent_comms.cli_verbs.publish_checkout import PublishCheckoutCliCommand
 from agent_comms.cli_verbs.sync_checkout import SyncCheckoutCliCommand
 from agent_comms.projects.checkout_publication import PublishingCheckout

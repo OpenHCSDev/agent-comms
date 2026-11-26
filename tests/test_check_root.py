@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli import CliInvocation
+from agent_comms.cli_runtime import CliInvocation
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import UnreceivedAnswerError
 from agent_comms.execution.check_root import CheckRoot

@@ -6,7 +6,7 @@ from io import StringIO
 
 from pydantic import TypeAdapter, ValidationError
 
-from agent_comms.cli import CliInvocation
+from agent_comms.cli_runtime import CliInvocation
 from agent_comms.cli_bridges.cli_protocol import CoreError
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.installer.interpreter_operation import CliProbePhase, RuntimeProbe

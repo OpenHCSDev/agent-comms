@@ -8,7 +8,7 @@ import sqlite3
 from contextlib import closing
 from dataclasses import MISSING, fields
 
-from agent_comms.cli import CliInvocation
+from agent_comms.cli_runtime import CliInvocation
 from agent_comms.cli_verbs.schema_report import SchemaReportCliCommand
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.storage.typed_table import SQLiteSchemaDifference, SQLiteSchemaObject

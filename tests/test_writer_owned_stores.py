@@ -8,7 +8,7 @@ from typing import Annotated, ClassVar
 import pytest
 
 from agent_comms.messaging.channel_targets import ChannelTarget, CommandTarget
-from agent_comms.cli import build_parser
+from agent_comms.cli_runtime import build_parser
 from agent_comms.cli_verbs.planned_reconcile import PlannedReconcileCliCommand
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.backup import StoreBackup

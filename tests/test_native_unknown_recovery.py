@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli import CliInvocation
+from agent_comms.cli_runtime import CliInvocation
 from agent_comms.cli_bridges.cli_protocol import WATCH_LINE, CoreError
 from agent_comms.comms import wire
 from agent_comms.coordination.attempt_recovery import RecoveryMonitorCapability, VerifiedOwnerLoss
