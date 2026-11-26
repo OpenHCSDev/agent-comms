@@ -60,6 +60,10 @@ class OwnGoalPublication(ToolResult):
     """A self-relative goal writer returns the exact declaration it published."""
 
     __slots__ = ()
+    goal: GoalDeclaration
+
+    def compact_text(self) -> str:
+        return self.goal.compact_text()
 
     @projected(view=WireExclude, name="agentCommsKind")
     def publication_kind(self) -> object:
@@ -71,24 +75,15 @@ class GoalSet(OwnGoalPublication):
     goal: GoalDeclaration
     instruction: str
 
-    def compact_text(self) -> str:
-        return self.goal.compact_text()
-
 
 @dataclass(frozen=True)
 class GoalProgress(OwnGoalPublication, GoalSnapshot):
     execution: Annotated[GoalExecution, WireName("goal_execution")]
 
-    def compact_text(self) -> str:
-        return self.goal.compact_text()
-
 
 @dataclass(frozen=True)
 class GoalUpdated(OwnGoalPublication):
     goal: GoalDeclaration
-
-    def compact_text(self) -> str:
-        return self.goal.compact_text()
 
 
 @dataclass(frozen=True)

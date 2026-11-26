@@ -78,7 +78,7 @@ from agent_comms.planning.goal_execution import GoalExecution
 from agent_comms.planning.goal_execution_snapshot import GoalExecutionSnapshot
 from agent_comms.planning.goal_snapshots import GoalSnapshots
 from agent_comms.planning.goal_waits import GoalWaits
-from agent_comms.planning.orders import TodoStore
+from agent_comms.planning.todo_store_file import TodoStoreFile
 from agent_comms.registry.activity import Activity, ActivityData, ActivityState, ObservedActivity
 from agent_comms.registry.agent_activity import ActivityAnswers, AgentActivity, CapturedActivity
 from agent_comms.registry.catalog_document import CatalogDocument
@@ -666,7 +666,7 @@ class WireRevision(ReadState, ToolResult):
 
     team_board: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: TodoStore.source_paths(views.root), TeamBoardView, TeamFramesView),
+        *revision_source(lambda views: TodoStoreFile.source_paths(views.root), TeamBoardView, TeamFramesView),
     ] = ()
 
     expiry_seconds: ClassVar[int] = 30

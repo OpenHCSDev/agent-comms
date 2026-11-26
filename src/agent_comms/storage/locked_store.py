@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import stat
@@ -18,7 +19,6 @@ from dataclasses import dataclass, field
 from functools import cache, cached_property, partial
 from importlib import import_module
 from pathlib import Path
-from pkgutil import walk_packages
 from threading import local
 from typing import Annotated, ClassVar, Generic, Self, TypeVar, cast
 from weakref import finalize
@@ -141,6 +141,118 @@ class DocumentRetirement[D, R](DocumentChange[D, R]):
 
     def apply_to(self, store: DocumentTransactions[D], original: D) -> None:
         store._retire_unlocked()
+
+
+_CLASS_HEADER = re.compile(r"^class\s+(\w+)(?:\[[^\]]*\])?\s*\(", re.MULTILINE)
+_AS_PAIR = re.compile(r"\b(\w+)\s+as\s+(\w+)\b")
+
+
+def _split_base_list(text: str) -> list[str]:
+    if "[" not in text and "(" not in text:
+        return text.split(",")
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    for ch in text:
+        if ch in "([":
+            depth += 1
+            current.append(ch)
+        elif ch in ")]":
+            depth -= 1
+            current.append(ch)
+        elif ch == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(ch)
+    parts.append("".join(current))
+    return parts
+
+
+@cache
+def _package_class_bases() -> tuple[tuple[str, tuple[tuple[str, tuple[str, ...]], ...]], ...]:
+    """Scan agent_comms top-level class headers once per process so RootFile subclasses
+    discover and import only their own declaring modules instead of every module in the tree."""
+    modules: list[tuple[str, tuple[tuple[str, tuple[str, ...]], ...]]] = []
+    package_name = agent_comms.__name__
+    for package_root in agent_comms.__path__:
+        prefix_len = len(package_root) + 1
+        for dirpath, dirnames, filenames in os.walk(package_root):
+            dirnames[:] = [name for name in dirnames if name != "__pycache__"]
+            for filename in filenames:
+                if not filename.endswith(".py"):
+                    continue
+                full = os.path.join(dirpath, filename)
+                with open(full, "rb") as handle:
+                    raw = handle.read()
+                if b"class " not in raw:
+                    continue
+                text = raw.decode("utf-8", errors="ignore")
+                first_class = _CLASS_HEADER.search(text)
+                if first_class is None:
+                    continue
+                header_prefix = text[: first_class.start()]
+                aliases = (
+                    {alias: original for original, alias in _AS_PAIR.findall(header_prefix)}
+                    if " as " in header_prefix
+                    else {}
+                )
+                entries: list[tuple[str, tuple[str, ...]]] = []
+                length = len(text)
+                for match in _CLASS_HEADER.finditer(text):
+                    index = match.end() - 1
+                    depth = 0
+                    while index < length:
+                        ch = text[index]
+                        if ch in "([":
+                            depth += 1
+                        elif ch in ")]":
+                            depth -= 1
+                            if depth == 0:
+                                break
+                        index += 1
+                    bases: list[str] = []
+                    for token in _split_base_list(text[match.end() : index]):
+                        token = token.strip()
+                        if not token or "=" in token:
+                            continue
+                        if "[" in token:
+                            token = token.split("[", 1)[0].strip()
+                        if "." in token:
+                            token = token.rsplit(".", 1)[-1]
+                        if token:
+                            bases.append(aliases.get(token, token))
+                    if bases:
+                        entries.append((match.group(1), tuple(bases)))
+                if entries:
+                    relative = full[prefix_len:-3].replace(os.sep, ".")
+                    module_name = (
+                        package_name
+                        if relative == "__init__"
+                        else f"{package_name}.{relative[:-9]}"
+                        if relative.endswith(".__init__")
+                        else f"{package_name}.{relative}"
+                    )
+                    modules.append((module_name, tuple(entries)))
+    return tuple(modules)
+
+
+@cache
+def _declaring_modules(root_name: str) -> tuple[str, ...]:
+    names = {root_name}
+    found: set[str] = set()
+    graph = _package_class_bases()
+    changed = True
+    while changed:
+        changed = False
+        for module_name, classes in graph:
+            for class_name, bases in classes:
+                if any(base in names for base in bases):
+                    if class_name not in names:
+                        names.add(class_name)
+                        changed = True
+                    found.add(module_name)
+    return tuple(sorted(found))
 
 
 class InstallableFile:
@@ -297,20 +409,20 @@ class RootFile:
     def files(path: Path) -> tuple[Path, ...]:
         return (path,)
 
-    @staticmethod
+    @classmethod
     @cache
-    def load_declarations() -> None:
-        """Import every module of agent_comms once per process, so ``declarations_in`` walks
-        the whole family and not only the owners some caller happened to import. The package
-        is imported, not taken from ``__package__``: this module lives in a subpackage."""
-        prefix = f"{agent_comms.__name__}."
-        for module in walk_packages(agent_comms.__path__, prefix):
-            import_module(module.name)
+    def load_declarations(cls) -> None:
+        """Import every module of agent_comms declaring a subclass of ``cls`` once per process,
+        so ``declarations_in`` walks the whole family without loading unrelated subpackages.
+        The package is scanned from ``agent_comms.__path__``, never from ``__package__``:
+        this module lives in a subpackage."""
+        for module_name in _declaring_modules(cls.__name__):
+            import_module(module_name)
 
     @classmethod
     def declarations_in(cls, root: Path) -> Iterator[tuple[type[Self], Path]]:
         """Each declaring owner and its directory, once across composed capabilities."""
-        RootFile.load_declarations()
+        cls.load_declarations()
         for family in cls.families():
             yield from family.root_declaration(root)
 
@@ -356,7 +468,12 @@ class RootFile:
         )
         if not stores:
             return cls
-        (owner,) = stores
+        roots = tuple(
+            owner
+            for owner in stores
+            if not any(other is not owner and issubclass(owner, other) for other in stores)
+        )
+        (owner,) = roots
         return owner
 
     @classmethod
