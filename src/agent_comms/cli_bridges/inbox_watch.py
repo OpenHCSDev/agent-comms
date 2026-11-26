@@ -55,7 +55,10 @@ from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.messaging.agent_inbox import NoWait, TakenInputPosition, TakenInputStart
+from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.bus_route_counts import BusRouteCounts
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.routing import DeliveryScope
 from agent_comms.messaging.watched import ChangeSignal, FileSource
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.package_stamp import STAMP
@@ -348,6 +351,35 @@ class InboxWatch:
                 thread=self.thread, after=after, wait=NoWait())
             return WatchedDelivery.read(comms, request.messages(comms))
 
+    def untaken_since(
+        self, after: TakenInputPosition, last_seq: int,
+    ) -> tuple[int, tuple[WatchedDelivery, ...]]:
+        """Skip full coordination-attached inbox queries when no new bus row targets this
+        thread or its channels; always perform a full drain on open (``last_seq < 0``) or
+        after any bus reset (``bus_seq < last_seq``)."""
+        bus = Bus(Bus.path_in(self.root))
+        bus_seq = bus.revision()
+        if last_seq >= 0 and bus_seq == last_seq:
+            return last_seq, ()
+        with self.wire() as comms:
+            snapshot = comms.registry.snapshot()
+            catalog = comms.channels.catalog.read()
+            bus_seq = comms.bus.bus.revision()
+            if last_seq >= 0 and bus_seq == last_seq:
+                return last_seq, ()
+            if last_seq >= 0 and bus_seq > last_seq:
+                delivery = DeliveryScope.capture(self.thread, snapshot, catalog)
+                with comms.bus.bus.observing() as db:
+                    if not BusRouteCounts.has_target_since(
+                        db, last_seq, bus_seq, delivery.index_targets,
+                    ):
+                        return bus_seq, ()
+            request = CommsInboxTool(
+                thread=self.thread, after=after, wait=NoWait())
+            deliveries = WatchedDelivery.read(comms, request.messages(comms))
+            next_seq = deliveries[-1].message.reference.seq if deliveries else bus_seq
+            return next_seq, deliveries
+
     def taken(self, delivery: WatchedDelivery, ledger: TakingLedger) -> None:
         """A message leaves the inbox before its frame goes out: the client may ack a print
         before a later write could land, and an attempt recorded but never sent is exactly what
@@ -454,11 +486,15 @@ class InboxWatch:
         """Send what no harness took, woken by each bus commit; nothing blocks a thread between
         commits, so a closed socket ends its handler at once."""
         after: TakenInputPosition = TakenInputStart()
+        last_seq = -1
         async with ChangeSignal.opened(*commits) as changes:
             while True:
                 # Drained before the read, so a commit landing during it wakes the wait.
                 changes.prepare()
-                for delivery in await asyncio.to_thread(self.untaken, after):
+                last_seq, deliveries = await asyncio.to_thread(
+                    self.untaken_since, after, last_seq,
+                )
+                for delivery in deliveries:
                     await asyncio.to_thread(self.taken, delivery, reported.current)
                     await socket.send_str(delivery.line())
                     after = after.advanced(delivery.message.reference)

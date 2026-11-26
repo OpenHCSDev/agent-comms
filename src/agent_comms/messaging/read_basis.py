@@ -468,7 +468,7 @@ class ReadCursor:
                json_extract(value,'$[4]') AS exceptions
         FROM json_each({parameter}))"""
 
-    unread_sql = "seq > high_water AND seq NOT IN (SELECT value FROM json_each(exceptions))"
+    unread_sql = "seq > high_water AND (exceptions = '[]' OR seq NOT IN (SELECT value FROM json_each(exceptions)))"
 
     def unread_rule(self) -> str:
         """Which joined request rows this cursor still counts; a human read is the whole rule."""

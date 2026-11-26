@@ -414,3 +414,33 @@ def test_one_recipient_decodes_only_its_board_and_checks_every_identity(tmp_path
         TeamBoardPublicationStore.read_cut(
             tmp_path, NamedTeamBoards(frozenset((original[0].teammate.name,)))
         )
+
+
+def test_packet_map_caches_by_file_revision_and_invalidates_on_write_or_unlink(
+    tmp_path, monkeypatch
+):
+    original = huds()
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
+    store = TeamBoardPublicationStore.at(tmp_path)
+    reads = 0
+    real_read = TeamBoardPublicationStore._read_unlocked
+
+    def counted_read(self):
+        nonlocal reads
+        reads += 1
+        return real_read(self)
+
+    monkeypatch.setattr(TeamBoardPublicationStore, "_read_unlocked", counted_read)
+    first = store.packet_map()
+    second = store.packet_map()
+    assert first == second == {hud.teammate: hud.packets for hud in original}
+    assert reads == 1
+
+    changed = (replace(original[0], packets=(), open_pings=()), *original[1:])
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), changed)
+    third = store.packet_map()
+    assert third[original[0].teammate] == ()
+    assert reads == 2
+
+    store.path.unlink()
+    assert store.packet_map() == {}

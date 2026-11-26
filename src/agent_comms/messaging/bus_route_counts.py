@@ -43,6 +43,21 @@ class BusRouteCounts(BusProjectionTables):
         return cls(message.seq, message.target, message.sender,
                    message.sender_lookup, message.timestamp)
 
+    @classmethod
+    def has_target_since(
+        cls, db: sqlite3.Connection, after_seq: int, through: int, targets: Iterable[str],
+    ) -> bool:
+        """Whether any delivered row in (after_seq, through] addressed one of ``targets``."""
+        target_list = tuple(targets)
+        if through <= after_seq or not target_list:
+            return False
+        placeholders = ",".join("?" for _ in target_list)
+        return db.execute(
+            f'SELECT 1 FROM "{cls.declared_name}" '
+            f'WHERE seq > ? AND seq <= ? AND target IN ({placeholders}) LIMIT 1',
+            (after_seq, through, *target_list),
+        ).fetchone() is not None
+
 
 @dataclass(frozen=True)
 class BusRouteKeys(BusProjectionTables):
@@ -85,14 +100,12 @@ class BusRouteKeys(BusProjectionTables):
         """Probe only captured sender identities, never retired route names or births."""
         return [row[0] for row in db.execute(
             f'''SELECT DISTINCT route.sender
-            FROM json_each(?) AS sender
-            CROSS JOIN json_each(sender.value) AS lookup
-            CROSS JOIN json_each(?) AS target
-            CROSS JOIN "{cls.declared_name}" AS route
-                ON route.target=target.value AND route.sender=sender.key
-                    AND route.sender_lookup IS lookup.value
+            FROM "{cls.declared_name}" AS route
+            JOIN json_each(?) AS target ON route.target=target.value
+            JOIN json_each(?) AS sender ON route.sender=sender.key
+            JOIN json_each(sender.value) AS lookup ON route.sender_lookup IS lookup.value
             WHERE route.first_seq<=?''',
-            (json.dumps(dict(senders)), json.dumps(targets), through))]
+            (json.dumps(targets), json.dumps(dict(senders)), through))]
 
 
 @dataclass(frozen=True)
@@ -177,11 +190,11 @@ class RouteCounts(ABC):
         FROM request_targets AS target,arguments,json_each(arguments.unrecorded) AS source
     ), route_keys AS MATERIALIZED (
         SELECT route.target,route.sender,route.sender_lookup,sender.since
-        FROM arguments CROSS JOIN sender_keys AS sender
-        CROSS JOIN request_targets AS target
-        CROSS JOIN "{BusRouteKeys.declared_name}" AS route ON route.target=target.target
-            AND route.sender=sender.sender AND route.sender_lookup IS sender.sender_lookup
-            AND route.first_seq<=arguments.through
+        FROM arguments
+        JOIN "{BusRouteKeys.declared_name}" AS route ON route.first_seq<=arguments.through
+        JOIN request_targets AS target ON target.target=route.target
+        JOIN sender_keys AS sender ON sender.sender=route.sender
+            AND sender.sender_lookup IS route.sender_lookup
         WHERE arguments.after=0 OR EXISTS (SELECT 1 FROM "{BusRouteCounts.declared_name}" AS row
             WHERE row.target=route.target AND row.sender=route.sender
                 AND row.sender_lookup IS route.sender_lookup
@@ -304,7 +317,9 @@ class RouteCounts(ABC):
         with self.observing() as db:
             through = BusRow.last_seq(db)
             inputs = self._route_inputs(db, registry, deliveries, seen, through)
-            start = held if inputs == held.inputs else HeldUnseenCounts(inputs)
+            if inputs == held.inputs and held.through == through:
+                return held
+            start = held if inputs == held.inputs and held.through <= through else HeldUnseenCounts(inputs)
             rows = self._route_query(db, RouteUnread, inputs, through, start.through,
                                      self._unseen_query(seen))
             return HeldUnseenCounts(inputs, through, self._grouped(deliveries, rows, start.counts))
