@@ -71,15 +71,24 @@ class GoalSet(OwnGoalPublication):
     goal: GoalDeclaration
     instruction: str
 
+    def compact_text(self) -> str:
+        return self.goal.compact_text()
+
 
 @dataclass(frozen=True)
 class GoalProgress(OwnGoalPublication, GoalSnapshot):
     execution: Annotated[GoalExecution, WireName("goal_execution")]
 
+    def compact_text(self) -> str:
+        return self.goal.compact_text()
+
 
 @dataclass(frozen=True)
 class GoalUpdated(OwnGoalPublication):
     goal: GoalDeclaration
+
+    def compact_text(self) -> str:
+        return self.goal.compact_text()
 
 
 @dataclass(frozen=True)
@@ -89,6 +98,9 @@ class TeammateGoalChanged(ToolResult):
 
     thread: str
     goal: GoalDeclaration
+
+    def compact_text(self) -> str:
+        return f"{self.thread}: {self.goal.compact_text()}"
 
 
 @dataclass(frozen=True, slots=True)

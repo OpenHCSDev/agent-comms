@@ -1,9 +1,10 @@
-"""Declared CLI and tool replies share their JSON behavior."""
+"""Declared CLI and tool replies share their JSON and compact text behavior."""
 
+from agent_comms.nominal.compact_text import CompactText
 from agent_comms.nominal.field_codec import DisclosedRecord, FieldCodec
 
 
-class DeclaredReply(DisclosedRecord):
+class DeclaredReply(CompactText, DisclosedRecord):
     """A declared reply record; the one sender that owns its transport encodes it."""
 
     __slots__ = ()

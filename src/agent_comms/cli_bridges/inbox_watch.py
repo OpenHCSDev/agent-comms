@@ -78,6 +78,10 @@ class InboxWatchUrl(ToolResult):
     url: str
     expires_at: float
 
+    def compact_text(self) -> str:
+        remaining = max(0, int(self.expires_at - time.time()))
+        return f"Watch URL: {self.url} (expires in {remaining}s)"
+
 
 @dataclass(frozen=True)
 class WatchTicket(ABC):

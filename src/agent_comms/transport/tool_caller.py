@@ -34,6 +34,26 @@ class ThreadListing(ToolResult):
     threads: tuple[Annotated[ThreadRecord, WireForm], ...]
     sent_messages: tuple[SentMessageSummary, ...]
 
+    def compact_text(self) -> str:
+        live: list[str] = []
+        stopped_unread: list[str] = []
+        stopped_idle: list[str] = []
+        for record in self.threads:
+            if not record.status.is_stopped():
+                live.append(record.compact_text())
+            elif record.pending.unread_count() > 0:
+                stopped_unread.append(record.compact_text())
+            else:
+                stopped_idle.append(record.thread.name)
+        sections: list[str] = []
+        if live:
+            sections.append(f"Active ({len(live)}):\n" + "\n".join(live))
+        if stopped_unread:
+            sections.append(f"Stopped with unread ({len(stopped_unread)}):\n" + "\n".join(stopped_unread))
+        if stopped_idle:
+            sections.append(f"Stopped idle ({len(stopped_idle)}): {', '.join(stopped_idle)}")
+        return "\n\n".join(sections) if sections else "No threads"
+
 
 class ToolCaller(ReadAuthority):
     def acting_caller(self, grant: ToolCaller) -> ToolCaller:

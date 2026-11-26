@@ -41,6 +41,7 @@ from agent_comms.execution.turn_goal_permission import (
     InactiveGoalPermission,
 )
 from agent_comms.installer.native_build_inputs import ConfiguredChildStdio
+from agent_comms.nominal.compact_text import CompactText
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -744,7 +745,10 @@ class GoalDeclaration(
 
 
 @dataclass(frozen=True)
-class NoGoal(OrphansHolds, NullMember, GoalDeclaration):
+class NoGoal(CompactText, OrphansHolds, NullMember, GoalDeclaration):
+    def compact_text(self) -> str:
+        return "No goal"
+
     def stopped_permit(self, store: GoalPermitSource) -> GoalTurnPermit:
         return NoLaunchPermit()
 
@@ -813,8 +817,15 @@ class NoGoal(OrphansHolds, NullMember, GoalDeclaration):
 
 
 @dataclass(frozen=True)
-class Goal(RecordMember, GoalDeclaration):
+class Goal(CompactText, RecordMember, GoalDeclaration):
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""
+
+    def compact_text(self) -> str:
+        state = self.state.declared_name
+        line = f"Goal [{state}] rev {self.revision}: {self.text}"
+        if self.progress:
+            return f"{line}\nProgress: {self.progress}"
+        return line
 
     # A presence row names the goal and its state; its body and bookkeeping stay with the goal tools.
     text: Annotated[str, PresenceExclude()]

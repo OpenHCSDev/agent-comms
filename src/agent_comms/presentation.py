@@ -258,6 +258,15 @@ class ChannelView(ToolResult, ChannelSortView[type[ChannelSort]]):
     members: tuple[str, ...]
     last_activity: float = 0
     last_user_input: float = 0
+
+    def compact_text(self) -> str:
+        if not self.members:
+            roster = "empty"
+        elif len(self.members) <= 12:
+            roster = ", ".join(self.members)
+        else:
+            roster = f"{', '.join(self.members[:12])}, +{len(self.members) - 12} more"
+        return f"{self.channel.name} ({len(self.members)}: {roster})"
     pinned_members: frozenset[str] = frozenset()
     active_agents: Annotated[int, WireExclude()] = 0
     registered_agents: Annotated[int, WireExclude()] = 0
@@ -302,10 +311,16 @@ class ChannelView(ToolResult, ChannelSortView[type[ChannelSort]]):
 class InboxCount(DeclaredFamily, JsonShapeFamily, affix="Inbox"):
     """A thread's unread count as its reader took it: counted, or not counted at all."""
 
+    def unread_count(self) -> int:
+        return 0
+
 
 @dataclass(frozen=True)
 class CountedInbox(InboxCount, JsonShapeMember):
     value: int
+
+    def unread_count(self) -> int:
+        return self.value
 
 
 @dataclass(frozen=True)
@@ -366,6 +381,17 @@ class ThreadRecord(CliResult):
 
     def to_wire(self) -> object:
         return FieldCodec.project(self, PresenceExclude)
+
+    def compact_text(self) -> str:
+        bits = [f"{self.thread.name} [{self.status.declared_name}]"]
+        if self.thread.tags:
+            bits.append(",".join(f"#{tag}" for tag in sorted(self.thread.tags)))
+        unread = self.pending.unread_count()
+        if unread:
+            bits.append(f"unread:{unread}")
+        if self.activity_detail:
+            bits.append(f"— {self.activity_detail}")
+        return " ".join(bits)
 
     @projected(view=PresenceExclude)
     def is_fork(self) -> bool:

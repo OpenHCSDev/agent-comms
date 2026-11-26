@@ -78,3 +78,9 @@ class MessagePublished(ToolResult):
     def from_send(cls, result: SendResult) -> MessagePublished:
         return cls(result.message.message_id, SentTranscript.from_message(result.message),
                    result.correction)
+
+    def compact_text(self) -> str:
+        targets = ", ".join(self.message.routing.reply.targets)
+        line = f"Sent {self.message.source.name} -> {targets}"
+        notices = self.correction.notices(self.id)
+        return "\n".join((line, *notices)) if notices else line

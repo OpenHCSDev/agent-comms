@@ -144,6 +144,11 @@ class AvailableTool:
 class ToolsSelected(ToolResult):
     tools: tuple[AvailableTool, ...]
 
+    def compact_text(self) -> str:
+        if not self.tools:
+            return "No matching tools"
+        return "\n".join(f"{tool.name.value}: {tool.label} — {tool.description}" for tool in self.tools)
+
 
 class ToolLookup(DeclaredFamily, affix="ToolLookup"):
     """An exact selection and a word search are distinct ways to acquire declarations."""

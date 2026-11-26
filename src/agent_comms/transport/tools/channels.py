@@ -27,6 +27,12 @@ class ChannelListing(ToolResult):
     views: tuple[SavedView, ...]
     order: type[ChannelSort]
 
+    def compact_text(self) -> str:
+        lines = [view.compact_text() for view in self.channels]
+        if self.views:
+            lines.append("Views: " + ", ".join(view.name for view in self.views))
+        return "\n".join(lines) if lines else "No channels"
+
 
 @dataclass(frozen=True, kw_only=True)
 class CommsChannelsTool(ChannelsArea, ShortListed, ReadTool, NativeToolRequest):
