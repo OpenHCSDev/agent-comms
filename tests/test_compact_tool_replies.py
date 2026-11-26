@@ -87,3 +87,29 @@ def test_answered_call_keeps_structured_content_and_renders_compact_text(comms: 
     i_reply, i_board, i_text = inbox_req.answered_parts(comms, caller)
     assert "Inbox (1 msgs)" in i_text
     assert "line one\nline two — detailed body" in i_text
+
+
+def test_comms_board_renders_live_board_when_no_heartbeat_frame_exists(comms: Comms) -> None:
+    """External-watch fleets have no native Pi heartbeat writing team_frames.json;
+    comms_board must still return an accurate live board instead of BoardUnavailable."""
+    comms.registry.declare(NativeThread("alpha", frozenset({"comms"}), Checkout(comms.root)))
+    caller = ThreadCaller("alpha")
+    goal_req = ServedRequest.member_named("comms_set_goal").decoded(
+        comms, {"text": "Keep the board always live"},
+    )
+    goal_req.answered_parts(comms, caller)
+
+    board_req = ServedRequest.member_named("comms_board").decoded(comms, {})
+    b_reply, _, b_text = board_req.answered_parts(comms, caller)
+    assert "Installed:" in b_text
+    assert "Active teammates" in b_text
+    assert "Open problems: none" in b_text
+    assert b_reply["lines"] == list(b_text.splitlines())
+
+    num_req = ServedRequest.member_named("comms_problem_number").decoded(comms, {})
+    _, _, n_text = num_req.answered_parts(comms, caller)
+    assert n_text.startswith("Reserved problem P")
+
+    list_req = ServedRequest.member_named("comms_todo_list").decoded(comms, {})
+    _, _, l_text = list_req.answered_parts(comms, caller)
+    assert l_text == "No open problems"

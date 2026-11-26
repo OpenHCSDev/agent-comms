@@ -188,6 +188,9 @@ class TeamLoad(ServiceReading):
     def header(self) -> tuple[str, ...]:
         return (*self.health_lines(), str(self.load))
 
+    def compact_text(self) -> str:
+        return "\n".join(self.header)
+
 
 @dataclass(frozen=True)
 class TeamHudRecord(TeamLoad):
@@ -216,6 +219,9 @@ class TeamHud(TeamHudRecord):
 
     def with_plan(self, plan: TeamPlan) -> Self:
         return self if self.phases == plan.phases else replace(self, phases=plan.phases)
+
+    def compact_text(self) -> str:
+        return "\n".join(self.frame)
 
     @classmethod
     def of(cls, comms: BusContext, frame: HeartbeatFrame,
