@@ -126,7 +126,13 @@ def main() -> int:
     answer = _fast_path(payload)
     if answer is None:
         from agent_comms.cli_bridges.antigravity_rule_gate import handle_hook
+        from agent_comms.execution.launch_root import LaunchRoot
+        from agent_comms.installer.active_route import ActiveRoute
 
+        try:
+            LaunchRoot.startup([], ActiveRoute.published_launch)
+        except (OSError, ValueError, RuntimeError):
+            pass
         answer = handle_hook(payload)
     sys.stdout.write(json.dumps(answer) + "\n")
     sys.stdout.flush()
