@@ -8,8 +8,13 @@ from dataclasses import dataclass
 
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
 from agent_comms.messaging.message_directions import MessageDirections
-from agent_comms.messaging.message_reads import MessageIdentityRead
-import agent_comms.messaging.messages as messages
+from agent_comms.messaging.message_reads import (
+    DirectableMessage,
+    MessageIdentityRead,
+    MessageWriter,
+    PublishedRecord,
+    RecordBuilder,
+)
 from agent_comms.nominal.field_codec import MessageId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.task_owner import TaskOwner
@@ -22,8 +27,8 @@ class InitialOrigin(ABC):
     __slots__ = ()
 
     @abstractmethod
-    def require_sender(
-        self, message: messages.Message, sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
+    def require_sender[M](
+        self, message: DirectableMessage[M], sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
     ) -> None:
         """Refuse a sender this origin cannot speak for."""
 
@@ -32,20 +37,20 @@ class InitialOrigin(ABC):
         """Check the sender and message ID on the actual append connection."""
 
     @abstractmethod
-    def append(self, bus: messages.MessageWriter, build: messages.RecordBuilder) -> messages.BusRecord:
+    def append[R](self, bus: MessageWriter[R], build: RecordBuilder[R]) -> R:
         """Commit the record, reporting failure as this origin requires."""
 
     @abstractmethod
-    def published(self, goals: MessageDirections[messages.Message], message: messages.Message) -> None:
+    def published[M](self, goals: MessageDirections[M], message: DirectableMessage[M]) -> None:
         """What a committed message from this origin records beyond the bus."""
 
-    def complete(self, goals: MessageDirections[messages.Message], record: messages.BusRecord) -> messages.BusRecord:
+    def complete[M](self, goals: MessageDirections[M], record: PublishedRecord[M]) -> M:
         """Keep the actual committed record when an origin's remaining work fails."""
         try:
-            self.published(goals, record.message)
+            self.published(goals, record)
         except BaseException as error:
             raise CommittedMessageError(record) from error
-        return record
+        return record.message
 
 
 class OwnerVoiceOrigin(InitialOrigin):
@@ -53,8 +58,8 @@ class OwnerVoiceOrigin(InitialOrigin):
 
     __slots__ = ()
 
-    def published(self, goals: MessageDirections[messages.Message], message: messages.Message) -> None:
-        message.task.direct(goals, message)
+    def published[M](self, goals: MessageDirections[M], message: DirectableMessage[M]) -> None:
+        message.direct(goals)
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,8 +78,8 @@ class HumanOrigin(OwnerVoiceOrigin):
     def of(cls, user: TaskOwner) -> HumanOrigin:
         return cls(user.name, user.incarnation.wire_birth, user.worktree)
 
-    def require_sender(
-        self, message: messages.Message, sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
+    def require_sender[M](
+        self, message: DirectableMessage[M], sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
     ) -> None:
         self.require_registered(snapshot)
         if message.sender != self.sender:
@@ -85,7 +90,7 @@ class HumanOrigin(OwnerVoiceOrigin):
             raise HumanSendRefusedError(RelationViolationError(
                 "Human message identity was already published."))
 
-    def append(self, bus: messages.MessageWriter, build: messages.RecordBuilder) -> messages.BusRecord:
+    def append[R](self, bus: MessageWriter[R], build: RecordBuilder[R]) -> R:
         try:
             return bus.append(build)
         except (CommittedMessageError, HumanSendRefusedError):

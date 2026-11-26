@@ -10,15 +10,19 @@ from typing import ClassVar, Self
 from agent_comms.coordination.response_acknowledgement import KeyedResponseAcknowledgement
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.audience_manifest import AudiencedMessage
-from agent_comms.messaging.messages import RecordBuilder
 from agent_comms.messaging.bus_tables import AwaitingAnswerSource, ReceivedSource, SentSource
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.delivery_recipients import DeliveryRecipients
 from agent_comms.messaging.initial_origin import InitialOrigin, OwnerVoiceOrigin
 from agent_comms.messaging.message_directions import MessageDirections
-from agent_comms.messaging.message_reads import MessageDeliveryRead, MessageIdentityRead
+from agent_comms.messaging.message_reads import (
+    DirectableMessage,
+    MessageDeliveryRead,
+    MessageIdentityRead,
+    MessageWriter,
+    RecordBuilder,
+)
 from agent_comms.messaging.message_send_reads import PublishedMessageRead
-from agent_comms.messaging.messages import MessageWriter
 from agent_comms.messaging.messages import BusRecord, BusRow, Message
 from agent_comms.messaging.projection_source import ProducedRow
 from agent_comms.nominal.class_fact import ClassFact
@@ -112,11 +116,11 @@ class KeyedPublication(BusRecord, declared_name=None):
 class AutomatedOrigin(InitialOrigin):
     """Shared non-human publication, without an implied owner turn or directive."""
 
-    def published(self, goals: MessageDirections[Message], message: Message) -> None:
+    def published[M](self, goals: MessageDirections[M], message: DirectableMessage[M]) -> None:
         """An automated message directs no thread: only the owner's voice does."""
 
-    def require_sender(
-        self, message: Message, sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
+    def require_sender[M](
+        self, message: DirectableMessage[M], sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
     ) -> None:
         sender_thread.role.require_automated_publication(
             RelationViolationError("Initial sender must be a registered automated publisher.")
@@ -125,7 +129,7 @@ class AutomatedOrigin(InitialOrigin):
     def require_source(self, source: MessageIdentityRead, sender: str, message_id: MessageId) -> None:
         """A resend is decided by the bus's own write, not by a read before it."""
 
-    def append(self, bus: MessageWriter, build: RecordBuilder) -> BusRecord:
+    def append[R](self, bus: MessageWriter[R], build: RecordBuilder[R]) -> R:
         """A resend of the same message returns its committed original, never a copy."""
         return bus.append_original(build)
 
@@ -134,8 +138,8 @@ class AutomatedOrigin(InitialOrigin):
 class AgentOrigin(AutomatedOrigin):
     """An executable thread's owner; it may resend under the same message id."""
 
-    def require_sender(
-        self, message: Message, sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
+    def require_sender[M](
+        self, message: DirectableMessage[M], sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
     ) -> None:
         sender_thread.role.require_executable(
             RelationViolationError("Initial sender must be a visible registered executable.")
@@ -146,8 +150,8 @@ class AgentOrigin(AutomatedOrigin):
 class ServiceOrigin(AutomatedOrigin):
     """A service publisher does not impersonate an executable colleague."""
 
-    def require_sender(
-        self, message: Message, sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
+    def require_sender[M](
+        self, message: DirectableMessage[M], sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
     ) -> None:
         sender_thread.role.require_service_publication(
             RelationViolationError("Initial sender must be a declared service publisher.")

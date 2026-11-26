@@ -32,7 +32,8 @@ from agent_comms.messaging.envelope_claim_transitions import (
 )
 from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.message_clock_source import MessageClockSource
-from agent_comms.messaging.message_reads import MessageDeliveryRead
+from agent_comms.messaging.message_directions import MessageDirections
+from agent_comms.messaging.message_reads import MessageDeliveryRead, PublishedRecord
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.message_send_reads import MessageReferenceRead
 from agent_comms.messaging.message_sender import PublicSender
@@ -989,12 +990,17 @@ class MessageInput(MessageClockSource, Addressed, ResponseMessageSource):
 
 
 @dataclass(frozen=True, slots=True)
-class Message(CompactText, MessageInput, TurnOrigin['Message'], MessageReferenceRead):
+class Message(
+    CompactText, MessageInput, TurnOrigin['Message'], MessageReferenceRead, PublishedRecord['Message'],
+):
     """Declares one inter-thread message.
 
     The bus assigns ``seq`` (a monotonically increasing log position) at send
     time; the hash-derived ``message_id`` is identity only and is not ordered.
     """
+
+    def direct(self, goals: MessageDirections[Message]) -> None:
+        self.task.direct(goals, self)
 
     def compact_text(self) -> str:
         when = time.strftime("%H:%M", time.localtime(self.timestamp))
@@ -1397,18 +1403,3 @@ class ClaimMessage(Claimed, Message):
     def retained_task_facts(self) -> Iterator[task_facts.ExactTaskFact]:
         yield from super().retained_task_facts()
         yield task_facts.ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
-
-
-type RecordBuilder = Callable[[int, sqlite3.Connection], BusRecord]
-"""The original bus append operations used by initial publication."""
-
-
-class MessageWriter(ABC):
-    """The bus append interface used by initial publication origins."""
-    __slots__ = ()
-
-    @abstractmethod
-    def append(self, build: RecordBuilder) -> BusRecord: ...
-
-    @abstractmethod
-    def append_original(self, build: RecordBuilder) -> BusRecord: ...

@@ -33,3 +33,26 @@ def test_cli_help_answers_without_importing_runtime() -> None:
     assert "usage: agent-comms" in result.stdout
     assert "channels" in result.stdout and "history" in result.stdout
     assert elapsed < 1.0, f"agent-comms --help took {elapsed:.3f}s"
+
+
+def test_input_origin_and_constraint_verbs_import_standalone() -> None:
+    """Lazy CLI dispatch loads one verb module cold; input_origin must not cycle through messages."""
+    checkout = Path(__file__).resolve().parents[1]
+    env = {**os.environ, "PYTHONPATH": str(checkout / "src")}
+    for module in (
+        "agent_comms.execution.input_origin",
+        "agent_comms.cli_verbs.approve_annotations",
+        "agent_comms.cli_verbs.drop_constraint",
+        "agent_comms.cli_verbs.pin_constraint",
+        "agent_comms.cli_verbs.pin_input_constraint",
+        "agent_comms.cli_verbs.supersede_constraint",
+    ):
+        result = subprocess.run(
+            (sys.executable, "-c", f"import {module}"),
+            cwd=checkout,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, f"{module} failed standalone import:\n{result.stderr}"

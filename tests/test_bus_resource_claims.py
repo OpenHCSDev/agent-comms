@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.messaging.messages import RecordBuilder
+from agent_comms.messaging.message_reads import RecordBuilder
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.errors import CommittedMessageError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity
@@ -29,6 +29,7 @@ from agent_comms.messaging.initial_origin import HumanOrigin
 from agent_comms.messaging.messages import (
     BusCapability,
     BusProjectionTables,
+    BusRecord,
     BusRow,
     BusTables,
     Claimed,
@@ -63,7 +64,7 @@ class ClaimBus:
             operation_id=operation, turn_id=self.turns[name], input_id=InputId.mint(),
         )
 
-    def builder(self, name: str, transition) -> RecordBuilder:
+    def builder(self, name: str, transition) -> RecordBuilder[BusRecord]:
         registry = self.registry.snapshot()
         owner = registry.threads[registry.canonical_name(name)]
 
@@ -77,7 +78,7 @@ class ClaimBus:
 
         return build
 
-    def acquisition(self, name: str, resources: tuple[str, ...], scope: NativeClaim) -> RecordBuilder:
+    def acquisition(self, name: str, resources: tuple[str, ...], scope: NativeClaim) -> RecordBuilder[BusRecord]:
         return self.builder(name, partial(
             WakeClaims, claims=resources, generation=scope.operation_id, resource_scope=scope,
         ))

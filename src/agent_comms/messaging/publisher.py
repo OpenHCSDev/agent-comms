@@ -23,7 +23,7 @@ from agent_comms.errors import (
 from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.audience_manifest import freeze_audience
 from agent_comms.messaging.bus import Bus, BusSnapshot, ClaimRecord, PrivateRecord
-from agent_comms.messaging.messages import RecordBuilder
+from agent_comms.messaging.message_reads import RecordBuilder
 from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.envelope_claim_transitions import (
@@ -135,7 +135,7 @@ class ClaimWrites(Publisher):
     def _claim_builder(
         self, snapshot: RegistrySnapshot, message: Message,
         make_transition: Callable[..., ClaimTransition], *, activity: ActivityClocks,
-    ) -> RecordBuilder:
+    ) -> RecordBuilder[BusRecord]:
         sender, target, require_channel = self._validate_publish_request(
             message, registry_snapshot=snapshot, catalog=self.channels.read(), activity=activity,
             destination=CommandTarget.named(message.target))
