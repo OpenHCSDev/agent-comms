@@ -59,6 +59,7 @@ from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.transcript_cursor_reads import (
     MarksSourceRead,
+    TranscriptHistorySource,
     TranscriptRuntime,
 )
 from agent_comms.execution.transcript_routes import TranscriptRoutes, _SessionRoutes
@@ -437,7 +438,7 @@ class CapturedTranscriptAppend:
     events: tuple[TranscriptEvent, ...]
 
 
-class TranscriptSource(ReadsPublishedMessages, ResolvesSentReports):
+class TranscriptSource(TranscriptHistorySource, ReadsPublishedMessages, ResolvesSentReports):
     """Recorded items alone carry no assigned-wire or publication authority.
 
     Native and external stores supply their original records. An assigned

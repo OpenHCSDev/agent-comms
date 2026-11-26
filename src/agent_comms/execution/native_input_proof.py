@@ -18,6 +18,7 @@ from pydantic import JsonValue
 
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.backend_query import ContextCommitProof
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_integer import PositiveNativeIntegerBounds
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity, PiSessionId
@@ -238,7 +239,7 @@ class NativeInputProof(DurableFile, ReconciledFile, PatternFile, DurableTables):
 
 
 @dataclass(frozen=True, slots=True)
-class NativeContextProof(NativeContextRecord, NativeInputLocation):
+class NativeContextProof(ContextCommitProof, NativeContextRecord, NativeInputLocation):
     session_file: Annotated[Path, PathText]
 
     def session_identity(self) -> NativeSessionIdentity:

@@ -9,6 +9,7 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from agent_comms.execution.backend_query import TurnInputContent
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.pi_vocabulary import ThinkingLevelField
 from agent_comms.execution.turn_context import InputContributionCoordinates
@@ -48,7 +49,7 @@ class RejectInputPolicy(BusyInputPolicy):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InputContent:
+class InputContent(TurnInputContent):
     """What one input says: its text, attached images and context contributions."""
 
     text: str

@@ -17,6 +17,7 @@ from pydantic import JsonValue
 from agent_comms import agent_events as events
 from agent_comms.execution.acp_failure import ExhaustedRetry, RecoveredRetry
 from agent_comms.execution.agent_event import AgentEvent
+from agent_comms.execution.backend_query import BackendQueryResponse
 from agent_comms.execution.annotation_disclosure import (
     PublicInstructionAnnotations,
     WithheldAnnotations,
@@ -895,7 +896,7 @@ class SnapshotAttestation(ABC):
 
 
 @dataclass(frozen=True)
-class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
+class PiResponseData(ExternalNull, PiPayload, BackendQueryResponse, DeclaredFamily, affix="Data"):
 
     @property
     def session_busy(self) -> bool:

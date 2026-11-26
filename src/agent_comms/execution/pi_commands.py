@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from pydantic import JsonValue
 
 from agent_comms import agent_events as events
+from agent_comms.execution.backend_query import BackendQuery
 from agent_comms.execution.child_process import BoundedRun
 from agent_comms.execution.failure_source import UnrecordedFailureSource
 from agent_comms.execution.image_input import ImageInput
@@ -271,7 +272,7 @@ class FollowingPrompt(Prompt, declared_name=None):
         return session.inputs.rejected(self.input_id, response, session)
 
 
-class NativeQuery(PiCommand):
+class NativeQuery(PiCommand, BackendQuery):
     """One correlated RPC transaction; command capabilities own its effects."""
 
     @property

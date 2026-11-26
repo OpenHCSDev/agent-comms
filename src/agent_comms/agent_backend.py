@@ -27,21 +27,25 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.agent_event import AgentEvent
+from agent_comms.execution.backend_query import (
+    BackendQuery,
+    BackendQueryResponse,
+    ContextCommitProof,
+    TurnInputContent,
+)
 from agent_comms.execution.child_process import NoProcess, ProcessState
 from agent_comms.execution.history_view import OwnHistory
 from agent_comms.execution.launch_runtime import LaunchRuntime
-from agent_comms.execution.native_input_proof import NativeContextProof
-from agent_comms.execution.pi_commands import NativeQuery
 from agent_comms.execution.pi_vocabulary import CompactionReason
 from agent_comms.execution.session_revision import NoSessionObservation, SessionObservation
-from agent_comms.execution.transcript_cursor_reads import TranscriptRuntime
-from agent_comms.execution.transcript_sources import TranscriptSource
-from agent_comms.execution.turn_inbox import InputContent
+from agent_comms.execution.transcript_cursor_reads import (
+    TranscriptHistorySource,
+    TranscriptRuntime,
+)
 from agent_comms.execution.turn_outcome import TurnOutcome
 from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMember
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.pi_counts import PiCount
-from agent_comms.pi_payloads import PiResponseData
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.transport.tool_result import DeclaredReply
 
@@ -108,7 +112,7 @@ class RuntimeLocation(DeclaredFamily, TranscriptRuntime, affix='Runtime'):
         raise BackendDeclarationError('Runtime cannot select native sessions')
 
     @abstractmethod
-    def history_source(self, root, incarnation) -> TranscriptSource: ...
+    def history_source(self, root, incarnation) -> TranscriptHistorySource: ...
 
     def imported_sources(self):
         return ()
@@ -187,7 +191,7 @@ class InputStartListener(ABC):
     @abstractmethod
     def following(self, public_id: InputId, native_id: InputId, text: str) -> bool: ...
 
-    async def original_context_committed(self, sent_text: str, context: NativeContextProof) -> None:
+    async def original_context_committed(self, sent_text: str, context: ContextCommitProof) -> None:
         """An unowned input has no durable ordinary disposition to acknowledge."""
         return None
 
@@ -195,7 +199,7 @@ class InputStartListener(ABC):
         self,
         public_id: InputId,
         sent_text: str,
-        context: NativeContextProof,
+        context: ContextCommitProof,
     ) -> None:
         """An unowned following input has no durable ordinary disposition."""
         return None
@@ -222,7 +226,7 @@ class RunsTurns(ABC):
 
     @abstractmethod
     def run_turn(
-        self, thread: Thread, content: InputContent, delivery: TurnDelivery
+        self, thread: Thread, content: TurnInputContent, delivery: TurnDelivery
     ) -> AsyncIterator[AgentEvent]:
         """Run ``content`` as ``thread``'s next input and yield its events."""
 
@@ -304,7 +308,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         """The per-session runtime child, never the shared worker hosting this backend."""
         return NoProcess()
 
-    async def inspect(self, thread: Thread, request: NativeQuery) -> PiResponseData:
+    async def inspect(self, thread: Thread, request: BackendQuery) -> BackendQueryResponse:
         """A runtime without native queries refuses this capability explicitly."""
         raise BackendDeclarationError(f"{type(self).__name__} does not support native inspection")
 
@@ -367,7 +371,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         AgentBackend.__registry__ = MappingProxyType(dict(AgentBackend.__registry__))  # type: ignore[assignment]
         AgentBackend._sealed = True
 
-    def run_turn(self, thread: Thread, content: InputContent, delivery: TurnDelivery):
+    def run_turn(self, thread: Thread, content: TurnInputContent, delivery: TurnDelivery):
         raise BackendDeclarationError(f"{type(self).__name__} does not run turns")
 
     @classmethod
