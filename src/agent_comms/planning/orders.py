@@ -133,6 +133,8 @@ from agent_comms.planning.pull_requests import (
     MissingReviewMergeBlock,
     PendingCheckMergeBlock,
     PullRequestCommit,
+    PullRequestClosurePage,
+    PullRequestClosureRow,
     PullRequestHeadRevision,
     PullRequestLink,
     PullRequestUpdatePage,
@@ -1010,6 +1012,37 @@ class PullRequests(RepositoryReads):
                 raise WorkBranchError(found.stderr.strip() or f'Pull request updates in {repo.to_wire()} could not be read.')
             page = FieldCodec.decode(PullRequestUpdatePage, FieldCodec.parse(found.stdout))
             rows.extend(self.rows(repo, tuple(row.number for row in page.rows)))
+            pending = (*remaining, *page.page_info.following)
+        return tuple(rows)
+
+    def closed_updates_since(self, repo: RepositoryName, since: float) -> tuple[PullRequestClosureRow, ...]:
+        """Read scalar close/reopen/merge updates in one GraphQL query per page, without check rollups."""
+        stamp = datetime.fromtimestamp(since, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+        pending: tuple[tuple[str, ...], ...] = ((),)
+        owner, name = repo.key
+        rows: list[PullRequestClosureRow] = []
+        while pending:
+            cursor, *remaining = pending
+            after = f', after: {json.dumps(cursor[0])}' if cursor else ''
+            query = (f'query {{ repository(owner: {json.dumps(owner)}, '
+                     f'name: {json.dumps(name)}) {{ pullRequests('
+                     'orderBy: {field: UPDATED_AT, direction: DESC}, first: 100'
+                     f'{after}) {{ pageInfo {{ hasNextPage endCursor }} nodes {{ '
+                     'number state headRefOid closedAt updated: updatedAt } } } }')
+            found = repo.graphql(query, '--jq',
+                '.data.repository.pullRequests as $page | '
+                f'{{rows: [$page.nodes[] | select(.updated >= {json.dumps(stamp)}) | '
+                'if .state == "CLOSED" and .headRefOid != null and .closedAt != null then '
+                '{kind: "closed_unmerged", number: .number, updated: .updated, '
+                'head: .headRefOid, closed_at: .closedAt} '
+                'else {kind: "open_or_merged", number: .number, updated: .updated} end], '
+                'page_info: ($page.pageInfo '
+                '| .hasNextPage = (.hasNextPage and (($page.nodes | length) > 0) '
+                f'and ($page.nodes[-1].updated >= {json.dumps(stamp)})))}}')
+            if found.returncode:
+                raise WorkBranchError(found.stderr.strip() or f'Pull request updates in {repo.to_wire()} could not be read.')
+            page = FieldCodec.decode(PullRequestClosurePage, FieldCodec.parse(found.stdout))
+            rows.extend(page.rows)
             pending = (*remaining, *page.page_info.following)
         return tuple(rows)
 

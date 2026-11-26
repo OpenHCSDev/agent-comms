@@ -155,6 +155,22 @@ def main():
             # gh --jq returns the typed projection, not the raw GraphQL envelope.
             print(json.dumps({f"p{number}": data["requests"][number]["listed"]
                               for _, number in selections}))
+        elif 'closedAt updated: updatedAt }' in query:
+            projection = arguments[arguments.index('--jq') + 1]
+            since = re.search(r'\.updated >= "([^"]+)"', projection).group(1)
+            rows = []
+            for entry in data['requests'].values():
+                listed = entry['listed']
+                if listed['updated'] < since:
+                    continue
+                if listed['kind'] == 'closed':
+                    rows.append({'kind': 'closed_unmerged', 'number': listed['number'],
+                                 'updated': listed['updated'], 'head': listed['head'],
+                                 'closed_at': listed['closed_at']})
+                else:
+                    rows.append({'kind': 'open_or_merged', 'number': listed['number'],
+                                 'updated': listed['updated']})
+            print(json.dumps({'rows': rows, 'page_info': {'hasNextPage': False, 'endCursor': None}}))
         elif 'updated: updatedAt }' in query:
             projection = arguments[arguments.index('--jq') + 1]
             since = re.search(r'\.updated >= "([^"]+)"', projection).group(1)

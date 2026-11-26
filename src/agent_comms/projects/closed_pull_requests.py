@@ -147,7 +147,7 @@ class ClosedPullRequestWatch(JoinedWatch, ConnectorWatch):
             recorded = StoredClosedHead.select(db, repo=repo.github,
                                                where=StoredClosedHead.missing_where)
         floor = max((row.observed_at for row in previous), default=0.0)
-        changes = PullRequests().updated_since(repo.github, floor)
+        changes = PullRequests().closed_updates_since(repo.github, floor)
         updated = max((floor, *(row.updated_at for row in changes)))
         reader = WorkBranches(repo.checkout)
         (published,) = reader.remote_heads(repo.remote, f'refs/heads/{reader.main}')
