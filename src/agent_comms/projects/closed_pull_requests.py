@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 
@@ -27,8 +28,35 @@ from agent_comms.projects.work_branches import (
     WorkBranches,
 )
 
+
+class ClosedRepositoryUpdate(ABC):
+    """Result of one repository's closed-PR watch pass."""
+
+    @abstractmethod
+    def commit(self, store: TodoStore) -> None: ...
+
+
 @dataclass(frozen=True)
-class ClosedRepositoryObservation:
+class UnchangedClosedRepository(ClosedRepositoryUpdate):
+    """Main tip, recorded closed heads, and forge timestamp are all unchanged."""
+
+    def commit(self, store: TodoStore) -> None:
+        del store
+
+
+@dataclass(frozen=True)
+class ClosedRepositoryTimestamp(ClosedRepositoryUpdate):
+    """Main tip and recorded closed heads are unchanged; only forge observed_at advanced."""
+
+    progress: StoredClosedRepository
+
+    def commit(self, store: TodoStore) -> None:
+        with store.writing() as db:
+            self.progress.upsert(db)
+
+
+@dataclass(frozen=True)
+class ClosedRepositoryObservation(ClosedRepositoryUpdate):
     progress: StoredClosedRepository
     heads: tuple[StoredClosedHead, ...]
     fingerprints: tuple[StoredCommitPatch, ...]
@@ -68,6 +96,20 @@ class ClosedHeadScan:
     fingerprints: dict[str, StoredCommitPatch]
     unservable: tuple[str, ...]
     diffs: dict[tuple[str, str], StoredHeadDiff] = field(default_factory=dict)
+    checked_main: dict[str, bool] = field(default_factory=dict)
+
+    def _prime_main_patches(self, patches: Iterable[str]) -> None:
+        unchecked = frozenset(patches) - self.new_patches - self.checked_main.keys()
+        if not unchecked:
+            return
+        with self.store.snapshot() as db:
+            present = StoredMainPatch.present_patches(db, self.repo, unchecked)
+        for patch in unchecked:
+            self.checked_main[patch] = patch in present
+
+    def _all_on_main(self, patches: frozenset[str]) -> bool:
+        return all(patch in self.new_patches or self.checked_main.get(patch, False)
+                   for patch in patches)
 
     def head(self, request: PullRequestHead, closed_at: float) -> StoredClosedHead:
         base: CommitBase = (UnservableCommitBase() if request.head in self.unservable
@@ -81,12 +123,13 @@ class ClosedHeadScan:
         diff = self.diffs[base, head]
         candidates = StoredCommitPatch.prepare(self.store, self.reader, diff.commits,
                                                 self.fingerprints)
-        with self.store.snapshot() as db:
-            if StoredMainPatch.contains_all(db, self.repo, diff.patches - self.new_patches):
-                return ()
-            return tuple(commit.commit for commit in candidates
-                         if not StoredMainPatch.contains_all(
-                             db, self.repo, commit.patches - self.new_patches))
+        self._prime_main_patches(
+            diff.patches | frozenset(patch for commit in candidates for patch in commit.patches)
+        )
+        if self._all_on_main(diff.patches):
+            return ()
+        return tuple(commit.commit for commit in candidates
+                     if not self._all_on_main(commit.patches))
 
 
 class ClosedPullRequestWatch(JoinedWatch, ConnectorWatch):
@@ -98,7 +141,7 @@ class ClosedPullRequestWatch(JoinedWatch, ConnectorWatch):
                 self.observe_repository(comms.goals.todos, repo).commit(comms.goals.todos)
 
     @staticmethod
-    def observe_repository(store: TodoStore, repo: Repo) -> ClosedRepositoryObservation:
+    def observe_repository(store: TodoStore, repo: Repo) -> ClosedRepositoryUpdate:
         with store.snapshot() as db:
             previous = StoredClosedRepository.select(db, repo=repo.github)
             recorded = StoredClosedHead.select(db, repo=repo.github,
@@ -110,6 +153,13 @@ class ClosedPullRequestWatch(JoinedWatch, ConnectorWatch):
         (published,) = reader.remote_heads(repo.remote, f'refs/heads/{reader.main}')
         old_tips = tuple(row.main for row in previous)
         closed = tuple(pull for change in changes for pull in change.as_closed())
+        changed = frozenset(row.number for row in changes)
+        stale = old_tips != (published,)
+        reopened_or_merged = any(row.request.pr in changed for row in recorded)
+        if not stale and not closed and not reopened_or_merged:
+            if previous and updated == floor:
+                return UnchangedClosedRepository()
+            return ClosedRepositoryTimestamp(StoredClosedRepository(repo.github, published, updated))
         Repo.require_commits(reader.checkout, repo.remote, published, *old_tips)
         requested = (*(pull.head for pull in closed), *(row.request.head for row in recorded))
         unservable = Repo.unservable_commits(reader.checkout, repo.remote, *requested)
@@ -128,8 +178,6 @@ class ClosedPullRequestWatch(JoinedWatch, ConnectorWatch):
         scan = ClosedHeadScan(store, reader, repo.github, published,
                               frozenset(patch for row in main_rows for patch in row.patches),
                               fingerprints, unservable)
-        changed = frozenset(row.number for row in changes)
-        stale = old_tips != (published,)
         heads = (*(scan.head(row.request, row.closed_at) if stale else row
                    for row in recorded if row.request.pr not in changed),
                  *(scan.head(PullRequestHead(repo.github, pull.number, pull.head), pull.closed_time)

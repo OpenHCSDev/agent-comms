@@ -4458,12 +4458,16 @@ class StoredCommitPatch(TodoStoreRows, TypedTable):
     def prepare(cls, store: TodoStore, reader: WorkBranches, commits: tuple[str, ...],
                 known: dict[str, Self]) -> tuple[Self, ...]:
         needed = tuple(commit for commit in dict.fromkeys(commits) if commit not in known)
-        with store.snapshot() as db:
-            known.update((row.commit, row) for commit in needed
-                         for row in cls.select(db, commit=commit))
-        missing = tuple(commit for commit in needed if commit not in known)
-        known.update((commit, cls(commit, patches))
-                     for commit, patches in reader.prepare_patch_ids(missing).items())
+        if needed:
+            with store.snapshot() as db:
+                known.update(
+                    (row.commit, row)
+                    for row in cls.select_keys(db, tuple({"commit": commit} for commit in needed))
+                )
+            missing = tuple(commit for commit in needed if commit not in known)
+            if missing:
+                known.update((commit, cls(commit, patches))
+                             for commit, patches in reader.prepare_patch_ids(missing).items())
         return tuple(known[commit] for commit in commits)
 
 
@@ -4473,9 +4477,33 @@ class StoredMainPatch(TodoStoreRows, TypedTable):
     patch: Annotated[str, Column(primary_key=True)]
 
     @classmethod
+    def present_patches(
+        cls, db: sqlite3.Connection, repo: RepositoryName, patches: Iterable[str],
+    ) -> frozenset[str]:
+        """Which of `patches` already exist on `repo`'s indexed main, via batched IN probes."""
+        wanted = tuple(dict.fromkeys(patches))
+        if not wanted:
+            return frozenset()
+        present: set[str] = set()
+        limit = max(1, db.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) - 2)
+        for chunk in batched(wanted, limit):
+            placeholders = ",".join("?" for _ in chunk)
+            present.update(
+                row.patch
+                for row in cls.select(
+                    db,
+                    repo=repo,
+                    where=f"{{patch}} IN ({placeholders})",
+                    parameters=chunk,
+                )
+            )
+        return frozenset(present)
+
+    @classmethod
     def contains_all(cls, db: sqlite3.Connection, repo: RepositoryName,
                      patches: Iterable[str]) -> bool:
-        return all(cls.select(db, repo=repo, patch=patch, limit=1) for patch in patches)
+        wanted = frozenset(patches)
+        return not wanted or len(cls.present_patches(db, repo, wanted)) == len(wanted)
 
 
 @dataclass(frozen=True)
