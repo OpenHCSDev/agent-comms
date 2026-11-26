@@ -3,6 +3,7 @@ the request's to answer: a read is asked once more, a call that may change the b
 twice (Core may already have run it). Opening a fresh TLS connection per call cost 170-260 ms
 of handshake each against ts-gaming; a dropped one surfaced as a crashed worker."""
 
+import gzip
 import http.client
 import json
 import socket
@@ -18,6 +19,7 @@ from agent_comms.execution.child_process import LinuxPlatform, Platform
 from agent_comms.nominal.field_codec import RootId
 from agent_comms.transport.connector_profile import (
     BearerSecret,
+    ClientHttpsConnection,
     HttpsMcpEndpoint,
     ReachedRoute,
     ResolvedRoute,
@@ -157,11 +159,47 @@ def test_platform_configures_client_tcp_keepalive_and_user_timeout():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
         platform.configure_client_socket(client)
         assert client.getsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE) != 0
+        assert client.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY) != 0
         if isinstance(platform, LinuxPlatform):
             assert client.getsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE) == LinuxPlatform.CLIENT_KEEPALIVE_IDLE_SECONDS
             assert client.getsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL) == LinuxPlatform.CLIENT_KEEPALIVE_INTERVAL_SECONDS
             assert client.getsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT) == LinuxPlatform.CLIENT_KEEPALIVE_COUNT
             assert client.getsockopt(socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT) == LinuxPlatform.CLIENT_TCP_USER_TIMEOUT_MS
+
+
+def test_client_https_connection_coalesces_small_post_headers_and_body():
+    writes: list[bytes] = []
+
+    class RecordingConnection(ClientHttpsConnection):
+        def send(self, data):
+            writes.append(bytes(data))
+
+    conn = RecordingConnection("core.example", 443)
+    conn.request("POST", "/mcp", b'{"jsonrpc":"2.0"}', {"Content-Type": "application/json"})
+    assert len(writes) == 1
+    assert writes[0].endswith(b'\r\n\r\n{"jsonrpc":"2.0"}')
+
+
+def test_remote_core_requests_and_decompresses_gzip_replies():
+    seen_headers: list[dict[str, str]] = []
+
+    class GzipReply(Reply):
+        headers = {"Content-Encoding": "gzip"}
+
+        def read(self) -> bytes:
+            return gzip.compress(REPLY, compresslevel=1)
+
+    class GzipConnection(DroppingConnection):
+        def request(self, method, path, body, headers) -> None:
+            seen_headers.append(dict(headers))
+            super().request(method, path, body, headers)
+
+        def getresponse(self):
+            return GzipReply()
+
+    connection = GzipConnection(drops=0)
+    assert access_over(connection).post(CommsChannelsTool()) == {"read": True}
+    assert seen_headers[0]["Accept-Encoding"] == "gzip"
 
 
 async def test_endpoint_routes_bound_observation_session_connect_timeout():

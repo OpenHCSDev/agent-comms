@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import gzip
+import json
+from types import SimpleNamespace
 from typing import Annotated
 
 import pytest
@@ -16,7 +19,9 @@ from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
 from agent_comms.team.team_hud import TeamHud, TeamLoad
 from agent_comms.team.vibe_check import ChokeholdReleased
-from agent_comms.transport.mcp_wire import AnsweredCall
+from agent_comms.transport.connector_caller import UiReadCaller
+from agent_comms.transport.mcp import McpMessage
+from agent_comms.transport.mcp_wire import AnsweredCall, StructuredAnsweredCall
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.transport.tool_request import ServedRequest
 from agent_comms.transport.tool_result import ToolResult
@@ -157,3 +162,25 @@ def test_chokehold_released_without_pattern_catalog_recitation(comms: Comms) -> 
     thread = comms.registry.declare(NativeThread("alpha", frozenset({"comms"}), Checkout(comms.root)))
     reply = Message("alpha", "user", "Fixed the stuck build directly.", InfoKind, timestamp=100.0, seq=1)
     assert len(ChokeholdReleased.judged(thread.incarnation, reply, ())) == 1
+
+
+def test_scoped_ui_caller_omits_unused_text_copy_and_mcp_gzips_large_replies(comms: Comms) -> None:
+    namespace = comms.registry.store.prepare_native_root().namespace
+    ui_caller = UiReadCaller(namespace)
+    req = ServedRequest.member_named("comms_channels").decoded(comms, {})
+    answered = ui_caller.answered_call(req, comms, ui_caller)
+    assert isinstance(answered, StructuredAnsweredCall)
+    result = answered.result()
+    assert result.content == ()
+    assert result.structured_content == req.replied(comms, ui_caller)
+
+    large_payload = {"data": "x" * 2048}
+    gz_request = SimpleNamespace(headers={"Accept-Encoding": "gzip, deflate"})
+    gz_response = McpMessage.json_response(gz_request, large_payload)
+    assert gz_response.headers["Content-Encoding"] == "gzip"
+    assert json.loads(gzip.decompress(gz_response.body)) == large_payload
+
+    plain_request = SimpleNamespace(headers={})
+    plain_response = McpMessage.json_response(plain_request, large_payload)
+    assert "Content-Encoding" not in plain_response.headers
+    assert json.loads(plain_response.body) == large_payload

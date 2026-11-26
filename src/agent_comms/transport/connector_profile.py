@@ -87,7 +87,10 @@ class HttpsMcpEndpoint(SingleFieldValue):
 
 
 class ClientHttpsConnection(http.client.HTTPSConnection):
-    """An HTTPS client connection whose TCP socket detects half-open switches quickly."""
+    """An HTTPS client connection whose TCP socket detects half-open switches quickly
+    and sends small request headers and body in one write instead of two."""
+
+    coalesce_body_bytes = 65536
 
     def connect_address(self) -> tuple[str, int]:
         return (self.host, self.port)
@@ -98,6 +101,19 @@ class ClientHttpsConnection(http.client.HTTPSConnection):
         )
         Platform.current().configure_client_socket(raw)
         self.sock = self._context.wrap_socket(raw, server_hostname=self.host)
+
+    def _send_output(self, message_body=None, encode_chunked: bool = False) -> None:
+        if (
+            not encode_chunked
+            and isinstance(message_body, (bytes, bytearray))
+            and len(message_body) <= self.coalesce_body_bytes
+        ):
+            self._buffer.extend((b"", b""))
+            msg = b"\r\n".join(self._buffer) + message_body
+            del self._buffer[:]
+            self.send(msg)
+            return
+        super()._send_output(message_body, encode_chunked=encode_chunked)
 
 
 class DialedConnection(ClientHttpsConnection):

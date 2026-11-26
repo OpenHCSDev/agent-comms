@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
 import http.client
 import io
 import json
@@ -269,7 +270,11 @@ class RemoteCoreAccess(
 
     @property
     def headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.credential.token}", "Content-Type": "application/json"}
+        return {
+            "Authorization": f"Bearer {self.credential.token}",
+            "Content-Type": "application/json",
+            "Accept-Encoding": "gzip",
+        }
 
     @cached_property
     def connection_epoch(self) -> ConnectionEpoch:
@@ -321,6 +326,8 @@ class RemoteCoreAccess(
             raise ConnectionDropped(
                 f"The connection to {self.endpoint.url.host} dropped: {error}") from error
         thread_connection.mark_used(time.monotonic())
+        if response.headers.get("Content-Encoding") == "gzip":
+            payload = gzip.decompress(payload)
         if response.status >= 400:
             raise urllib.error.HTTPError(
                 str(self.endpoint.url), response.status, response.reason, response.headers,
