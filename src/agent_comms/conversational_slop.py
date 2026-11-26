@@ -67,6 +67,14 @@ class ResponseContext:
     repetition_min_bigram_ratio: float = 0.60
     repetition_min_sentence_ratio: float = 0.75
 
+    def check(self, cls, response):
+        if self.token_budget is None:
+            return VerifierResult(passed=True)
+        char_budget = int(self.token_budget * cls.CHARS_PER_TOKEN)
+        if len(response) > char_budget:
+            return VerifierResult(passed=False, detail=f'length {len(response)} > budget {char_budget} chars (~{self.token_budget} tokens)')
+        return VerifierResult(passed=True)
+
 
 @dataclass(frozen=True)
 class VerifierResult:
@@ -197,16 +205,7 @@ class LengthRunawayVerifier(SlopVerifier):
 
     @classmethod
     def check(cls, response: str, context: ResponseContext) -> VerifierResult:
-        if context.token_budget is None:
-            return VerifierResult(passed=True)
-        char_budget = int(context.token_budget * cls.CHARS_PER_TOKEN)
-        if len(response) > char_budget:
-            return VerifierResult(
-                passed=False,
-                detail=f"length {len(response)} > budget {char_budget} chars "
-                       f"(~{context.token_budget} tokens)",
-            )
-        return VerifierResult(passed=True)
+        return context.check(cls, response)
 
 
 class MissingCertaintyBlockVerifier(SlopVerifier):
