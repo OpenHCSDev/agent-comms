@@ -8,11 +8,13 @@ from typing import Annotated
 import pytest
 
 from agent_comms.comms import Comms
+from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import InfoKind, Message
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, NullMember, WireExclude
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import ExternalThread, NativeThread
+from agent_comms.team.team_hud import TeamHud, TeamLoad
 from agent_comms.team.vibe_check import ChokeholdReleased
 from agent_comms.transport.mcp_wire import AnsweredCall
 from agent_comms.transport.tool_caller import ThreadCaller
@@ -106,6 +108,7 @@ def test_comms_board_renders_live_board_when_no_heartbeat_frame_exists(comms: Co
     assert "Installed:" in b_text
     assert "Active teammates" in b_text
     assert "Open problems: none" in b_text
+    assert "Tristan last completed" not in b_text
     assert b_reply["lines"] == list(b_text.splitlines())
 
     num_req = ServedRequest.member_named("comms_problem_number").decoded(comms, {})
@@ -118,17 +121,36 @@ def test_comms_board_renders_live_board_when_no_heartbeat_frame_exists(comms: Co
 
     hud_req = ServedRequest.member_named("comms_hud").decoded(comms, {})
     h_reply, _, h_text = hud_req.answered_parts(comms, caller)
+    assert "Live bus snapshot:" in h_text
+    assert "Nothing is refreshing these rows" not in h_text
+    assert "Tristan last completed" not in h_text
+    assert "Codex usage unreadable" not in h_text
+    assert "Heartbeat: live" in h_text
     assert "Load: 0" in h_text
+    assert "IN PROGRESS · 1" in h_text and "alpha · Moving" in h_text
     assert h_reply["teammate"]["name"] == "alpha"
+    assert FieldCodec.decode(TeamHud, h_reply).teammate.name == "alpha"
 
     load_req = ServedRequest.member_named("comms_team_load").decoded(comms, {})
     load_reply, _, load_text = load_req.answered_parts(comms, caller)
+    assert "Live bus snapshot:" in load_text
+    assert "Nothing is refreshing these rows" not in load_text
+    assert "Tristan last completed" not in load_text
     assert "load 0" in load_text
     assert load_reply["load"]["owed"] == 0
+    assert FieldCodec.decode(TeamLoad, FieldCodec.encode(TeamLoad.live(comms))).load.owed == 0
 
     rules_req = ServedRequest.member_named("comms_standing_rules").decoded(comms, {})
     _, _, rules_text = rules_req.answered_parts(comms, caller)
     assert "Load: 0" in rules_text
+
+    # Real service failures still surface loud on live board, HUD, and load reads.
+    ServicePassStore.at(comms.root).failed("TeamHeartbeat", RuntimeError("boom"))
+    _, _, failed_board = board_req.answered_parts(comms, caller)
+    _, _, failed_hud = hud_req.answered_parts(comms, caller)
+    _, _, failed_load = load_req.answered_parts(comms, caller)
+    for rendered in (failed_board, failed_hud, failed_load):
+        assert "RuntimeError: boom" in rendered
 
 
 def test_chokehold_released_without_pattern_catalog_recitation(comms: Comms) -> None:

@@ -34,7 +34,6 @@ from agent_comms.task_attachments.owner_notices import (
     EscalationNotice,
     VibeCheckNotice,
 )
-from agent_comms.team.package import TeamPackage
 from agent_comms.team.standing_rules import (
     BlocksRelease,
     Degradation,
@@ -155,15 +154,10 @@ class VibeCheck(UndatedStandingRule):
 
     def burst(self) -> tuple[str, ...]:
         return (
-            f"VIBE CHECK ({self.sign.mark}). This is about you, right now: every teammate gets"
-            " this burst and answers for itself.",
+            f"VIBE CHECK ({self.sign.mark}). Every live teammate gets this notice and answers for itself.",
             self.sign.line,
-            f"Stop. Reread {TeamPackage.patterns()} in full. You are writing one of its copies,"
-            " this hour.",
-            "Answer this burst once, naming any one of its messages with --answers: which failure"
-            " in the pattern catalog is you right now, why, and the one structural change you make"
-            " this turn. Every verb that answers nothing is refused until you do. Ignore this and"
-            " the team stops.",
+            "Answer with --answers naming this message: state who owns the degraded signal and "
+            "the concrete change you are making this turn. Unanswered checks pause your goal.",
         )
 
     def line(self) -> str:
