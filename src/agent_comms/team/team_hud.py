@@ -34,6 +34,7 @@ from agent_comms.nominal.field_codec import (
     projected,
 )
 from agent_comms.nominal.shared_json import SharedJson
+from agent_comms.planning.orders import NoCommitProgress, Todo
 from agent_comms.planning.plan_phase_base import Plan, PlanPhase
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.file_observation import FileRevision
@@ -61,7 +62,7 @@ from agent_comms.team.team_hud_records import (
 )
 from agent_comms.team.team_service import TeamService
 from agent_comms.team.vibe_check import OverloadDegradation
-from agent_comms.ui_model.teammate_state import TeammateState
+from agent_comms.ui_model.teammate_state import Idle, Moving, NoPendingClock, TeammateState
 from agent_comms_hooks.board import BoardEntry
 
 
@@ -191,6 +192,13 @@ class TeamLoad(ServiceReading):
     def compact_text(self) -> str:
         return "\n".join(self.header)
 
+    @classmethod
+    def live(cls, comms: BusContext) -> TeamLoad:
+        """Read live load directly from bus stores when no heartbeat frame exists for this caller."""
+        passes = ServicePassStore.at(comms.root).read()
+        todos = tuple(comms.goals.todos.board())
+        return cls(services=passes, load=OverloadDegradation.from_orders(todos, 0, 0))
+
 
 @dataclass(frozen=True)
 class TeamHudRecord(TeamLoad):
@@ -222,6 +230,66 @@ class TeamHud(TeamHudRecord):
 
     def compact_text(self) -> str:
         return "\n".join(self.frame)
+
+    @classmethod
+    def live(cls, comms: BusContext, recipient: str) -> TeamHud:
+        """Synthesize a live HUD directly from bus stores when no heartbeat frame exists."""
+        snapshot = comms.registry.snapshot()
+        thread = snapshot.require(recipient)
+        owner = snapshot.require(thread.teammate()).incarnation.require_recorded()
+        installed = InstalledBuild.read()
+        todos = tuple(comms.goals.todos.board())
+        by_holder: dict[str, list[Todo]] = {}
+        for todo in todos:
+            if todo.holder:
+                by_holder.setdefault(todo.holder, []).append(todo)
+        active = sorted(
+            snapshot.active_threads(snapshot.active_candidates()),
+            key=lambda candidate: candidate.name,
+        )
+        shown = tuple(dict.fromkeys((
+            *active,
+            *(snapshot.threads[name] for name in by_holder if name in snapshot.threads),
+        )))
+        units = tuple(
+            Teammate(
+                candidate.incarnation,
+                Moving if by_holder.get(candidate.name) else Idle,
+                NoPendingClock(),
+                tuple(
+                    TeamOrder(
+                        todo.id,
+                        todo.text,
+                        checked.id,
+                        todo.order.installed_line(installed),
+                        NoCommitProgress(),
+                        (),
+                        todo.strike_count,
+                        0,
+                    )
+                    for todo in by_holder.get(candidate.name, ())
+                    for checked in todo.order.declarations
+                ),
+                sum(todo.strikes_against(candidate.incarnation) for todo in todos),
+                (),
+                (),
+            )
+            for candidate in shown
+        )
+        passes = ServicePassStore.at(comms.root).read()
+        return cls(
+            teammate=owner,
+            units=units,
+            phases=(),
+            load=OverloadDegradation.from_orders(todos, 0, 0),
+            forks=(),
+            usage=CodexUsage(UnreadableUsage("live snapshot")),
+            packets=(),
+            open_pings=(),
+            services=passes,
+            stopped=frozenset(),
+            heartbeat=passes.heartbeat_completed_at(owner),
+        )
 
     @classmethod
     def of(cls, comms: BusContext, frame: HeartbeatFrame,

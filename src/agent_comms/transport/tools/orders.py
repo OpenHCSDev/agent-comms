@@ -297,10 +297,13 @@ class BoardReadTool(ThreadReadTool, declared_name=None):
 @dataclass(frozen=True, kw_only=True)
 class CommsTeamLoadTool(WorkArea, BoardReadTool, declared_name="comms_team_load"):
     label = "Measured teammate load"
-    description = "Read retained teammate load with recorded service failures and its original completion clock."
+    description = "Read teammate load from the latest frame, or directly from live bus stores."
 
     def apply(self, comms: BusContext, caller: ToolCaller) -> TeamLoad:
+        try:
             return TeamBoardPublicationStore.read_for(comms, caller.subject(self.thread)).load_reading()
+        except BoardUnavailable:
+            return TeamLoad.live(comms)
 
 
 @dataclass(frozen=True)
@@ -364,13 +367,17 @@ class CommsBoardTool(ShortListed, WorkArea, BoardReadTool):
 class CommsHudTool(WorkArea, ThreadReadTool):
     label = "Team HUD"
     description = (
-        "Read the teammate's latest published Tristan frame: orders, review timers, "
-        "strikes, edits, PRs, plan phases and load. Recorded failures precede retained data; "
-        "stale rows stay explicitly stale, and missing frames remain unavailable."
+        "Read the teammate's latest HUD (orders, review timers, strikes, edits, PRs, plan "
+        "phases and load), falling back to a live snapshot from bus stores when no heartbeat "
+        "frame has been published for this caller."
     )
 
     def apply(self, comms: BusContext, caller: ToolCaller) -> TeamHud:
-            return TeamBoardPublicationStore.read_for(comms, caller.subject(self.thread))
+        subject = caller.subject(self.thread)
+        try:
+            return TeamBoardPublicationStore.read_for(comms, subject)
+        except BoardUnavailable:
+            return TeamHud.live(comms, subject)
 
 
 @dataclass(frozen=True, kw_only=True)
