@@ -607,7 +607,7 @@ class RegistryStore(
         """Capture related files together; decode none while holding a guard."""
         registry, first_source, second_source = self._copy_sources(self, first, second)
         return (self._decode_snapshot(registry),
-                first.read_copied(first_source), second.read_copied(second_source))
+                first.read_shared_copied(first_source), second.read_shared_copied(second_source))
 
     def _decode_snapshot(self, source: RegistryCapture) -> RegistrySnapshot:
         revision = self._decode_revision(source)

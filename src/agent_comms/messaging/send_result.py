@@ -58,9 +58,9 @@ class MessageSentResult(CliResult):
 
     def to_wire(self) -> object:
         message_id = self.sent.message.message_id
-        return {'id': message_id, 'message': f'Message {message_id} was sent',
+        return {'id': str(message_id), 'message': f'Message {message_id} was sent',
                 'correction': FieldCodec.encode(self.sent.correction),
-                'notices': self.sent.notices}
+                'notices': list(self.sent.notices)}
 
 
 @dataclass(frozen=True)

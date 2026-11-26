@@ -29,7 +29,12 @@ from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup, Wi
 from agent_comms.registry.presence import PresenceCapture, PresenceChange, PresenceRevision
 from agent_comms.registry.registry_document import RegistryDocument
 from agent_comms.registry.thread_identity import GenerationCounter, TurnIdentity
-from agent_comms.storage.file_observation import FileIdentity, FileRevision, MissingFile
+from agent_comms.storage.file_observation import (
+    CapturedSource,
+    FileIdentity,
+    FileRevision,
+    MissingFile,
+)
 from agent_comms.storage.locked_store import RegistryFile
 from agent_comms.storage.row_mapping import RowMapping
 from agent_comms.storage.typed_table import (
@@ -361,7 +366,7 @@ class RegistryRowRevision:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryCapture:
+class RegistryCapture(CapturedSource):
     """One committed revision's encoded rows, sharing immutable mapping roots.
 
     This is an in-process capture; wire_document owns its complete JSON export.

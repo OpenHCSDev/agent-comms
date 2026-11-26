@@ -93,7 +93,9 @@ class _RetainedDocumentDecode(MroDispatch):
     def missing[T](
         self, revision: MissingFile, store: CopyingStore[T], source: DocumentBytes,
     ) -> DecodedDocument[T]:
-        return DecodedDocument(source.revision, source.content, store.read_copied, store._encode)
+        return DecodedDocument(
+            source.revision, source.content, store._decode_uncached, store._encode, type(store),
+        )
 
 
 class _InitializeDocument(MroDispatch):
@@ -561,9 +563,16 @@ class JsonDocument(RootFile, ABC, Generic[T]):
         except (OSError, MalformedRecord) as error:
             return self._unreadable(error)
 
+    def _decode_uncached(self, source: DocumentBytes) -> T:
+        return self._read_captured(lambda: source, self._decode_capture)
+
     def read_copied(self, source: DocumentBytes) -> T:
         """Decode a document captured by its owning multi-file read."""
-        return self._read_captured(lambda: source, self._decode_capture)
+        return source.detached_value(self._decode_uncached)
+
+    def read_shared_copied(self, source: DocumentBytes) -> T:
+        """Read a captured document without copying; callers must treat the value as read-only."""
+        return source.shared_value(self._decode_uncached)
 
     def _unreadable(self, error: Exception) -> T:
         """Strict by default; optional owners may declare a fail-closed value."""
@@ -1420,6 +1429,7 @@ class DecodedDocument[T](DocumentBytes):
 
     decode_value: Callable[[DocumentBytes], T] = field(compare=False, repr=False)
     encode_value: Callable[[T], JsonValue] = field(compare=False, repr=False)
+    owner_type: type = field(compare=False, repr=False)
 
     @cached_property
     def value(self) -> T:
@@ -1434,6 +1444,12 @@ class DecodedDocument[T](DocumentBytes):
     def detached(self) -> T:
         """Readers own their value; the captured source keeps its comparison evidence."""
         return deepcopy(self.value)
+
+    def detached_value[V](self, decode: Callable[[DocumentBytes], V]) -> V:
+        return cast(V, self.detached())
+
+    def shared_value[V](self, decode: Callable[[DocumentBytes], V]) -> V:
+        return cast(V, self.value)
 
 
 @dataclass(frozen=True)
@@ -1467,16 +1483,28 @@ class CopyingStore(RootFile, RankedStoreLock, declared_name=None):
 class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, declared_name=None):
     """Document changes own their write guard, independent of path construction."""
 
+    def _capture_unlocked(self) -> DocumentBytes:
+        try:
+            revision = FileRevision.from_stat(self.path.stat())
+        except FileNotFoundError:
+            _read_cache.pop(self.path, None)
+            return DocumentBytes(MissingFile(), b"")
+        return self._cached_value(
+            revision, lambda: self._decode_retained(DocumentBytes.capture(self.path)),
+        )
+
     def _cached_value(
         self, revision: FileObservation, obtain: Callable[[], DecodedDocument[T]],
     ) -> DecodedDocument[T]:
         cached = _read_cache.get(self.path)
-        if cached is not None and cached.revision == revision:
+        if cached is not None and cached.revision == revision and cached.owner_type is type(self):
             return cast(DecodedDocument[T], cached)
         return obtain()
 
     def _decode_source(self, source: DocumentBytes) -> DecodedDocument[T]:
-        decoded = DecodedDocument(source.revision, source.content, self.read_copied, self._encode)
+        decoded = DecodedDocument(
+            source.revision, source.content, self._decode_uncached, self._encode, type(self),
+        )
         _read_cache[self.path] = decoded
         return decoded
 
@@ -1517,7 +1545,8 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
 
     def _retain_published(self, source: DocumentBytes) -> None:
         _read_cache[self.path] = PublishedDocument(
-            source.revision, source.content, self.read_copied, self._encode)
+            source.revision, source.content, self._decode_uncached, self._encode, type(self),
+        )
 
     def replace_if_changed(self, value: T) -> None:
         """Replace only changed stored content; logical identity does not decide writes."""

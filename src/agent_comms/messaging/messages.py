@@ -79,6 +79,7 @@ from agent_comms.storage.typed_table import (
     ForeignKey,
     Index,
     ProducedTable,
+    RowNotFoundError,
     SharedFileTables,
     TableReference,
     TableSource,
@@ -523,7 +524,9 @@ class BusCapability(TypedRow, ProjectionSource):
         header = BusRow.qualified("seq")
         found = {row.seq: record for row, record in BusCapability.stored_records(
             db, f"{header} IN ({','.join('?' for _ in sequences)})", sequences)}
-        return tuple(found[seq] for seq in sequences if seq in found)
+        if len(found) != len(set(sequences)):
+            raise RowNotFoundError(f"Expected one {BusRow.declared_name} for ('seq',)")
+        return tuple(found[seq] for seq in sequences)
 
     @staticmethod
     def stored_records(
