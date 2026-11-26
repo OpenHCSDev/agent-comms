@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
-from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
@@ -63,7 +62,6 @@ from agent_comms.messaging.notification_source import NotificationSource
 from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
 from agent_comms.messaging.revision_views import ActivityView
 from agent_comms.messaging.sent_message import AssignedSourceIdentity
-from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, PresenceExclude, WireForm
 from agent_comms.notification_assignment import NotificationAssignment, NotificationSelection
 from agent_comms.projects.checkouts import Checkout
@@ -81,7 +79,8 @@ from agent_comms.registry.registry_document import (
 )
 from agent_comms.registry.shared_ledger import LedgerDocument
 from agent_comms.registry.thread_identity import ThreadIncarnation
-from agent_comms.registry.threads import ConversationPreparation, Thread, current_thread
+from agent_comms.cli_verbs.poll import PollTarget
+from agent_comms.registry.threads import ConversationPreparation, Thread
 from agent_comms.registry.view_unread import transcript_read_state
 from agent_comms.storage.file_observation import FileRevision
 from agent_comms.transcript.transcripts import TranscriptSourceWindow, Transcripts
@@ -124,32 +123,6 @@ from agent_comms.transport.progress import WireExportObserver
 from agent_comms.ui_model.unread import UnreadPresentation
 
 _LOG = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class PollTarget(DeclaredFamily, affix="Target"):
-    """Whose poll this is: the thread that calls, or one named on the command line."""
-
-    @abstractmethod
-    def thread(self, registry: Registration) -> Thread: ...
-
-
-@dataclass(frozen=True)
-class CallingThreadTarget(PollTarget):
-    def thread(self, registry: Registration) -> Thread:
-        return registry.require(current_thread(registry).name)
-
-
-@dataclass(frozen=True)
-class NamedThreadTarget(PollTarget):
-    name: str
-
-    def thread(self, registry: Registration) -> Thread:
-        return registry.require(self.name)
-
-    @classmethod
-    def argument(cls, value: str) -> dict[str, object]:
-        return FieldCodec.encode_record(cls(value))
 
 
 @dataclass(frozen=True)
@@ -676,7 +649,7 @@ class HistoryViews(HistoryReadSource, BusViews):
 
     def poll(self, target: PollTarget) -> ThreadPoll:
         """One-shot status snapshot: self state plus inbox."""
-        name = target.thread(self.registry).name
+        name = self.registry.require(target.target_name()).name
         peers = tuple(view for view in self._presence_views() if view.thread.name != name)
         return ThreadPoll(self.thread_detail(name, CountedRead()), self.bus.inbox(name).page.messages,
                           self.ledger.read(), peers)

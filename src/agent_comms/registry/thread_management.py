@@ -13,7 +13,7 @@ from typing import Self
 from agent_comms.agent_backend import NewThreadBackend, RuntimeLocation
 from agent_comms.bus_context import BusThreads
 from agent_comms.cli_bridges.history import History
-from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.cli_verbs.cli_commands import ThreadDeleted
 from agent_comms.coordination.errors import CoordinationError
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import (
@@ -217,13 +217,6 @@ class ThreadDeletionClaim(ProcessSingleton, RuntimeFile, PatternFile):
     @classmethod
     def for_thread(cls, root: Path, thread: Thread) -> Self:
         return cls(cls.path_in(root, lookup=thread.incarnation.require_recorded().lookup))
-
-
-@dataclass(frozen=True, slots=True)
-class ThreadDeleted(CliResult):
-    deleted: str
-    session_bytes_freed: int
-    detached_children: tuple[str, ...]
 
 
 @dataclass(eq=False, repr=False)
