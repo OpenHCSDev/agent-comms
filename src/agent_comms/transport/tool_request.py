@@ -104,17 +104,23 @@ class ScreensArea(ToolArea):
     __slots__ = ()
 
 
-class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
-    AsyncWork, ThreadCommandAvailability, ToolRequest[Result],
-    metaclass=ServesDeclaration, declared_name=None,
-):
-    """A tool request as the Core that runs it sees it: the declaration plus decoding a call,
-    applying it under a caller and replying. Only the server imports this."""
+class ServedToolDiscovery:
+    """Acquires served tool modules whenever a serving capability family is queried."""
+
+    __slots__ = ()
 
     @classmethod
     def _member_declarations(cls):
         cls.discover_package(served_tools)
         return super()._member_declarations()
+
+
+class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
+    AsyncWork, ThreadCommandAvailability, ServedToolDiscovery, ToolRequest[Result],
+    metaclass=ServesDeclaration, declared_name=None,
+):
+    """A tool request as the Core that runs it sees it: the declaration plus decoding a call,
+    applying it under a caller and replying. Only the server imports this."""
 
     @classmethod
     def result_type(cls) -> type[Result]:
@@ -319,7 +325,9 @@ class LiveOwnerTool:
     __slots__ = ()
 
 
-class ReadTool[Result: ToolResult = ToolResult](ReadWork, ReadRequest[Result], declared_name=None):
+class ReadTool[Result: ToolResult = ToolResult](
+    ReadWork, ServedToolDiscovery, ReadRequest[Result], declared_name=None,
+):
     """Serving a read: its apply changes nothing, so it needs no board and no entry gate."""
 
     __slots__ = ()
