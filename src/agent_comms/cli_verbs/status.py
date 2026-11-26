@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.registry.activity import ActivityState
 
 
@@ -25,7 +24,7 @@ class ActiveStatusResult(CliResult):
 class StatusCliCommand(CliCommand):
     help = "Live activity: what each thread is doing right now"
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: CliBus) -> CliResult:
         snapshot = ctx.registry.snapshot()
         running = snapshot.active_threads(snapshot.active_candidates())
         activities = ctx.agents.all_activity(running, snapshot=snapshot)

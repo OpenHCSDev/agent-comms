@@ -4,9 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.runtime_home import RuntimeHome
@@ -32,7 +31,7 @@ class SyncTestEnvironmentCliCommand(CliCommand, declared_name=RepositoryEnvironm
     requirements: Annotated[Path, PathText, Argument(flags=("--requirements",))]
     project_thread: Annotated[str, Argument(flags=("--project-thread",))]
 
-    def apply(self, ctx: Comms) -> SyncedTestEnvironmentResult:
+    def apply(self, ctx: CliBus) -> SyncedTestEnvironmentResult:
         ctx.registry.require(self.caller.own_thread())
         checkout = Checkout.checked(self.checkout)
         project = ctx.registry.require(self.project_thread).worktree

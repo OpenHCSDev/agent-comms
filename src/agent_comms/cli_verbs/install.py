@@ -4,7 +4,7 @@ import dataclasses
 from dataclasses import dataclass
 from typing import Annotated, Literal, TextIO
 
-from agent_comms.cli_verbs.cli_command import BusOpener, CliCommand
+from agent_comms.cli_verbs.cli_verb import BusOpener, CliCommand
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.active_route import CommsRoute, RouteFile, active_route_path
 from agent_comms.installer.interpreter_operation import ProcessLauncherPhase

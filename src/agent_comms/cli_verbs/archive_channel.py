@@ -5,8 +5,8 @@ from typing import Annotated, Self
 
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
-from agent_comms.cli_verbs.cli_command import CliCommand, MultipleTargets, TargetActionCommand
-from agent_comms.comms import Comms
+from agent_comms.cli_verbs.cli_command import MultipleTargets, TargetActionCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.messaging.channels import Channel
 from agent_comms.nominal.field_codec import Argument, TargetBound
 from agent_comms.projects.checkouts import Checkout
@@ -28,12 +28,12 @@ class ArchiveChannelCliCommand(MultipleTargets, NamedCliCommand, TargetActionCom
         return ArchiveCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
+    def channel_bindings(cls, comms: CliBus, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
         return (cls(name=resolved.channel.name),) if resolved.channel.can_set_archived(cls.archived) else ()
 
     def confirmation(self) -> str:
         return (f"Archive {self.name}? Hide the channel without removing threads, tags or history. It can be restored."
                 if self.archived else '')
 
-    def apply(self, ctx: Comms) -> Channel:
+    def apply(self, ctx: CliBus) -> Channel:
         return ctx.channels.set_channel_archived(self.name, self.archived)

@@ -5,9 +5,8 @@ from pathlib import Path
 from typing import Annotated
 
 from agent_comms.cli_bridges.session_watch import WatchClaim
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, MalformedRecord
 from agent_comms.planning.orders import StoredHeadReview
 from agent_comms.projects.head_review import PullRequestHead
@@ -26,7 +25,7 @@ class MergeReviewResult(CliResult):
 class ReviewedMerge:
     """The CLI and resident hook share exact-head authorization, not a subprocess protocol."""
 
-    def reviewed_merges(self, ctx: Comms, snapshot: RegistrySnapshot,
+    def reviewed_merges(self, ctx: CliBus, snapshot: RegistrySnapshot,
                         actor: RecordedThreadIncarnation,
                         bypasses: tuple[QueueBypass, ...]) -> MergeReviewResult:
         project = snapshot.team_project
@@ -54,7 +53,7 @@ class MergeReviewCliCommand(ReviewedMerge, CliCommand[MergeReviewResult], declar
     session: Annotated[str, Argument(flags=("--session",))]
     bash: Annotated[str, Argument(flags=("--bash",))]
 
-    def apply(self, ctx: Comms) -> MergeReviewResult:
+    def apply(self, ctx: CliBus) -> MergeReviewResult:
         bindings = tuple(binding for binding in WatchClaim(self.session).bindings()
                          if Path(binding.root) == ctx.root)
         if not bindings:

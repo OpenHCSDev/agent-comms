@@ -4,9 +4,9 @@ import builtins
 from dataclasses import dataclass
 from typing import Annotated
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_verbs.declared_verb import DeclaredOptions
 from agent_comms.cli_verbs.target_fields import ChoiceTargetField
-from agent_comms.comms import Comms
 from agent_comms.messaging.messages import (
     ConversationRole,
     InfoKind,
@@ -43,6 +43,6 @@ class SendRequest(DeclaredOptions):
         ),
     ] = NoChangeReport()
 
-    def sent(self, comms: Comms) -> SendResult:
+    def sent(self, comms: CliBus) -> SendResult:
         return comms.messaging.send(self.sender, self.target, self.body, self.type,
                                     role=self.role(), report=self.report)

@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
-from agent_comms.comms import Comms
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize
 from agent_comms.projects.checkout_publication import PublishingCheckout
 from agent_comms.registry.threads import Thread
@@ -22,7 +21,7 @@ class HomeCheckoutCliCommand(CliCommand):
         "help": "Physical publication checkout of the selected project's repository",
     })]
 
-    def home(self, ctx: Comms) -> tuple[Thread, PublishingCheckout]:
+    def home(self, ctx: CliBus) -> tuple[Thread, PublishingCheckout]:
         thread = ctx.registry.require(self.caller.own_thread())
         checkout = self.checkout.qualified_for(thread.worktree)
         ctx.registry.storage_rule.require_destination(thread, checkout.path)

@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Self
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.thread_lifecycle import ThreadLifecycleCliCommand
 from agent_comms.cli_verbs.cli_command import AppliedTogether, TargetActionCommand
-from agent_comms.comms import Comms
 from agent_comms.execution.owner_lifecycle import OwnerStartResult
 from agent_comms.registry.threads import NativeOwnerCommand, OwnerLifecycleControl
 
@@ -18,5 +18,5 @@ class RestoreOwnerCliCommand(AppliedTogether[OwnerStartResult], NativeOwnerComma
     menu_label = "Restore"
 
     @classmethod
-    def apply_together(cls, ctx: Comms, commands: tuple[Self, ...]) -> tuple[OwnerStartResult, ...]:
+    def apply_together(cls, ctx: CliBus, commands: tuple[Self, ...]) -> tuple[OwnerStartResult, ...]:
         return ctx.owners.start_many(tuple(command.name for command in commands))

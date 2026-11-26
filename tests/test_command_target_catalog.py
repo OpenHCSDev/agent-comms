@@ -8,14 +8,15 @@ import pytest
 
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
 from agent_comms.cli_verbs.cli_command import (
-    CliCommand,
     OneTarget,
     TargetActionCommand,
     TargetBatch,
     TargetBatchResult,
+    TargetCommand,
     TargetCompleted,
     TargetFailed,
 )
+from agent_comms.cli_verbs.cli_verb import CliCommand
 from agent_comms.cli_verbs.cli_commands import ThreadStoppedResult
 from agent_comms.cli_verbs.cli_result import ResultShower
 from agent_comms.cli_verbs.fork import ForkCliCommand
@@ -111,8 +112,8 @@ def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
     for name in names:
         comms.registry.declare(NativeThread(name, frozenset(), Checkout(tmp_path)),
                                StoppedThreadStatus())
-    selected = CliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names))
-    catalog = CliCommand.target_catalog(comms, selected, project=Checkout(tmp_path))
+    selected = TargetCommand.selected_targets(tuple(CommandTarget.named(name) for name in names))
+    catalog = TargetCommand.target_catalog(comms, selected, project=Checkout(tmp_path))
     assert any(action.declaration is ArchiveCliCommand for action in catalog)
     assert all(action.declaration is not QueueRestartCliCommand for action in catalog)
     with pytest.raises(ValueError, match="single target"):

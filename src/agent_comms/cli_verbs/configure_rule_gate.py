@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Self
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.cli_verbs.cli_command import TargetActionCommand
 from agent_comms.cli_verbs.rule_gate import RuleGateCommand, RuleGateConfiguredResult
-from agent_comms.comms import Comms
 from agent_comms.messaging.channel_targets import SurroundingChannel
 from agent_comms.registry.catalog_document import CatalogAccess
 from agent_comms.registry.thread_status import ThreadStatus
@@ -21,12 +21,12 @@ class ThreadRuleGateCliCommand(NamedCliCommand, RuleGateCommand,
                               declared_name="configure-rule-gate"):
     menu_label = "Rule gate"
     @classmethod
-    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus,
+    def thread_bindings(cls, comms: CliBus, thread: Thread, status: ThreadStatus,
                         channel: SurroundingChannel, *, catalog: CatalogAccess) -> tuple[Self, ...]:
         deal = PiThreadGate.of(comms, thread)
         if not deal.record.exists():
             return ()
         return (cls(name=thread.name, **RuleGateSettings.field_values(deal.current())),)
 
-    def deal(self, ctx: Comms) -> RuleDeal:
+    def deal(self, ctx: CliBus) -> RuleDeal:
         return PiThreadGate.of(ctx, ctx.registry.require(self.name))

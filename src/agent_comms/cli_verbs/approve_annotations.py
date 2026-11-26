@@ -4,8 +4,8 @@ import json
 from dataclasses import dataclass
 from typing import Annotated
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_verbs.pin_constraint import PinConstraintCliCommand
-from agent_comms.comms import Comms
 from agent_comms.execution.turn_context import ContextSegment
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
@@ -33,6 +33,6 @@ class ApproveAnnotationsCliCommand(PinConstraintCliCommand, declared_name="appro
         ),
     ]
 
-    def pin_original(self, ctx: Comms, source: MessageReference) -> Message:
+    def pin_original(self, ctx: CliBus, source: MessageReference) -> Message:
         return ctx.messaging.approve_annotations(self.thread, source, worktree=self.worktree,
                                                 per_hour=self.per_hour, segments=self.segments)

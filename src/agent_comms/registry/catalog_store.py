@@ -9,8 +9,8 @@ from typing import ClassVar
 
 from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.registry.catalog_document import CatalogDocument
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
 from agent_comms.registry.thread_owned_state import ThreadOwnedState
-from agent_comms.registry.threads import Thread
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.store_files import CatalogTier, SingleFileStore
@@ -37,7 +37,7 @@ class ChannelCatalog(SingleFileStore, ThreadOwnedState, CarriedDocument[CatalogD
 
         return self.update(apply)
 
-    def remove_threads(self, threads: Sequence[Thread]) -> None:
+    def remove_threads(self, threads: Sequence[ThreadIdentitySource]) -> None:
         """Unpin deleted threads from every channel preference."""
         def remove(document: CatalogDocument) -> None:
             for thread in threads:

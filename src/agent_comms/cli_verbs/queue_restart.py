@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.thread_lifecycle import ThreadLifecycleCliCommand
 from agent_comms.cli_verbs.cli_command import TargetActionCommand
-from agent_comms.comms import Comms
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.owner_lifecycle import OwnerRestartSelection
 from agent_comms.execution.restart_queue import RestartQueue, RestartQueued
@@ -23,6 +23,6 @@ class QueueRestartCliCommand(ThreadLifecycleCliCommand, TargetActionCommand[Rest
     def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
         return bool(thread.restart_candidates(status))
 
-    def apply(self, ctx: Comms) -> RestartQueued:
+    def apply(self, ctx: CliBus) -> RestartQueued:
         selection = OwnerRestartSelection.capture(ctx.registry.snapshot(), self.name)
         return RestartQueued(RestartQueue(ctx.root).enqueue(ctx, selection, launch_runtime=LaunchRuntime.running()))

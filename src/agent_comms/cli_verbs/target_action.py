@@ -7,9 +7,8 @@ from typing import Annotated
 from pydantic import JsonValue
 
 from agent_comms.cli_support.target_arguments import TargetArguments
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.nominal.field_codec import Argument
 
@@ -28,7 +27,7 @@ class TargetActionCliCommand(TargetArguments, declared_name="target-action"):
         False
     )
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: CliBus) -> CliResult:
         declaration = CliCommand.member_named(self.operation)
         return declaration.execute_target(
             ctx, declaration.selected_targets(CommandTarget.arguments(self.target, self.project)), self.arguments,

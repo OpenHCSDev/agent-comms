@@ -8,8 +8,7 @@ from pathlib import Path
 from typing import Annotated
 
 from agent_comms import cli as comms_cli
-from agent_comms.cli_verbs.cli_command import CliCommand
-from agent_comms.comms import Comms
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize
 from agent_comms.transport.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.transport.served_tools.served import ToolReplyResult, invoke_tool
@@ -41,5 +40,5 @@ class InvokeCliCommand(CliCommand[ToolReplyResult], declared_name="tool"):
                 self.declared_name, *self.caller.from_flag(), '--tool', self.tool,
                 '--arguments', json.dumps(self.arguments))
 
-    def apply(self, ctx: Comms) -> ToolReplyResult:
+    def apply(self, ctx: CliBus) -> ToolReplyResult:
         return ToolReplyResult(invoke_tool(ctx, self.tool, self.arguments, caller=self.caller))

@@ -9,7 +9,7 @@ from typing import Annotated
 
 import pytest
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliCommand
 from agent_comms.cli_support.checkout_grant import AddCheckoutOperation
 from agent_comms.cli_verbs.goal_checkout import GoalCheckoutCliCommand
 from agent_comms.cli_verbs.select_checkout import SelectCheckoutCliCommand

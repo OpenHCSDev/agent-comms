@@ -8,9 +8,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.context_store import LATEST_CONTEXT, ContextManifestCursor
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.turn_context import (
@@ -80,7 +79,7 @@ class CurrentContextCliCommand(CliCommand, declared_name=None):
         parser.add_argument("--imported", action="store_true")
 
 
-    def manifests(self, ctx: Comms) -> Iterator[ContextManifest]:
+    def manifests(self, ctx: CliBus) -> Iterator[ContextManifest]:
         cursor: ContextManifestCursor = LATEST_CONTEXT
         while True:
             page = ctx.contexts.page(self.thread, ctx.registry, cursor=cursor)
@@ -89,7 +88,7 @@ class CurrentContextCliCommand(CliCommand, declared_name=None):
                 return
             cursor = page.older
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: CliBus) -> CliResult:
         owner = ctx.registry.require(self.thread)
         connection = OwnerConnection(ctx, owner.incarnation, socket_path(ctx.root, owner.require_process().pid))
 

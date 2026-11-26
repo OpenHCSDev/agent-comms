@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliCommand
 from agent_comms.cli_verbs.cli_commands import WorktreeArgument
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.execution.input_origin import InputProvenance

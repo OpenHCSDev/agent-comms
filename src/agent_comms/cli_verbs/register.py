@@ -4,11 +4,10 @@ import dataclasses
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_commands import NameArgument, _tags
 from agent_comms.cli_verbs.cli_result import CliResult, RegisteredResult
 from agent_comms.cli_verbs.target_fields import ChoiceTargetField
-from agent_comms.comms import Comms
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState
 from agent_comms.nominal.field_codec import Argument, Editor, Normalize
 from agent_comms.projects.checkouts import Checkout
@@ -42,7 +41,7 @@ class RegisterCliCommand(NameArgument, CliCommand):
         ),
     ] = ExternalThread
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: CliBus) -> CliResult:
 
         thread = self.execution(
             name=self.name,

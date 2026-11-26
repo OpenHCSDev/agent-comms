@@ -222,6 +222,17 @@ class PrivateDirectoryRole(PrivateRole):
             Platform.current().sync_directory(parent.parent)
 
     @classmethod
+    def require_private_tree(
+        cls, directory: Path, refusal: Callable[[str], Exception],
+    ) -> None:
+        if ".." in directory.parts:
+            raise refusal("Native Pi session directory is not lexical")
+        TrustedAncestorRole.require_path(
+            directory, refusal("Native Pi session directory has unsafe ancestor"))
+        cls.require(
+            directory.lstat(), refusal("Native Pi session directory must be owner-only"))
+
+    @classmethod
     def kind_flags(cls) -> int:
         return os.O_DIRECTORY
 

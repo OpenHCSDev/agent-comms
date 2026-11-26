@@ -5,10 +5,10 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_verbs.cli_command import CreatesThread, TargetActionCommand
 from agent_comms.cli_verbs.cli_commands import NameArgument, ThreadCreatedResult, _tag_choice_text
 from agent_comms.cli_verbs.model_context import ModelContextArguments
-from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
 from agent_comms.nominal.field_codec import (
     Argument,
@@ -51,7 +51,7 @@ class NewThreadCliCommand(
     thinking_level: FieldCodec.field_annotation(ThreadSettings, "thinking_level") = NativeThreadDefaults.thinking_level
 
     @classmethod
-    def project_bindings(cls, comms: Comms, project: Checkout) -> tuple[Self, ...]:
+    def project_bindings(cls, comms: CliBus, project: Checkout) -> tuple[Self, ...]:
         defaults = NativeThreadDefaults()
         return (cls(name='', project=project, **NativeThreadDefaults.field_values(defaults)),)
 
@@ -59,7 +59,7 @@ class NewThreadCliCommand(
     def project_path(self) -> Path:
         return self.project.path
 
-    def apply(self, ctx: Comms) -> ThreadCreatedResult:
+    def apply(self, ctx: CliBus) -> ThreadCreatedResult:
         spec = self.spec_type.from_task(**{
             **{item.name: getattr(self, item.name) for item in fields(self.spec_type)},
             'project': LaunchCheckout.checked(self.project.path),

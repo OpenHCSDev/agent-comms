@@ -3,10 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_commands import NameArgument
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
@@ -87,7 +86,7 @@ def embedded_repositories(worktree: Path) -> tuple[str, ...]:
 class CheckpointCliCommand(NameArgument, CliCommand, declared_name="checkpoint"):
     help = "Commit and push a thread's uncommitted worktree changes as a checkpoint branch"
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: CliBus) -> CliResult:
         worktree = ctx.registry.require(self.name).worktree.path.resolve()
         branch = f"checkpoint/{self.name}"
         # Only the declared worktree's own repository; never checkpoint an ancestor's.

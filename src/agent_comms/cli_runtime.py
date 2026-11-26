@@ -13,7 +13,7 @@ from agent_comms.cli import CLI_DESCRIPTION, format_top_level_help, is_top_level
 from agent_comms.cli_bridges.cli_arguments import CliArgumentParser, CliArguments, CliParserExit
 from agent_comms.cli_bridges.cli_protocol import CoreError
 from agent_comms.cli_support.cli_failures import CLI_FAILURES
-from agent_comms.cli_verbs.cli_command import CliBus
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.execution.launch_root import LaunchRoot, started
 from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
 

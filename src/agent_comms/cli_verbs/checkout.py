@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.checkout_grant import (
     CheckoutGrant,
     OrderCheckoutGrant,
     PreparedCheckoutCliCommand,
 )
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.projects.repository_sources import LocalRepositorySource, RepositorySource
 from agent_comms.projects.storage_rules import OrderCheckoutAllocation, StorageRule
@@ -22,10 +22,10 @@ class CheckoutCliCommand(PreparedCheckoutCliCommand,
     help = "Create, repair, transfer or remove an owned problem checkout with its pinned submodules"
     problem: Annotated[str, Argument(flags=("problem",))]
 
-    def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant:
+    def grant(self, ctx: CliBus, thread: Thread) -> CheckoutGrant:
         return OrderCheckoutGrant(thread, ctx.goals.todos.get(self.problem))
 
-    def source(self, ctx: Comms, thread: Thread) -> RepositorySource:
+    def source(self, ctx: CliBus, thread: Thread) -> RepositorySource:
         return LocalRepositorySource(ctx.goals.todos.get(self.problem).repository)
 
     def declared_destination(self, rule: StorageRule, thread: Thread) -> Path:

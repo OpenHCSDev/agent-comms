@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.publishing import PublishingCliCommand
 from agent_comms.cli_verbs.cli_commands import UserMessageSentResult, WorktreeArgument
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.nominal.field_codec import Argument
 
@@ -17,6 +17,6 @@ class UserSendCliCommand(WorktreeArgument, PublishingCliCommand, declared_name="
     target: Annotated[str, Argument(flags=("--to",))]
     body: Annotated[str, Argument(flags=("--body",))]
 
-    def publish(self, ctx: Comms) -> CliResult:
+    def publish(self, ctx: CliBus) -> CliResult:
         message = ctx.messaging.send_user_message(CommandTarget.named(self.target), self.body, worktree=self.worktree)
         return UserMessageSentResult(message.reference)

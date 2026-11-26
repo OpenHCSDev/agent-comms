@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from agent_comms.cli import discover_cli_verbs
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliCommand
 
 
 def test_cli_discovers_exact_cli_command_catalog() -> None:

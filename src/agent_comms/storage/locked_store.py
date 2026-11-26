@@ -914,6 +914,7 @@ class BusStoreFile(BusFile):
 
     __slots__ = ()
     filename = "bus.sqlite3"
+    row_table: ClassVar[str] = "bus"
 
 
 class InputCaptureFile(RootFile):
@@ -1579,6 +1580,18 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
 
 
 _read_cache: dict[Path, DecodedDocument[object]] = {}
+
+
+@dataclass(frozen=True, slots=True)
+class BusRevisionReader(FileStore, SQLiteReader, BusStoreFile):
+    """Read-only bus sequence check for route/launch validation without importing Bus."""
+
+    def revision(self) -> int:
+        with self.reader_snapshot() as db:
+            return FieldCodec.decode(
+                int,
+                db.execute(f'SELECT COALESCE(MAX(seq), 0) FROM "{self.row_table}"').fetchone()[0],
+            )
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,8 +5,8 @@ from __future__ import annotations
 from itertools import islice
 from typing import ClassVar
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.context_option import ContextOptionCliCommand
-from agent_comms.comms import Comms
 from agent_comms.execution.turn_context import ContextManifestChange
 
 
@@ -16,7 +16,7 @@ class DiffContextCliCommand(ContextOptionCliCommand):
     def context_diff(cls) -> bool:
         return True
 
-    def apply(self, ctx: Comms) -> ContextManifestChange:
+    def apply(self, ctx: CliBus) -> ContextManifestChange:
         manifests = iter(self.manifests(ctx))
         for current in islice(manifests, 1):
             for previous in manifests:

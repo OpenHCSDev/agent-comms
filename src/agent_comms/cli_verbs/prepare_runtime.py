@@ -5,9 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.runtime_stack import WheelRuntime
@@ -35,7 +34,7 @@ class PrepareRuntimeCliCommand(CliCommand, declared_name="prepare-runtime"):
     wheels: Annotated[tuple[Annotated[Path, PathText], ...],
                      Argument(flags=("--wheels",), options={"nargs": "+"})]
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: CliBus) -> CliResult:
         thread = ctx.registry.require(self.caller.own_thread())
         prefix = self.into.expanduser().absolute()
         checkout = self.checkout.expanduser().resolve()

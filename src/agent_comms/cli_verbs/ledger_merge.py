@@ -5,9 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_commands import LedgerMergedResult
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 
 
@@ -17,6 +16,6 @@ class LedgerMergeCliCommand(CliCommand, declared_name="ledger-merge"):
     merge_from: Annotated[str, Argument(flags=("--merge-from",))]
     author: Annotated[str, Argument(flags=("--author",))]
 
-    def apply(self, ctx: Comms) -> LedgerMergedResult:
+    def apply(self, ctx: CliBus) -> LedgerMergedResult:
         ctx.ledger.merge(json.loads(Path(self.merge_from).read_text()), self.author)
         return LedgerMergedResult()

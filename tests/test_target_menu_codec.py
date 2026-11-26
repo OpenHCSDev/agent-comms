@@ -33,6 +33,7 @@ from agent_comms.cli_verbs.cli_command import (
     TargetAction,
     TargetActionCommand,
     TargetBatchResult,
+    TargetCommand,
     TargetEdit,
     TargetSelection,
 )

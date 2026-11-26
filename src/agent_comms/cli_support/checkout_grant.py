@@ -8,9 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize, PathText
 from agent_comms.nominal.lifecycle_capability import Complete
@@ -51,14 +50,14 @@ class CheckoutGrant(DeclaredFamily, affix="CheckoutGrant"):
     @abstractmethod
     def require(self) -> None: ...
 
-    def revalidate(self, ctx: Comms) -> None:
+    def revalidate(self, ctx: CliBus) -> None:
         """A long acquisition cannot spend a retired caller or a changed goal."""
         current = ctx.registry.require(self.thread.name)
         if current.incarnation != self.thread.incarnation:
             raise ValueError('The checkout caller incarnation changed during acquisition')
         dataclasses.replace(self, thread=current).require()
 
-    def require_transfer(self, ctx: Comms, repository: Repo) -> None:
+    def require_transfer(self, ctx: CliBus, repository: Repo) -> None:
         raise ValueError('Checkout transfer requires a current held problem')
 
 
@@ -69,12 +68,12 @@ class OrderCheckoutGrant(CheckoutGrant):
     def require(self) -> None:
         self.todo.require_assignee(self.thread.incarnation, self.todo.held().generation)
 
-    def revalidate(self, ctx: Comms) -> None:
+    def revalidate(self, ctx: CliBus) -> None:
         super().revalidate(ctx)
         ctx.goals.todos.get(self.todo.id).require_assignee(
             self.thread.incarnation, self.todo.held().generation)
 
-    def require_transfer(self, ctx: Comms, repository: Repo) -> None:
+    def require_transfer(self, ctx: CliBus, repository: Repo) -> None:
         current = ctx.goals.todos.get(self.todo.id)
         if current != self.todo:
             raise ValueError(f'Target problem {self.todo.id} changed before checkout transfer')
@@ -101,7 +100,7 @@ class CheckoutOperation(DeclaredFamily, affix="CheckoutOperation"):
 
     @classmethod
     @abstractmethod
-    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult: ...
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: CliBus, thread: Thread) -> CheckoutResult: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -124,18 +123,18 @@ class PreparedCheckoutCliCommand(CliCommand, declared_name=None):
     @abstractmethod
     def declared_destination(self, rule: StorageRule, thread: Thread) -> Path: ...
 
-    def destination(self, ctx: Comms, thread: Thread) -> Path:
+    def destination(self, ctx: CliBus, thread: Thread) -> Path:
         rule = ctx.registry.storage_rule
         return rule.reused_checkout(thread, self.source(ctx, thread).github,
                                     self.declared_destination(rule, thread), RepositoryReads())
 
     @abstractmethod
-    def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant: ...
+    def grant(self, ctx: CliBus, thread: Thread) -> CheckoutGrant: ...
 
     @abstractmethod
-    def source(self, ctx: Comms, thread: Thread) -> RepositorySource: ...
+    def source(self, ctx: CliBus, thread: Thread) -> RepositorySource: ...
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: CliBus) -> CliResult:
         thread = ctx.registry.require(self.caller.own_thread())
         return self.operation.apply(self, ctx, thread)
 
@@ -145,7 +144,7 @@ class AddCheckoutOperation(CheckoutOperation):
     the caller's order or goal grants the allocation."""
 
     @classmethod
-    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult:
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: CliBus, thread: Thread) -> CheckoutResult:
         destination = command.destination(ctx, thread)
         grant = command.grant(ctx, thread)
         grant.revalidate(ctx)
@@ -175,7 +174,7 @@ class AdoptCheckoutOperation(CheckoutOperation):
     """Take over one archived owner's retained tree, keeping both session paths intact."""
 
     @classmethod
-    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult:
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: CliBus, thread: Thread) -> CheckoutResult:
         if len(command.source_checkout) != 1:
             raise ValueError(
                 f'adopt needs exactly one --source checkout to take over, got '
@@ -199,7 +198,7 @@ class TransferCheckoutOperation(CheckoutOperation):
     """Relocate the caller's retained work into its current held allocation."""
 
     @classmethod
-    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult:
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: CliBus, thread: Thread) -> CheckoutResult:
         destination = command.declared_destination(ctx.registry.storage_rule, thread)
         if len(command.source_checkout) != 1:
             raise ValueError(
@@ -228,7 +227,7 @@ class RemoveCheckoutOperation(CheckoutOperation):
     Checkout owner refuses uncommitted work."""
 
     @classmethod
-    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread) -> CheckoutResult:
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: CliBus, thread: Thread) -> CheckoutResult:
         destination = next(iter(command.source_checkout), None)
         destination = (destination.expanduser().absolute() if destination is not None
                        else command.destination(ctx, thread))

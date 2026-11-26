@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.cli_bridges.history import OfflineHistory
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_command import TargetCommand
 from agent_comms.comms import wire
 from agent_comms.config_options import ConfigOptions
 from agent_comms.display_order import (
@@ -244,8 +244,8 @@ def test_tag_removal_preserves_current_records(tmp_path):
 async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catalog(tmp_path):
 
     comms = setup_wire(tmp_path)
-    selected = CliCommand.selected_targets((CommandTarget.named('#api'),))
-    catalog = CliCommand.target_catalog(comms, selected, project=Checkout(tmp_path))
+    selected = TargetCommand.selected_targets((CommandTarget.named('#api'),))
+    catalog = TargetCommand.target_catalog(comms, selected, project=Checkout(tmp_path))
     action = next(action for action in catalog if action.declaration.declared_name == 'delete-tag')
     disposition = DeleteExclusiveInactiveThreadsTagDisposition()
     editor_value = compile_decoder(TagDisposition).encode_editor(disposition)

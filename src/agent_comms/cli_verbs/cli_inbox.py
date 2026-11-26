@@ -4,9 +4,8 @@ from dataclasses import dataclass
 
 from agent_comms.agent_backend import NewThreadBackend
 from agent_comms.cli_support.named_thread import NamedThreadCliCommand
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import TargetEditResult
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import FieldCodec, RecordMember
 from agent_comms.registry.threads import NativeOwnerCommand, OwnerLifecycleControl
 
@@ -28,7 +27,7 @@ class CliInboxCliCommand(
 ):
     help = "Switch a native Pi thread onto a CLI inbox without changing its identity"
 
-    def apply(self, ctx: Comms) -> ThreadExecutionResult:
+    def apply(self, ctx: CliBus) -> ThreadExecutionResult:
         switched = ctx.threads.switch_to_cli_inbox(self.name)
         preserved = switched.session_file.location(NewThreadBackend.selected()).is_resumable()
         return ThreadExecutionResult(

@@ -10,9 +10,8 @@ import time
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize
 from agent_comms.transport.tool_caller import ThreadCaller
 from agent_comms.waking.mute_ledger import MuteLedger
@@ -33,7 +32,7 @@ class MuteCliCommand(CliCommand, declared_name="mute"):
     minutes: Annotated[float, Argument(flags=("--minutes",))] = 60.0
     clear: Annotated[bool, Argument(flags=("--clear",))] = False
 
-    def apply(self, ctx: Comms) -> MutedResult:
+    def apply(self, ctx: CliBus) -> MutedResult:
         thread = ctx.registry.require(self.caller.own_thread())
         lookup = thread.incarnation.lookup
         ledger = MuteLedger.at(ctx.root)

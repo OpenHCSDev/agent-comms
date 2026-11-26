@@ -3,9 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from agent_comms.cli_support.named_thread import NamedThreadCliCommand
-from agent_comms.cli_verbs.cli_command import CliCommand
+from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_inbox import ThreadExecutionResult
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.threads import ExternalOwnerCommand, OwnerLifecycleControl
 
@@ -20,7 +19,7 @@ class NativeThreadCliCommand(
 ):
     help = "Switch an independent CLI-inbox thread onto native Pi without changing its identity"
 
-    def apply(self, ctx: Comms) -> ThreadExecutionResult:
+    def apply(self, ctx: CliBus) -> ThreadExecutionResult:
         switched = ctx.threads.switch_to_native(self.name)
         return ThreadExecutionResult(
             thread=switched.name,

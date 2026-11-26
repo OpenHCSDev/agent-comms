@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated, Self
 
+from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.messaging.channel_targets import DeclaredTag
 from agent_comms.cli_support.thread_bound import ThreadBoundCliCommand
 from agent_comms.cli_verbs.new import NewThreadCliCommand
-from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument, TargetBound
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.tag_choice import GivenTags
@@ -26,7 +26,7 @@ class ForkCliCommand(ForkableThreadCommand, ThreadBoundCliCommand, NewThreadCliC
     ]
 
     @classmethod
-    def project_bindings(cls, comms: Comms, project: Checkout) -> tuple[Self, ...]:
+    def project_bindings(cls, comms: CliBus, project: Checkout) -> tuple[Self, ...]:
         return ()
 
     @classmethod
