@@ -30,7 +30,6 @@ from agent_comms.input_attempt import (
 )
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.bus_read import (
-    BusRead,
     OwnerScopedRead,
 )
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, TurnId
@@ -299,7 +298,7 @@ async def test_retained_read_refuses_a_changed_recipient(tmp_path: Path, recreat
 
 
 @pytest.mark.parametrize("operation", tuple(
-    operation() for operation in BusRead.members_with(OwnerScopedRead)
+    operation() for operation in OwnerScopedRead.members_with(OwnerScopedRead)
 ))
 async def test_captured_owner_read_refuses_an_absent_root_before_its_first_witness(
     tmp_path: Path, operation: OwnerScopedRead,

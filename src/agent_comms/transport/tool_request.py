@@ -14,6 +14,7 @@ from pydantic import JsonValue
 
 from agent_comms.bus_context import BusContext
 from agent_comms.execution.child_process import AsyncWork, ReadWork
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, ToolCallId
 from agent_comms.nominal.served_declaration import ServesDeclaration
 from agent_comms.registry.threads import ThreadCommandAvailability
@@ -105,14 +106,19 @@ class ScreensArea(ToolArea):
 
 
 class ServedToolDiscovery:
-    """Acquires served tool modules whenever a serving capability family is queried."""
+    """Acquires served tool modules when a serving capability family resolves a request.
+
+    Kept off `_member_declarations` so client-side `FieldCodec` encode/decode on
+    `BusRead`, `UiRead`, `NotificationRead`, or `ReadTool` never imports server-side
+    `served_tools` (and its `installer`/`packaging` graph) into client/Android runtimes.
+    """
 
     __slots__ = ()
 
     @classmethod
-    def _member_declarations(cls):
+    def serving(cls, request: DeclaredFamily) -> Self:
         cls.discover_package(served_tools)
-        return super()._member_declarations()
+        return super().serving(request)
 
 
 class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolResult](
@@ -121,6 +127,11 @@ class ServedRequest[Caller: ToolCaller = ToolCaller, Result: ToolResult = ToolRe
 ):
     """A tool request as the Core that runs it sees it: the declaration plus decoding a call,
     applying it under a caller and replying. Only the server imports this."""
+
+    @classmethod
+    def _member_declarations(cls):
+        cls.discover_package(served_tools)
+        return super()._member_declarations()
 
     @classmethod
     def result_type(cls) -> type[Result]:

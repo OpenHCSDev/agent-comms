@@ -15,7 +15,6 @@ from agent_comms.input_attempt import UnobservedInputDeliveryScope
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.active_route import LocalRoute
 from agent_comms.messaging.bus_read import (
-    BusRead,
     OwnerScopedRead,
 )
 from agent_comms.messaging.message_reference import MessageReference
@@ -43,7 +42,7 @@ def owner_reads(family: type[OwnerScopedRead] = OwnerScopedRead):
     """The declared read family supplies the UI operations covered by each contract."""
     return tuple(
         pytest.param(partial(ReadOwnerOperation, operation=operation()), id=operation.declared_name)
-        for operation in BusRead.members_with(family)
+        for operation in family.members_with(family)
     )
 
 
