@@ -61,11 +61,10 @@ from agent_comms.messaging.messages import (
     Message,
     MessageInput,
     MessageKind,
-    MessageWriter,
     PublicRecord,
-    RecordBuilder,
     StoredWireHistory,
 )
+from agent_comms.messaging.message_reads import MessageWriter, RecordBuilder
 from agent_comms.messaging.read_basis import CursorRow, ReadCursor, RepliesDisplayScope, UnreadQuery
 from agent_comms.messaging.watched import Watched
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
@@ -682,7 +681,7 @@ class StoredBusReader(BusReader, SQLiteReader):
 
 class Bus(
     FileStore, StoredBusReader, ReconciledFile, WalStore, CarriedWriter, BusStoreFile,
-    CompleteInputReader, Watched, MessageWriter,
+    CompleteInputReader, Watched, MessageWriter[BusRecord],
 ):
     """One SQLite transaction owns the sequence and all of a record's fields."""
 
@@ -740,21 +739,21 @@ class Bus(
                 raise CommittedMessageError(committed) from error
             return committed
 
-    def _insert(self, db: sqlite3.Connection, build: RecordBuilder) -> int:
+    def _insert(self, db: sqlite3.Connection, build: RecordBuilder[BusRecord]) -> int:
         seq, record = self._built(db, build)
         return record.append_to(db, seq)
 
     @staticmethod
-    def _built(db: sqlite3.Connection, build: RecordBuilder) -> tuple[int, BusRecord]:
+    def _built(db: sqlite3.Connection, build: RecordBuilder[BusRecord]) -> tuple[int, BusRecord]:
         seq = BusRow.next_seq(db)
         record = build(seq, db)
         FieldCodec.require_fields(record)
         return seq, record
 
-    def append(self, build: RecordBuilder) -> BusRecord:
+    def append(self, build: RecordBuilder[BusRecord]) -> BusRecord:
         return self._publish(lambda db: self._insert(db, build))
 
-    def append_original(self, build: RecordBuilder) -> BusRecord:
+    def append_original(self, build: RecordBuilder[BusRecord]) -> BusRecord:
         """Publish a sender's original message once, decided inside the same write.
 
         The proposed record is built once with its final identity. A committed record with
@@ -793,7 +792,7 @@ class Bus(
         ))
 
     def acquire_resource_claim[Owner: PresenceThread](
-        self, resource: str, claim: RecordedScope, registry: ClaimRegistryRead[Owner], build: RecordBuilder,
+        self, resource: str, claim: RecordedScope, registry: ClaimRegistryRead[Owner], build: RecordBuilder[BusRecord],
     ) -> ClaimOwner:
         def acquire(db: sqlite3.Connection) -> int:
             def publish() -> ClaimOwner:
