@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import threading
+import time
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import aclosing, contextmanager
 from dataclasses import dataclass
@@ -15,7 +16,7 @@ from agent_comms.messaging.bus_read_source import BusReadSource
 from agent_comms.messaging.bus_route_counts import HeldUnseenCounts
 from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.channels import AnyChannel, Channel
-from agent_comms.messaging.historical_views import HistoryArchive
+from agent_comms.messaging.historical_views import HistoryArchive, SenderFilteredHistory
 from agent_comms.messaging.message_page import (
     DisplayedMessagePage,
     InboxPage,
@@ -23,14 +24,17 @@ from agent_comms.messaging.message_page import (
     PageBounds,
 )
 from agent_comms.messaging.message_reference import FirstUnreadStart, InboxStart, NewestUnreadStart
+from agent_comms.messaging.messages import Message
 from agent_comms.messaging.published_bus import PublishedBus
 from agent_comms.messaging.publisher import Publisher
 from agent_comms.messaging.read_basis import (
     AnonymousViewer,
+    ChannelDisplayScope,
     DisplayViewer,
     ListedDeliveries,
     NamedViewer,
     ReadCursor,
+    SenderDisplayScope,
 )
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.read_selection import CapturedSelection
@@ -245,3 +249,50 @@ class MessageBus[Writes: Publisher](PublishedBus[Writes], BusReadSource):
 
     def channels(self) -> Sequence[str]:
         return list(self.channel_declarations())
+
+    def recent_owner_messages(
+        self,
+        thread: Thread,
+        snapshot: RegistrySnapshot,
+        *,
+        limit: int = 5,
+    ) -> tuple[Message, ...]:
+        """Return the owner's last ``limit`` verbatim bus messages targeting this thread
+        or any of its subscribed channels, oldest first."""
+        if limit <= 0:
+            return ()
+        targets = frozenset({
+            *snapshot.names_for(thread.name),
+            *(f"#{tag}" for tag in thread.tags),
+        })
+        scope = SenderDisplayScope(
+            ChannelDisplayScope(thread.name, targets),
+            SenderFilteredHistory.human_senders(snapshot),
+        )
+        with self.snapshot() as (_, source):
+            return PageBounds(limit=limit).conversation(scope).read_opened(source).messages
+
+    @staticmethod
+    def format_owner_messages(messages: Sequence[Message]) -> str:
+        """Render verbatim owner bus messages for compaction and /prime re-deals."""
+        if not messages:
+            return ""
+        entries = []
+        for message in messages:
+            when = time.strftime("%H:%M", time.localtime(message.timestamp))
+            where = message.target if message.target.startswith("#") else f"DM -> {message.target}"
+            entries.append(f"> [{message.seq}-{message.message_id} · {where} · {when}] {message.body}")
+        return "\n\n".join((
+            "WHAT TRISTAN ACTUALLY SAID LAST ON THE BUS, verbatim, oldest first"
+            " (DMs and subscribed channels):",
+            *entries,
+        ))
+
+    def owner_bus_words(
+        self,
+        thread: Thread,
+        snapshot: RegistrySnapshot,
+        *,
+        limit: int = 5,
+    ) -> str:
+        return self.format_owner_messages(self.recent_owner_messages(thread, snapshot, limit=limit))

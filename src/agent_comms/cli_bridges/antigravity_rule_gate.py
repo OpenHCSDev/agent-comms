@@ -386,13 +386,24 @@ class AntigravityRuleGate(DealtRuleGate):
             deal_mtime_ns=self._deal_mtime_ns(),
         ).write(self.checkpoint_cursor_path)
 
-    def _order_text(self, trigger: DealTrigger, prompts: tuple[str, ...]) -> str:
-        parts = [
-            f"{trigger.reason()} {self.delivery().told(self.current(), self.audit)}",
-            self.template_once(self.current().due),
-        ]
+    def owner_bus_words(self) -> str:
+        """Read Tristan's last verbatim bus messages for the bound thread, if any."""
+        thread_name = self.bound_thread_name()
+        if not thread_name:
+            return ""
+        try:
+            with client_wire() as comms:
+                snapshot = comms.registry.snapshot()
+                if thread_name not in snapshot.threads:
+                    return ""
+                return comms.bus.owner_bus_words(snapshot.threads[thread_name], snapshot)
+        except (OSError, ValueError, RuntimeError, KeyError, sqlite3.Error):
+            return ""
+
+    def _owner_prompt_sections(self, prompts: tuple[str, ...]) -> tuple[str, ...]:
+        sections: list[str] = []
         if prompts:
-            parts.append(
+            sections.append(
                 "\n\n".join(
                     (
                         "WHAT TRISTAN ACTUALLY SAID LAST, verbatim, oldest first. Not your summary"
@@ -402,6 +413,16 @@ class AntigravityRuleGate(DealtRuleGate):
                     )
                 )
             )
+        if bus_words := self.owner_bus_words():
+            sections.append(bus_words)
+        return tuple(sections)
+
+    def _order_text(self, trigger: DealTrigger, prompts: tuple[str, ...]) -> str:
+        parts = [
+            f"{trigger.reason()} {self.delivery().told(self.current(), self.audit)}",
+            self.template_once(self.current().due),
+            *self._owner_prompt_sections(prompts),
+        ]
         return "\n\n".join(part for part in parts if part)
 
     def deal_fresh(self, trigger: DealTrigger, repos: tuple[Repo, ...]) -> str:
@@ -437,18 +458,8 @@ class AntigravityRuleGate(DealtRuleGate):
                 " re-read them with a tool; the read gate is now open for those files."
             ),
             self.template_once(record.due),
+            *self._owner_prompt_sections(prompts),
         ]
-        if prompts:
-            parts.append(
-                "\n\n".join(
-                    (
-                        "WHAT TRISTAN ACTUALLY SAID LAST, verbatim, oldest first. Not your summary"
-                        " of it. Your audit answers each one, and your next action serves them,"
-                        " not the summary's next step:",
-                        *(f"> {words}" for words in prompts),
-                    )
-                )
-            )
         return (*chunks, "\n\n".join(part for part in parts if part))
 
     @property
