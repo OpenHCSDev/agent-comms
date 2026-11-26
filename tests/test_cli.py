@@ -1,4 +1,5 @@
 import argparse
+import io
 import json
 import os
 import sys
@@ -611,3 +612,16 @@ def test_result_kind_decides_exit_code_and_navigation_targets():
 
     completed = TargetCompleted(ProjectTarget(Checkout(Path("/project"))), command, created)
     assert TargetBatchResult((completed, batch.outcomes[-1], completed)).open_targets() == ("child",)
+
+
+def test_channels_cli_execute_reads_fresh_and_populated_bus(tmp_path):
+    fresh_out = io.StringIO()
+    assert CliInvocation().invoke(["--root", str(tmp_path), "channels"], fresh_out) == 0
+    fresh_payload = json.loads(fresh_out.getvalue())
+    comms = wire(tmp_path)
+    assert tuple(fresh_payload["channels"]) == tuple(comms.channels.channels())
+    comms.channels.create_tag("perf")
+    expected = tuple(comms.channels.channels())
+    populated_out = io.StringIO()
+    assert CliInvocation().invoke(["--root", str(tmp_path), "channels"], populated_out) == 0
+    assert tuple(json.loads(populated_out.getvalue())["channels"]) == expected

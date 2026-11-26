@@ -26,6 +26,7 @@ class ChannelsCliCommand(CliCommand):
 
     def execute(self, route: CommsRoute, output: TextIO, open_bus: BusOpener) -> int:
         RootRuntime.require_attachable(route.root, LaunchRuntime.running())
+        route.observe_root()
         return ChannelsResult(
-            tuple(ChannelCatalog.at(route.root).read().views(Bus(route.root).activity_clocks()))
+            tuple(ChannelCatalog.at(route.root).read().views(Bus.at(route.root).activity_clocks()))
         ).write(output)
