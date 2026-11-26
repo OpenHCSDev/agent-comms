@@ -1167,3 +1167,46 @@ async def test_a_cloud_message_sent_as_a_file_is_delivered_once_a_cat_shows_it(
             await asyncio.sleep(0.05)
     assert attempt_outcome(comms, edited) == "unconfirmed"
     await socket.close()
+
+
+async def test_a_pushed_message_with_an_attachment_confirms_delivered_alone_and_with_disk_notice(
+    session, comms: Comms, tmp_path: Path,
+) -> None:
+    """WatchedDelivery renders attachment lines under the body, and the watch client later
+    prints a per-file arrival notice; PushedTranscript must confirm both a standalone event
+    and one batched together with the disk notice as delivered, never MismatchedMonitor."""
+    client, token = session
+    socket = await client.ws_connect(await watch_path(client, token, "cloud"))
+    photo = FileUpload.of("shot.png", "image/png", b"\x89PNG\r\n\x1a\n" + b"x" * 64)
+    alone = comms.messaging.send("sender", "cloud", "screenshot one", files=(photo,)).message
+    batched = comms.messaging.send("sender", "cloud", "screenshot two", files=(photo,)).message
+    for _ in range(2):
+        await frame(socket)
+    await inbox_emptied(comms, "cloud")
+
+    alone_files = comms.messaging.files.of((alone.reference,))
+    batched_files = comms.messaging.files.of((batched.reference,))
+    alone_inline = ClaudeMonitorFrame(alone, alone_files).shown_inline()
+    batched_inline = "\n".join((
+        ClaudeMonitorFrame(batched, batched_files).shown_inline(),
+        ClaudeMonitorFrame.file_saved_notice(
+            0, batched.reference, tmp_path / "shot.png", "image/png", 72),
+    ))
+    await socket.send_str(monitor_event_record(alone_inline))
+    await socket.send_str(monitor_event_record(batched_inline))
+    async with asyncio.timeout(20):
+        while (attempt_outcome(comms, alone) != "delivered"
+               or attempt_outcome(comms, batched) != "delivered"):
+            await asyncio.sleep(0.05)
+    await socket.close()
+
+
+def test_file_notice_lines_are_claimed_and_excluded_from_inline_bodies(comms: Comms) -> None:
+    comms.registry.declare(NativeThread("sender", frozenset(), Checkout(comms.root)))
+    comms.registry.declare(ExternalThread("cloud", frozenset(), Checkout(comms.root)))
+    notice = ClaudeMonitorFrame.file_saved_notice(
+        0, MessageReference.named("6909-29fc643ce597"), Path("/tmp/shot.png"), "image/png", 10)
+    assert ClaudeMonitorFrame.claims(notice)
+    assert not ClaudeMonitorFrame.claims("File 0: shot.png (image/png, 10 bytes)")
+    message = comms.messaging.send("sender", "cloud", f"hello\n{notice}").message
+    assert not ClaudeMonitorFrame(message, ()).shows_safely_inline

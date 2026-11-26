@@ -112,6 +112,20 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     """What a transcript's XML envelope cannot carry as written: control characters, CR and
     the two noncharacters."""
 
+    FILE_NOTICE = re.compile(r'^File \d+ of \d+-[0-9a-f]{12} ')
+    """A watch client's per-file arrival notice printed after its message event."""
+
+    @classmethod
+    def file_saved_notice(cls, position: int, message: MessageReference, path: Path,
+                          mime_type: str, size: int) -> str:
+        return (f'File {position} of {message.name} is on your disk: {path} '
+                f'({mime_type}, {size} bytes). Read that path to see it.')
+
+    @classmethod
+    def file_corrupt_notice(cls, position: int, message: MessageReference, name: str) -> str:
+        return (f'File {position} of {message.name} ({name}) did not arrive '
+                'whole and was not kept; comms_message_file still reads it.')
+
     @staticmethod
     def units(line: str) -> int:
         return len(line.encode('utf-16-le')) // 2
@@ -228,7 +242,8 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     @classmethod
     def claims(cls, line: str) -> bool:
         """Whether the transcript decoder reads this line as one of ours rather than body text."""
-        return line.startswith((MonitorProtocolFrame.wire_prefix, cls.HEADER_PREFIX))
+        return (line.startswith((MonitorProtocolFrame.wire_prefix, cls.HEADER_PREFIX))
+                or cls.FILE_NOTICE.match(line) is not None)
 
     @classmethod
     def decode_line(cls, line: str) -> MonitorFrame:
