@@ -278,8 +278,16 @@ class ChannelView(ToolResult, ChannelSortView[type[ChannelSort]]):
         messages: Mapping[str, ChannelActivity], visibility: RosterVisibility,
     ) -> tuple[ChannelView, ...]:
         index = ChannelMemberIndex(snapshot.threads.values())
-        return tuple(sorted((cls.capture(
-            channel, channel.members(index), snapshot,
+        statuses: dict[str, ThreadStatus] = {}
+
+        def status_of(name: str) -> ThreadStatus:
+            cached = statuses.get(name)
+            if cached is None:
+                cached = statuses[name] = snapshot.status(name)
+            return cached
+
+        return tuple(sorted((cls._capture_with(
+            channel, channel.members(index), status_of,
             pins.get(channel.name, frozenset()), activity, sent,
             messages.get(channel.name, ChannelActivity()), visibility,
         ) for channel in channels), key=order.key))
@@ -290,8 +298,25 @@ class ChannelView(ToolResult, ChannelSortView[type[ChannelSort]]):
         pins: frozenset[str], activity: Mapping[str, ObservedActivity], sent: Mapping[str, float],
         history: ChannelActivity, visibility: RosterVisibility,
     ) -> ChannelView:
-        people = {thread.name: thread for thread in registered
-                  if snapshot.status(thread.name).in_view(visibility)}
+        return cls._capture_with(
+            channel, registered, snapshot.status, pins, activity, sent, history, visibility,
+        )
+
+    @classmethod
+    def _capture_with(
+        cls, channel: Channel, registered: tuple[Thread, ...],
+        status_of: Callable[[str], ThreadStatus],
+        pins: frozenset[str], activity: Mapping[str, ObservedActivity], sent: Mapping[str, float],
+        history: ChannelActivity, visibility: RosterVisibility,
+    ) -> ChannelView:
+        people: dict[str, Thread] = {}
+        active_agents = 0
+        for thread in registered:
+            status = status_of(thread.name)
+            if status.in_view(visibility):
+                people[thread.name] = thread
+            for _ in status.items_with(ActiveThreadPresence, thread):
+                active_agents += 1
         members = tuple(sorted(people, key=lambda name: (
             name not in pins,
             channel.order.key(name, people[name].created_at,
@@ -303,7 +328,7 @@ class ChannelView(ToolResult, ChannelSortView[type[ChannelSort]]):
             max(history.last_message,
                 max((activity[name].timestamp for name in members if name in activity), default=0)),
             history.last_user_input, pins & frozenset(members),
-            sum(1 for _ in snapshot.active_threads(registered)), len(registered),
+            active_agents, len(registered),
         )
 
 
@@ -370,14 +395,20 @@ class ThreadRecord(CliResult):
              pending: Mapping[str, InboxCount]) -> tuple[ThreadRecord, ...]:
         """Only active threads are observed; the rest show the absent activity."""
         threads = tuple(threads)
+        statuses = {thread.name: snapshot.status(thread.name) for thread in threads}
+        active = tuple(
+            member for thread in threads
+            for member in statuses[thread.name].items_with(ActiveThreadPresence, thread)
+        )
         waits = partial(GoalWaits.for_goal, rows=goals.waits.read())
-        observed = agents.all_activity(snapshot.active_threads(threads), snapshot=snapshot)
+        observed = agents.all_activity(active, snapshot=snapshot)
+        executions = goals.snapshots_for(threads, snapshot, waits, agents)
         return tuple(cls(
-            thread, snapshot.status(thread.name),
+            thread, statuses[thread.name],
             observed.get(thread.name, Activity.absent(thread.name)),
-            goals.snapshot_for(thread, snapshot, waits).execution,
+            goal.execution,
             pending=pending[thread.name],
-        ) for thread in threads)
+        ) for thread, goal in zip(threads, executions, strict=True))
 
     def to_wire(self) -> object:
         return FieldCodec.project(self, PresenceExclude)

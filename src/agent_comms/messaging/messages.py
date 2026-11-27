@@ -1171,7 +1171,7 @@ class Message(
                 f'FROM "{BusRow.declared_name}" {joins}')
 
     def to_wire(self) -> dict:
-        return {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self.envelope)}
+        return {"seq": self.seq, "id": str(self.message_id), **FieldCodec.encode(self.envelope)}
 
     @classmethod
     def from_wire(cls, data: object) -> Message:

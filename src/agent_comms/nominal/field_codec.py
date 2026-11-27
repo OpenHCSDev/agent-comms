@@ -849,6 +849,9 @@ class FieldPlan(ViewColumn):
     def encoded(self, value, *, key=None):
         return {key or self.key: value}
 
+    def write_encoded(self, target: dict[str, object], value: object, key: str) -> None:
+        target[key] = value
+
     def project_encoded[V](
         self, value: V, record: Callable[[Mapping[str, V]], V],
     ) -> V:
@@ -879,7 +882,7 @@ class FieldPlan(ViewColumn):
         )
 
     def omitted(self, value: object) -> bool:
-        return bool(self.omit_default and value == self.default())
+        return self.omit_default and value == self.default()
 
     def captured(self, data: object) -> dict[str, object]:
         if not isinstance(data, dict):
@@ -988,6 +991,9 @@ class ContextFieldPlan(DeclaredFieldPlan):
     def encoded(self, value: object, *, key: str | None = None) -> dict[str, object]:
         return {}
 
+    def write_encoded(self, target: dict[str, object], value: object, key: str) -> None:
+        return None
+
     def project_encoded[V](
         self, value: V, record: Callable[[Mapping[str, V]], V],
     ) -> V:
@@ -1053,6 +1059,9 @@ class InlineFieldPlan(DeclaredFieldPlan):
 
     def encoded(self, value, *, key=None):
         return value
+
+    def write_encoded(self, target: dict[str, object], value: object, key: str) -> None:
+        target.update(cast(Mapping[str, object], value))
 
     def project_encoded[V](
         self, value: V, record: Callable[[Mapping[str, V]], V],
@@ -1802,7 +1811,7 @@ class WireForm(FieldRepresentation):
 
     @classmethod
     def encode(cls, value: object) -> object:
-        return FieldCodec.encode(cast(WiredValue, value).to_wire())
+        return cast(WiredValue, value).to_wire()
 
     @classmethod
     def decode(cls, value: object) -> object:
@@ -1813,6 +1822,10 @@ class WireValue(WireForm):
     """A value supplies its representation to the single field boundary."""
 
     __slots__ = ()
+
+    @classmethod
+    def encode(cls, value: object) -> object:
+        return FieldCodec.encode(cast(WiredValue, value).to_wire())
 
     @classmethod
     def representation(cls) -> type[FieldRepresentation]:
@@ -3188,11 +3201,13 @@ class FieldCodec(MroDispatch, Sealed):
     @staticmethod
     def parse(text: str | bytes) -> object:
         """External JSON text is data: strict UTF-8, syntax and duplicate keys refuse it."""
-        with MalformedRecord.refusing("Invalid JSON"):
-            return json.loads(
-                text.decode("utf-8") if isinstance(text, bytes) else text,
-                object_pairs_hook=_unique_object,
-            )
+        try:
+            raw = text.decode("utf-8") if isinstance(text, bytes) else text
+            return _STRICT_JSON_DECODER.decode(raw)
+        except MalformedRecord:
+            raise
+        except ValueError as error:
+            raise MalformedRecord(f"Invalid JSON: {error}") from error
 
     @classmethod
     def require_fields(cls, record: DataclassInstance, *names: str) -> None:
@@ -3214,8 +3229,12 @@ class FieldCodec(MroDispatch, Sealed):
     @staticmethod
     def construct(target: Callable[..., T], values: dict[str, object]) -> T:
         """A record built from decoded data refuses its values as a malformed record."""
-        with MalformedRecord.refusing(f"Invalid {target.__name__}"):
+        try:
             return target(**values)
+        except MalformedRecord:
+            raise
+        except ValueError as error:
+            raise MalformedRecord(f"Invalid {target.__name__}: {error}") from error
 
     @staticmethod
     def alternatives_schema(
@@ -3282,6 +3301,10 @@ class FieldCodec(MroDispatch, Sealed):
         Projection is deliberately one way. Excluded secrets cannot be rebuilt
         from a read-only view, and a view never serves as a persistence record.
         """
+        if annotation is None:
+            value_type = type(value)
+            if value is None or value_type is str or value_type is bool or value_type is int:
+                return cast(JsonValue, value)
         return cls._value_representation(value, annotation).project_view(value, view, annotation)
 
     @classmethod
@@ -3296,15 +3319,18 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def _project_record(cls, value: object, view: type[ViewExclusion]) -> JsonValue:
         """A record's view: its tag, its view's fields and the properties the view owns."""
+        record_type = type(value)
         result = cls._tag(value)
-        result.update(cls._record_plan(type(value)).encoded(
-            value, view, lambda entry, current: cls.project(current, view, entry.annotation)
-        ))
-        properties = cls.projections(type(value), view)
-        result.update(
-            (member.wire_name, cls.project(getattr(value, name), view))
-            for name, member in properties.items()
-        )
+        plan = cls._record_plan(record_type)
+        for entry, key in plan._bindings_for(view):
+            current = entry.current(value)
+            if entry.omitted(current):
+                continue
+            entry.write_encoded(result, cls.project(current, view, entry.annotation), key)
+        properties = cls.projections(record_type, view)
+        if properties:
+            for name, member in properties.items():
+                result[member.wire_name] = cls.project(getattr(value, name), view)
         return result
 
     @dataclass(frozen=True)
@@ -3318,6 +3344,9 @@ class FieldCodec(MroDispatch, Sealed):
         """The keys every stored row carries, in wire order: one list the decoder enforces
         and the schema publishes."""
         accepted_keys: frozenset[str]
+        _view_bindings: dict[type[ViewExclusion], tuple[tuple[FieldPlan, str], ...]] = field(
+            default_factory=dict, init=False, compare=False, repr=False,
+        )
 
         @cached_property
         def required_wire_keys(self) -> frozenset[str]:
@@ -3332,19 +3361,26 @@ class FieldCodec(MroDispatch, Sealed):
             """Each binding under the name its field declares."""
             return {plan.name: plan for plan in self.bindings}
 
+        def _bindings_for(
+            self, view: type[ViewExclusion],
+        ) -> tuple[tuple[FieldPlan, str], ...]:
+            cached = self._view_bindings.get(view)
+            if cached is None:
+                cached = tuple(
+                    (entry, entry.key_in(view))
+                    for entry in self.bindings
+                    if not entry.excluded_in(view)
+                )
+                self._view_bindings[view] = cached
+            return cached
+
         def encoded(self, value, view, encode_value) -> dict[str, object]:
             result: dict[str, object] = {}
-            for entry in self.bindings:
+            for entry, key in self._bindings_for(view):
                 current = entry.current(value)
-                if not entry.excluded_in(view) and not entry.omitted(
-                    current
-                ):
-                    result.update(
-                        entry.encoded(
-                            encode_value(entry, current),
-                            key=entry.key_in(view),
-                        )
-                    )
+                if entry.omitted(current):
+                    continue
+                entry.write_encoded(result, encode_value(entry, current), key)
             return result
 
         def schema_fields(self, properties, required):
@@ -4011,6 +4047,9 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     if len(result) != len(pairs):
         raise MalformedRecord("Duplicate JSON field")
     return result
+
+
+_STRICT_JSON_DECODER = json.JSONDecoder(object_pairs_hook=_unique_object)
 
 
 def _object_entries(data: object) -> Iterable[tuple[object, object]]:
