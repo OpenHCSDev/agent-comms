@@ -46,8 +46,8 @@ from agent_comms.messaging.response_policy import (
     ResponseEligibility,
     ResponsePolicy,
 )
-import agent_comms.messaging.retained_task_facts as task_facts
 from agent_comms.messaging.task_attachment import NoTaskAttachment, TaskAttachment
+from agent_comms.messaging.task_fact_base import ExactTaskFact
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.compact_text import CompactText
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -1104,9 +1104,9 @@ class Message(
         yield from self.sender_role.user_task_facts(source)
         yield from self.task.retained_task_facts(source)
 
-    def default_user_source_fact(self) -> object:
+    def default_user_source_fact(self) -> ExactTaskFact:
         """The user-source fact a USER message produces when its task has no override."""
-        return task_facts.UserSourceTaskFact(self)
+        return UserSourceTaskFact(self)
 
     def __post_init__(self) -> None:
         if not self.sender:
@@ -1403,6 +1403,30 @@ class ClaimMessage(Claimed, Message):
         """A copied history keeps the envelope's display facts and drops its claim."""
         return Message.from_message(self, type=ClaimHistoryKind)
 
-    def retained_task_facts(self) -> Iterator[task_facts.ExactTaskFact]:
+    def retained_task_facts(self) -> Iterator[ExactTaskFact]:
         yield from super().retained_task_facts()
-        yield task_facts.ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
+        yield ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
+
+
+@dataclass(frozen=True)
+class UserSourceTaskFact(ExactTaskFact):
+    source: Message
+
+    def wire_sources(self):
+        return (self.source,)
+
+    def __post_init__(self) -> None:
+        self.source.sender_role.require_user(
+            RelationViolationError("A peer message is not an original user source")
+        )
+
+
+@dataclass(frozen=True)
+class ClaimTaskFact(ExactTaskFact):
+    source: ClaimMessage
+
+    def __post_init__(self) -> None:
+        self.source.require_claim_transition()
+
+    def wire_sources(self):
+        return (self.source,)
