@@ -380,14 +380,26 @@ def block_packaging(name, *args, **kwargs):
 
 builtins.__import__ = block_packaging
 
+from pathlib import Path
+from agent_comms.cli_verbs.thread import ThreadCliCommand
 from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.execution.turn_failure import InputIdUnavailable
+from agent_comms.nominal.field_codec import AttemptId, FieldCodec, GoalId, TurnId
 from agent_comms.planning.goal_ledger import FailedTurnEvidence
+from agent_comms.projects.checkouts import Checkout
 from agent_comms.ui_model.teammate_state import TeammateState
 
 assert FailedTurnEvidence.recorded_member(FailedTurnEvidence.declared_name) is FailedTurnEvidence
 assert WakeAssignment.recorded_member(WakeAssignment.declared_name) is WakeAssignment
 for name in ("idle", "blocked", "moving", "spinning"):
     assert issubclass(TeammateState.recorded_member(name), TeammateState)
+assert FieldCodec.encode(ThreadCliCommand(name="probe"))["kind"] == "thread"
+assert FieldCodec.encode_document(ThreadCliCommand(name="probe"), ThreadCliCommand)["name"] == "probe"
+evidence = FailedTurnEvidence(
+    AttemptId("a" * 32), GoalId("b" * 32), 1, "u", 1.0, Checkout(Path("/tmp")), 1, 1, 1,
+    TurnId("c" * 32), InputIdUnavailable, "boom",
+)
+assert FieldCodec.encode(evidence)["owner"] == "u"
 
 for forbidden in (
     "packaging",
