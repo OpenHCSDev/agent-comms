@@ -206,8 +206,8 @@ class BusPresentation:
             )
         return replace(
             snapshot, read_marker_notice=basis.document.notice.take(self.bus.reads),
-            unread={name: IndexingUnread() for name in snapshot.threads},
-            channel_unread={name: IndexingUnread() for name in snapshot.channels},
+            unread={name: IndexingUnread() for name in basis.registry.threads},
+            channel_unread={name: IndexingUnread() for name in basis.channels},
         )
 
     def channel_page(
