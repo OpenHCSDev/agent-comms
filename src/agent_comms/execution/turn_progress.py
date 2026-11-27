@@ -216,6 +216,9 @@ class TurnProgress(AgentEventConsumer[Comms]):
                 self.turn_lease.claimed_generation,
             ), owner=self.thread.require_process()),
         )
+        await CoordinationWork.run_worker(partial(
+            self.thread.backend.acknowledge_turn_inputs, self.comms, self.thread, self.origins,
+        ))
 
     async def before_native_metadata(self, event: NativeMetadataObservation) -> None:
         await event.session_file.attach(self.turn.attach_native_session)

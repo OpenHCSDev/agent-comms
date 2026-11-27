@@ -51,6 +51,7 @@ from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.transport.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
+    from agent_comms.comms import Comms
     from agent_comms.config_options import ConfigOptions
     from agent_comms.execution.input_drain import InputDrain
     from agent_comms.execution.owned_turn import TurnDelivery
@@ -58,7 +59,7 @@ if TYPE_CHECKING:
     from agent_comms.execution.session_config_options import SessionConfigOptions
     from agent_comms.execution.turn_lease import TurnLeaseFence
     from agent_comms.execution.turn_runner import TurnRunner
-    from agent_comms.messaging.messages import MessageReference
+    from agent_comms.messaging.messages import Message, MessageReference
     from agent_comms.messaging.routing import TurnRouting
     from agent_comms.registry.thread_identity import RecordedThreadIncarnation
     from agent_comms.registry.threads import Thread
@@ -360,6 +361,16 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         """Drain this thread's inbox inside the worker host."""
         del thread
         await inputs.drain_private_inbox(session_id)
+
+    @classmethod
+    def acknowledge_turn_inputs(
+        cls,
+        comms: Comms,
+        thread: Thread,
+        origins: tuple[Message, ...],
+    ) -> None:
+        """Record model-context read receipts when a backend starts executing bus origins."""
+        del comms, thread, origins
 
     async def context_for_input(self, thread, context):
         return context

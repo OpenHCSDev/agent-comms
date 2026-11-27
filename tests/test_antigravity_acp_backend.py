@@ -273,11 +273,23 @@ async def test_shared_acp_process_multiplexes_two_backends_and_streams_events(tm
     )
     assert any(isinstance(e, events.Done) and e.ok and "alpha-2" in e.text for e in events_a2)
     assert any(isinstance(e, events.Done) and e.ok and "beta-2" in e.text for e in events_b2)
+    from agent_comms.execution.turn_phase import (
+        ModelWaitPhase,
+        NativePhaseChanged,
+        SettlingStatsPhase,
+        ToolRunningPhase,
+    )
+
     assert any(isinstance(e, AgentInfo) for e in events_a)
     assert any(isinstance(e, events.Thinking) for e in events_a)
     assert any(isinstance(e, events.ToolStart) for e in events_a)
     assert any(isinstance(e, events.ToolEnd) and e.ok for e in events_a)
     assert any(isinstance(e, ContextInfo) for e in events_a)
+    phases_a = [e.phase for e in events_a if isinstance(e, NativePhaseChanged)]
+    assert any(isinstance(p, ModelWaitPhase) and p.detail == "Thinking" for p in phases_a)
+    assert any(isinstance(p, ToolRunningPhase) and p.tools for p in phases_a)
+    assert any(isinstance(p, ModelWaitPhase) and p.detail == "Replying" for p in phases_a)
+    assert any(isinstance(p, SettlingStatsPhase) for p in phases_a)
     done_a = [e for e in events_a if isinstance(e, events.Done)][-1]
     done_b = [e for e in events_b if isinstance(e, events.Done)][-1]
     assert done_a.ok and "reply:alpha:gemini-4-neon" in done_a.text
@@ -409,7 +421,7 @@ async def test_comms_agent_drains_and_runs_two_turns_on_antigravity_acp(
     try:
         await agent.sessions.start_owner(launch, owner)
 
-        comms.messaging.send("tristan", thread.name, "first-ping")
+        sent1 = comms.messaging.send("tristan", thread.name, "first-ping")
         for _ in range(80):
             await asyncio.sleep(0.05)
             if len(comms.bus.inbox("tristan").page.messages) >= 1 and not agent.inputs.turn_live(sid):
@@ -419,6 +431,14 @@ async def test_comms_agent_drains_and_runs_two_turns_on_antigravity_acp(
         first_session = str(backend._acp_session)
         first_pid = backend.runtime_process.pid
         assert first_session and first_pid > 0
+
+        from agent_comms.messaging.message_notification import MessageNotification
+        from agent_comms.messaging.notification_evidence import AllOutcomes
+
+        ref1 = sent1.message.reference
+        win1 = comms.views.message_notifications_for_references(AllOutcomes(), (ref1,))
+        summary1 = MessageNotification.summary(win1.outcomes.get((ref1.seq, ref1.message_id), ()))
+        assert "1 read" in summary1, f"Expected read receipt in summary, got {summary1!r}"
 
         comms.messaging.send("tristan", thread.name, "second-ping")
         for _ in range(80):

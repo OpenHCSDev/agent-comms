@@ -28,6 +28,7 @@ from agent_comms.agent_backend import (
     ThreadServingBackend,
 )
 from agent_comms.execution.agent_event import AgentEvent
+from agent_comms.installer.harness_install import AntigravityAcpSession
 from agent_comms.execution.antigravity_acp import (
     AcpRpcError,
     AntigravityAcpPool,
@@ -51,6 +52,11 @@ from agent_comms.execution.runtime_observations import (
     ReportedNativeSessionPath,
 )
 from agent_comms.execution.turn_failure import BackendFailed
+from agent_comms.execution.turn_phase import (
+    NativePhaseChanged,
+    SettlingStatsPhase,
+    TurnPhase,
+)
 from agent_comms.execution.unstarted_runtime import ExternalTranscriptLocation
 from agent_comms.nominal.field_codec import (
     AcpSessionId,
@@ -62,11 +68,13 @@ from agent_comms.pi_counts import UnreportedCount
 from agent_comms.registry.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 
 if TYPE_CHECKING:
+    from agent_comms.comms import Comms
     from agent_comms.config_options import ConfigOptions
     from agent_comms.execution.input_drain import InputDrain
     from agent_comms.execution.owned_turn import TurnDelivery
     from agent_comms.execution.pi_commands import SettingCommand
     from agent_comms.execution.session_config_options import SessionConfigOptions
+    from agent_comms.messaging.messages import Message
     from agent_comms.registry.threads import Thread
 
 
@@ -148,6 +156,20 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
         thread: Thread,
     ) -> None:
         await inputs.drain_direct_inbox(session_id, thread)
+
+    @classmethod
+    def acknowledge_turn_inputs(
+        cls,
+        comms: Comms,
+        thread: Thread,
+        origins: tuple[Message, ...],
+    ) -> None:
+        comms.messaging.acknowledge_direct_turn_inputs(
+            thread,
+            origins,
+            root_id=comms.owners.require_private_launch().wire_root_id,
+            bridge=AntigravityAcpSession,
+        )
 
     def __init__(self, process: AntigravityAcpProcess) -> None:
         self._process = process
@@ -270,9 +292,15 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
                     current_model=self._applied_model,
                     thought_level=self._applied_thinking,
                 )
+                last_phase: TurnPhase = state.phase
+                yield NativePhaseChanged(last_phase, self._process.process_identity)
                 async for frame in self._process.prompt(session_id, content.acp_prompt_blocks()):
                     for event in frame.apply(state, self._remember_applied):
                         yield event
+                    if state.phase != last_phase:
+                        last_phase = state.phase
+                        yield NativePhaseChanged(last_phase, self._process.process_identity)
+                yield NativePhaseChanged(SettlingStatsPhase(), self._process.process_identity)
                 yield events.StreamSettled()
                 yield events.Done(text=state.full_text, ok=True)
             except (AcpRpcError, ConnectionError, TimeoutError) as error:

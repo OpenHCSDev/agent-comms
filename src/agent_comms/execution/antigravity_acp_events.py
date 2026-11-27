@@ -15,6 +15,7 @@ from agent_comms.cli_bridges.wire_models import DeclaredWireFamily, WireModel
 from agent_comms.config_option import CatalogChoice
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.runtime_observations import ContextInfo
+from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import NominalText, ToolCallId
 from agent_comms.pi_counts import ReportedCount, UnreportedCount
@@ -87,12 +88,26 @@ class AcpTurnStreamState:
 
     text_chunks: list[str] = field(default_factory=list)
     tool_names: dict[str, str] = field(default_factory=dict)
+    active_tools: dict[ToolCallId, str] = field(default_factory=dict)
+    phase: TurnPhase = field(default_factory=ModelWaitPhase)
     current_model: str = ""
     thought_level: str = ""
 
     @property
     def full_text(self) -> str:
         return "".join(self.text_chunks)
+
+    def tool_started(self, call_id: ToolCallId, label: str) -> None:
+        self.active_tools[call_id] = label
+        self.phase = ToolRunningPhase(tools=tuple(self.active_tools.items()))
+
+    def tool_finished(self, call_id: ToolCallId) -> None:
+        self.active_tools.pop(call_id, None)
+        self.phase = (
+            ToolRunningPhase(tools=tuple(self.active_tools.items()))
+            if self.active_tools
+            else ModelWaitPhase()
+        )
 
 
 class AcpConfigOptionKind(DeclaredFamily, affix="AcpConfigOption"):
@@ -179,10 +194,12 @@ class AcpToolStatus(DeclaredFamily, affix="ToolStatus"):
     @classmethod
     def emit(
         cls,
+        state: AcpTurnStreamState,
         call_id: ToolCallId,
         name: str,
         output: str,
     ) -> Iterator[AgentEvent]:
+        del state
         yield events.ToolProgress(id=call_id, name=name, output=output)
 
 
@@ -198,10 +215,12 @@ class CompletedToolStatus(AcpToolStatus, declared_name="completed"):
     @classmethod
     def emit(
         cls,
+        state: AcpTurnStreamState,
         call_id: ToolCallId,
         name: str,
         output: str,
     ) -> Iterator[AgentEvent]:
+        state.tool_finished(call_id)
         yield events.ToolEnd(id=call_id, name=name, ok=True, output=output)
 
 
@@ -209,10 +228,12 @@ class FailedToolStatus(AcpToolStatus, declared_name="failed"):
     @classmethod
     def emit(
         cls,
+        state: AcpTurnStreamState,
         call_id: ToolCallId,
         name: str,
         output: str,
     ) -> Iterator[AgentEvent]:
+        state.tool_finished(call_id)
         yield events.ToolEnd(id=call_id, name=name, ok=False, output=output)
 
 
@@ -247,6 +268,7 @@ class AgentMessageChunkAcpUpdate(AntigravityAcpUpdate, declared_name="agent_mess
     def convert(self, state: AcpTurnStreamState) -> Iterator[AgentEvent]:
         text = self.content.extract_text()
         if text:
+            state.phase = ModelWaitPhase("Replying")
             state.text_chunks.append(text)
             yield events.Chunk(text=text)
 
@@ -255,9 +277,9 @@ class AgentThoughtChunkAcpUpdate(AntigravityAcpUpdate, declared_name="agent_thou
     content: AcpContentBlock = Field(default_factory=AcpContentBlock)
 
     def convert(self, state: AcpTurnStreamState) -> Iterator[AgentEvent]:
-        del state
         text = self.content.extract_text()
         if text:
+            state.phase = ModelWaitPhase("Thinking")
             yield events.Thinking(text=text)
 
 
@@ -274,10 +296,11 @@ class ToolCallAcpUpdate(AntigravityAcpUpdate, declared_name="tool_call"):
 
     def convert(self, state: AcpTurnStreamState) -> Iterator[AgentEvent]:
         call_key = self.tool_call_key or "agy-tool"
+        call_id = ToolCallId(call_key)
         title = self.title or self.kind or "tool"
         name = self.name or title
         state.tool_names[call_key] = name
-        start = events.ToolStart.from_call(ToolCallId(call_key), name, self.raw_input)
+        start = events.ToolStart.from_call(call_id, name, self.raw_input)
         if title and not start.title:
             start = events.ToolStart(
                 id=start.id,
@@ -286,6 +309,7 @@ class ToolCallAcpUpdate(AntigravityAcpUpdate, declared_name="tool_call"):
                 args=start.args,
                 kind=start.kind,
             )
+        state.tool_started(call_id, start.title or name)
         yield start
 
 
@@ -310,7 +334,7 @@ class ToolCallUpdateAcpUpdate(AntigravityAcpUpdate, declared_name="tool_call_upd
         name = state.tool_names.get(call_key) or self.name or self.title or "tool"
         parts = [block.extract_text() for block in self.content]
         output = "\n".join(part for part in parts if part) or _format_raw_output(self.raw_output)
-        yield from AcpToolStatus.of(self.status).emit(ToolCallId(call_key), name, output)
+        yield from AcpToolStatus.of(self.status).emit(state, ToolCallId(call_key), name, output)
 
 
 class UsageUpdateAcpUpdate(AntigravityAcpUpdate, declared_name="usage_update"):

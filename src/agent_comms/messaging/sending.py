@@ -13,10 +13,13 @@ from agent_comms.cli_bridges.harness_delivery_states import (
     UnconfirmedOutcome,
 )
 from agent_comms.coordination.assignment_store import AssignmentStore
+from agent_comms.coordination.cohort_foreground import AcceptsDeliveries
+from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.session import NativeCapture, NativeCoordinationSession
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery
 from agent_comms.installer.harness_install import HarnessSession
+from agent_comms.nominal.field_codec import RootId
 from agent_comms.errors import (
     CommittedMessageError,
     RelationViolationError,
@@ -212,6 +215,25 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
             owner, unique, time.time() if timestamp is None else timestamp, bridge=bridge,
         )
         return unique
+
+    def acknowledge_direct_turn_inputs(
+        self,
+        owner: Thread,
+        origins: tuple[Message, ...],
+        *,
+        root_id: RootId,
+        bridge: type[HarnessSession],
+    ) -> tuple[MessageReference, ...]:
+        """Accept pending cohort rows and record model-context read receipts for a direct turn."""
+        refs = tuple(dict.fromkeys(origin.reference for origin in origins if origin.seq > 0))
+        if not refs:
+            return ()
+        AcceptsDeliveries(
+            bus=self.bus,
+            root_id=root_id,
+            thread_name=owner.name,
+        ).accept(Coordination(CoordinationStore.path_in(self.root)))
+        return self.acknowledge_deliveries(owner.name, refs, bridge=bridge)
 
     def _settle_answered_remote_deliveries(
         self,
