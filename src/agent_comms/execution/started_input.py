@@ -6,6 +6,7 @@ from functools import partial
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination.work import CoordinationWork
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.nominal.lifecycle_capability import Unresolved
 
@@ -14,7 +15,6 @@ if TYPE_CHECKING:
     from agent_comms.execution.input_drain import InputDrain
     from agent_comms.execution.turn_input_source import TurnInputSource
     from agent_comms.input_attempt import StartedInput as StartedRow
-    from agent_comms.messaging.messages import Message
 
 
 class StartedInput:

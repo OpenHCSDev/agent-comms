@@ -43,7 +43,10 @@ from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, Thr
 from agent_comms.transport.runtime_server import RuntimeServer
 
 
-class SessionConfigOptions(ThreadSettingApplier, ConfigurationChanges[ConfigOptions]):
+class SessionConfigOptions(
+    ThreadSettingApplier[ConfigOptions, SettingCommand],
+    ConfigurationChanges[ConfigOptions],
+):
     """Publish and persist each executing session's original configuration."""
 
     def __init__(

@@ -15,7 +15,7 @@ from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import (
@@ -57,6 +57,7 @@ from agent_comms.execution.runtime_observations import (
     AgentInfo,
     ReportedNativeSessionPath,
 )
+from agent_comms.execution.turn_delivery import DirectTurnDelivery
 from agent_comms.execution.turn_failure import BackendFailed
 from agent_comms.execution.turn_inbox import TurnInboxItem
 from agent_comms.execution.turn_phase import (
@@ -79,12 +80,6 @@ from agent_comms.pi_counts import UnreportedCount
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from agent_comms.registry.threads import Thread
-
-if TYPE_CHECKING:
-    from agent_comms.config_options import ConfigOptions
-    from agent_comms.execution.owned_turn import TurnDelivery
-    from agent_comms.execution.pi_commands import SettingCommand
-    from agent_comms.execution.turn_runner import TurnRunner
 
 
 @dataclass(frozen=True)
@@ -149,12 +144,12 @@ class AntigravityAcpBackend(
         return incoming
 
     @classmethod
-    async def apply_setting(
+    async def apply_setting[Configuration, Command](
         cls,
-        owner: ThreadSettingApplier,
-        configuration: ConfigOptions,
+        owner: ThreadSettingApplier[Configuration, Command],
+        configuration: Configuration,
         thread: Thread,
-        command: SettingCommand,
+        command: Command,
     ) -> None:
         del configuration
         await owner.store_direct_setting(thread, command)
@@ -203,7 +198,7 @@ class AntigravityAcpBackend(
         return self._acp_session.selected(empty, lambda sid: (sid,))
 
     @classmethod
-    def for_worker(cls, runner: TurnRunner, session_id: AcpSessionId) -> Self:
+    def for_worker(cls, runner: object, session_id: AcpSessionId) -> Self:
         del session_id
         return cls(AntigravityAcpPool.for_runner(runner))
 
@@ -281,7 +276,7 @@ class AntigravityAcpBackend(
         self,
         thread: Thread,
         content: TurnInputContent,
-        delivery: TurnDelivery,
+        delivery: DirectTurnDelivery,
     ) -> AsyncIterator[AgentEvent]:
         async with self._lock:
             native_input_id = InputId.mint()

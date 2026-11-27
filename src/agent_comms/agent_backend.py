@@ -25,6 +25,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms import agent_events as events
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.backend_query import (
@@ -43,30 +44,26 @@ from agent_comms.execution.transcript_cursor_reads import (
     TranscriptHistorySource,
     TranscriptRuntime,
 )
+from agent_comms.execution.transcript_sources import TranscriptCursor
+from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.execution.turn_outcome import TurnOutcome
 from agent_comms.installer.harness_install import HarnessSession
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.routing import TurnRouting
 from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMember
-from agent_comms.nominal.field_codec import AcpSessionId, InputId
+from agent_comms.nominal.field_codec import AcpSessionId, InputId, TurnId
 from agent_comms.pi_counts import PiCount
+from agent_comms.registry.thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.transport.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from agent_comms import agent_events as events
-    from agent_comms.config_options import ConfigOptions
     from agent_comms.execution.owned_turn import TurnDelivery
-    from agent_comms.execution.pi_commands import SettingCommand
-    from agent_comms.execution.transcript_sources import TranscriptCursor
-    from agent_comms.execution.turn_lease import TurnLeaseFence
     from agent_comms.execution.turn_runner import TurnRunner
-    from agent_comms.messaging.message_reference import MessageReference
-    from agent_comms.messaging.messages import Message
-    from agent_comms.messaging.routing import TurnRouting
-    from agent_comms.nominal.field_codec import TurnId
-    from agent_comms.registry.thread_identity import (
-        RecordedThreadIncarnation,
-        ThreadIncarnation,
-    )
     from agent_comms.registry.threads import Thread
 
 
@@ -86,16 +83,16 @@ class TurnPublicationRecorder(ABC):
     ) -> None: ...
 
 
-class ThreadSettingApplier(ABC):
+class ThreadSettingApplier[Configuration, Command](ABC):
     """Configuration owner capability applying stored model/thinking updates for a backend."""
 
     @abstractmethod
     async def configure_pi_thread(
-        self, configuration: ConfigOptions, thread: Thread, command: SettingCommand
+        self, configuration: Configuration, thread: Thread, command: Command
     ) -> None: ...
 
     @abstractmethod
-    async def store_direct_setting(self, thread: Thread, command: SettingCommand) -> None: ...
+    async def store_direct_setting(self, thread: Thread, command: Command) -> None: ...
 
 
 class OwnedInboxDrainer(ABC):
@@ -192,12 +189,12 @@ class RuntimeLocation(DeclaredFamily, TranscriptRuntime, affix='Runtime'):
         self,
         transcripts: TurnPublicationRecorder,
         *,
-        lease: object,
-        checkpoint: object,
-        routing: object,
-        published: tuple[object, ...],
-        incarnation: object,
-        thread: object,
+        lease: TurnLeaseFence,
+        checkpoint: TranscriptCursor,
+        routing: TurnRouting,
+        published: tuple[MessageReference, ...],
+        incarnation: RecordedThreadIncarnation,
+        thread: Thread,
     ) -> None:
         transcripts.record_native_turn_publication(
             lease=lease,
@@ -420,12 +417,12 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         return cls.for_provider(provider)
 
     @classmethod
-    async def apply_setting(
+    async def apply_setting[Configuration, Command](
         cls,
-        owner: ThreadSettingApplier,
-        configuration: ConfigOptions,
+        owner: ThreadSettingApplier[Configuration, Command],
+        configuration: Configuration,
         thread: Thread,
-        command: SettingCommand,
+        command: Command,
     ) -> None:
         """Apply one runtime setting change (`SetModel` or `SetThinkingLevel`) for this backend."""
         await owner.configure_pi_thread(configuration, thread, command)
@@ -448,7 +445,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         thread: Thread,
         origins: tuple[Message, ...],
     ) -> None:
-        """Record model-context delivery acknowledgements when a backend starts executing origins."""
+        """Record model-context delivery acknowledgements when a backend starts origins."""
         del acknowledger, thread, origins
 
     async def context_for_input(self, thread, context):

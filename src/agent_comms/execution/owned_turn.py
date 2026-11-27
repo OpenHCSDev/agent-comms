@@ -47,6 +47,7 @@ from agent_comms.execution.pi_events import DialogUiRequest, ExtensionUiChoice
 from agent_comms.execution.pi_wire import PiUsage
 from agent_comms.execution.send_outcome import SendBoundary
 from agent_comms.execution.transcript_routes import DisplayText, NoDisplayText
+from agent_comms.execution.turn_delivery import DirectTurnDelivery
 from agent_comms.execution.turn_failure import BackendFailed, CoordinationRefused, TurnFailure
 from agent_comms.execution.turn_goal_permission import OwnerGoalPermission, TurnGoalPermission
 from agent_comms.execution.turn_inbox import InputContent, TurnInbox
@@ -181,7 +182,7 @@ class TurnGoalAccount(ProgressGoalAccount):
 
 
 @dataclass(frozen=True, kw_only=True)
-class TurnDelivery:
+class TurnDelivery(DirectTurnDelivery):
     """Core's bindings for one turn, handed to the backend that runs it.
 
     ``inbox`` carries :class:`InputRequest` and :class:`SendNow` records that
@@ -192,12 +193,8 @@ class TurnDelivery:
     provider progress and answer runtime dialogs.
     """
 
-    worktree: str
     environment: dict[str, str]
-    inbox: TurnInbox
     finish_event: asyncio.Event
-    send_boundary: SendBoundary
-    input_start: InputStartListener
     cursor_delivery: CursorDelivery
     request_progress: Callable[..., None]
     ui_request: Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]]
