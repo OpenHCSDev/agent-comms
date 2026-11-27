@@ -796,7 +796,7 @@ class FieldPlan(ViewColumn):
         return directive.read(self.annotation, default)
 
     def current(self, record: object) -> object:
-        return cast(object, getattr(record, self.name))
+        return getattr(record, self.declared.name)
 
     def assign(self, record: object, value: object) -> None:
         """Assign this declared field on an editable record."""
@@ -1661,7 +1661,7 @@ class FieldRepresentation[T](MroDispatch, ABC, JsonSchemaOwner):
 
     @classmethod
     def project_view(cls, value: object, view: type[ViewExclusion], annotation: object) -> JsonValue:
-        return RepresentedProjection.of(value, view, annotation)
+        return FieldCodec.encode(value, annotation)
 
     @classmethod
     def producer_owners(cls) -> tuple[type[FieldRepresentation], ...]:
@@ -1861,6 +1861,10 @@ class SingleValueEncoding(WireValue):
     """Encode one declared field as the whole wire value."""
 
     @classmethod
+    def encode(cls, value: object) -> object:
+        return cast(SingleValueEncoding, value).to_wire()
+
+    @classmethod
     def wire_field(cls) -> DeclaredFieldPlan:
         entry, = FieldCodec._record_plan(cls).fields
         return entry
@@ -1914,6 +1918,10 @@ class MemberUnion(ExternalJsonShape, WireValue):
     its schema all derive from that member set."""
 
     __slots__ = ()
+
+    @classmethod
+    def project_view(cls, value: object, view: type[ViewExclusion], annotation: object) -> JsonValue:
+        return RepresentedProjection.of(value, view, annotation)
 
     @classmethod
     @abstractmethod
@@ -2100,6 +2108,10 @@ class RecordMember(ExternalJsonShape, WireValue):
     @classmethod
     def encode(cls, value: object) -> dict[str, JsonValue]:
         return FieldCodec.encode_record(value)
+
+    @classmethod
+    def project_view(cls, value: object, view: type[ViewExclusion], annotation: object) -> JsonValue:
+        return FieldCodec._project_record(value, view)
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
@@ -3322,11 +3334,19 @@ class FieldCodec(MroDispatch, Sealed):
         record_type = type(value)
         result = cls._tag(value)
         plan = cls._record_plan(record_type)
-        for entry, key in plan._bindings_for(view):
+        for entry, key, rep in plan._bindings_for(view):
             current = entry.current(value)
             if entry.omitted(current):
                 continue
-            entry.write_encoded(result, cls.project(current, view, entry.annotation), key)
+            if rep is StructuralRepresentation:
+                current_type = type(current)
+                if current is None or current_type is str or current_type is bool or current_type is int:
+                    encoded: object = current
+                else:
+                    encoded = rep.for_value(current).project_view(current, view, entry.annotation)
+            else:
+                encoded = rep.project_view(current, view, entry.annotation)
+            entry.write_encoded(result, encoded, key)
         properties = cls.projections(record_type, view)
         if properties:
             for name, member in properties.items():
@@ -3344,9 +3364,9 @@ class FieldCodec(MroDispatch, Sealed):
         """The keys every stored row carries, in wire order: one list the decoder enforces
         and the schema publishes."""
         accepted_keys: frozenset[str]
-        _view_bindings: dict[type[ViewExclusion], tuple[tuple[FieldPlan, str], ...]] = field(
-            default_factory=dict, init=False, compare=False, repr=False,
-        )
+        _view_bindings: dict[
+            type[ViewExclusion], tuple[tuple[FieldPlan, str, type[FieldRepresentation]], ...],
+        ] = field(default_factory=dict, init=False, compare=False, repr=False)
 
         @cached_property
         def required_wire_keys(self) -> frozenset[str]:
@@ -3363,11 +3383,11 @@ class FieldCodec(MroDispatch, Sealed):
 
         def _bindings_for(
             self, view: type[ViewExclusion],
-        ) -> tuple[tuple[FieldPlan, str], ...]:
+        ) -> tuple[tuple[FieldPlan, str, type[FieldRepresentation]], ...]:
             cached = self._view_bindings.get(view)
             if cached is None:
                 cached = tuple(
-                    (entry, entry.key_in(view))
+                    (entry, entry.key_in(view), FieldCodec.representation(entry.annotation)[1])
                     for entry in self.bindings
                     if not entry.excluded_in(view)
                 )
@@ -3376,7 +3396,7 @@ class FieldCodec(MroDispatch, Sealed):
 
         def encoded(self, value, view, encode_value) -> dict[str, object]:
             result: dict[str, object] = {}
-            for entry, key in self._bindings_for(view):
+            for entry, key, _ in self._bindings_for(view):
                 current = entry.current(value)
                 if entry.omitted(current):
                     continue

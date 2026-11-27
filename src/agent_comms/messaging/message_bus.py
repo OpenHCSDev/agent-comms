@@ -41,17 +41,41 @@ from agent_comms.messaging.read_selection import CapturedSelection
 from agent_comms.messaging.routing import DeliveryScope
 from agent_comms.messaging.watched import FileSource
 from agent_comms.peer_relevance import Prioritized
+from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.peer_relation import PeerRelation
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
-from agent_comms.storage.file_observation import FileIdentity, FileRevision
+from agent_comms.storage.file_observation import FileIdentity
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 
 
+@dataclass(frozen=True, slots=True)
+class _CachedPendingProjection:
+    held: HeldUnseenCounts
+    registry: RegistrySnapshot
+    catalog: CatalogDocument
+    document: ReadDocument
+    actors: frozenset[str]
+
+    def same_cut(self, basis: CapturedSelection) -> bool:
+        return (
+            self.registry is basis.registry
+            and self.catalog is basis.catalog
+            and self.document is basis.document
+        )
+
+    def serves(self, basis: CapturedSelection, actor_set: frozenset[str], source: BusSnapshot) -> bool:
+        return (
+            self.same_cut(basis)
+            and actor_set <= self.actors
+            and source.revision() == self.held.through
+        )
+
+
 _pending_counts_lock = threading.Lock()
-_pending_counts_cache: dict[tuple[Path, FileIdentity], HeldUnseenCounts] = {}
+_pending_counts_cache: dict[tuple[Path, FileIdentity], _CachedPendingProjection] = {}
 
 
 @dataclass(frozen=True)
@@ -188,20 +212,22 @@ class MessageBus[Writes: Publisher](PublishedBus[Writes], BusReadSource):
 
     def _pending_projection(self, source: BusSnapshot, basis: CapturedSelection, names: Sequence[str]):
         actors = {name: basis.registry.canonical_name(name) for name in names}
+        actor_set = frozenset(actors.values())
+        cache_key = (self.bus.path, source.identity)
+        with _pending_counts_lock:
+            cached = _pending_counts_cache.get(cache_key)
+        if cached is not None and cached.serves(basis, actor_set, source):
+            return {name: cached.held.counts[actor] for name, actor in actors.items()}
         deliveries = {actor: DeliveryScope.capture(actor, basis.registry, basis.catalog)
-                      for actor in set(actors.values())}
+                      for actor in actor_set}
         seen = {actor: basis.document.cursor(actor, basis.registry, source)
                 for actor in deliveries}
-        identity = FileRevision.capture(self.bus.path).file_identity()
-        cache_key = (self.bus.path, identity) if isinstance(identity, FileIdentity) else None
-        held = HeldUnseenCounts()
-        if cache_key is not None:
-            with _pending_counts_lock:
-                held = _pending_counts_cache.get(cache_key, held)
+        held = cached.held if cached is not None else HeldUnseenCounts()
         updated = source.advanced_unseen_counts(held, basis.registry, deliveries, seen)
-        if cache_key is not None:
-            with _pending_counts_lock:
-                _pending_counts_cache[cache_key] = updated
+        with _pending_counts_lock:
+            _pending_counts_cache[cache_key] = _CachedPendingProjection(
+                updated, basis.registry, basis.catalog, basis.document, actor_set,
+            )
         return {name: updated.counts[actor] for name, actor in actors.items()}
 
     def pending_counts_opened(
