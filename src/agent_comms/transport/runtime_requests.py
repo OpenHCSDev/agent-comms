@@ -10,13 +10,8 @@ from typing import (
 from acp.schema import PromptRequest
 
 from agent_comms.context_store import ContextManifestReference
-from agent_comms.execution.turn_context import (
-    DispatchRequest,
-    PreviewProvenance,
-    Provenance,
-    RecordedContextTurn,
-    SegmentManifest,
-)
+from agent_comms.execution.context_provenance import PreviewProvenance, Provenance
+from agent_comms.execution.turn_context import DispatchRequest, RecordedContextTurn, SegmentManifest
 from agent_comms.nominal.field_codec import GoalId, WireName
 from agent_comms.planning.goal_actions import GoalAction
 from agent_comms.planning.goal_scope import AllGoals, OneGoal

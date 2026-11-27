@@ -14,7 +14,8 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.delivers_input import DeliversInput
 from agent_comms.execution.input_lookup import InputLookup
 from agent_comms.execution.input_publication_read import InputPublicationRead
-from agent_comms.execution.turn_context import ContextSegment, Provenance, WireProvenance
+from agent_comms.execution.context_provenance import Provenance, WireProvenance
+from agent_comms.execution.turn_context import ContextSegment
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_directions import MessageDirections
 from agent_comms.messaging.message_reads import MessageReferencesRead

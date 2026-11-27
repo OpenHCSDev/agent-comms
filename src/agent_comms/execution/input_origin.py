@@ -11,7 +11,7 @@ from agent_comms.messaging import initial_origin
 from agent_comms.execution.controller import NO_CONTROLLER
 from agent_comms.execution.input_ingress import InputIngressContext, InputRegistry
 from agent_comms.execution.input_key import InputKey, InputKeyText
-from agent_comms.execution.turn_context import Provenance
+from agent_comms.execution.context_provenance import Provenance
 from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.messaging.message_reference import MessageReference, NoMessageReferences
 from agent_comms.nominal.declared_family import DeclaredFamily

@@ -27,8 +27,8 @@ from agent_comms.messaging.messages import BusRecord, BusRow, Message
 from agent_comms.messaging.projection_source import ProducedRow
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, ThreadLookup
-from agent_comms.registry.task_owner import TaskOwner
-from agent_comms.registry.task_registry import TaskRegistry
+from agent_comms.registry.registry_names import RegistryNames
+from agent_comms.registry.thread_role_source import ThreadRoleSource
 from agent_comms.storage.typed_table import Column, Generated, sql_literal
 from agent_comms.waking.wake_policy import RecipientDecision
 
@@ -120,7 +120,7 @@ class AutomatedOrigin(InitialOrigin):
         """An automated message directs no thread: only the owner's voice does."""
 
     def require_sender[M](
-        self, message: DirectableMessage[M], sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
+        self, message: DirectableMessage[M], sender_thread: ThreadRoleSource, snapshot: RegistryNames
     ) -> None:
         sender_thread.role.require_automated_publication(
             RelationViolationError("Initial sender must be a registered automated publisher.")
@@ -139,7 +139,7 @@ class AgentOrigin(AutomatedOrigin):
     """An executable thread's owner; it may resend under the same message id."""
 
     def require_sender[M](
-        self, message: DirectableMessage[M], sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
+        self, message: DirectableMessage[M], sender_thread: ThreadRoleSource, snapshot: RegistryNames
     ) -> None:
         sender_thread.role.require_executable(
             RelationViolationError("Initial sender must be a visible registered executable.")
@@ -151,7 +151,7 @@ class ServiceOrigin(AutomatedOrigin):
     """A service publisher does not impersonate an executable colleague."""
 
     def require_sender[M](
-        self, message: DirectableMessage[M], sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
+        self, message: DirectableMessage[M], sender_thread: ThreadRoleSource, snapshot: RegistryNames
     ) -> None:
         sender_thread.role.require_service_publication(
             RelationViolationError("Initial sender must be a declared service publisher.")

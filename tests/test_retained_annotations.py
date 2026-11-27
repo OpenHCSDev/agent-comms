@@ -21,6 +21,7 @@ from agent_comms.coordination.working_memory_annotations import (
     WorkingMemoryAnnotations,
 )
 from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.context_provenance import UnattributedProvenance
 from agent_comms.execution.turn_context import (
     ContextManifest,
     ContextSpan,
@@ -29,7 +30,6 @@ from agent_comms.execution.turn_context import (
     RecordedContextTurn,
     SystemLayerSegment,
     ToolCatalogSegment,
-    UnattributedProvenance,
 )
 from agent_comms.execution.turn_item import PiRequestKey
 from agent_comms.execution.working_memory_disclosure import DisclosureState

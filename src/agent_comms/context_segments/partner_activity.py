@@ -9,7 +9,8 @@ import json
 from dataclasses import dataclass
 from typing import ClassVar
 
-from agent_comms.execution.turn_context import InstructionSegment, OwnerProvenance
+from agent_comms.execution.context_provenance import OwnerProvenance
+from agent_comms.execution.turn_context import InstructionSegment
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.peer_relevance import Informed
 from agent_comms.planning.goal_history import GoalHistoryEntry

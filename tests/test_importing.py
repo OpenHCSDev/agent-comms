@@ -55,8 +55,8 @@ from agent_comms.execution.imported_session_metadata import ImportedSessionMetad
 from agent_comms.execution.native_entries import ImportedMetadataEntry, NativeEntry
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.turn_context import FileProvenance
-from agent_comms.execution.turn_context import HistoricalInstructionProvenance
+from agent_comms.execution.context_provenance import FileProvenance
+from agent_comms.execution.context_provenance import HistoricalInstructionProvenance
 from agent_comms.importing import ImportBuffer, ImportSnapshot
 from agent_comms.registry.thread_results import ThreadImported
 from agent_comms.installer.harness_install import (

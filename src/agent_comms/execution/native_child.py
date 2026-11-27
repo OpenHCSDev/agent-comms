@@ -32,7 +32,8 @@ from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.publication_measurements import PublicationMeasurements
 from agent_comms.execution.session_retention import NativeSessionRetention
 from agent_comms.execution.session_revision import SessionRevision
-from agent_comms.execution.turn_context import Provenance, TurnContext
+from agent_comms.execution.context_provenance import Provenance
+from agent_comms.execution.turn_context import TurnContext
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.pi_payloads import PiResponseData, StateData

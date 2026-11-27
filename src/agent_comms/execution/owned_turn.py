@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from agent_comms.execution.owned_turn_runner import OwnedTurnRunner
+from agent_comms.execution.context_provenance import TurnProvenance
 from agent_comms.execution.turn_context import (
     AutomaticTitleSegment,
     RecordedContextTurn,
     ReplyRouteSegment,
     TurnContext,
-    TurnProvenance,
 )
 
 import asyncio

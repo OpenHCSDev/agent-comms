@@ -31,7 +31,8 @@ from agent_comms.execution.input_origin import (
     WireInputOrigin,
 )
 from agent_comms.execution.queued_input import QueuedInput
-from agent_comms.execution.turn_context import UserFollowupSegment, WireProvenance
+from agent_comms.execution.context_provenance import WireProvenance
+from agent_comms.execution.turn_context import UserFollowupSegment
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference

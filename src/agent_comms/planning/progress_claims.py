@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.execution.turn_context import FileProvenance
+from agent_comms.execution.context_provenance import FileProvenance
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.projects.repo import Repo
 from agent_comms.registry.threads import Thread

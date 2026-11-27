@@ -13,7 +13,7 @@ from pathlib import Path
 
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.execution.imported_conversation import ImportedConversation
-from agent_comms.execution.turn_context import HistoricalInstructionProvenance
+from agent_comms.execution.context_provenance import HistoricalInstructionProvenance
 from agent_comms.installer.harness_install import Harness
 from agent_comms.nominal.field_codec import (
     FieldCodec,

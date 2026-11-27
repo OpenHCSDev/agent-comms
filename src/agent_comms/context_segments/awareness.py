@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from agent_comms.execution.turn_context import InstructionSegment, WireProvenance
+from agent_comms.execution.context_provenance import WireProvenance
+from agent_comms.execution.turn_context import InstructionSegment
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import FieldCodec

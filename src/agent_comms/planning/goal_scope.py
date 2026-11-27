@@ -5,8 +5,6 @@ from dataclasses import dataclass
 from typing import TypedDict
 
 from agent_comms.nominal.field_codec import GoalId, NullMember, SingleFieldValue
-from agent_comms.planning.goals import GoalDeclaration
-from agent_comms.planning.recorded_goal_revision import RecordedGoalRevision
 
 class FailureKey(TypedDict, total=False):
     """The attempt ledger columns a scope narrows a failure read by."""
@@ -19,13 +17,13 @@ class GoalScope:
 
     __slots__ = ()
 
-    def keeps(self, revision: RecordedGoalRevision) -> bool:
+    def keeps(self, revision) -> bool:
         return True
 
     def failure_key(self) -> FailureKey:
         return FailureKey()
 
-    def require(self, goal: GoalDeclaration) -> None:
+    def require(self, goal) -> None:
         """A check that names no goal holds for every goal."""
 
     def schedules_goal(self) -> bool:
@@ -46,13 +44,13 @@ class OneGoal(GoalScope, SingleFieldValue):
 
     goal_id: GoalId
 
-    def keeps(self, revision: RecordedGoalRevision) -> bool:
+    def keeps(self, revision) -> bool:
         return self.goal_id in {revision.before.reported_id(), revision.after.reported_id()}
 
     def failure_key(self) -> FailureKey:
         return FailureKey(goal_id=self.goal_id)
 
-    def require(self, goal: GoalDeclaration) -> None:
+    def require(self, goal) -> None:
         goal.require().require_id(self.goal_id)
 
     def schedules_goal(self) -> bool:

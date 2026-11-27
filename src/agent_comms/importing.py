@@ -27,7 +27,7 @@ from agent_comms.execution.native_entries import (
     NativeEntry,
     SessionEntry,
 )
-from agent_comms.execution.turn_context import HistoricalInstructionProvenance
+from agent_comms.execution.context_provenance import HistoricalInstructionProvenance
 from agent_comms.execution.turn_item import NativeItemId
 from agent_comms.installer.harness_install import Harness
 from agent_comms.nominal.field_codec import FieldCodec

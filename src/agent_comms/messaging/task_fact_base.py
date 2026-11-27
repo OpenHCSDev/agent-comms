@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.registry.task_owner import TaskOwner
-from agent_comms.registry.task_registry import TaskRegistry
 
 
 class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
@@ -32,5 +30,5 @@ class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
     def for_tasks(self, current: frozenset[MessageReference]) -> ExactTaskFact:
         return self
 
-    def for_owner(self, owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> ExactTaskFact:
+    def for_owner(self, owner, registry) -> ExactTaskFact:
         return self

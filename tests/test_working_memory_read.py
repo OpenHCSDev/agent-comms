@@ -5,12 +5,11 @@ import pytest
 
 from agent_comms.coordination.database import ReadableStore
 from agent_comms.coordination.working_memory_annotations import WorkingMemoryAnnotations
+from agent_comms.execution.context_provenance import FileProvenance, UnattributedProvenance
 from agent_comms.execution.turn_context import (
     ContextSpan,
     ContributionCoordinates,
-    FileProvenance,
     SystemLayerSegment,
-    UnattributedProvenance,
 )
 from agent_comms.working_memory.working_memory_labels import JevClassifier
 from working_memory_fixture import local_system

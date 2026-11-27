@@ -25,7 +25,8 @@ from agent_comms.cli_bridges.cli_protocol import Declared, HistoryRecord
 from agent_comms.cli_bridges.cli_protocol import OpenWire
 from agent_comms.cli_bridges.cli_protocol import TimestampedWire
 from agent_comms.cli_bridges.cli_protocol import WireHeader
-from agent_comms.execution.turn_context import DigestedSpan, HistoricalInstructionProvenance
+from agent_comms.execution.context_provenance import HistoricalInstructionProvenance
+from agent_comms.execution.turn_context import DigestedSpan
 from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.cli_bridges.runtime_updates import HiddenItem
 from agent_comms.cli_bridges.runtime_updates import HistoryNotice
