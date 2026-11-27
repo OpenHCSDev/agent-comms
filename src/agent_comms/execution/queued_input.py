@@ -517,7 +517,7 @@ class DirectDeliveredInput(BusDeliveredInput):
         return placed_count
 
     async def started(self, inputs: InputDrain) -> None:
-        """Read receipt is recorded durably by TurnProgress.input_started."""
+        """Delivery acknowledgement is recorded durably by TurnProgress.input_started."""
 
     async def not_started(self, inputs: InputDrain) -> None:
         await Coordination.run_worker(partial(inputs.finish_original_inputs, (self.key,)))

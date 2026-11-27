@@ -15,7 +15,7 @@ from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import (
@@ -33,8 +33,6 @@ from agent_comms.agent_backend import (
     TurnTranscriptSink,
 )
 from agent_comms.execution.agent_event import AgentEvent
-from agent_comms.execution.antigravity_transcript import ExternalTurnTranscriptSink
-from agent_comms.installer.harness_install import AntigravityAcpSession
 from agent_comms.execution.antigravity_acp import (
     AcpRpcError,
     AntigravityAcpPool,
@@ -50,7 +48,7 @@ from agent_comms.execution.antigravity_acp_events import (
     AcpTurnStreamState,
     AntigravityAcpUpdate,
 )
-from agent_comms.execution.turn_inbox import TurnInboxItem
+from agent_comms.execution.antigravity_transcript import ExternalTurnTranscriptSink
 from agent_comms.execution.backend_query import TurnInputContent
 from agent_comms.execution.child_process import ProcessState
 from agent_comms.execution.launch_runtime import LaunchRuntime
@@ -60,21 +58,33 @@ from agent_comms.execution.runtime_observations import (
     ReportedNativeSessionPath,
 )
 from agent_comms.execution.turn_failure import BackendFailed
+from agent_comms.execution.turn_inbox import TurnInboxItem
 from agent_comms.execution.turn_phase import (
     NativePhaseChanged,
     SettlingStatsPhase,
     TurnPhase,
 )
 from agent_comms.execution.unstarted_runtime import ExternalTranscriptLocation
+from agent_comms.installer.harness_install import AntigravityAcpSession
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import (
     AcpSessionId,
     AcpSessionSelection,
     InputId,
     NoAcpSessionId,
+    TurnId,
 )
 from agent_comms.pi_counts import UnreportedCount
+from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from agent_comms.registry.threads import Thread
+
+if TYPE_CHECKING:
+    from agent_comms.config_options import ConfigOptions
+    from agent_comms.execution.owned_turn import TurnDelivery
+    from agent_comms.execution.pi_commands import SettingCommand
+    from agent_comms.execution.turn_runner import TurnRunner
 
 
 @dataclass(frozen=True)
@@ -142,9 +152,9 @@ class AntigravityAcpBackend(
     async def apply_setting(
         cls,
         owner: ThreadSettingApplier,
-        configuration: object,
+        configuration: ConfigOptions,
         thread: Thread,
-        command: object,
+        command: SettingCommand,
     ) -> None:
         del configuration
         await owner.store_direct_setting(thread, command)
@@ -163,7 +173,7 @@ class AntigravityAcpBackend(
         cls,
         acknowledger: TurnInputAcknowledger,
         thread: Thread,
-        origins: tuple[object, ...],
+        origins: tuple[Message, ...],
     ) -> None:
         acknowledger.acknowledge_direct_turn_inputs(
             thread,
@@ -175,9 +185,9 @@ class AntigravityAcpBackend(
     def turn_transcript_sink(
         cls,
         root: Path,
-        incarnation: object,
-        turn_id: object,
-        opening: tuple[object, ...],
+        incarnation: ThreadIncarnation,
+        turn_id: TurnId,
+        opening: tuple[MessageReference, ...],
     ) -> TurnTranscriptSink:
         return ExternalTurnTranscriptSink.for_turn(root, incarnation, turn_id, opening)
 
@@ -188,8 +198,12 @@ class AntigravityAcpBackend(
         self._applied_thinking: str = ""
         self._lock = asyncio.Lock()
 
+    def _bound_sessions(self) -> tuple[AcpSessionId, ...]:
+        empty: tuple[AcpSessionId, ...] = ()
+        return self._acp_session.selected(empty, lambda sid: (sid,))
+
     @classmethod
-    def for_worker(cls, runner: object, session_id: AcpSessionId) -> Self:
+    def for_worker(cls, runner: TurnRunner, session_id: AcpSessionId) -> Self:
         del session_id
         return cls(AntigravityAcpPool.for_runner(runner))
 
@@ -230,7 +244,7 @@ class AntigravityAcpBackend(
         worktree: Path,
     ) -> tuple[AcpSessionId, bool, Path]:
         storage = AntigravitySessionStorage.from_db_path(Path(thread.writable_runtime.path))
-        bound_sessions = self._acp_session.selected((), lambda sid: (sid,))
+        bound_sessions = self._bound_sessions()
         if bound_sessions and self._process.alive:
             return bound_sessions[0], False, storage.db_path
         if storage.exists:
@@ -267,7 +281,7 @@ class AntigravityAcpBackend(
         self,
         thread: Thread,
         content: TurnInputContent,
-        delivery: object,
+        delivery: TurnDelivery,
     ) -> AsyncIterator[AgentEvent]:
         async with self._lock:
             native_input_id = InputId.mint()
@@ -303,7 +317,7 @@ class AntigravityAcpBackend(
                     thought_level=self._applied_thinking,
                 )
                 last_phase: TurnPhase = state.phase
-                yield NativePhaseChanged(last_phase, self._process.process_identity)
+                yield NativePhaseChanged(last_phase, self._process.require_process_identity())
                 live = await self._process.open_prompt(session_id, content.acp_prompt_blocks())
                 inbox_task: asyncio.Task[TurnInboxItem] = asyncio.create_task(delivery.inbox.get())
                 frames_task: asyncio.Task[tuple[AcpPromptFrame, ...]] = asyncio.create_task(
@@ -336,7 +350,7 @@ class AntigravityAcpBackend(
                                 if state.phase != last_phase:
                                     last_phase = state.phase
                                     yield NativePhaseChanged(
-                                        last_phase, self._process.process_identity
+                                        last_phase, self._process.require_process_identity()
                                     )
                             frames_task = asyncio.create_task(live.next_frames())
                 except asyncio.CancelledError:
@@ -349,7 +363,9 @@ class AntigravityAcpBackend(
                             with suppress(asyncio.CancelledError):
                                 await pending_task
                     live.close()
-                yield NativePhaseChanged(SettlingStatsPhase(), self._process.process_identity)
+                yield NativePhaseChanged(
+                    SettlingStatsPhase(), self._process.require_process_identity()
+                )
                 yield events.StreamSettled()
                 yield events.Done(text=state.full_text, ok=True)
             except (AcpRpcError, ConnectionError, TimeoutError) as error:
@@ -359,13 +375,13 @@ class AntigravityAcpBackend(
 
     async def abort[Result](self, owner: asyncio.Task[Result]) -> None:
         del owner
-        for active in self._acp_session.selected((), lambda sid: (sid,)):
+        for active in self._bound_sessions():
             with suppress(AcpRpcError):
                 await self._process.cancel(active)
 
     async def close_idle(self) -> None:
         async with self._lock:
-            bound_sessions = self._acp_session.selected((), lambda sid: (sid,))
+            bound_sessions = self._bound_sessions()
             self._acp_session = NoAcpSessionId()
             self._applied_model = ""
             self._applied_thinking = ""

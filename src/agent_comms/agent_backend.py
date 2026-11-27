@@ -52,8 +52,21 @@ from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.transport.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
+    from agent_comms import agent_events as events
+    from agent_comms.config_options import ConfigOptions
     from agent_comms.execution.owned_turn import TurnDelivery
+    from agent_comms.execution.pi_commands import SettingCommand
+    from agent_comms.execution.transcript_sources import TranscriptCursor
+    from agent_comms.execution.turn_lease import TurnLeaseFence
     from agent_comms.execution.turn_runner import TurnRunner
+    from agent_comms.messaging.message_reference import MessageReference
+    from agent_comms.messaging.messages import Message
+    from agent_comms.messaging.routing import TurnRouting
+    from agent_comms.nominal.field_codec import TurnId
+    from agent_comms.registry.thread_identity import (
+        RecordedThreadIncarnation,
+        ThreadIncarnation,
+    )
     from agent_comms.registry.threads import Thread
 
 
@@ -64,12 +77,12 @@ class TurnPublicationRecorder(ABC):
     def record_native_turn_publication(
         self,
         *,
-        lease: object,
-        checkpoint: object,
-        routing: object,
-        published: tuple[object, ...],
-        incarnation: object,
-        thread: object,
+        lease: TurnLeaseFence,
+        checkpoint: TranscriptCursor,
+        routing: TurnRouting,
+        published: tuple[MessageReference, ...],
+        incarnation: RecordedThreadIncarnation,
+        thread: Thread,
     ) -> None: ...
 
 
@@ -78,11 +91,11 @@ class ThreadSettingApplier(ABC):
 
     @abstractmethod
     async def configure_pi_thread(
-        self, configuration: object, thread: object, command: object
+        self, configuration: ConfigOptions, thread: Thread, command: SettingCommand
     ) -> None: ...
 
     @abstractmethod
-    async def store_direct_setting(self, thread: object, command: object) -> None: ...
+    async def store_direct_setting(self, thread: Thread, command: SettingCommand) -> None: ...
 
 
 class OwnedInboxDrainer(ABC):
@@ -92,17 +105,17 @@ class OwnedInboxDrainer(ABC):
     async def drain_private_inbox(self, session_id: AcpSessionId) -> None: ...
 
     @abstractmethod
-    async def drain_direct_inbox(self, session_id: AcpSessionId, thread: object) -> None: ...
+    async def drain_direct_inbox(self, session_id: AcpSessionId, thread: Thread) -> None: ...
 
 
 class TurnInputAcknowledger(ABC):
-    """Composition-root capability recording durable read receipts for direct backend inputs."""
+    """Composition-root capability recording durable delivery acknowledgements for direct inputs."""
 
     @abstractmethod
     def acknowledge_direct_turn_inputs(
         self,
-        thread: object,
-        origins: tuple[object, ...],
+        thread: Thread,
+        origins: tuple[Message, ...],
         *,
         bridge: type[HarnessSession],
     ) -> None: ...
@@ -117,16 +130,16 @@ class TurnTranscriptSink:
     async def on_chunk(self, text: str) -> None:
         del text
 
-    async def on_tool_start(self, event: object) -> None:
+    async def on_tool_start(self, event: events.ToolStart) -> None:
         del event
 
-    async def on_tool_end(self, event: object) -> None:
+    async def on_tool_end(self, event: events.ToolEnd) -> None:
         del event
 
-    def on_committed_progress(self, text: str, published: tuple[object, ...]) -> None:
+    def on_committed_progress(self, text: str, published: tuple[MessageReference, ...]) -> None:
         del text, published
 
-    def on_finish(self, published: tuple[object, ...]) -> None:
+    def on_finish(self, published: tuple[MessageReference, ...]) -> None:
         del published
 
     def on_abort(self) -> None:
@@ -410,9 +423,9 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     async def apply_setting(
         cls,
         owner: ThreadSettingApplier,
-        configuration: object,
+        configuration: ConfigOptions,
         thread: Thread,
-        command: object,
+        command: SettingCommand,
     ) -> None:
         """Apply one runtime setting change (`SetModel` or `SetThinkingLevel`) for this backend."""
         await owner.configure_pi_thread(configuration, thread, command)
@@ -433,9 +446,9 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         cls,
         acknowledger: TurnInputAcknowledger,
         thread: Thread,
-        origins: tuple[object, ...],
+        origins: tuple[Message, ...],
     ) -> None:
-        """Record model-context read receipts when a backend starts executing bus origins."""
+        """Record model-context delivery acknowledgements when a backend starts executing origins."""
         del acknowledger, thread, origins
 
     async def context_for_input(self, thread, context):
@@ -500,9 +513,9 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     def turn_transcript_sink(
         cls,
         root: Path,
-        incarnation: object,
-        turn_id: object,
-        opening: tuple[object, ...],
+        incarnation: ThreadIncarnation,
+        turn_id: TurnId,
+        opening: tuple[MessageReference, ...],
     ) -> TurnTranscriptSink:
         del root, incarnation, turn_id, opening
         return TurnTranscriptSink()

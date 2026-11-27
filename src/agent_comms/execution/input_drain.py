@@ -90,6 +90,8 @@ from agent_comms.input_attempt import (
 )
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.read_basis import DisplayBasis
 from agent_comms.messaging.routing import ScheduledTurn
 from agent_comms.messaging.watched import ChangeSignal, FileLifetimeSource, FileSource
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -1515,7 +1517,7 @@ class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEve
         if not turn.has_source():
             return
 
-        def capture_pending() -> tuple[tuple[Thread, tuple[Message, ...], object], ...]:
+        def capture_pending() -> tuple[tuple[Thread, tuple[Message, ...], DisplayBasis], ...]:
             if self.comms.owners.maintenance.read().turn_pending:
                 return ()
             snapshot = self.comms.registry.snapshot()

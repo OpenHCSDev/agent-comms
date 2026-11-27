@@ -14,10 +14,12 @@ if TYPE_CHECKING:
     from agent_comms.execution.input_drain import InputDrain
     from agent_comms.execution.turn_input_source import TurnInputSource
     from agent_comms.input_attempt import StartedInput as StartedRow
+    from agent_comms.messaging.messages import Message
 
 
 class StartedInput:
     notice_text: ClassVar[str | None] = None
+    origins: ClassVar[tuple[Message, ...]] = ()
 
     def started_update_of(self, row: StartedRow, update: InputStartedUpdate) -> InputStartedUpdate:
         return update

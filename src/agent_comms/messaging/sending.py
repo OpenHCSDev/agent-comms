@@ -220,7 +220,7 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         *,
         bridge: type[HarnessSession],
     ) -> tuple[MessageReference, ...]:
-        """Record durable model-context read receipts for a direct backend turn."""
+        """Record durable model-context delivery acknowledgements for a direct backend turn."""
         refs = tuple(dict.fromkeys(origin.reference for origin in origins if origin.seq > 0))
         if not refs:
             return ()

@@ -88,7 +88,10 @@ from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_provenance import RegistryProvenance
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.registry_tables import RegistryRowRevision
-from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
 from agent_comms.registry.thread_presentation import ThreadOwnerBinding, ThreadPresentation
 from agent_comms.registry.thread_text import ThreadParent, ThreadText
 from agent_comms.registry.threads import Thread, ThreadProvenance
