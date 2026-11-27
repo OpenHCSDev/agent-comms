@@ -39,10 +39,12 @@ from agent_comms.planning.goal_actions import (
     GoalActionContext,
     GoalPrecondition,
     GoalPublicationContext,
-    HeadReviewedOrderGoalAction,
     RuntimeInvocable,
-    SentBackOrderGoalAction,
     SetGoalAction,
+)
+from agent_comms.planning.order_goal_actions import (
+    HeadReviewedOrderGoalAction,
+    SentBackOrderGoalAction,
 )
 from agent_comms.planning.goal_attempts import GoalAttemptStore
 from agent_comms.planning.goal_events import GoalChange, GoalReadFailed
@@ -187,6 +189,10 @@ class Goals(
     GoalStoreSource[GoalAttemptStore],
     GoalReadyGrantSource[NativeThread, Generation],
 ):
+    @cached_property
+    def todos(self) -> TodoStore:
+        return TodoStore(self.root)
+
     def held_orders(self) -> HeldOrders:
         """Capture held work from the goal store against one current registry cut."""
         return HeldOrders.of(self.todos, self.registry.snapshot())

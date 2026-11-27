@@ -22,11 +22,13 @@ from agent_comms.nominal.field_codec import AcpSessionId, InputId, OrderId
 from agent_comms.planning.goal_actions import (
     BlockedGoalAction,
     ClearGoalAction,
-    CreateProblemGoalAction,
-    OrderGoalAction,
     OwnerInvocable,
     PausedGoalAction,
     SetGoalAction,
+)
+from agent_comms.planning.order_goal_actions import (
+    CreateProblemGoalAction,
+    OrderGoalAction,
 )
 from agent_comms.planning.goal_states import ActiveGoal
 from agent_comms.projects.checkouts import Checkout

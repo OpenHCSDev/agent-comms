@@ -63,10 +63,12 @@ from agent_comms.planning.goal_actions import (
     ActiveGoalAction,
     ChokeholdPausedGoalAction,
     CompliedGoalAction,
-    CreateProblemGoalAction,
     OwnerInvocable,
-    ReissuedOrderGoalAction,
     SetGoalAction,
+)
+from agent_comms.planning.order_goal_actions import (
+    CreateProblemGoalAction,
+    ReissuedOrderGoalAction,
 )
 from agent_comms.planning.goal_presentation import RunnableExecution
 from agent_comms.planning.goal_states import ActiveGoal

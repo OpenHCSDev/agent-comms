@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from functools import cached_property
 from pathlib import Path
 
 from agent_comms.input_attempt import ReservedInput
@@ -17,7 +16,6 @@ from agent_comms.planning.goal_wait_recovery import (
 )
 from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goal_work import GoalWorkSource
-from agent_comms.planning.orders import TodoStore
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import Thread
@@ -29,10 +27,6 @@ class GoalRecords(GoalStoreAccess, GoalWaitRecovery, GoalWorkSource):
         self.registry = registry
         self.bus = bus
         self.dispositions = InputDispositions(root)
-
-    @cached_property
-    def todos(self) -> TodoStore:
-        return TodoStore(self.root)
 
     def _goal_input_review(
         self, thread: Thread, goal_id: GoalId, wait_for: Sequence[str]

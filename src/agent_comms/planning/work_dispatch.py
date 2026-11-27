@@ -14,10 +14,10 @@ from typing import Self
 
 from agent_comms.comms import Comms
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.planning.goal_actions import (
+from agent_comms.planning.goal_actions import GoalActionContext
+from agent_comms.planning.order_goal_actions import (
     CreateProblemGoalAction,
     FiledProblem,
-    GoalActionContext,
     OrderGoalAction,
     ProblemOrder,
     ProblemOrderGoalAction,

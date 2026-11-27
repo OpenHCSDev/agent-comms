@@ -426,12 +426,20 @@ class RootFile:
         """Each declaring owner and its directory, once across composed capabilities."""
         cls.load_declarations()
         for family in cls.families():
+            filename = getattr(family, "filename", None)
+            if filename is not None and any(
+                base is not cls
+                and issubclass(base, cls)
+                and getattr(base, "filename", None) == filename
+                for base in family.__mro__[1:]
+            ):
+                continue
             yield from family.root_declaration(root)
 
     @classmethod
     def root_declaration(cls, root: Path) -> tuple[tuple[type[Self], Path], ...]:
         """A bus-relative declaration contributes its location to the bus inventory."""
-        return ((cls, cls.directory_in(root)),) if "filename" in vars(cls) else ()
+        return ((cls, cls.directory_in(root)),) if hasattr(cls, "filename") else ()
 
     @classmethod
     def existing_in(cls, root: Path) -> dict[Path, type[Self]]:

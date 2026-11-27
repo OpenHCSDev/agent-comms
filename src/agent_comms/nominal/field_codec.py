@@ -3669,6 +3669,21 @@ def _validate_json_value(value: object) -> object:
         return value
     if isinstance(value, str):
         return str(value)
+    if isinstance(value, int):
+        return int(value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("Expected a JSON value with string keys and finite numbers")
+        return float(value)
+    if isinstance(value, dict):
+        result: dict[str, object] = {}
+        for key, item in value.items():
+            if type(key) is not str and not isinstance(key, str):
+                raise ValueError("Expected a JSON value with string keys and finite numbers")
+            result[str(key)] = _validate_json_value(item)
+        return result
+    if isinstance(value, list):
+        return [_validate_json_value(item) for item in value]
     raise ValueError("Expected a JSON value with string keys and finite numbers")
 
 

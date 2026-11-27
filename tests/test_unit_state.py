@@ -21,7 +21,7 @@ from agent_comms.execution.turn_item import (
 )
 from agent_comms.installer.runtime_record import CorePackage
 from agent_comms.nominal.field_codec import OrderId, ToolCallId
-from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.order_goal_actions import CreateProblemGoalAction
 from agent_comms.planning.order_runs import ApplicationOrderRun
 from agent_comms.planning.orders import (
     DeliverTodo,

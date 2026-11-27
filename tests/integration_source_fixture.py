@@ -12,7 +12,7 @@ from module_layers import MaterializedClients
 
 from agent_comms.comms import Comms
 from agent_comms.projects.integration import IntegrationCheckout, IntegrationRun
-from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.order_goal_actions import CreateProblemGoalAction
 from agent_comms.planning.orders import (
     DraftListedPullRequest,
     PullRequests,

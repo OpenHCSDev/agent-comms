@@ -33,7 +33,7 @@ from agent_comms.heartbeat_subjects import TeamHistory, TeammateSubject
 from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.nominal.field_codec import FieldCodec, OrderId
 from agent_comms.nominal.text_digest import TextDigest
-from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.order_goal_actions import CreateProblemGoalAction
 from agent_comms.planning.orders import (
     StoredHeadReview,
     ProgressRead,

@@ -24,7 +24,7 @@ from agent_comms.errors import TodoError
 from agent_comms.execution.test_lease import TestLease
 from agent_comms.installer.runtime_resolution import PrivateUvProject, StackSources
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.order_goal_actions import CreateProblemGoalAction
 from agent_comms.planning.order_words import VerdictReason
 from agent_comms.planning.orders import (
     DraftListedPullRequest,

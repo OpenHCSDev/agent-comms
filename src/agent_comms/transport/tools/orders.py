@@ -33,7 +33,7 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
 )
 from agent_comms.planning.delivery_evidence import TodoProblems
-from agent_comms.planning.goal_actions import (
+from agent_comms.planning.order_goal_actions import (
     CreateProblemGoalAction,
     OrderGoalAction,
 )
