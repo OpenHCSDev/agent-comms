@@ -32,11 +32,10 @@ from agent_comms.execution.native_turn_context import (
     SentSegment,
 )
 from agent_comms.execution.pi_rpc import PiRpcChannel
+from agent_comms.execution.context_provenance import JournalProvenance, NativeProvenance
 from agent_comms.execution.turn_context import (
     ContextManifest,
     ContextRecording,
-    JournalProvenance,
-    NativeProvenance,
     ObservedDispatchRequest,
     RecordedContextManifest,
     RecordedContextPredecessor,

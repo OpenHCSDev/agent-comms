@@ -15,11 +15,14 @@ from agent_comms.messaging.message_reads import (
     MessageIdentityRead,
     MessageReferencesRead,
 )
-from agent_comms.messaging.messages import BusRecord, ClaimMessage, Message
-from agent_comms.messaging.retained_task_facts import ClaimTaskFact
-from agent_comms.messaging.retained_task_facts import InputTaskFact
-from agent_comms.messaging.retained_task_facts import RetainedTaskFacts
-from agent_comms.messaging.retained_task_facts import UserSourceTaskFact
+from agent_comms.messaging.messages import (
+    BusRecord,
+    ClaimMessage,
+    ClaimTaskFact,
+    Message,
+    UserSourceTaskFact,
+)
+from agent_comms.messaging.retained_task_facts import InputTaskFact, RetainedTaskFacts
 from agent_comms.registry.task_owner import TaskOwner
 from agent_comms.registry.task_registry import TaskRegistry
 

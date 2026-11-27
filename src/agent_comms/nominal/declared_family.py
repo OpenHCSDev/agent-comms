@@ -234,7 +234,14 @@ class DeclaredFamily(FamilyMember, metaclass=FamilyMeta):
 
     @classmethod
     def _named_member(cls, name: object) -> type[DeclaredFamily]:
-        return cls.__registry__[cast(Hashable, name)]
+        registry = cls.__registry__
+        if (
+            isinstance(registry, dict)
+            and isinstance(name, Hashable)
+            and dict.__contains__(registry, name)
+        ):
+            return dict.__getitem__(registry, name)
+        return registry[cast(Hashable, name)]
 
     @classmethod
     def acquire_declarations(cls) -> None:
@@ -341,6 +348,15 @@ class DeclaredFamily(FamilyMember, metaclass=FamilyMeta):
 
 
     @classmethod
+    def is_leaf_document(cls) -> bool:
+        """A directly declared leaf document is its own only declared member."""
+        return (
+            cls.declared_name is not None
+            and cls.decodes_tagged_records()
+            and cls._members == (cls,)
+        )
+
+    @classmethod
     def declared_position(cls) -> int:
         root = cls.family_root
         return root.members_with(root).index(cls)
@@ -387,6 +403,19 @@ class ModuleMembers(AcquiredMembers):
         except ModuleNotFoundError as error:
             if error.name != module:
                 raise
+
+    @classmethod
+    def is_leaf_document(cls) -> bool:
+        """Module-backed members own one module each; inspect already-declared
+        subclasses without walking sibling command modules."""
+        if cls.declared_name is None or not cls.decodes_tagged_records():
+            return False
+        registry = cls.__registry__
+        if isinstance(registry, dict):
+            return tuple(
+                member for member in dict.values(registry) if issubclass(member, cls)
+            ) == (cls,)
+        return super().is_leaf_document()
 
     @classmethod
     def validate_module_name(cls) -> None:

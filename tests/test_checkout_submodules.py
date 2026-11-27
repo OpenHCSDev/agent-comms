@@ -29,9 +29,9 @@ from agent_comms.projects.checkouts import (
     DetachedStart,
     LaunchCheckout,
     NewBranchStart,
-    RepositoryReads,
     ScratchCheckout,
 )
+from agent_comms.projects.git_history import RepositoryReads
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName

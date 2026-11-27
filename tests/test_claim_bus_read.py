@@ -30,12 +30,8 @@ from agent_comms.execution.selected.claim import (
     write_selected_claimed_file,
 )
 from agent_comms.execution.selected.source_batch import SelectedSource
-from agent_comms.execution.turn_context import (
-    ContextManifest,
-    OwnerProvenance,
-    RecordedContextTurn,
-    SegmentManifest,
-)
+from agent_comms.execution.context_provenance import OwnerProvenance
+from agent_comms.execution.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from agent_comms.messaging.message_page import ConversationMessagePageRequest, MessagePageRequest

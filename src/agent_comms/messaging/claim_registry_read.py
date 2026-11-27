@@ -4,7 +4,7 @@ from abc import abstractmethod
 from collections.abc import Iterable, Iterator
 
 from agent_comms.registry.presence_reads import PresenceThread
-from agent_comms.registry.task_registry import ClaimGenerationRead
+from agent_comms.registry.claim_generation_read import ClaimGenerationRead
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 
 

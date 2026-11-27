@@ -213,33 +213,55 @@ class RouteCounts(ABC):
         JOIN unaddressed_since AS unaddressed ON unaddressed.name=target.actor
             AND unaddressed.since IS NOT NULL
         WHERE {DeliveryScope.delivers_sql("target.actor", "route.sender", "alias.canonical")}
+    ), actor_all_floor AS MATERIALIZED (
+        SELECT actor,max(high_water) AS hw FROM actor_floor WHERE target='' GROUP BY actor
+    ), actor_target_floor AS MATERIALIZED (
+        SELECT target.actor,target.target,
+            max(coalesce(target_floor.high_water,0),coalesce(all_floor.hw,0)) AS hw
+        FROM actor_targets AS target
+        LEFT JOIN actor_floor AS target_floor
+            ON target_floor.actor=target.actor AND target_floor.target=target.target
+        LEFT JOIN actor_all_floor AS all_floor ON all_floor.actor=target.actor
+    ), actor_min_floor AS MATERIALIZED (
+        SELECT recipient.key AS actor,recipient.value AS lookup,
+            coalesce(min(floor.hw),0) AS min_hw,viewer.since AS viewer_since
+        FROM recipients AS recipient
+        JOIN addressed_since AS viewer ON viewer.name=recipient.key
+        LEFT JOIN actor_target_floor AS floor ON floor.actor=recipient.key
+        GROUP BY recipient.key
+    ), addressed_rows AS MATERIALIZED (
+        SELECT row.seq,row.target,row.sender,row.timestamp,alias.canonical
+        FROM "{BusRouteCounts.declared_name}" AS row
+        JOIN route_keys AS route ON route.target=row.target
+            AND route.sender=row.sender AND route.sender_lookup IS row.sender_lookup
+        LEFT JOIN aliases AS alias ON alias.name=row.sender
+        WHERE row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
+            AND row.timestamp>=route.since
     )'''
 
     _requests = f'''requests AS NOT MATERIALIZED (
-        SELECT recipient.key AS actor,row.seq,row.target,row.sender
-        FROM recipients AS recipient
+        SELECT viewer_floor.actor,row.seq,row.target,row.sender
+        FROM actor_min_floor AS viewer_floor
         CROSS JOIN "{ReceivedSource.declared_name}" AS addressed
-            ON addressed.lookup=recipient.value
-                AND {ReadCursor.above_floor("addressed.seq", "recipient.key", "''")}
-        CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.seq=addressed.seq
-            AND row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
-        CROSS JOIN route_keys AS route ON route.target=row.target
-            AND route.sender=row.sender AND route.sender_lookup IS row.sender_lookup
-        CROSS JOIN actor_targets AS target ON target.actor=recipient.key AND target.target=row.target
-        CROSS JOIN addressed_since AS viewer ON viewer.name=recipient.key
-        LEFT JOIN aliases AS alias ON alias.name=row.sender
-        WHERE row.timestamp>=max(route.since,viewer.since)
-            AND {DeliveryScope.delivers_sql("recipient.key", "row.sender", "alias.canonical")}
-            AND row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
-            AND {ReadCursor.above_floor("row.seq", "recipient.key", "row.target")}
+            ON addressed.lookup=viewer_floor.lookup
+                AND addressed.seq>max(viewer_floor.min_hw,(SELECT after FROM arguments))
+                AND addressed.seq<=(SELECT through FROM arguments)
+        CROSS JOIN addressed_rows AS row ON row.seq=addressed.seq
+        CROSS JOIN actor_target_floor AS target_floor
+            ON target_floor.actor=viewer_floor.actor AND target_floor.target=row.target
+        WHERE row.seq>target_floor.hw
+            AND row.timestamp>=viewer_floor.viewer_since
+            AND {DeliveryScope.delivers_sql("viewer_floor.actor", "row.sender", "row.canonical")}
         UNION ALL
         SELECT route.actor,row.seq,row.target,row.sender
         FROM route_since AS route
+        CROSS JOIN actor_target_floor AS target_floor
+            ON target_floor.actor=route.actor AND target_floor.target=route.target
         CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.target=route.target
             AND row.sender=route.sender AND row.sender_lookup IS route.sender_lookup
         WHERE route.unaddressed IS NOT NULL AND row.timestamp>=route.unaddressed
-            AND row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
-            AND {ReadCursor.above_floor("row.seq", "route.actor", "row.target")}
+            AND row.seq>max(target_floor.hw,(SELECT after FROM arguments))
+            AND row.seq<=(SELECT through FROM arguments)
             AND NOT EXISTS (SELECT 1 FROM "{ReceivedSource.declared_name}" AS addressed
                 WHERE addressed.lookup=route.recipient_lookup AND addressed.seq=row.seq)
     )'''

@@ -9,7 +9,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.execution.turn_context import Sha256Digest
+from agent_comms.execution.context_provenance import Sha256Digest
 from agent_comms.installer.harness_install import replace_link
 from agent_comms.projects.checkouts import Checkout, CheckoutMove
 from agent_comms.projects.repo import Repo

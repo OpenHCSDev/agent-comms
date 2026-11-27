@@ -35,13 +35,13 @@ from agent_comms.messaging.messages import (
     Claimed,
     ClaimNoticeKind,
     ClaimOperations,
+    ClaimTaskFact,
     HeldResources,
     InfoKind,
     Message,
     ReplayedHolders,
     StoredHolders,
 )
-from agent_comms.messaging.retained_task_facts import ClaimTaskFact
 from agent_comms.nominal.field_codec import ClaimId, FieldCodec, InputId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration

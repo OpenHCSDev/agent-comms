@@ -14,13 +14,13 @@ from agent_comms.context_segments.wake_values import WakeWorkContext
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.responses import ResponseObligation
+from agent_comms.execution.context_provenance import WireProvenance
 from agent_comms.execution.turn_context import (
     ContextSegment,
     InstructionFile,
     InstructionSegment,
     NextContextTurn,
     UserInputSegment,
-    WireProvenance,
     WireSources,
 )
 from agent_comms.messaging.bus_publication import Delivered
@@ -159,7 +159,7 @@ class DeliveredMessageSegment(WireSources, InstructionSegment):
 
 
 @dataclass(frozen=True)
-class MessageDelivery(DeliveredContext):
+class MessageDelivery(DeliveredContext[ContextSegment]):
     """One committed original, framed by its task on either input route."""
 
     source: Delivered

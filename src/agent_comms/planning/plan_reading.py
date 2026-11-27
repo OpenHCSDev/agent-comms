@@ -20,7 +20,8 @@ from agent_comms.planning.phase_evidence import (
     PhaseEvidence,
     UnreadableEvidenceError,
 )
-from agent_comms.projects.checkouts import Checkout, CheckoutHistory
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import CheckoutHistory
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 
@@ -102,7 +103,7 @@ class PlanReadings:
     def read(self, repo: Repo, todos: tuple[Todo, ...],
              evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
         return self.observe_reading(self.prepare_reading(
-            repo, todos, evidence, history=Checkout(repo.checkout).read()), evidence)
+            repo, todos, evidence, history=CheckoutHistory.capture(Checkout(repo.checkout))), evidence)
 
     def finish_pass(self) -> None:
         """An ordinary command releases its reading when its caller does."""

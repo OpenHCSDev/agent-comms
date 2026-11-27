@@ -2,14 +2,12 @@
 
 from abc import ABC, abstractmethod
 
-from agent_comms.execution.turn_context import ContextSegment
 
-
-class DeliveredContext(ABC):
+class DeliveredContext[Segment](ABC):
     __slots__ = ()
 
     @abstractmethod
-    def delivered(self) -> ContextSegment: ...
+    def delivered(self) -> Segment: ...
 
 
 class TeamObservation(ABC):

@@ -25,8 +25,8 @@ from agent_comms.planning.orders import (
     ProgressRead,
     ProgressSource,
 )
-from agent_comms.projects.checkouts import (
-    Checkout,
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import (
     CheckoutStatus,
     CommitsNaming,
     EveryCommit,

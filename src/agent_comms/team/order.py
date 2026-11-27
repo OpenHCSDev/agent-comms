@@ -112,7 +112,8 @@ from agent_comms.projects.change_report import (
     NoSourceReference,
     RegisteredRoots,
 )
-from agent_comms.projects.checkouts import Checkout, RepositoryReads
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import RepositoryReads
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.slop import Slop

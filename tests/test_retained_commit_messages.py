@@ -6,8 +6,9 @@ from unittest.mock import Mock, patch
 import pytest
 
 import fixture_git
-from agent_comms.projects.checkouts import (
-    Checkout,
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import (
+    CheckoutHistory,
     CommitMessages,
     CommitsNaming,
     GitCommit,
@@ -90,7 +91,7 @@ def test_real_changed_ref_keeps_old_cut_and_reuses_unchanged_postings(tmp_path: 
         assert len(tuple(following.commits(('main',), selected=CommitsNaming('P2')))) == 1
     added = git(main, 'rev-parse', 'HEAD').strip()
     assert [call.args[0].split('\0', 1)[0] for call in decoded.call_args_list] == [added]
-    fresh = Checkout(main).read().graph
+    fresh = CheckoutHistory.capture(Checkout(main)).graph
     assert tuple(following.graph.items()) == tuple(fresh.items())
     assert following.graph[old_answer[0].sha] is earlier.graph[old_answer[0].sha]
     assert following.messages.word_names['p1'] is old_words['p1']

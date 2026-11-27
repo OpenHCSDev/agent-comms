@@ -49,6 +49,7 @@ from agent_comms.planning.phase_evidence import MainTree
 from agent_comms.planning.plan_phase_base import PlanPhase
 from agent_comms.planning.plan_reading import PlanReading
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import CheckoutHistory
 from agent_comms.projects.head_review import Side as CutSide
 from agent_comms.projects.repo import Repo
 from agent_comms.storage import locked_store, store_files, typed_table
@@ -228,7 +229,7 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
     def reading(path: Path, commit: str) -> PlanReading:
         """The plan phases as the commit declares them, read once per checkout and commit."""
         return PlanReading((), MainTree(
-            Repo.of(path), commit, NominalCensus(), history=Checkout(path).read()))
+            Repo.of(path), commit, NominalCensus(), history=CheckoutHistory.capture(Checkout(path))))
 
     def failing_guards(self, commit: str) -> frozenset[type[PlanPhase]]:
         reading = self.reading(self.path, commit)

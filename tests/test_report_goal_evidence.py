@@ -8,7 +8,7 @@ import pytest
 from agent_comms.coordination.errors import Refused
 from agent_comms.errors import GoalRefused
 from agent_comms.execution.owner_protocol import OwnerFailure, OwnerLine
-from agent_comms.execution.turn_context import FileProvenance
+from agent_comms.execution.context_provenance import FileProvenance
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goals import ProblemGoalOrder

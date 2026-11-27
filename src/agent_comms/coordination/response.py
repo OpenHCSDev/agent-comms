@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Type
+from typing import Type
 
 from agent_comms.coordination.cohort_schema import ClaimBatchAcknowledgements, CohortTable
 from agent_comms.coordination.coordinator import Coordination
@@ -38,7 +38,10 @@ from agent_comms.coordination.tables.publications import (
     PublicationEvidence,
     PublicationIntents,
 )
-from agent_comms.coordination.tables.response_schema import ResponseTable
+from agent_comms.coordination.tables.response_schema import (
+    PublicationAppendDispatches,
+    ResponseTable,
+)
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.private_send_rules import RunningTurnRegistryCheck
@@ -53,55 +56,17 @@ from agent_comms.messaging.messages import (
 )
 from agent_comms.messaging.publisher import ResponseWrites
 from agent_comms.messaging.response_conversation import ResponseConversation
-from agent_comms.nominal.field_codec import MessageId, RootId, ThreadLookup
+from agent_comms.nominal.field_codec import MessageId, ThreadLookup
 from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.storage.locked_store import RegistryFile
-from agent_comms.storage.typed_table import (
-    Column,
-    ForeignKey,
-    SqlValue,
-    TypedRow,
-    WithoutRowid,
-)
+from agent_comms.storage.typed_table import SqlValue, TypedRow
 
-@dataclass(frozen=True)
-class PublicationAppendDispatches(ResponseTable, WithoutRowid):
-    execution_id: Annotated[str, Column(primary_key=True)]
-    exact_target: Annotated[
-        str, Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")
-    ]
-    wire_root_id: RootId
-    owner_generation: Annotated[int, Column(check="owner_generation>0")]
-    attempt_ordinal: Annotated[int, Column(check="attempt_ordinal>0")]
-    dispatched_at_ms: Annotated[int, Column(check="dispatched_at_ms>=0")]
+class ResponseDispatches:
+    """Coordinator-side dispatch proof and retained keyed-response completion."""
 
-    @classmethod
-    def references(cls):
-        return (ForeignKey(columns=("execution_id", "exact_target"), target=PublicationIntents,
-                          target_columns=("execution_id", "exact_target")),)
-
-    def matches(self, wire_root_id: RootId, fence: OwnerFence, exact_target: str) -> bool:
-        return self.matches_attempt(
-            wire_root_id, fence.execution_id, fence.owner_generation,
-            fence.attempt_ordinal, exact_target,
-        )
-
-    def matches_attempt(
-        self, wire_root_id: RootId, execution_id: str, owner_generation: int,
-        attempt_ordinal: int, exact_target: str,
-    ) -> bool:
-        return self == PublicationAppendDispatches(
-            execution_id=execution_id,
-            exact_target=exact_target,
-            wire_root_id=wire_root_id,
-            owner_generation=owner_generation,
-            attempt_ordinal=attempt_ordinal,
-            dispatched_at_ms=self.dispatched_at_ms,
-        )
-
-    @classmethod
-    def unattempted(cls, store: Coordination, bus: MessageBus, snapshot: RecoverySnapshot) -> bool:
+    @staticmethod
+    def unattempted(store: Coordination, bus: MessageBus, snapshot: RecoverySnapshot) -> bool:
         """Prove every frozen reply stayed before the first append barrier.
 
         The acquired owner-loss capability calls this inside its settlement
@@ -111,8 +76,10 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
         if not store.session._connection.in_transaction:
             raise CoordinationError("unattempted response proof requires the settlement transaction")
         return all(
-            cls.one(store.session._connection, execution_id=intent.execution_id,
-                    exact_target=intent.exact_target) is None
+            PublicationAppendDispatches.one(
+                store.session._connection, execution_id=intent.execution_id,
+                exact_target=intent.exact_target,
+            ) is None
             and intent.published_message(bus.bus) is None
             for intent in snapshot.publication_intents
         )
@@ -162,7 +129,7 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
                         frozen.exact_target, boundary.registry
                     )
                     attempt = snapshot.require_current_attempt()
-                    dispatch = cls.one(
+                    dispatch = PublicationAppendDispatches.one(
                         db, execution_id=current_id, exact_target=frozen.exact_target
                     )
                     if dispatch is None:
@@ -176,18 +143,20 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
                     if matched is None:
                         raise CoordinationError("no keyed bus acknowledgement; no resend authorized")
                     completed.append(
-                        dispatch.complete(store, boundary, snapshot, intent, obligation, matched)
+                        cls.complete(dispatch, store, boundary, snapshot, intent, obligation, matched)
                     )
         return tuple(completed)
 
+    @staticmethod
     def complete(
-        self, store: Coordination, boundary, snapshot: RecoverySnapshot,
+        dispatch: PublicationAppendDispatches,
+        store: Coordination, boundary, snapshot: RecoverySnapshot,
         intent: PublicationIntents, obligation: ResponseObligation, matched: Message,
     ) -> RecoverySnapshot:
         """Record one exact durable keyed row and finish its original attempt."""
         attempt = snapshot.require_current_attempt()
-        if not self.matches_attempt(
-            self.wire_root_id, snapshot.execution.execution_id,
+        if not dispatch.matches_attempt(
+            dispatch.wire_root_id, snapshot.execution.execution_id,
             attempt.owner_generation, attempt.attempt_ordinal, intent.exact_target,
         ):
             raise IdentityConflict("response dispatch belongs to another root or owner")
@@ -280,7 +249,7 @@ class LiveResponseOwner(RegistryOwner):
             self.require_snapshot(
                 boundary.registry, "response owner changed before retained resolution"
             )
-            return PublicationAppendDispatches.resolve_retained(
+            return ResponseDispatches.resolve_retained(
                 store, bus, boundary, owner_lookup=self.recipient_lookup,
             )
 
@@ -580,7 +549,7 @@ def _settle_fenced_response(
                     intent, conversation=conversation, registry_snapshot=registry_snapshot, activity=boundary.activity
                 )
             return Applied(
-                dispatch.complete(store, boundary, snapshot, intent, obligation, matched)
+                ResponseDispatches.complete(dispatch, store, boundary, snapshot, intent, obligation, matched)
             )
 
 

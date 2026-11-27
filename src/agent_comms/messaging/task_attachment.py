@@ -15,9 +15,9 @@ from dataclasses import dataclass
 
 from agent_comms.cli_bridges.harness_delivery_states import Outcome
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.context_provenance import Provenance, WireProvenance
 from agent_comms.execution.delivers_input import DeliversInput
 from agent_comms.execution.input_lookup import InputLookup
-from agent_comms.execution.turn_context import ContextSegment, Provenance, WireProvenance
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_directions import MessageDirections
 from agent_comms.messaging.message_reads import MessageReferencesRead
@@ -26,8 +26,6 @@ from agent_comms.messaging.projection_source import ProjectionSource
 from agent_comms.messaging.task_callbacks import DeliveredContext, TeamObservation
 from agent_comms.nominal.declared_family import DeclaredFamily, DeclaredFirstMembers
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
-from agent_comms.registry.task_owner import TaskOwner
-from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.storage.typed_table import TypedTable
 from agent_comms.ui_model.message_category import MessageCategory
 
@@ -82,7 +80,7 @@ class TaskAttachment(
         """How a harness bridge hands the message carrying this attachment to its session."""
         return await bridge.deliver(message)
 
-    def message_segment(self, delivery: DeliveredContext) -> ContextSegment:
+    def message_segment[Segment](self, delivery: DeliveredContext[Segment]) -> Segment:
         """The same message contract for selected and following input."""
         return delivery.delivered()
 
@@ -119,7 +117,7 @@ class TaskAttachment(
         raise RelationViolationError("Ordinary message is not a decision lineage event")
 
     def current_roots(self, message: messages.Message, originals: dict[MessageReference, messages.Message],
-                      owner: TaskOwner, registry: TaskRegistry[TaskOwner]) -> messages.Message | None:
+                      owner, registry) -> messages.Message | None:
         return None
 
     def revises_after(self, previous: messages.Message) -> bool:
@@ -128,10 +126,10 @@ class TaskAttachment(
     def require_sender(self, sender: str) -> None:
         pass
 
-    def require_target(self, target: str, registry: TaskRegistry[TaskOwner]) -> None:
+    def require_target(self, target: str, registry) -> None:
         pass
 
-    def require_publication(self, sender: str, registry: TaskRegistry[TaskOwner], original_source: MessageReferencesRead[messages.Message]) -> None:
+    def require_publication(self, sender: str, registry, original_source: MessageReferencesRead[messages.Message]) -> None:
         pass
 
     def retained_task_facts(self, message: messages.Message):

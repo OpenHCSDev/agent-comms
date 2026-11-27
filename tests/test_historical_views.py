@@ -3,13 +3,17 @@
 
 import json
 import os
+import subprocess
+import sys
 from dataclasses import fields, replace
 from pathlib import Path
 
 import pytest
 
+import agent_comms
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import HistoricalSourceChanged, ReloadRequired
+from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.transcript_routes import DisplayText
 from agent_comms.execution.turn_item import FreshNativeId
@@ -41,7 +45,7 @@ from agent_comms.messaging.read_basis import (
 )
 from agent_comms.messaging.read_ledger import ReadLedger
 from agent_comms.messaging.routing import MessageRoute, TurnRouting
-from agent_comms.nominal.field_codec import FieldCodec, InputId
+from agent_comms.nominal.field_codec import FieldCodec, InputId, TurnId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_provenance import RegistryProvenance
@@ -49,6 +53,7 @@ from agent_comms.registry.threads import NativeThread, ThreadProvenance
 from agent_comms.storage.locked_store import LiveFilesRequest, RegistryFile
 from agent_comms.storage.store_files import StoreOwner
 from agent_comms.transcript.transcripts import (
+    NotifiedThreadPresentation,
     RecordedPageSource,
     RecordedTranscriptReadIdentity,
     TranscriptReadIdentity,
@@ -294,13 +299,64 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     assert rebound.current_identity() == decoded
     assert any(event.text == "original recorded answer" for event in rebound.read().events)
     delivered = []
-    decoded.publish_turn(lambda root, thread: delivered.append((root, thread)))
+    decoded.publish_turn(lambda root, thread, turn_state: delivered.append((root, thread, turn_state)))
     assert delivered == []
     live_identity = live.transcripts.capture_page_read("alice").identity
-    live_identity.publish_turn(lambda root, thread: delivered.append((root, thread)))
-    assert delivered == [(str(live.root), live.registry.require("alice"))]
+    decoded_live = FieldCodec.decode(TranscriptReadIdentity, FieldCodec.encode(live_identity))
+    decoded_live.publish_turn(lambda root, thread, turn_state: delivered.append((root, thread, turn_state)))
+    alice = live.registry.require("alice")
+    assert delivered == [(str(live.root), alice, alice.turn_state)]
     assert (RegistryFile.path_in(old.root)).read_bytes() == original_registry
     assert native.read_bytes() == original_native
+
+
+def test_live_presentation_wire_roundtrip_publishes_active_turn_state(tmp_path):
+    comms = wire(tmp_path)
+    comms.registry.register(
+        NativeThread(
+            "alice",
+            frozenset({"team"}),
+            Checkout(tmp_path),
+            created_at=10.0,
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
+    turn_id = TurnId("0" * 31 + "1")
+    before = comms.views.thread_presentations(("alice",)).read("alice").published()
+    leased, _ = comms.registry.lease_local_turn("alice", turn_id)
+    after = comms.views.thread_presentations(("alice",)).read("alice").published()
+
+    assert not before.same_observation(after)
+    decoded = FieldCodec.decode(NotifiedThreadPresentation, FieldCodec.encode(after))
+    decoded_again = FieldCodec.decode(NotifiedThreadPresentation, FieldCodec.encode(after))
+    assert decoded.same_observation(decoded_again)
+    assert not FieldCodec.decode(NotifiedThreadPresentation, FieldCodec.encode(before)).same_observation(decoded)
+    delivered = []
+    decoded.read_identity.publish_turn(lambda root, thread, turn_state: delivered.append((root, thread, turn_state)))
+    assert delivered == [(str(comms.root), decoded.read_identity.thread, leased.turn_state)]
+    assert delivered[0][2].active is not None
+    assert delivered[0][2].active.id == turn_id
+
+
+def test_cli_bridges_discovery_avoids_packaging():
+    src_root = str(Path(agent_comms.__file__).resolve().parent.parent)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "from agent_comms.installer.harness_install import HarnessSession; "
+                "assert 'claude_bridge' in HarnessSession.__registry__; "
+                "assert 'packaging' not in sys.modules"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "PYTHONPATH": src_root},
+    )
+    assert result.returncode == 0, result.stderr
 
 
 

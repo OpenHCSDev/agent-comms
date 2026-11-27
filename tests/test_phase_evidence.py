@@ -8,6 +8,7 @@ import pytest
 from nominal_refactor_advisor.audit.findings import GodFunction
 
 import fixture_git
+from agent_comms.projects.git_history import CheckoutHistory
 from agent_comms.planning.nominal_census import NominalCensus
 from agent_comms.planning.phase_artifacts import RecordedArtifact
 from agent_comms.planning.phase_evidence import (
@@ -572,14 +573,14 @@ def test_retained_readings_keep_commit_views_and_refresh_history(tmp_path, monke
     live = PerPass("First")
     readings = Readings()
     readings.begin_pass()
-    first = readings.observed(repo, (), Checkout(repo.checkout).read())
+    first = readings.observed(repo, (), CheckoutHistory.capture(Checkout(repo.checkout)))
     selection = first.main.selected(("src",))
     assert first.main.missing(("src/a.py", "gone.py")) == (False, True)
     assert first.holds(ClassDeclared("First"))
     assert first.holds(live)
     readings.finish_pass()
     readings.begin_pass()
-    history = Checkout(repo.checkout).read()
+    history = CheckoutHistory.capture(Checkout(repo.checkout))
     second = readings.observed(repo, (), history)
     assert second.main.history is history
     assert second.main.selected(("src",)) is selection
@@ -588,7 +589,7 @@ def test_retained_readings_keep_commit_views_and_refresh_history(tmp_path, monke
     assert len(evidence_reads) == 2
     assert second.main.missing(("src/a.py", "gone.py")) == (False, True)
     assert len(listings) == 2
-    another_history = Checkout(repo.checkout).read()
+    another_history = CheckoutHistory.capture(Checkout(repo.checkout))
     assert readings.observed(repo, (), another_history).main.history is another_history
     readings.finish_pass()
 
@@ -597,7 +598,7 @@ def test_retained_readings_keep_commit_views_and_refresh_history(tmp_path, monke
     git(repo.checkout, "commit", "-qm", "new source")
     git(repo.checkout, "update-ref", "refs/remotes/origin/main", git(repo.checkout, "rev-parse", "HEAD"))
     readings.begin_pass()
-    changed = readings.observed(repo, (), Checkout(repo.checkout).read())
+    changed = readings.observed(repo, (), CheckoutHistory.capture(Checkout(repo.checkout)))
     assert changed.main.selected(("src",)) != selection
     assert changed.holds(ClassDeclared("Second"))
     assert not changed.holds(ClassDeclared("First"))

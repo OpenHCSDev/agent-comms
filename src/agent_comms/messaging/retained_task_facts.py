@@ -16,25 +16,13 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.input_lookup import InputLookup
 from agent_comms.messaging.message_reads import ConversationRead
 from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import UserSourceTaskFact
 from agent_comms.messaging.task_fact_base import ExactTaskFact
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.registry.task_owner import TaskOwner
 from agent_comms.registry.task_registry import TaskRegistry
 from agent_comms.registry.thread_identity import ThreadIncarnation
-
-
-@dataclass(frozen=True)
-class UserSourceTaskFact(ExactTaskFact):
-    source: messages.Message
-
-    def wire_sources(self):
-        return (self.source,)
-
-    def __post_init__(self) -> None:
-        self.source.sender_role.require_user(
-            RelationViolationError("A peer message is not an original user source")
-        )
 
 
 @dataclass(frozen=True)
@@ -144,17 +132,6 @@ class HumanConstraintTaskFact(UserSourceTaskFact, AuthoredTaskFact,
 class CurrentHumanConstraintTaskFact(HumanConstraintTaskFact,
                                      declared_name="current_human_constraint"):
     pass
-
-
-@dataclass(frozen=True)
-class ClaimTaskFact(ExactTaskFact):
-    source: messages.ClaimMessage
-
-    def __post_init__(self) -> None:
-        self.source.require_claim_transition()
-
-    def wire_sources(self):
-        return (self.source,)
 
 
 @dataclass(frozen=True)

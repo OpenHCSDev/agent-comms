@@ -1,11 +1,8 @@
 """Unattested local annotation data, never an SDK/provider observation."""
 import hashlib
 
-from agent_comms.execution.turn_context import (
-    ContributionCoordinates,
-    SystemLayerSegment,
-    UnattributedProvenance,
-)
+from agent_comms.execution.context_provenance import UnattributedProvenance
+from agent_comms.execution.turn_context import ContributionCoordinates, SystemLayerSegment
 
 
 def local_system(
