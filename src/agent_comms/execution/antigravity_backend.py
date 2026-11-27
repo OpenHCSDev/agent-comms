@@ -305,6 +305,8 @@ class AntigravityAcpBackend(
                         )
                         if inbox_task in done:
                             item = inbox_task.result()
+                            for progress_event in state.commit_progress():
+                                yield progress_event
                             for event in item.apply_to_acp_turn(
                                 steer=live.steer,
                                 send_boundary=delivery.send_boundary,

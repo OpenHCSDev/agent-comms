@@ -578,3 +578,52 @@ async def test_five_concurrent_antigravity_threads_wake_without_lock_starvation(
         await agent.shutdown()
 
 
+def test_committed_progress_flushes_intermediate_and_open_background_replies() -> None:
+    # 1. Intermediate reply before a tool call flushes CommittedProgress once, leaving final reply intact.
+    state = AcpTurnStreamState()
+    e1 = AntigravityAcpUpdate.decode(
+        {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "checking logs..."}},
+        state,
+    )
+    assert any(isinstance(ev, events.Chunk) for ev in e1)
+    assert not any(isinstance(ev, events.CommittedProgress) for ev in e1)
+
+    e2 = AntigravityAcpUpdate.decode(
+        {"sessionUpdate": "tool_call", "toolCallId": "bg-1", "title": "run_command", "name": "run_command"},
+        state,
+    )
+    committed = [ev for ev in e2 if isinstance(ev, events.CommittedProgress)]
+    assert committed == [events.CommittedProgress(text="checking logs...")]
+    assert any(isinstance(ev, events.ToolStart) for ev in e2)
+
+    # 2. Reply written while a background tool is STILL open flushes on usage_update (no silent trap!).
+    AntigravityAcpUpdate.decode(
+        {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "numbers look clean"}},
+        state,
+    )
+    e3 = AntigravityAcpUpdate.decode(
+        {"sessionUpdate": "usage_update", "used": 2000, "size": 1048576},
+        state,
+    )
+    assert [ev for ev in e3 if isinstance(ev, events.CommittedProgress)] == [
+        events.CommittedProgress(text="numbers look clean")
+    ]
+    assert any(isinstance(ev, ContextInfo) for ev in e3)
+
+    # 3. Once the tool finishes, the final reply before end_turn is NOT prematurely flushed on usage_update.
+    AntigravityAcpUpdate.decode(
+        {"sessionUpdate": "tool_call_update", "toolCallId": "bg-1", "name": "run_command", "status": "completed", "rawOutput": "ok"},
+        state,
+    )
+    AntigravityAcpUpdate.decode(
+        {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "all done"}},
+        state,
+    )
+    e4 = AntigravityAcpUpdate.decode(
+        {"sessionUpdate": "usage_update", "used": 2500, "size": 1048576},
+        state,
+    )
+    assert not any(isinstance(ev, events.CommittedProgress) for ev in e4)
+    assert "".join(state.pending_progress_chunks) == "all done"
+
+

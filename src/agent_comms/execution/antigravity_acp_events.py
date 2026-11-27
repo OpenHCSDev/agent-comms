@@ -92,7 +92,9 @@ class AcpTurnStreamState:
     """Per-turn mutable correlation state while streaming one ACP `session/prompt`."""
 
     text_chunks: list[str] = field(default_factory=list)
+    pending_progress_chunks: list[str] = field(default_factory=list)
     tool_names: dict[str, str] = field(default_factory=dict)
+    open_tools: set[str] = field(default_factory=set)
     phase: TurnPhase = field(default_factory=ModelWaitPhase)
     current_model: str = ""
     thought_level: str = ""
@@ -100,6 +102,19 @@ class AcpTurnStreamState:
     @property
     def full_text(self) -> str:
         return "".join(self.text_chunks)
+
+    def append_text(self, text: str) -> None:
+        self.text_chunks.append(text)
+        self.pending_progress_chunks.append(text)
+
+    def commit_progress(self) -> Iterator[AgentEvent]:
+        if not self.pending_progress_chunks:
+            return
+        progress = "".join(self.pending_progress_chunks)
+        if not progress.strip():
+            return
+        self.pending_progress_chunks.clear()
+        yield events.CommittedProgress(text=progress)
 
 
 class AcpConfigOptionKind(DeclaredFamily, affix="AcpConfigOption"):
@@ -212,6 +227,8 @@ class CompletedToolStatus(AcpToolStatus, declared_name="completed"):
         name: str,
         output: str,
     ) -> Iterator[AgentEvent]:
+        yield from state.commit_progress()
+        state.open_tools.discard(str(call_id))
         state.phase = state.phase.tool_ended(call_id)
         yield events.ToolEnd(id=call_id, name=name, ok=True, output=output)
 
@@ -225,6 +242,8 @@ class FailedToolStatus(AcpToolStatus, declared_name="failed"):
         name: str,
         output: str,
     ) -> Iterator[AgentEvent]:
+        yield from state.commit_progress()
+        state.open_tools.discard(str(call_id))
         state.phase = state.phase.tool_ended(call_id)
         yield events.ToolEnd(id=call_id, name=name, ok=False, output=output)
 
@@ -261,7 +280,7 @@ class AgentMessageChunkAcpUpdate(AntigravityAcpUpdate, declared_name="agent_mess
         text = self.content.extract_text()
         if text:
             state.phase = ReplyingPhase()
-            state.text_chunks.append(text)
+            state.append_text(text)
             yield events.Chunk(text=text)
 
 
@@ -271,6 +290,7 @@ class AgentThoughtChunkAcpUpdate(AntigravityAcpUpdate, declared_name="agent_thou
     def convert(self, state: AcpTurnStreamState) -> Iterator[AgentEvent]:
         text = self.content.extract_text()
         if text:
+            yield from state.commit_progress()
             state.phase = ThinkingPhase()
             yield events.Thinking(text=text)
 
@@ -287,11 +307,13 @@ class ToolCallAcpUpdate(AntigravityAcpUpdate, declared_name="tool_call"):
     raw_input: JsonValue = Field(default="", alias="rawInput")
 
     def convert(self, state: AcpTurnStreamState) -> Iterator[AgentEvent]:
+        yield from state.commit_progress()
         call_key = self.tool_call_key or "agy-tool"
         call_id = ToolCallId(call_key)
         title = self.title or self.kind or "tool"
         name = self.name or title
         state.tool_names[call_key] = name
+        state.open_tools.add(call_key)
         start = events.ToolStart.from_call(call_id, name, self.raw_input)
         if title and not start.title:
             start = events.ToolStart(
@@ -334,7 +356,8 @@ class UsageUpdateAcpUpdate(AntigravityAcpUpdate, declared_name="usage_update"):
     size: int = 0
 
     def convert(self, state: AcpTurnStreamState) -> Iterator[AgentEvent]:
-        del state
+        if state.open_tools:
+            yield from state.commit_progress()
         if self.size > 0:
             yield ContextInfo(
                 context_used=ReportedCount(self.used),
