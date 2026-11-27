@@ -48,10 +48,10 @@ from agent_comms.execution.turn_item import (
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId, ToolCallId
-from agent_comms.planning.goal_actions import (
+from agent_comms.planning.goal_actions import SetGoalAction
+from agent_comms.planning.order_goal_actions import (
     OrderGoalAction,
     ReissuedOrderGoalAction,
-    SetGoalAction,
 )
 from agent_comms.planning.goals import CountCheckResult, GoalConsentRequired, OrderCheck
 from agent_comms.planning.held_orders import HeldOrders

@@ -16,7 +16,7 @@ import fixture_git
 from agent_comms.comms import wire
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.launch_runtime import LaunchRoot
-from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.order_goal_actions import CreateProblemGoalAction
 from agent_comms.planning.orders import (
     EditingProgress,
     NoCommitProgress,

@@ -8,7 +8,7 @@ import pytest
 from agent_comms.errors import MissingSourceLine
 from agent_comms.execution.check_root import CheckRoot
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
-from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.order_goal_actions import CreateProblemGoalAction
 from agent_comms.planning.goals import OrderCheck
 from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.order_words import PlainText

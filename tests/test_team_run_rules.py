@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
-from agent_comms.planning.goal_actions import OrderGoalAction
+from agent_comms.planning.order_goal_actions import OrderGoalAction
 from agent_comms.planning.order_runs import ApplicationOrderRun
 from agent_comms.planning.orders import (
     Todo,

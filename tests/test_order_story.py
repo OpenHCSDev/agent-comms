@@ -15,7 +15,7 @@ from agent_comms.nominal.field_codec import (
     OrderId,
     ToolCallId,
 )
-from agent_comms.planning.goal_actions import (
+from agent_comms.planning.order_goal_actions import (
     CreateProblemGoalAction,
     OrderGoalAction,
 )

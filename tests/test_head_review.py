@@ -19,7 +19,7 @@ from agent_comms.heartbeat_subjects import HeadSubject, TeamHistory, UnlandedHea
 from agent_comms.installer.build_identity import RepositoryCommit
 from agent_comms.projects.integration import IntegrationRun
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, MalformedRecord, RecordProblems
-from agent_comms.planning.goal_actions import CreateProblemGoalAction
+from agent_comms.planning.order_goal_actions import CreateProblemGoalAction
 from agent_comms.planning.order_words import (
     GrowthReason,
     StrikeReason,

@@ -45,7 +45,7 @@ from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, Id128
-from agent_comms.planning.goal_actions import ReissuedOrderGoalAction
+from agent_comms.planning.order_goal_actions import ReissuedOrderGoalAction
 from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.orders import (
     Assignment,

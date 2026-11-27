@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.errors import MissingSourceLine
 from agent_comms.nominal.field_codec import OwnerRequestKey
-from agent_comms.planning.goal_actions import OrderGoalAction
+from agent_comms.planning.order_goal_actions import OrderGoalAction
 from agent_comms.planning.orders import FixScope
 from agent_comms.planning.owner_requests import OwnerRequestId
 from agent_comms.planning.problem_findings import (

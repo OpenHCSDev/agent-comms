@@ -13,8 +13,10 @@ from agent_comms.errors import GoalRefused
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.planning.goal_actions import (
     CompletedGoalAction,
-    CreateProblemGoalAction,
     GoalPrecondition,
+)
+from agent_comms.planning.order_goal_actions import (
+    CreateProblemGoalAction,
     OrderGoalAction,
 )
 from agent_comms.planning.goal_scope import OneGoal

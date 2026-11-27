@@ -14,9 +14,9 @@ from agent_comms.installer.practice import PracticeCopy
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.planning.goal_actions import (
     ClearGoalAction,
-    CreateProblemGoalAction,
     SetGoalAction,
 )
+from agent_comms.planning.order_goal_actions import CreateProblemGoalAction
 from agent_comms.planning.goals import (
     CountCheckResult,
     OrderCheck,
