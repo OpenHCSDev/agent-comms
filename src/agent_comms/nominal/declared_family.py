@@ -234,7 +234,14 @@ class DeclaredFamily(FamilyMember, metaclass=FamilyMeta):
 
     @classmethod
     def _named_member(cls, name: object) -> type[DeclaredFamily]:
-        return cls.__registry__[cast(Hashable, name)]
+        registry = cls.__registry__
+        if (
+            isinstance(registry, dict)
+            and isinstance(name, Hashable)
+            and dict.__contains__(registry, name)
+        ):
+            return dict.__getitem__(registry, name)
+        return registry[cast(Hashable, name)]
 
     @classmethod
     def acquire_declarations(cls) -> None:

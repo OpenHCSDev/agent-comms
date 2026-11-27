@@ -40,7 +40,11 @@ from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.class_fact import ClassFact
-from agent_comms.nominal.declared_family import DeclaredFamily, RegisteredFamily
+from agent_comms.nominal.declared_family import (
+    DeclaredFamily,
+    DeclaredFirstMembers,
+    RegisteredFamily,
+)
 from agent_comms.nominal.field_codec import (
     DefaultedName,
     DefaultExternalName,
@@ -279,7 +283,10 @@ class ClearingVerb(DeclaredVerb, declared_name=None):
         """Bind this declaration to one observed rule and its board recipient."""
 
 
-class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discovery_package="agent_comms.team"):
+class StandingRule(
+    DefaultedName, DeclaredFirstMembers, RegisteredFamily,
+    affix="StandingRule", discovery_package="agent_comms.team",
+):
     @classmethod
     @abstractmethod
     def scan_observed(cls, comms: BusContext,
@@ -294,6 +301,11 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
     clearing_verbs: ClassVar[tuple[type[ClearingVerb], ...]] = ()
 
     @classmethod
+    def _acquire_named_declarations(cls, name: object) -> None:
+        super()._acquire_named_declarations(name)
+        cls.family_root._compared_declared_members
+
+    @classmethod
     def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
         """Discovery completes the declarations: each rule's observation comparison
         compiles then, so a compared field with no codec owner refuses before any
@@ -302,12 +314,19 @@ class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discov
 
     @ClassFact
     @staticmethod
-    def _compared_members(cls: type[StandingRule]) -> tuple[type[DeclaredFamily], ...]:
-        """Validate the acquired declarations once, and again when membership changes."""
-        members = super(StandingRule, cls)._member_declarations()
+    def _compared_declared_members(cls: type[StandingRule]) -> tuple[type[DeclaredFamily], ...]:
+        """Validate the currently declared rules once, and again when membership changes."""
+        members = tuple(dict.values(cls.__registry__))
         if members:
             FieldCodec.compile_comparison(members[0], *members[1:])
         return members
+
+    @ClassFact
+    @staticmethod
+    def _compared_members(cls: type[StandingRule]) -> tuple[type[DeclaredFamily], ...]:
+        """Discover the package and validate the acquired declarations once per cut."""
+        super(StandingRule, cls)._member_declarations()
+        return cls.family_root._compared_declared_members
 
     @classmethod
     def team_disposes(cls) -> bool:

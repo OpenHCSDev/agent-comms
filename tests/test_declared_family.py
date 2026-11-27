@@ -365,3 +365,39 @@ print(len(before))
                             text=True, timeout=45)
     assert result.returncode == 0, result.stderr
     assert int(result.stdout.strip()) > 0
+
+
+def test_viewer_wire_families_decode_without_package_walk_or_packaging():
+    probe = '''
+import builtins
+import sys
+
+orig_import = builtins.__import__
+def block_packaging(name, *args, **kwargs):
+    if name == "packaging" or name.startswith("packaging."):
+        raise ModuleNotFoundError("No module named 'packaging'", name="packaging")
+    return orig_import(name, *args, **kwargs)
+
+builtins.__import__ = block_packaging
+
+from agent_comms.coordination.tables.assignments import WakeAssignment
+from agent_comms.planning.goal_ledger import FailedTurnEvidence
+from agent_comms.ui_model.teammate_state import TeammateState
+
+assert FailedTurnEvidence.recorded_member(FailedTurnEvidence.declared_name) is FailedTurnEvidence
+assert WakeAssignment.recorded_member(WakeAssignment.declared_name) is WakeAssignment
+for name in ("idle", "blocked", "moving", "spinning"):
+    assert issubclass(TeammateState.recorded_member(name), TeammateState)
+
+for forbidden in (
+    "packaging",
+    "agent_comms.cli_verbs.install",
+    "agent_comms.installer.launch",
+    "agent_comms.team.standing",
+):
+    assert forbidden not in sys.modules, f"Unexpectedly imported {forbidden}"
+print("ok")
+'''
+    result = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, timeout=45)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() == "ok"
