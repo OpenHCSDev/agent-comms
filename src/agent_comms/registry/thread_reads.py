@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Self
 
-from agent_comms.projects.checkouts import RepositoryReads
+from agent_comms.projects.git_history import RepositoryReads
 from agent_comms.registry.thread_presentation import ThreadOwnerBinding
 
 

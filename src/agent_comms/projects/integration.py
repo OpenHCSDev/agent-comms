@@ -42,7 +42,8 @@ from agent_comms.planning.orders import (
     Todo,
 )
 from agent_comms.planning.pull_requests import PullRequestLink
-from agent_comms.projects.checkouts import DetachedStart, RepositoryReads
+from agent_comms.projects.checkouts import DetachedStart
+from agent_comms.projects.git_history import RepositoryReads
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.head_review import (
     BaseSide,

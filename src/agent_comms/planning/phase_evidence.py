@@ -28,7 +28,8 @@ from nominal_refactor_advisor.foreign_family import FunctionDefinition
 from agent_comms.ast_field_decoders import capture_names, variadic_parameters
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.projects.checkouts import Checkout, CheckoutHistory
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import CheckoutHistory
 from agent_comms.projects.repo import Repo
 
 if TYPE_CHECKING:
@@ -90,7 +91,7 @@ class MainTree:
 
     @classmethod
     def of(cls, repo: Repo, census: Census) -> MainTree:
-        return cls.from_history(repo, census, Checkout(repo.checkout).read())
+        return cls.from_history(repo, census, CheckoutHistory.capture(Checkout(repo.checkout)))
 
     @classmethod
     def from_history(cls, repo: Repo, census: Census, history: CheckoutHistory) -> MainTree:

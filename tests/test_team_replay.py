@@ -42,11 +42,8 @@ from agent_comms.planning.orders import (
     UnmergedListedPullRequest,
 )
 from agent_comms.planning.pull_requests import PullRequestLink
-from agent_comms.projects.checkouts import (
-    Checkout,
-    RepositoryReads,
-    UnpushedHead,
-)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import RepositoryReads, UnpushedHead
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.work_branches import SourceGrowth, WorkBranchError

@@ -6,7 +6,8 @@ from functools import cached_property
 from pathlib import Path
 
 from agent_comms.comms import Comms
-from agent_comms.projects.checkouts import Checkout, RepositoryReads
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import RepositoryReads
 from agent_comms.projects.repository_sources import RepositorySource
 from agent_comms.projects.repository_storage import RepositoryReader
 from agent_comms.projects.shell_effects import StorageEffect

@@ -7,7 +7,8 @@ from pathlib import Path
 from pydantic import JsonValue
 
 from agent_comms.nominal.field_codec import FieldCodec, WireValue
-from agent_comms.projects.checkouts import Checkout, RepositoryReads
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import RepositoryReads
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.repository_storage import RepositoryStorage

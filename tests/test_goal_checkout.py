@@ -11,11 +11,8 @@ from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.planning.goals import Goal
-from agent_comms.projects.checkouts import (
-    Checkout,
-    DetachedStart,
-    RepositoryReads,
-)
+from agent_comms.projects.checkouts import Checkout, DetachedStart
+from agent_comms.projects.git_history import RepositoryReads
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.repository_sources import (

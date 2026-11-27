@@ -25,12 +25,8 @@ from agent_comms.planning.orders import (
     PendingProblemOrder,
 )
 from agent_comms.planning.pull_requests import PullRequestLink
-from agent_comms.projects.checkouts import (
-    Checkout,
-    CheckoutHistory,
-    DetachedStart,
-    RepositoryReads,
-)
+from agent_comms.projects.checkouts import Checkout, DetachedStart
+from agent_comms.projects.git_history import CheckoutHistory, RepositoryReads
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName

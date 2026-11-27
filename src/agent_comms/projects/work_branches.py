@@ -22,9 +22,9 @@ from pydantic.alias_generators import to_camel
 from agent_comms.cli_bridges.wire_models import WireModel
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import GitCommitText, PathText, WireExclude, projected
-from agent_comms.projects.checkouts import (
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import (
     BranchUpstream,
-    Checkout,
     CheckoutHistory,
     DetachedHead,
     GitHead,

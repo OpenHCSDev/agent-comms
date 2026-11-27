@@ -161,8 +161,8 @@ from agent_comms.projects.change_report import (
     SourceText,
     WorkingTree,
 )
-from agent_comms.projects.checkouts import (
-    Checkout,
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import (
     CommitFilter,
     CommitsNaming,
     EveryCommit,

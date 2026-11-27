@@ -15,7 +15,8 @@ from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize, Pat
 from agent_comms.nominal.lifecycle_capability import Complete
 from agent_comms.planning.goals import Goal
 from agent_comms.planning.orders import Todo
-from agent_comms.projects.checkouts import Checkout, CheckoutStart, RepositoryReads
+from agent_comms.projects.checkouts import Checkout, CheckoutStart
+from agent_comms.projects.git_history import RepositoryReads
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_sources import RepositorySource
 from agent_comms.projects.shell_effects import (

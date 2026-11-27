@@ -1,6 +1,7 @@
 import pytest
 
-from agent_comms.projects.checkouts import CheckoutHistory, Checkout
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import CheckoutHistory
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repository_name import RepositoryName
 from source_revision_fixture import SourceRepository
@@ -20,7 +21,7 @@ def test_acquired_merge_bases_preserve_git_relations_and_the_ref_cut(tmp_path, m
     first, second = commit("First merge", left, right), commit("Second merge", right, left)
 
     def read(*heads):
-        result = Checkout(source.checkout).read()
+        result = CheckoutHistory.capture(Checkout(source.checkout))
         result.include(*heads)
         return result
 
