@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from agent_comms.execution.native_entries import TranscriptProjection
+from agent_comms.execution.transcript_routes import TranscriptProjection
 from agent_comms.execution.tool_results import (
     NoSentMessage,
     NoToolDiff,

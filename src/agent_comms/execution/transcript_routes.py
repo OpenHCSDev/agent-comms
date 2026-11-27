@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import os
 import re
+from abc import ABC, abstractmethod
 from contextlib import ExitStack, closing
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from sqlite3 import Connection
+from typing import Annotated, ClassVar
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.pi_wire import PiOmitted, ReportedInputId
@@ -21,7 +23,6 @@ from agent_comms.nominal.field_codec import (
     SingleFieldValue,
 )
 from agent_comms.nominal.text_digest import TextDigest
-from agent_comms.pi_payloads import UserMessage
 from agent_comms.storage.file_observation import FileObservation, FileRevision
 from agent_comms.storage.typed_table import (
     Column,
@@ -32,10 +33,27 @@ from agent_comms.storage.typed_table import (
 )
 from agent_comms.transcript.transcript_events import ContextTranscript, TranscriptEvent
 
-if TYPE_CHECKING:
-    from sqlite3 import Connection
 
-    from agent_comms.execution.native_entries import TranscriptProjection
+class ProjectedUserMessage[Part](ABC):
+    """A user transcript message whose display and parts project through InputDisplay."""
+
+    parts: tuple[Part, ...]
+
+    @property
+    @abstractmethod
+    def original_text(self) -> str: ...
+
+    @abstractmethod
+    def matches_display(self, digest: SentTextDigest) -> bool: ...
+
+    @abstractmethod
+    def display_parts(self, text: str) -> tuple[Part, ...]: ...
+
+    @abstractmethod
+    def project_parts(
+        self, parts: tuple[Part, ...], context: TranscriptProjection,
+        timestamp: float, routing: Routing,
+    ) -> list[TranscriptEvent]: ...
 
 
 class TranscriptRoutesRows(StoreRows):
@@ -77,8 +95,8 @@ class NoDisplayText(NullMember):
 class SentTextDigest(TextDigest, SingleFieldValue):
     """The exact sent text owns matching and an immutable route binding."""
 
-    def project_message(
-        self, message: UserMessage, display: InputDisplay,
+    def project_message[Part](
+        self, message: ProjectedUserMessage[Part], display: InputDisplay,
         context: TranscriptProjection, timestamp: float,
     ) -> list[TranscriptEvent]:
         if not message.matches_display(self):
@@ -100,8 +118,8 @@ class SentTextDigest(TextDigest, SingleFieldValue):
 class NoSentTextDigest(NullMember):
     """No exact sent text was bound; retain the surrounding route."""
 
-    def project_message(
-        self, message: UserMessage, display: InputDisplay,
+    def project_message[Part](
+        self, message: ProjectedUserMessage[Part], display: InputDisplay,
         context: TranscriptProjection, timestamp: float,
     ) -> list[TranscriptEvent]:
         return display.project_display(message, context, timestamp, context.routing)
@@ -135,8 +153,8 @@ class NoSentInputText(NullMember):
 class InputPresentation:
     """A native input's display policy; the default preserves its original parts."""
 
-    def project_message(
-        self, message: UserMessage, context: TranscriptProjection, timestamp: float,
+    def project_message[Part](
+        self, message: ProjectedUserMessage[Part], context: TranscriptProjection, timestamp: float,
     ) -> list[TranscriptEvent]:
         return message.project_parts(message.parts, context, timestamp, context.routing)
 
@@ -144,6 +162,13 @@ class InputPresentation:
 @dataclass(frozen=True)
 class NoInputDisplay(NullMember, InputPresentation):
     """No owner-authored replacement or suppression was recorded."""
+
+
+@dataclass(frozen=True)
+class TranscriptProjection:
+    position: int = field(kw_only=True)
+    routing: Routing = NoTurnRouting()
+    input_display: InputPresentation = NoInputDisplay()
 
 
 @dataclass(frozen=True)
@@ -158,13 +183,13 @@ class InputDisplay(TranscriptRoutesRows, WithoutRowid, InputPresentation):
     ] = NoSentTextDigest()
     checks = ("routing IS NULL OR sent_text_digest IS NOT NULL",)
 
-    def project_message(
-        self, message: UserMessage, context: TranscriptProjection, timestamp: float,
+    def project_message[Part](
+        self, message: ProjectedUserMessage[Part], context: TranscriptProjection, timestamp: float,
     ) -> list[TranscriptEvent]:
         return self.sent_text_digest.project_message(message, self, context, timestamp)
 
-    def project_display(
-        self, message: UserMessage, context: TranscriptProjection,
+    def project_display[Part](
+        self, message: ProjectedUserMessage[Part], context: TranscriptProjection,
         timestamp: float, routing: Routing,
     ) -> list[TranscriptEvent]:
         raw_text = message.original_text

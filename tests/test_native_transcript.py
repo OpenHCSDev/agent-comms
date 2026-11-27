@@ -9,9 +9,9 @@ import pytest
 from agent_comms.execution.native_entries import (
     MessageEntry,
     NativeEntry,
-    TranscriptProjection,
     UnknownEntry,
 )
+from agent_comms.execution.transcript_routes import TranscriptProjection
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.transcript_sources import NativeTranscript

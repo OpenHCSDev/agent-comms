@@ -13,7 +13,8 @@ from agent_comms.agent_backend import (
 )
 from agent_comms.agent_events import Chunk, Error, Thinking, ToolStart
 from agent_comms.execution.native_arguments import SelectedModel
-from agent_comms.execution.native_entries import NativeEntry, StoredEntry, TranscriptProjection
+from agent_comms.execution.native_entries import NativeEntry, StoredEntry
+from agent_comms.execution.transcript_routes import TranscriptProjection
 from agent_comms.execution.launch_runtime import RestartEnvironment
 from agent_comms.execution.native_session_files import NativeModelConfiguration
 from agent_comms.execution.pi_commands import GetSessionStats, SetModel

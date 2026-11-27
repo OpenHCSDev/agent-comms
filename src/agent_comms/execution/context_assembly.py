@@ -1,5 +1,6 @@
 """Core context assembly on the same owner as its goals, views, relations and bus."""
 
+from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.context_segments.partner_activity import PartnerActivitySegment
 from agent_comms.context_segments.relationships import RelationshipsSegment
 from agent_comms.execution.context_owner import ContextOwner
@@ -35,7 +36,7 @@ class ContextAssembly:
         self, context: TurnContext, owner: ContextOwner, relations: tuple[PeerRelation, ...],
     ) -> TurnContext:
         """Append relationships, addressed messages and partner goal changes."""
-        segments = list(self.bus.awareness_segments(owner, relations))
+        segments = list(AwarenessSegment.for_owner(self.bus.bus, owner, relations))
         if (rel := RelationshipsSegment.capture(owner, relations)) is not None:
             segments.append(rel)
         if (act := PartnerActivitySegment.capture(owner, relations, self.goals)) is not None:

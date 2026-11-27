@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordination.work import CoordinationWork
 from agent_comms.messaging.bus import Bus, BusSnapshot
 from agent_comms.messaging.bus_read_source import BusReadSource
@@ -40,10 +39,8 @@ from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.read_selection import CapturedSelection
 from agent_comms.messaging.routing import DeliveryScope
 from agent_comms.messaging.watched import FileSource
-from agent_comms.peer_relevance import Prioritized
 from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.catalog_store import ChannelCatalog
-from agent_comms.registry.peer_relation import PeerRelation
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
@@ -255,23 +252,6 @@ class MessageBus[Writes: Publisher](PublishedBus[Writes], BusReadSource):
                 audience=delivery, through=sequence,
             )
             self.reads.mark_displayed(canonical, displayed)
-
-    def awareness_segments(self, owner: Thread, relations: Sequence[PeerRelation]):
-        """Bounded frozen-recipient pointers, independent of UI read state.
-
-        The window is the newest received rows, shown in sequence order. Peer relevance
-        orders the selected rows, never changes their window.
-        """
-        first = {relation.peer.require_recorded().lookup for relation in relations
-                 if relation.relevance.grants(Prioritized)}
-        rows = tuple(
-            delivery for record in self.bus.received(
-                owner.incarnation.require_recorded().lookup, limit=100,
-            ) for delivery in record.deliveries()
-        )
-        rows = tuple(sorted(
-            rows, key=lambda row: (row.sender_lookup not in first, row.seq)))
-        return (AwarenessSegment.capture(self.bus.path, rows),) if rows else ()
 
     def channels(self) -> Sequence[str]:
         return list(self.channel_declarations())

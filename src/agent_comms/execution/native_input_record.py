@@ -18,11 +18,15 @@ from agent_comms.coordination.tables.assignments import ExecutionAssignmentLink,
 from agent_comms.coordination.tables.executions import ExecutionRecord
 from agent_comms.coordination.tables.participants import OwnerGenerations, OwnerRecord
 from agent_comms.coordination.tables.responses import ResponseObligation
-from agent_comms.execution.native_entries import MessageEntry, RecordedEntry, TranscriptProjection
+from agent_comms.execution.native_entries import MessageEntry, RecordedEntry
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_integer import PositiveNativeIntegerBounds
 from agent_comms.execution.native_session_reopen import PiSessionId
-from agent_comms.execution.transcript_routes import InputDisplay, NoDisplayText
+from agent_comms.execution.transcript_routes import (
+    InputDisplay,
+    NoDisplayText,
+    TranscriptProjection,
+)
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (

@@ -9,8 +9,8 @@ from agent_comms.execution.native_entries import (
     NativeEntry,
     NoEntryId,
     RecordedEntry,
-    TranscriptProjection,
 )
+from agent_comms.execution.transcript_routes import TranscriptProjection
 from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.nominal.field_codec import MalformedRecord
 

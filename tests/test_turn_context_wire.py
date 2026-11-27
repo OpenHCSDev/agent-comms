@@ -59,7 +59,7 @@ def test_awareness_inspection_reads_the_committed_source_beside_a_held_writer(tm
     comms = context_comms(tmp_path)
     publish_initial(comms, 'sender', '#team', '@Alice original question')
     owner = comms.registry.require('Alice')
-    original = comms.bus.awareness_segments(owner, ())
+    original = AwarenessSegment.for_owner(comms.bus.bus, owner, ())
     assert len(original) == 1 and isinstance(original[0], AwarenessSegment)
     before = comms.bus.bus.revision()
     locked, release = Event(), Event()
@@ -75,7 +75,7 @@ def test_awareness_inspection_reads_the_committed_source_beside_a_held_writer(tm
         try:
             # Another thread holds the bus write transaction; the reader keeps
             # its committed snapshot instead of waiting or omitting awareness.
-            assert comms.bus.awareness_segments(owner, ()) == original
+            assert AwarenessSegment.for_owner(comms.bus.bus, owner, ()) == original
         finally:
             release.set()
         writer.result(timeout=2)
