@@ -15,7 +15,7 @@ from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import (
@@ -23,9 +23,13 @@ from agent_comms.agent_backend import (
     CompactionOutcome,
     FailedCompaction,
     Forks,
+    Interrupts,
+    OwnedInboxDrainer,
     PlacedCompaction,
     RuntimeLocation,
     ThreadServingBackend,
+    ThreadSettingApplier,
+    TurnInputAcknowledger,
 )
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.installer.harness_install import AntigravityAcpSession
@@ -40,9 +44,11 @@ from agent_comms.execution.antigravity_acp import (
 from agent_comms.execution.antigravity_acp_events import (
     ANTIGRAVITY_ACP_EVENT_KINDS,
     AcpConfigKey,
+    AcpPromptFrame,
     AcpTurnStreamState,
     AntigravityAcpUpdate,
 )
+from agent_comms.execution.turn_inbox import TurnInboxItem
 from agent_comms.execution.backend_query import TurnInputContent
 from agent_comms.execution.child_process import ProcessState
 from agent_comms.execution.launch_runtime import LaunchRuntime
@@ -66,16 +72,7 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.pi_counts import UnreportedCount
 from agent_comms.registry.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
-
-if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-    from agent_comms.config_options import ConfigOptions
-    from agent_comms.execution.input_drain import InputDrain
-    from agent_comms.execution.owned_turn import TurnDelivery
-    from agent_comms.execution.pi_commands import SettingCommand
-    from agent_comms.execution.session_config_options import SessionConfigOptions
-    from agent_comms.messaging.messages import Message
-    from agent_comms.registry.threads import Thread
+from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -121,7 +118,9 @@ def _selected_model_name(*, provider: object = "", model_id: object = "") -> str
     return str(model_id)
 
 
-class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigravity_acp"):
+class AntigravityAcpBackend(
+    Forks, Interrupts, ThreadServingBackend, declared_name="antigravity_acp"
+):
     """Antigravity over ACP: concurrent thread sessions multiplexed on one ``agy acp`` server."""
 
     location_type: ClassVar[type[RuntimeLocation]] = AntigravitySession
@@ -140,10 +139,10 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
     @classmethod
     async def apply_setting(
         cls,
-        owner: SessionConfigOptions,
-        configuration: ConfigOptions,
+        owner: ThreadSettingApplier,
+        configuration: object,
         thread: Thread,
-        command: SettingCommand,
+        command: object,
     ) -> None:
         del configuration
         await owner.store_direct_setting(thread, command)
@@ -151,7 +150,7 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
     @classmethod
     async def drain_owned_inbox(
         cls,
-        inputs: InputDrain,
+        inputs: OwnedInboxDrainer,
         session_id: AcpSessionId,
         thread: Thread,
     ) -> None:
@@ -160,14 +159,13 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
     @classmethod
     def acknowledge_turn_inputs(
         cls,
-        comms: Comms,
+        acknowledger: TurnInputAcknowledger,
         thread: Thread,
-        origins: tuple[Message, ...],
+        origins: tuple[object, ...],
     ) -> None:
-        comms.messaging.acknowledge_direct_turn_inputs(
+        acknowledger.acknowledge_direct_turn_inputs(
             thread,
             origins,
-            root_id=comms.owners.require_private_launch().wire_root_id,
             bridge=AntigravityAcpSession,
         )
 
@@ -257,7 +255,7 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
         self,
         thread: Thread,
         content: TurnInputContent,
-        delivery: TurnDelivery,
+        delivery: object,
     ) -> AsyncIterator[AgentEvent]:
         async with self._lock:
             native_input_id = InputId.mint()
@@ -294,12 +292,49 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
                 )
                 last_phase: TurnPhase = state.phase
                 yield NativePhaseChanged(last_phase, self._process.process_identity)
-                async for frame in self._process.prompt(session_id, content.acp_prompt_blocks()):
-                    for event in frame.apply(state, self._remember_applied):
-                        yield event
-                    if state.phase != last_phase:
-                        last_phase = state.phase
-                        yield NativePhaseChanged(last_phase, self._process.process_identity)
+                live = await self._process.open_prompt(session_id, content.acp_prompt_blocks())
+                inbox_task: asyncio.Task[TurnInboxItem] = asyncio.create_task(delivery.inbox.get())
+                frames_task: asyncio.Task[tuple[AcpPromptFrame, ...]] = asyncio.create_task(
+                    live.next_frames()
+                )
+                try:
+                    while True:
+                        done, _ = await asyncio.wait(
+                            {frames_task, inbox_task},
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        if inbox_task in done:
+                            item = inbox_task.result()
+                            for event in item.apply_to_acp_turn(
+                                steer=live.steer,
+                                send_boundary=delivery.send_boundary,
+                                input_start=delivery.input_start,
+                            ):
+                                yield event
+                            inbox_task = asyncio.create_task(delivery.inbox.get())
+                        if frames_task in done:
+                            batch = frames_task.result()
+                            if not batch:
+                                break
+                            for frame in batch:
+                                for event in frame.apply(state, self._remember_applied):
+                                    yield event
+                                if state.phase != last_phase:
+                                    last_phase = state.phase
+                                    yield NativePhaseChanged(
+                                        last_phase, self._process.process_identity
+                                    )
+                            frames_task = asyncio.create_task(live.next_frames())
+                except asyncio.CancelledError:
+                    await live.cancel_and_close()
+                    raise
+                finally:
+                    for pending_task in (inbox_task, frames_task):
+                        if not pending_task.done():
+                            pending_task.cancel()
+                            with suppress(asyncio.CancelledError):
+                                await pending_task
+                    live.close()
                 yield NativePhaseChanged(SettlingStatsPhase(), self._process.process_identity)
                 yield events.StreamSettled()
                 yield events.Done(text=state.full_text, ok=True)

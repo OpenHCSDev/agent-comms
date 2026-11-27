@@ -20,9 +20,11 @@ from agent_comms.acp_extension import (
     QueueChangedUpdate,
     QueueScope,
 )
+from agent_comms.agent_backend import OwnedInboxDrainer
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
 from agent_comms.coordination.cohort import next_sealed_assignment
+from agent_comms.coordination.cohort_foreground import AcceptsDeliveries
 from agent_comms.coordination.cohort_schema import AcceptanceFrontier
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
@@ -1290,7 +1292,7 @@ class OwnerSession(DrainedSession, OwnedSessionLifetime):
         return (*super().producers(), self.auth_observer)
 
 
-class InputDrain(InputObservation, QueuePublication, InputEventSource):
+class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEventSource):
     async def begin_observation(
         self, state: DrainedSession, entry: RegistryEntry,
     ) -> RegistryEntry:
@@ -1504,8 +1506,47 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
         await self._drain_private_if_changed(session_id, private_root)
         WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
 
+    async def _steer_direct_inbox(self, session_id: AcpSessionId, thread: Thread) -> None:
+        def capture_pending() -> tuple[tuple[Thread, RootId, int], ...]:
+            if self.comms.owners.maintenance.read().turn_pending:
+                return ()
+            snapshot = self.comms.registry.snapshot()
+            owner = snapshot.require(thread.name)
+            if snapshot.status(owner.name).is_stopped() or owner.goal.accepts_following_handoff():
+                return ()
+            inbox = self.comms.bus.inbox(owner.name)
+            messages = tuple(sorted(inbox.page.messages, key=lambda item: item.seq))
+            if not messages:
+                return ()
+            self.comms.bus.reads.mark_displayed(owner.name, inbox.displayed)
+            waking = tuple(
+                message
+                for message in messages
+                if message.sender != owner.name
+                and message.role.response_policy(message).starts_turn_for(
+                    message, owner.name, snapshot.aliases
+                )
+            )
+            if not waking:
+                return ()
+            root_id = self.comms.owners.require_private_launch().wire_root_id
+            AcceptsDeliveries(
+                bus=self.comms.bus,
+                root_id=root_id,
+                thread_name=owner.name,
+            ).accept(Coordination(CoordinationStore.path_in(self.comms.root)))
+            return ((owner, root_id, waking[0].seq - 1),)
+
+        for owner, root_id, after_seq in await Coordination.run_worker(capture_pending):
+            await DeliveredInput.deliver_pending(
+                self, session_id, owner, self.comms.bus, root_id, after_seq,
+            )
+
     async def drain_direct_inbox(self, session_id: AcpSessionId, thread: Thread) -> None:
-        if self.background_wakes_disabled or self.turn_live(session_id):
+        if self.background_wakes_disabled:
+            return
+        if self.turn_live(session_id):
+            await self._steer_direct_inbox(session_id, thread)
             return
         state = self.state(session_id)
         if state.pending_turns:

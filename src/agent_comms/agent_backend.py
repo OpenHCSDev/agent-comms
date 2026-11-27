@@ -44,6 +44,7 @@ from agent_comms.execution.transcript_cursor_reads import (
     TranscriptRuntime,
 )
 from agent_comms.execution.turn_outcome import TurnOutcome
+from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMember
 from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.pi_counts import PiCount
@@ -51,20 +52,60 @@ from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.transport.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-    from agent_comms.config_options import ConfigOptions
-    from agent_comms.execution.input_drain import InputDrain
     from agent_comms.execution.owned_turn import TurnDelivery
-    from agent_comms.execution.pi_commands import SettingCommand
-    from agent_comms.execution.session_config_options import SessionConfigOptions
-    from agent_comms.execution.turn_lease import TurnLeaseFence
     from agent_comms.execution.turn_runner import TurnRunner
-    from agent_comms.messaging.messages import Message, MessageReference
-    from agent_comms.messaging.routing import TurnRouting
-    from agent_comms.registry.thread_identity import RecordedThreadIncarnation
     from agent_comms.registry.threads import Thread
-    from agent_comms.transcript.transcript_cursor import TranscriptCursor
-    from agent_comms.transcript.transcripts import Transcripts
+
+
+class TurnPublicationRecorder(ABC):
+    """Transcript store capability that joins a completed native turn to committed wire rows."""
+
+    @abstractmethod
+    def record_native_turn_publication(
+        self,
+        *,
+        lease: object,
+        checkpoint: object,
+        routing: object,
+        published: tuple[object, ...],
+        incarnation: object,
+        thread: object,
+    ) -> None: ...
+
+
+class ThreadSettingApplier(ABC):
+    """Configuration owner capability applying stored model/thinking updates for a backend."""
+
+    @abstractmethod
+    async def configure_pi_thread(
+        self, configuration: object, thread: object, command: object
+    ) -> None: ...
+
+    @abstractmethod
+    async def store_direct_setting(self, thread: object, command: object) -> None: ...
+
+
+class OwnedInboxDrainer(ABC):
+    """Input drain capability serving either private-N/K Pi or direct ACP threads."""
+
+    @abstractmethod
+    async def drain_private_inbox(self, session_id: AcpSessionId) -> None: ...
+
+    @abstractmethod
+    async def drain_direct_inbox(self, session_id: AcpSessionId, thread: object) -> None: ...
+
+
+class TurnInputAcknowledger(ABC):
+    """Composition-root capability recording durable read receipts for direct backend inputs."""
+
+    @abstractmethod
+    def acknowledge_direct_turn_inputs(
+        self,
+        thread: object,
+        origins: tuple[object, ...],
+        *,
+        bridge: type[HarnessSession],
+    ) -> None: ...
 
 
 class BackendDeclarationError(TypeError):
@@ -111,14 +152,14 @@ class RuntimeLocation(DeclaredFamily, TranscriptRuntime, affix='Runtime'):
 
     def record_turn_publication(
         self,
-        transcripts: Transcripts,
+        transcripts: TurnPublicationRecorder,
         *,
-        lease: TurnLeaseFence,
-        checkpoint: TranscriptCursor,
-        routing: TurnRouting,
-        published: tuple[MessageReference, ...],
-        incarnation: RecordedThreadIncarnation,
-        thread: Thread,
+        lease: object,
+        checkpoint: object,
+        routing: object,
+        published: tuple[object, ...],
+        incarnation: object,
+        thread: object,
     ) -> None:
         transcripts.record_native_turn_publication(
             lease=lease,
@@ -343,10 +384,10 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     @classmethod
     async def apply_setting(
         cls,
-        owner: SessionConfigOptions,
-        configuration: ConfigOptions,
+        owner: ThreadSettingApplier,
+        configuration: object,
         thread: Thread,
-        command: SettingCommand,
+        command: object,
     ) -> None:
         """Apply one runtime setting change (`SetModel` or `SetThinkingLevel`) for this backend."""
         await owner.configure_pi_thread(configuration, thread, command)
@@ -354,7 +395,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     @classmethod
     async def drain_owned_inbox(
         cls,
-        inputs: InputDrain,
+        inputs: OwnedInboxDrainer,
         session_id: AcpSessionId,
         thread: Thread,
     ) -> None:
@@ -365,12 +406,12 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     @classmethod
     def acknowledge_turn_inputs(
         cls,
-        comms: Comms,
+        acknowledger: TurnInputAcknowledger,
         thread: Thread,
-        origins: tuple[Message, ...],
+        origins: tuple[object, ...],
     ) -> None:
         """Record model-context read receipts when a backend starts executing bus origins."""
-        del comms, thread, origins
+        del acknowledger, thread, origins
 
     async def context_for_input(self, thread, context):
         return context

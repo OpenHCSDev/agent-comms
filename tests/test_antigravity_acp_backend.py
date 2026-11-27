@@ -32,7 +32,7 @@ from agent_comms.execution.pi_vocabulary import HighThinkingLevel
 from agent_comms.execution.runtime_observations import AgentInfo, ContextInfo
 from agent_comms.execution.send_outcome import NO_SEND_BOUNDARY
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.turn_inbox import InputContent
+from agent_comms.execution.turn_inbox import InputContent, TurnInbox
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.projects.checkouts import Checkout, LaunchCheckout
 from agent_comms.registry.thread_management import ForkSpec, NewThreadSpec
@@ -41,9 +41,16 @@ from agent_comms.registry.threads import ChosenModel, NativeThread, Thread
 
 
 _FAKE_ACP_SERVER = """
-import json, sys, time, uuid
+import json, sys, threading, time, uuid
 
 sessions = {}
+write_lock = threading.Lock()
+
+def write_msg(payload):
+    with write_lock:
+        sys.stdout.write(json.dumps(payload) + "\\n")
+        sys.stdout.flush()
+
 for raw in sys.stdin:
     if not raw.strip():
         continue
@@ -52,17 +59,15 @@ for raw in sys.stdin:
     req_id = msg.get("id")
     params = msg.get("params") or {}
 
-    def reply(result):
-        sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": result}) + "\\n")
-        sys.stdout.flush()
+    def reply(result, rid=req_id):
+        write_msg({"jsonrpc": "2.0", "id": rid, "result": result})
 
     def update(sid, payload):
-        sys.stdout.write(json.dumps({
+        write_msg({
             "jsonrpc": "2.0",
             "method": "session/update",
             "params": {"sessionId": sid, "update": payload},
-        }) + "\\n")
-        sys.stdout.flush()
+        })
 
     if method == "initialize":
         reply({"protocolVersion": 1, "agentCapabilities": {"loadSession": True}})
@@ -93,11 +98,17 @@ for raw in sys.stdin:
     elif method == "session/prompt":
         sid = params["sessionId"]
         if sid not in sessions:
-            sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": req_id, "error": {"code": -32602, "message": f"Session not found: {sid}"}}) + "\\n")
-            sys.stdout.flush()
+            write_msg({"jsonrpc": "2.0", "id": req_id, "error": {"code": -32602, "message": f"Session not found: {sid}"}})
             continue
         sessions[sid]["turns"] = sessions[sid].get("turns", 0) + 1
         text = " ".join(b.get("text", "") for b in params.get("prompt", []) if b.get("type") == "text")
+        if "SLOW_HOLD" in text:
+            def finish_slow(rid=req_id, s=sid, t=text):
+                time.sleep(0.5)
+                update(s, {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": f"slow:{t}"}})
+                reply({"stopReason": "end_turn"}, rid=rid)
+            threading.Thread(target=finish_slow, daemon=True).start()
+            continue
         update(sid, {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": f"thinking:{sid[:6]}"}})
         update(sid, {"sessionUpdate": "tool_call", "toolCallId": f"tc-{sid[:6]}", "title": "run_command", "name": "run_command", "rawInput": {"CommandLine": "echo ok"}})
         update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": f"tc-{sid[:6]}", "name": "run_command", "status": "completed", "rawOutput": {"output": "ok", "exit_code": 0}, "content": [{"type": "content", "content": {"type": "text", "text": "ok"}}]})
@@ -237,6 +248,7 @@ async def test_shared_acp_process_multiplexes_two_backends_and_streams_events(tm
             worktree=str(tmp_path),
             send_boundary=NO_SEND_BOUNDARY,
             input_start=_StartListener(),
+            inbox=TurnInbox(),
         )
 
     loc_a = AntigravitySession.fresh_in(tmp_path)
@@ -459,6 +471,28 @@ async def test_comms_agent_drains_and_runs_two_turns_on_antigravity_acp(
         comms.messaging.send("tristan", thread.name, "non-waking alert", AlertKind, role=NoticeRole())
         await asyncio.sleep(0.3)
         assert len(comms.bus.inbox("tristan").page.messages) == 2
+
+        # Mid-turn steer: send a slow turn, then inject a second bus message WHILE the first turn is live!
+        comms.messaging.send("tristan", thread.name, "SLOW_HOLD initial task")
+        for _ in range(40):
+            await asyncio.sleep(0.02)
+            if agent.inputs.turn_live(sid):
+                break
+        assert agent.inputs.turn_live(sid), "Expected SLOW_HOLD turn to be actively running"
+        steered_sent = comms.messaging.send("tristan", thread.name, "MID_TURN_STEER_99")
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            if len(comms.bus.inbox("tristan").page.messages) >= 3 and not agent.inputs.turn_live(sid):
+                break
+        replies_after_steer = [m.body for m in comms.bus.inbox("tristan").page.messages]
+        assert len(replies_after_steer) == 3, f"Expected 3 combined replies, got {replies_after_steer}"
+        assert "MID_TURN_STEER_99" in replies_after_steer[2] and "SLOW_HOLD" in replies_after_steer[2]
+        steer_ref = steered_sent.message.reference
+        steer_win = comms.views.message_notifications_for_references(AllOutcomes(), (steer_ref,))
+        steer_summary = MessageNotification.summary(
+            steer_win.outcomes.get((steer_ref.seq, steer_ref.message_id), ())
+        )
+        assert "1 read" in steer_summary, f"Expected read receipt on steered msg, got {steer_summary!r}"
 
         diag_dir = root / "diagnostics"
         assert not (list(diag_dir.glob("*.json")) if diag_dir.exists() else [])

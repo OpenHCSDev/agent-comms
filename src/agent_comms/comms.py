@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from agent_comms.agent_backend import TurnInputAcknowledger
 from agent_comms.bus_context import BusContext
+from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.config_option import ConfigurationCatalogs
 from agent_comms.execution.context_assembly import ContextAssembly
@@ -57,9 +59,24 @@ class Comms(
     ContextAssembly,
     InputIngressContext[Thread],
     InputTextContext[InputAttempt],
+    TurnInputAcknowledger,
 ):
     input_dispositions: ClassVar[Callable[[Path], InputLookup[InputAttempt]]] = InputDispositions
     messaging: Messaging
+
+    def acknowledge_direct_turn_inputs(
+        self,
+        thread: Thread,
+        origins: tuple[Message, ...],
+        *,
+        bridge: type[HarnessSession],
+    ) -> None:
+        self.messaging.acknowledge_direct_turn_inputs(
+            thread,
+            origins,
+            root_id=self.owners.require_private_launch().wire_root_id,
+            bridge=bridge,
+        )
 
     def __init__(self, root: CommsRoute) -> None:
         super().__init__(root)

@@ -533,6 +533,88 @@ def resolve_agy_binary() -> str:
     return "agy"
 
 
+class AcpLivePrompt:
+    """One live ``session/prompt`` turn on ``agy acp`` supporting concurrent mid-turn steers."""
+
+    def __init__(
+        self,
+        process: AntigravityAcpProcess,
+        session_id: AcpSessionId,
+        queue: Queue[AcpQueueItem],
+        initial_task: Task[dict[str, JsonValue]],
+    ) -> None:
+        self._process = process
+        self._session_id = session_id
+        self._queue = queue
+        self._in_flight: set[Task[dict[str, JsonValue]]] = {initial_task}
+        self._last_stop_reason: str = ""
+        self._finished = False
+
+    def steer(self, blocks: Sequence[Mapping[str, object]]) -> None:
+        """Inject a mid-turn follow-up prompt concurrently onto the active ``agy acp`` session."""
+        if self._finished:
+            return
+        task = asyncio.create_task(
+            self._process._call_locked_unchecked(
+                "session/prompt",
+                {"sessionId": str(self._session_id), "prompt": list(blocks)},
+                timeout=0.0,
+            ),
+            name=f"antigravity-steer-{str(self._session_id)[:8]}",
+        )
+        self._in_flight.add(task)
+
+    def _drain_queued_nowait(self) -> list[AcpPromptFrame]:
+        frames: list[AcpPromptFrame] = []
+        while not self._queue.empty():
+            frames.extend(self._queue.get_nowait().frames())
+        return frames
+
+    async def next_frames(self) -> tuple[AcpPromptFrame, ...]:
+        """Await the next batch of update frames, or the final ``AcpResultFrame`` once all
+        in-flight prompt/steer RPCs settle; returns ``()`` after completion."""
+        if self._finished:
+            return ()
+        while True:
+            completed = [task for task in self._in_flight if task.done()]
+            for task in completed:
+                self._in_flight.remove(task)
+                result = AcpPromptResultWire.model_validate(await task)
+                if result.stop_reason:
+                    self._last_stop_reason = result.stop_reason
+            if not self._in_flight:
+                self._finished = True
+                queued = self._drain_queued_nowait()
+                queued.append(AcpResultFrame(self._last_stop_reason))
+                return tuple(queued)
+            if not self._queue.empty():
+                return tuple(self._drain_queued_nowait())
+            get_task: Task[AcpQueueItem] = asyncio.create_task(self._queue.get())
+            wait_set: set[Task[object]] = {*self._in_flight, get_task}
+            done, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED)
+            if get_task in done:
+                return tuple(get_task.result().frames())
+            get_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await get_task
+
+    async def cancel_and_close(self) -> None:
+        self._finished = True
+        with suppress(AcpRpcError):
+            await self._process.cancel(self._session_id)
+        for task in list(self._in_flight):
+            task.cancel()
+        for task in list(self._in_flight):
+            with suppress(asyncio.CancelledError, AcpRpcError, ConnectionError):
+                await task
+        self._in_flight.clear()
+        self._process._session_queues.pop(self._session_id, None)
+
+    def close(self) -> None:
+        self._finished = True
+        self._process._session_queues.pop(self._session_id, None)
+
+
 class AntigravityAcpProcess:
     """One shared ``agy acp`` process multiplexing arbitrary concurrent sessions over stdio."""
 
@@ -755,12 +837,12 @@ class AntigravityAcpProcess:
             {"sessionId": str(session_id), "configId": str(config_key), "value": value},
         )
 
-    async def prompt(
+    async def open_prompt(
         self,
         session_id: AcpSessionId,
         blocks: Sequence[Mapping[str, object]],
-    ) -> AsyncIterator[AcpPromptFrame]:
-        """Stream decoded `AcpUpdateFrame`s for ``session_id`` and end with `AcpResultFrame`."""
+    ) -> AcpLivePrompt:
+        """Start one live ``session/prompt`` turn that accepts mid-turn ``.steer()`` calls."""
         await self.ensure_started()
         queue: Queue[AcpQueueItem] = Queue()
         self._session_queues[session_id] = queue
@@ -772,36 +854,27 @@ class AntigravityAcpProcess:
             ),
             name=f"antigravity-prompt-{str(session_id)[:8]}",
         )
+        return AcpLivePrompt(self, session_id, queue, prompt_task)
+
+    async def prompt(
+        self,
+        session_id: AcpSessionId,
+        blocks: Sequence[Mapping[str, object]],
+    ) -> AsyncIterator[AcpPromptFrame]:
+        """Stream decoded `AcpUpdateFrame`s for ``session_id`` and end with `AcpResultFrame`."""
+        live = await self.open_prompt(session_id, blocks)
         try:
             while True:
-                if prompt_task.done():
-                    while not queue.empty():
-                        for frame in queue.get_nowait().frames():
-                            yield frame
-                    result = AcpPromptResultWire.model_validate(await prompt_task)
-                    yield AcpResultFrame(result.stop_reason)
+                batch = await live.next_frames()
+                if not batch:
                     return
-                get_task = asyncio.create_task(queue.get())
-                done, _ = await asyncio.wait(
-                    {prompt_task, get_task},
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                if get_task in done:
-                    for frame in get_task.result().frames():
-                        yield frame
-                else:
-                    get_task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await get_task
+                for frame in batch:
+                    yield frame
         except asyncio.CancelledError:
-            with suppress(AcpRpcError):
-                await self.cancel(session_id)
-            prompt_task.cancel()
-            with suppress(asyncio.CancelledError, AcpRpcError):
-                await prompt_task
+            await live.cancel_and_close()
             raise
         finally:
-            self._session_queues.pop(session_id, None)
+            live.close()
 
     async def cancel(self, session_id: AcpSessionId) -> None:
         if not self.alive:

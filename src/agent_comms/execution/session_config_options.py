@@ -15,7 +15,7 @@ from acp.schema import (
     SetSessionConfigOptionResponse,
 )
 
-from agent_comms.agent_backend import AgentBackend
+from agent_comms.agent_backend import AgentBackend, ThreadSettingApplier
 from agent_comms.comms import Comms
 from agent_comms.config_option import (
     CatalogConfigOption,
@@ -43,7 +43,7 @@ from agent_comms.registry.threads import ChosenModel, NextTurnConfiguration, Thr
 from agent_comms.transport.runtime_server import RuntimeServer
 
 
-class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
+class SessionConfigOptions(ThreadSettingApplier, ConfigurationChanges[ConfigOptions]):
     """Publish and persist each executing session's original configuration."""
 
     def __init__(

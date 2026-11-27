@@ -24,6 +24,7 @@ from agent_comms.coordination.errors import (
     StaleRevision,
     TranscriptChanged,
 )
+from agent_comms.agent_backend import TurnPublicationRecorder
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.history_view import HistoryView, OwnHistory
 from agent_comms.execution.native_entries import NativeEvidenceScope
@@ -524,7 +525,7 @@ class AcquiredThreadPresentation(NotifiedThreadPresentation):
             "send its published() ThreadPresentation")
 
 
-class Transcripts:
+class Transcripts(TurnPublicationRecorder):
     def __init__(self, root: Path, registry: Registration, bus: MessageBus):
         self.root = root
         self.registry = registry

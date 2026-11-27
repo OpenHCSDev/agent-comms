@@ -209,7 +209,8 @@ class TurnProgress(AgentEventConsumer[Comms]):
 
     @handles(events.InputStarted)
     async def input_started(self, event: events.InputStarted) -> None:
-        await event.captured(self.inputs, self.session_id).started(
+        captured = event.captured(self.inputs, self.session_id)
+        await captured.started(
             self.inputs, self.session_id,
             LiveQueueScope(session_id=self.session_id, claimed_identity=ClaimedIdentity(
                 self.turn_lease.identity.incarnation,
@@ -217,7 +218,7 @@ class TurnProgress(AgentEventConsumer[Comms]):
             ), owner=self.thread.require_process()),
         )
         await CoordinationWork.run_worker(partial(
-            self.thread.backend.acknowledge_turn_inputs, self.comms, self.thread, self.origins,
+            self.thread.backend.acknowledge_turn_inputs, self.comms, self.thread, captured.origins,
         ))
 
     async def before_native_metadata(self, event: NativeMetadataObservation) -> None:

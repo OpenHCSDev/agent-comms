@@ -6,12 +6,16 @@ from abc import (
     abstractmethod,
 )
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
+from agent_comms import agent_events as events
+from agent_comms.agent_backend import InputStartListener
+from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.backend_query import TurnInputContent
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.pi_vocabulary import ThinkingLevelField
+from agent_comms.execution.send_outcome import SendBoundary
 from agent_comms.execution.turn_context import InputContributionCoordinates
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import InputId
@@ -80,6 +84,17 @@ class TurnInboxItem(ABC):
     def carried_inputs(self) -> tuple[InputId, ...]:
         return ()
 
+    def apply_to_acp_turn(
+        self,
+        *,
+        steer: Callable[[list[dict[str, object]]], None],
+        send_boundary: SendBoundary,
+        input_start: InputStartListener,
+    ) -> Iterator[AgentEvent]:
+        """Inject this inbox item into a live ACP turn if it carries a user input."""
+        del steer, send_boundary, input_start
+        return iter(())
+
 
 class TurnInbox(asyncio.Queue[TurnInboxItem]):
     """The live inbox parks its head until the existing observer sees READY."""
@@ -136,6 +151,30 @@ class InputRequest(TurnInboxItem):
     @property
     def carried_inputs(self) -> tuple[InputId, ...]:
         return (self.input_id,)
+
+    def apply_to_acp_turn(
+        self,
+        *,
+        steer: Callable[[list[dict[str, object]]], None],
+        send_boundary: SendBoundary,
+        input_start: InputStartListener,
+    ) -> Iterator[AgentEvent]:
+        native_id = InputId.mint()
+        with send_boundary.send_following(
+            self.input_id, native_id, self.content.text
+        ) as outcome:
+            refusal = outcome.run_direct(
+                on_granted=lambda: (
+                    input_start.following(self.input_id, native_id, self.content.text),
+                    "",
+                )[1],
+                on_denied=lambda reason: reason,
+            )
+        if refusal:
+            yield events.FollowingInputRefused(id=self.input_id)
+            return
+        steer(self.content.acp_prompt_blocks())
+        yield events.FollowingInputStarted(id=self.input_id)
 
 
 @dataclass(frozen=True)
