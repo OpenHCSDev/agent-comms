@@ -397,6 +397,7 @@ async def test_comms_agent_drains_and_runs_two_turns_on_antigravity_acp(
     from agent_comms.execution.acp import CommsAgent, RetainedOwnerLaunch
     from agent_comms.execution.child_process import ProcessIdentity
     from agent_comms.execution.native_arguments import NativeArguments
+    from agent_comms.nominal.field_codec import ToolCallId
     from agent_comms.registry.threads import NextTurnConfiguration
 
     fake_script = tmp_path / "fake_agy.py"
@@ -625,5 +626,140 @@ def test_committed_progress_flushes_intermediate_and_open_background_replies() -
     )
     assert not any(isinstance(ev, events.CommittedProgress) for ev in e4)
     assert "".join(state.pending_progress_chunks) == "all done"
+
+
+@pytest.mark.asyncio
+async def test_antigravity_acp_turn_publishes_external_transcript_items_and_drafts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+    from bus_record_fixture import prepare_native_comms
+    from agent_comms.comms import wire
+    from agent_comms.execution.acp import CommsAgent, RetainedOwnerLaunch
+    from agent_comms.execution.child_process import ProcessIdentity
+    from agent_comms.execution.native_arguments import NativeArguments
+    from agent_comms.nominal.field_codec import ToolCallId
+    from agent_comms.registry.threads import NextTurnConfiguration
+    from agent_comms.transcript.transcript_drafts import NoDraft
+    from agent_comms.transcript.transcript_events import (
+        AssistantTranscript,
+        SentTranscript,
+        ThinkingTranscript,
+        ToolEndTranscript,
+        ToolStartTranscript,
+    )
+
+    fake_script = tmp_path / "fake_agy_transcript.py"
+    fake_script.write_text(
+        '''import json, sys
+
+def send(obj):
+    sys.stdout.write(json.dumps(obj) + "\\n")
+    sys.stdout.flush()
+
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    msg = json.loads(line)
+    method = msg.get("method")
+    rid = msg.get("id")
+    params = msg.get("params") or {}
+    if method == "initialize":
+        send({"jsonrpc": "2.0", "id": rid, "result": {"protocolVersion": 1}})
+    elif method == "session/new":
+        send({"jsonrpc": "2.0", "id": rid, "result": {
+            "sessionId": "11111111-2222-3333-4444-555555555555",
+            "configOptions": [
+                {"id": "model", "currentValue": "gemini-4-neon"},
+                {"id": "thought_level", "currentValue": "high"},
+            ],
+        }})
+    elif method == "session/prompt":
+        sid = params["sessionId"]
+        for update in (
+            {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": "inspecting "}},
+            {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": "android logs"}},
+            {"sessionUpdate": "tool_call", "toolCallId": "call-1", "name": "run_command", "title": "run_command", "rawInput": {"CommandLine": "adb logcat -d"}},
+            {"sessionUpdate": "tool_call_update", "toolCallId": "call-1", "name": "run_command", "status": "completed", "rawOutput": "clean"},
+            {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "logs checked, patching now"}},
+            {"sessionUpdate": "tool_call", "toolCallId": "call-2", "name": "read_file", "title": "read_file", "rawInput": {"Path": "/tmp/app.py"}},
+            {"sessionUpdate": "tool_call_update", "toolCallId": "call-2", "name": "read_file", "status": "completed", "rawOutput": "print(1)"},
+            {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "all fixed"}},
+            {"sessionUpdate": "usage_update", "used": 1200, "size": 1048576},
+        ):
+            send({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": sid, "update": update}})
+        send({"jsonrpc": "2.0", "id": rid, "result": {"stopReason": "end_turn"}})
+    elif rid is not None:
+        send({"jsonrpc": "2.0", "id": rid, "result": {}})
+''',
+        encoding="utf-8",
+    )
+    fake_bin = tmp_path / "fake_agy_transcript"
+    fake_bin.write_text(f"#!/bin/sh\nexec {sys.executable} {fake_script} \"$@\"\n", encoding="utf-8")
+    fake_bin.chmod(0o755)
+    monkeypatch.setenv("AGENT_COMMS_AGY_BIN", str(fake_bin))
+
+    root = tmp_path / "bus"
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    comms = prepare_native_comms(wire(root))
+    comms.registry.declare(NativeThread("tristan", frozenset(), Checkout(worktree)))
+
+    declared = comms.registry.declare(NativeThread("toad-sim", frozenset({"toad"}), Checkout(worktree)))
+    comms.threads.set_thread_configuration(
+        declared, NextTurnConfiguration(model=ChosenModel("antigravity/gemini-4-neon")),
+    )
+    comms.owners.acquire_thread("toad-sim")
+    owner = comms.registry.entry("toad-sim").entry.owner_identity
+
+    proc = ProcessIdentity.capture(os.getpid())
+    agent = CommsAgent(comms, auto_wake=True)
+    sid = AcpSessionId("toad-sim")
+    try:
+        env = {
+            **os.environ,
+            "AGENT_COMMS_THREAD": "toad-sim",
+            "PI_WORKTREE": str(worktree),
+            NativeArguments.binary_key: NativeArguments.default_binary,
+        }
+        launch = RetainedOwnerLaunch(process=proc, interpreter=sys.executable, environment=env)
+        await agent.sessions.start_owner(launch, owner)
+
+        comms.messaging.send("tristan", "toad-sim", "check android message view")
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            replies = [m.body for m in comms.bus.inbox("tristan").page.messages]
+            if len(replies) >= 2 and not agent.inputs.turn_live(sid):
+                break
+
+        replies = [m.body for m in comms.bus.inbox("tristan").page.messages]
+        assert replies == ["logs checked, patching now", "all fixed"]
+
+        page = comms.transcripts.capture_page_read("toad-sim").read()
+        thoughts = [ev.text for ev in page.events if isinstance(ev, ThinkingTranscript)]
+        starts = [ev for ev in page.events if isinstance(ev, ToolStartTranscript)]
+        ends = [ev for ev in page.events if isinstance(ev, ToolEndTranscript)]
+        sents = [ev.text for ev in page.events if isinstance(ev, SentTranscript)]
+        dup_assistants = [ev for ev in page.events if isinstance(ev, AssistantTranscript)]
+
+        assert thoughts == ["inspecting android logs"]
+        assert [(ev.tool_call_id, ev.tool_name) for ev in starts] == [
+            (ToolCallId("call-1"), "bash"),
+            (ToolCallId("call-2"), "read"),
+        ]
+        assert [(ev.tool_call_id, ev.text, ev.ok) for ev in ends] == [
+            (ToolCallId("call-1"), "clean", True),
+            (ToolCallId("call-2"), "print(1)", True),
+        ]
+        assert sents == ["logs checked, patching now", "all fixed"]
+        assert dup_assistants == []
+
+        ext = comms.transcripts.external("toad-sim")
+        with ext.reading() as reader:
+            assert reader.current_draft(ext.root, ext.incarnation) == NoDraft()
+    finally:
+        await agent.shutdown()
+
 
 

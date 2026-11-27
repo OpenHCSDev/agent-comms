@@ -108,6 +108,31 @@ class TurnInputAcknowledger(ABC):
     ) -> None: ...
 
 
+class TurnTranscriptSink:
+    """Per-turn transcript publisher for backends whose history lives in ``ExternalTranscript``."""
+
+    async def on_thinking(self, text: str) -> None:
+        del text
+
+    async def on_chunk(self, text: str) -> None:
+        del text
+
+    async def on_tool_start(self, event: object) -> None:
+        del event
+
+    async def on_tool_end(self, event: object) -> None:
+        del event
+
+    def on_committed_progress(self, text: str, published: tuple[object, ...]) -> None:
+        del text, published
+
+    def on_finish(self, published: tuple[object, ...]) -> None:
+        del published
+
+    def on_abort(self) -> None:
+        pass
+
+
 class BackendDeclarationError(TypeError):
     """A backend declaration is incomplete; the message names every missing piece."""
 
@@ -470,6 +495,17 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     @classmethod
     def as_native_backend(cls, incoming: type[AgentBackend]) -> type[AgentBackend]:
         return cls
+
+    @classmethod
+    def turn_transcript_sink(
+        cls,
+        root: Path,
+        incarnation: object,
+        turn_id: object,
+        opening: tuple[object, ...],
+    ) -> TurnTranscriptSink:
+        del root, incarnation, turn_id, opening
+        return TurnTranscriptSink()
 
     @classmethod
     def seal(cls) -> None:

@@ -562,6 +562,7 @@ class OwnedTurn(ProgressTurn):
         except asyncio.CancelledError:
             await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
             await self.backend.abort(self.owner_task)
+            await CoordinationWork.run_worker(self.progress.transcript_sink.on_abort)
             state = await CoordinationWork.run_worker(self.settle_unbound)
             await self.progress.consumer.dispatch(events.PromptCancelled(state))
             raise

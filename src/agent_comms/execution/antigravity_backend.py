@@ -30,8 +30,10 @@ from agent_comms.agent_backend import (
     ThreadServingBackend,
     ThreadSettingApplier,
     TurnInputAcknowledger,
+    TurnTranscriptSink,
 )
 from agent_comms.execution.agent_event import AgentEvent
+from agent_comms.execution.antigravity_transcript import ExternalTurnTranscriptSink
 from agent_comms.installer.harness_install import AntigravityAcpSession
 from agent_comms.execution.antigravity_acp import (
     AcpRpcError,
@@ -168,6 +170,16 @@ class AntigravityAcpBackend(
             origins,
             bridge=AntigravityAcpSession,
         )
+
+    @classmethod
+    def turn_transcript_sink(
+        cls,
+        root: Path,
+        incarnation: object,
+        turn_id: object,
+        opening: tuple[object, ...],
+    ) -> TurnTranscriptSink:
+        return ExternalTurnTranscriptSink.for_turn(root, incarnation, turn_id, opening)
 
     def __init__(self, process: AntigravityAcpProcess) -> None:
         self._process = process
