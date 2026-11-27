@@ -926,14 +926,6 @@ class BusFile(DurableFile):
         )
 
 
-class BusStoreFile(BusFile):
-    """Bus database location usable by route and launcher modules without importing Bus."""
-
-    __slots__ = ()
-    filename = "bus.sqlite3"
-    row_table: ClassVar[str] = "bus"
-
-
 class InputCaptureFile(RootFile):
     """A store participating in the original input capture's common source cut."""
 
@@ -1399,6 +1391,14 @@ class PublishedSQLiteFile(SQLiteFile):
             ) from error
 
 
+
+
+class BusStoreFile(BusFile, SQLiteFile):
+    """Bus database location usable by route and launcher modules without importing Bus."""
+
+    __slots__ = ()
+    filename = "bus.sqlite3"
+    row_table: ClassVar[str] = "bus"
 
 
 class RegistryFile(RollbackRetained, PublishedSQLiteFile, GoalWakeFile):

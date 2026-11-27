@@ -13,6 +13,7 @@ from typing import Annotated
 
 import pytest
 
+from agent_comms.cli_verbs.reconcile_stores import ReconcileStoresCliCommand
 from agent_comms.coordination.errors import (
     ContendedRead,
     CoordinationReadUnavailable,
@@ -24,14 +25,20 @@ from agent_comms.execution.runtime_info import (
     RuntimeInfoDocument,
     RuntimeInfoStore,
 )
+from agent_comms.installer.upgrade import bus_files, carried
+from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import WireExclude
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.storage.file_observation import DocumentBytes, FileRevision, MissingFile
 from agent_comms.storage.locked_store import (
+    BusStoreFile,
     DocumentChange,
+    LiveFilesRequest,
     LockedStore,
     RegistryFile,
+    RootFile,
+    SQLiteFile,
 )
 from agent_comms.storage.store_files import (
     DependentStateTier,
@@ -648,3 +655,31 @@ def test_published_content_compares_without_decoding_or_borrowing_input(tmp_path
     store.replace_if_changed(expected)
     assert DocumentBytes.capture(store.path) == before
     assert len(store.decoded) == 1
+
+
+def test_every_sqlite_root_declaration_is_sqlite_file_and_unchanged_reconcile_writes_nothing(tmp_path):
+    """Every .sqlite3 RootFile owner (including BusStoreFile) must inherit SQLiteFile so
+    bus_files/backup group -wal/-shm with the database, and ReconciledFile.reconcile_at must
+    not open a writer or create -wal/-shm when a store's schema already matches."""
+    assert issubclass(BusStoreFile, SQLiteFile)
+    for owner, _directory in RootFile.declarations_in(tmp_path):
+        filename = getattr(owner, "filename", "")
+        if filename.endswith(".sqlite3"):
+            assert issubclass(owner, SQLiteFile), f"{owner.__qualname__} ({filename}) must inherit SQLiteFile"
+
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source_bus = Bus(source_dir / BusStoreFile.filename)
+    with source_bus.writing() as db:
+        Bus.schema_at(source_bus.path).create_schema(db)
+    practice = tmp_path / "practice"
+    practice.mkdir()
+    BusStoreFile.copy_file(source_bus.path, practice / BusStoreFile.filename)
+
+    request = LiveFilesRequest(practice)
+    before = bus_files(request)
+    result = ReconcileStoresCliCommand().answer(practice)
+    assert result.rewritten == ()
+    assert bus_files(request) == before
+    assert carried(request, before, (), frozenset()).rewritten == 0
+
