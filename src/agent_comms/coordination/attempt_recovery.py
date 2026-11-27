@@ -25,7 +25,7 @@ from agent_comms.coordination.errors import (
 )
 from agent_comms.coordination.reason_codes import GivenReasonCode, NoDetail
 from agent_comms.coordination.recovery_states import DeferredRecovery, FailedRecovery
-from agent_comms.coordination.response import PublicationAppendDispatches
+from agent_comms.coordination.response import ResponseDispatches
 from agent_comms.coordination.results import Applied
 from agent_comms.coordination.session import CoordinationCapture, NativeCapture
 from agent_comms.coordination.snapshot import RecoverySnapshot
@@ -261,7 +261,7 @@ class VerifiedAttemptOwnerLoss(VerifiedOwnerLoss, CoordinationCapture):
     def can_settle_publications(self, snapshot: RecoverySnapshot) -> bool:
         if not self.owns(self._store, snapshot.require_attempt()):
             raise RecoveryBlocked("publication failure requires this exact released owner")
-        return PublicationAppendDispatches.unattempted(self._store, self.boundary.bus, snapshot)
+        return ResponseDispatches.unattempted(self._store, self.boundary.bus, snapshot)
 
     def release_resources(self, snapshot: RecoverySnapshot, outcome) -> None:
         self.boundary.release_resources(snapshot, outcome)
@@ -304,7 +304,7 @@ class DispatchedOwnerLoss(VerifiedAttemptOwnerLoss):
     def settle(self, recovery_cls, store: Coordination, execution_id: str, owner) -> None:
         self.require_native_exit()
         try:
-            PublicationAppendDispatches.resolve_retained(
+            ResponseDispatches.resolve_retained(
                 store, self.boundary.bus, self.boundary,
                 owner_lookup=owner.incarnation.lookup,
                 execution_id=execution_id,

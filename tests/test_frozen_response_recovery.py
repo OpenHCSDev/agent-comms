@@ -15,9 +15,10 @@ from agent_comms.coordination.attempt_states import ModelRunningAttempt, PromptA
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import CoordinationError, RecoveryBlocked, ResponseNotDispatched
 from agent_comms.coordination.obligation_states import FailedResponse
-from agent_comms.coordination.response import LiveResponseOwner, PublicationAppendDispatches, prepare_fenced_response, publish_fenced_response
+from agent_comms.coordination.response import LiveResponseOwner, ResponseDispatches, prepare_fenced_response, publish_fenced_response
 from agent_comms.coordination.tables.attempts import ReplayFact
 from agent_comms.coordination.tables.executions import CurrentExecutions
+from agent_comms.coordination.tables.response_schema import PublicationAppendDispatches
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.storage.file_observation import FileRevision
@@ -50,7 +51,7 @@ class FrozenReplyHistory(ClaimedHistory):
                                                fence.owner_generation + 1, fence.attempt_ordinal, 1000).insert(db)
                 return
             target_method = ("_publish_keyed_response_unlocked" if cls.mode == "attempted" else "complete")
-            owner = participant.bus.publisher if cls.mode == "attempted" else PublicationAppendDispatches
+            owner = participant.bus.publisher if cls.mode == "attempted" else ResponseDispatches
             with patch.object(owner, target_method, side_effect=OSError("original publication interrupted")):
                 with pytest.raises(OSError, match="original publication interrupted"):
                     publish_fenced_response(store, participant.bus, fence,
@@ -117,7 +118,7 @@ def test_original_owner_recovery_distinguishes_unattempted_and_uncertain_publica
                 # Re-enter the ordinary preparation resolver after recovery: a retained
                 # failed reply must not become a permanent restart trap.
                 with store.session.capture(comms.bus) as boundary:
-                    assert PublicationAppendDispatches.resolve_retained(
+                    assert ResponseDispatches.resolve_retained(
                         store, comms.bus, boundary, owner_lookup=owner.incarnation.lookup) == ()
             else:
                 assert after.completed_response()
@@ -137,15 +138,15 @@ def test_live_owner_cannot_retire_frozen_reply_and_partial_publication_is_not_un
             prepare_fenced_response(case.store, case.bus, case.fence, "Frozen route answer",
                                     exact_target=target, owner_witness=case.witness)
         with pytest.raises(ResponseNotDispatched), case.store.session.capture(case.bus) as boundary:
-            PublicationAppendDispatches.resolve_retained(case.store, case.bus, boundary,
-                                                        owner_lookup=case.owner_lookup)
+            ResponseDispatches.resolve_retained(case.store, case.bus, boundary,
+                                                owner_lookup=case.owner_lookup)
         with pytest.raises(RecoveryBlocked):
             with VerifiedOwnerLoss.observe_native_release(case.store, "exec"):
                 pytest.fail("a live owner is not a released owner")
         publish_fenced_response(case.store, case.bus, case.fence,
                                 exact_target=routes[0], owner_witness=case.witness)
         with case.store.session.writing():
-            assert not PublicationAppendDispatches.unattempted(case.store, case.bus, case.store.get("exec"))
+            assert not ResponseDispatches.unattempted(case.store, case.bus, case.store.get("exec"))
         assert case.store.get("exec").is_current
     finally:
         case.close()
