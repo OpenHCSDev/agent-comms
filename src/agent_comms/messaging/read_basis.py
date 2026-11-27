@@ -15,7 +15,7 @@ from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from itertools import product
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, TextIO
+from typing import TYPE_CHECKING, Annotated, NoReturn, Self, TextIO
 
 from agent_comms.coordination.errors import DMPaintedBoundChanged, DMScopeChanged
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
@@ -466,9 +466,20 @@ class ReadCursor:
                CAST(json_extract(value,'$[2]') AS TEXT) AS sender,
                json_extract(value,'$[3]') AS high_water,
                json_extract(value,'$[4]') AS exceptions
-        FROM json_each({parameter}))"""
+        FROM json_each({parameter})
+    ), cursor_exceptions AS MATERIALIZED (
+        SELECT rc.actor AS ex_actor, rc.target AS ex_target,
+               rc.sender AS ex_sender, CAST(ex.value AS INTEGER) AS ex_seq
+        FROM read_cursors AS rc, json_each(rc.exceptions) AS ex
+        WHERE rc.exceptions != '[]'
+    )"""
 
-    unread_sql = "seq > high_water AND (exceptions = '[]' OR seq NOT IN (SELECT value FROM json_each(exceptions)))"
+    unread_sql = (
+        "seq > high_water AND (exceptions = '[]' OR NOT EXISTS ("
+        "SELECT 1 FROM cursor_exceptions "
+        "WHERE ex_actor = actor AND ex_target = target "
+        "AND ex_sender = cursor_sender AND ex_seq = seq))"
+    )
 
     def unread_rule(self) -> str:
         """Which joined request rows this cursor still counts; a human read is the whole rule."""
@@ -500,7 +511,8 @@ class ReadCursor:
 
     joined_sql = """cursors AS NOT MATERIALIZED (
         SELECT row.*,max(coalesce(read.high_water,0),coalesce(all_read.high_water,0)) AS high_water,
-            coalesce(read.exceptions,'[]') AS exceptions FROM requests AS row
+            coalesce(read.exceptions,'[]') AS exceptions,
+            coalesce(read.sender,'') AS cursor_sender FROM requests AS row
         LEFT JOIN read_cursors AS read ON read.actor=row.actor AND read.target=row.target
             AND (read.sender='' OR read.sender=row.sender)
         LEFT JOIN read_cursors AS all_read ON all_read.actor=row.actor
