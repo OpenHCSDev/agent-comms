@@ -96,7 +96,7 @@ for raw in sys.stdin:
         text = " ".join(b.get("text", "") for b in params.get("prompt", []) if b.get("type") == "text")
         update(sid, {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": f"thinking:{sid[:6]}"}})
         update(sid, {"sessionUpdate": "tool_call", "toolCallId": f"tc-{sid[:6]}", "title": "run_command", "name": "run_command", "rawInput": {"CommandLine": "echo ok"}})
-        update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": f"tc-{sid[:6]}", "status": "completed", "content": [{"type": "content", "content": {"type": "text", "text": "ok"}}]})
+        update(sid, {"sessionUpdate": "tool_call_update", "toolCallId": f"tc-{sid[:6]}", "name": "run_command", "status": "completed", "rawOutput": {"output": "ok", "exit_code": 0}, "content": [{"type": "content", "content": {"type": "text", "text": "ok"}}]})
         update(sid, {"sessionUpdate": "usage_update", "used": 1200, "size": 1048576})
         update(sid, {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": f"reply:{text}:{sessions[sid]['model']}"}})
         reply({"stopReason": "end_turn"})

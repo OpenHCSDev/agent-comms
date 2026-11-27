@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
+import json
 
 from pydantic import ConfigDict, Field, JsonValue
 
@@ -288,18 +289,27 @@ class ToolCallAcpUpdate(AntigravityAcpUpdate, declared_name="tool_call"):
         yield start
 
 
+def _format_raw_output(value: JsonValue) -> str:
+    if isinstance(value, str):
+        return value
+    if not value:
+        return ""
+    return json.dumps(value)
+
+
 class ToolCallUpdateAcpUpdate(AntigravityAcpUpdate, declared_name="tool_call_update"):
     tool_call_key: str = Field(default="agy-tool", alias="toolCallId")
+    name: str = ""
     title: str = ""
     status: str = ""
     content: list[AcpContentBlock] = Field(default_factory=list)
-    raw_output: str = Field(default="", alias="rawOutput")
+    raw_output: JsonValue = Field(default="", alias="rawOutput")
 
     def convert(self, state: AcpTurnStreamState) -> Iterator[AgentEvent]:
         call_key = self.tool_call_key or "agy-tool"
-        name = state.tool_names.get(call_key) or self.title or "tool"
+        name = state.tool_names.get(call_key) or self.name or self.title or "tool"
         parts = [block.extract_text() for block in self.content]
-        output = "\n".join(part for part in parts if part) or self.raw_output
+        output = "\n".join(part for part in parts if part) or _format_raw_output(self.raw_output)
         yield from AcpToolStatus.of(self.status).emit(ToolCallId(call_key), name, output)
 
 

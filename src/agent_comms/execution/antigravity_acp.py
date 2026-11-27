@@ -11,14 +11,16 @@ Antigravity's native SQLite + annotations + brain directories under
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 import json
+import logging
 import os
 import shutil
 import sqlite3
 import uuid
 from abc import ABC, abstractmethod
 from asyncio import Future, Lock, Queue, StreamReader, StreamWriter, Task
-from asyncio.subprocess import DEVNULL, PIPE, Process
+from asyncio.subprocess import PIPE, Process
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
@@ -47,6 +49,7 @@ from agent_comms.nominal.field_codec import AcpSessionId, NominalText
 from agent_comms.storage.store_files import AtomicFile
 
 DEFAULT_ANTIGRAVITY_HOME: Path = Path(".gemini/antigravity-cli")
+logger = logging.getLogger(__name__)
 
 
 class AntigravityConversationId(NominalText):
@@ -117,10 +120,7 @@ class SessionUpdateNotificationMethod(AcpNotificationMethod, declared_name="sess
         params: Mapping[str, JsonValue],
         session_queues: Mapping[AcpSessionId, Queue[AcpQueueItem]],
     ) -> None:
-        try:
-            parsed = AcpSessionUpdateParamsWire.model_validate(params)
-        except ValidationError:
-            return
+        parsed = AcpSessionUpdateParamsWire.model_validate(params)
         if not parsed.session_key:
             return
         sid = AcpSessionId(parsed.session_key)
@@ -140,13 +140,15 @@ class AcpRpcEnvelopeWire(AcpWireModel):
     id: int = 0
     method: str = ""
     params: dict[str, JsonValue] = Field(default_factory=dict)
-    result: dict[str, JsonValue] = Field(default_factory=dict)
+    result: JsonValue = Field(default_factory=dict)
     error: AcpRpcErrorWire = Field(default_factory=AcpRpcErrorWire)
 
     def unwrap_result(self) -> dict[str, JsonValue]:
         if self.error.code != 0:
             raise self.error.to_exception()
-        return self.result
+        if isinstance(self.result, dict):
+            return self.result
+        return {}
 
     def deliver(
         self,
@@ -427,49 +429,75 @@ class StoppedAcpSubprocess(AcpSubprocessState):
 
 
 class RunningAcpSubprocess(AcpSubprocessState):
-    """One live ``agy acp`` subprocess and its background stdout reader."""
+    """One live ``agy acp`` subprocess and its background stdout/stderr readers."""
 
     def __init__(
         self,
         proc: Process,
         stdin: StreamWriter,
         stdout: StreamReader,
+        stderr: StreamReader,
         pid: int,
     ) -> None:
         self._proc = proc
         self._stdin = stdin
         self._stdout = stdout
+        self._stderr = stderr
         self._pid = pid
         self._running = True
-        self._reader: tuple[Task[None], ...] = ()
+        self._tasks: tuple[Task[None], ...] = ()
+        self._stderr_lines: deque[str] = deque(maxlen=64)
 
-    def attach_reader(self, reader: Task[None]) -> None:
-        self._reader = (reader,)
+    def attach_tasks(self, *tasks: Task[None]) -> None:
+        self._tasks = tasks
+
+    def record_stderr(self, line: str) -> None:
+        stripped = line.rstrip()
+        if stripped:
+            self._stderr_lines.append(stripped)
+
+    def stderr_tail(self) -> str:
+        return "\n".join(self._stderr_lines)[-2048:]
+
+    async def read_stderr_line(self) -> bytes:
+        return await self._stderr.readline()
 
     def mark_exited(self) -> None:
         self._running = False
 
     @property
+    def _has_exited(self) -> bool:
+        return isinstance(self._proc.returncode, int)
+
+    @property
     def alive(self) -> bool:
-        return self._running
+        return self._running and not self._has_exited
 
     @property
     def identity(self) -> ProcessState:
-        return ProcessIdentity.capture(self._pid) if self._running else NoProcess()
+        return ProcessIdentity.capture(self._pid) if self.alive else NoProcess()
 
     async def readline(self) -> bytes:
         return await self._stdout.readline()
 
     async def write_line(self, encoded: bytes) -> None:
-        if not self._running:
+        if not self.alive:
             raise ConnectionError("Antigravity ACP server is not running")
         self._stdin.write(encoded)
         await self._stdin.drain()
 
-    async def terminate(self) -> None:
-        was_running = self._running
+    async def exit_description(self) -> str:
+        if not self._has_exited:
+            with suppress(TimeoutError):
+                await asyncio.wait_for(self._proc.wait(), timeout=1.0)
+        rc = self._proc.returncode
+        code_text = f"exit code {rc}" if isinstance(rc, int) else "still running"
+        tail = self.stderr_tail()
+        return f"{code_text}; stderr: {tail}" if tail else code_text
+
+    async def terminate_process(self) -> None:
         self._running = False
-        if was_running:
+        if not self._has_exited:
             with suppress(ProcessLookupError):
                 self._proc.terminate()
             try:
@@ -479,12 +507,16 @@ class RunningAcpSubprocess(AcpSubprocessState):
                     self._proc.kill()
                 with suppress(ProcessLookupError):
                     await self._proc.wait()
-        for reader in self._reader:
-            if not reader.done():
-                reader.cancel()
+
+    async def terminate(self) -> None:
+        await self.terminate_process()
+        current = asyncio.current_task()
+        for task in self._tasks:
+            if task is not current and not task.done():
+                task.cancel()
                 with suppress(asyncio.CancelledError):
-                    await reader
-        self._reader = ()
+                    await task
+        self._tasks = ()
 
 
 def resolve_agy_binary() -> str:
@@ -550,20 +582,25 @@ class AntigravityAcpProcess:
                 *self._command,
                 stdin=PIPE,
                 stdout=PIPE,
-                stderr=DEVNULL,
+                stderr=PIPE,
                 env=env,
                 limit=16 * 1024 * 1024,
             )
             stdin = proc.stdin
             stdout = proc.stdout
+            stderr = proc.stderr
             pid = proc.pid
             if not (
-                isinstance(stdin, StreamWriter) and isinstance(stdout, StreamReader) and pid > 0
+                isinstance(stdin, StreamWriter)
+                and isinstance(stdout, StreamReader)
+                and isinstance(stderr, StreamReader)
+                and pid > 0
             ):
                 raise ConnectionError("Antigravity ACP subprocess missing stdio pipes")
-            running = RunningAcpSubprocess(proc, stdin, stdout, pid)
-            running.attach_reader(
-                asyncio.create_task(self._read_loop(running), name="antigravity-acp-reader")
+            running = RunningAcpSubprocess(proc, stdin, stdout, stderr, pid)
+            running.attach_tasks(
+                asyncio.create_task(self._read_loop(running), name="antigravity-acp-reader"),
+                asyncio.create_task(self._stderr_loop(running), name="antigravity-acp-stderr"),
             )
             self._state = running
             await self._call_locked_unchecked(
@@ -573,20 +610,39 @@ class AntigravityAcpProcess:
             )
             self._initialized = True
 
+    async def _stderr_loop(self, running: RunningAcpSubprocess) -> None:
+        while True:
+            raw = await running.read_stderr_line()
+            if not raw:
+                return
+            running.record_stderr(raw.decode("utf-8", errors="replace"))
+
     async def _read_loop(self, running: RunningAcpSubprocess) -> None:
+        failure_reason = ""
         try:
             while True:
                 raw = await running.readline()
                 if not raw:
                     break
-                try:
-                    envelope = AcpRpcEnvelopeWire.model_validate_json(raw)
-                except ValidationError:
+                stripped = raw.lstrip()
+                if not stripped.startswith(b"{"):
+                    logger.warning(
+                        "Non-JSON stdout from agy acp: %s",
+                        stripped[:200].decode("utf-8", errors="replace"),
+                    )
                     continue
+                envelope = AcpRpcEnvelopeWire.model_validate_json(stripped)
                 envelope.deliver(self._pending, self._session_queues)
+        except (ValidationError, ValueError, OSError) as exc:
+            failure_reason = f"Antigravity ACP frame error ({type(exc).__name__}): {exc}"
+            logger.error("%s", failure_reason)
+            await running.terminate_process()
         finally:
             running.mark_exited()
-            error = ConnectionError("Antigravity ACP server exited unexpectedly")
+            if not failure_reason:
+                description = await running.exit_description()
+                failure_reason = f"Antigravity ACP server exited unexpectedly ({description})"
+            error = ConnectionError(failure_reason)
             for future in list(self._pending.values()):
                 if not future.done():
                     future.set_exception(error)
