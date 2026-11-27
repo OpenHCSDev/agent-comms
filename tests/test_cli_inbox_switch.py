@@ -225,6 +225,16 @@ def test_models_json_invalidates_catalog_and_surfaces_labels(tmp_path: Path, mon
 
     first = asyncio.run(catalog.choices(thread))
     assert calls == 1
+    from agent_comms.execution.native_arguments import AntigravityProvider
+
+    expected_antigravity = [
+        CatalogChoice(
+            name=label,
+            value=f"{AntigravityProvider.declared_name}/{model_id}",
+            description=description,
+        )
+        for model_id, label, description in AntigravityProvider.catalog_models()
+    ]
     assert first == [
         CatalogChoice(
             name="Personal Model 2B (Widened SFT v2) (personal-model/pm-2b-sft-v2)",
@@ -236,6 +246,7 @@ def test_models_json_invalidates_catalog_and_surfaces_labels(tmp_path: Path, mon
             value="openai-codex/gpt-5.6-sol",
             description=None,
         ),
+        *expected_antigravity,
         CatalogChoice(
             name="CLI inbox",
             value="cli-inbox",

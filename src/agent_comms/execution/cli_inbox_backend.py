@@ -24,13 +24,12 @@ from agent_comms.agent_backend import (
 )
 from agent_comms.execution.history_view import ForkOwnHistory
 from agent_comms.execution.launch_runtime import LaunchRuntime
-from agent_comms.execution.transcript_sources import ExternalTranscript
+from agent_comms.execution.unstarted_runtime import ExternalTranscriptLocation
 from agent_comms.nominal.field_codec import AcpSessionId
-from agent_comms.transcript.no_native_transcript_cursor import NoNativeTranscriptCursor
 
 
 @dataclass(frozen=True)
-class CliInboxRuntime(RuntimeLocation):
+class CliInboxRuntime(ExternalTranscriptLocation):
     """Runtime location for a CLI-inbox thread.
 
     ``path`` is empty for a pure CLI inbox, or holds a preserved native Pi session
@@ -66,23 +65,12 @@ class CliInboxRuntime(RuntimeLocation):
     def read_keys(self):
         return ()
 
-    def transcript_cursor(self, frontier, cut, *, source):
-        return NoNativeTranscriptCursor(
-            source=source, offset=cut.offset, wire=frontier, file=cut.file_identity(),
-        )
-
     def history_locations(self, thread, registry, visited):
         yield from thread.inherited_history(registry, visited)
         yield self, thread.parent.own_history
 
     def view_from_fork(self, view, fork_birth):
         return ForkOwnHistory()
-
-    def external_records(self, root, incarnation):
-        return self.history_source(root, incarnation)
-
-    def history_source(self, root, incarnation):
-        return ExternalTranscript(root, incarnation)
 
     def storage_files(self):
         if not self.path:
@@ -115,6 +103,11 @@ class CliInboxBackend(Forks, AgentBackend):
         cls, fallback: Callable[[type[AgentBackend]], RuntimeLocation],
     ) -> RuntimeLocation:
         return CliInboxRuntime()
+
+    @classmethod
+    def configured_for(cls, provider) -> type[AgentBackend]:
+        del provider
+        return cls
 
     @classmethod
     def registered_over(cls, previous: type[AgentBackend]) -> type[AgentBackend]:

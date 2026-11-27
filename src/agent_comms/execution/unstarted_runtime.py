@@ -10,8 +10,23 @@ from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.transcript.no_native_transcript_cursor import NoNativeTranscriptCursor
 
 
+class ExternalTranscriptLocation(RuntimeLocation):
+    """Runtime location whose conversation history is paged from `ExternalTranscript`."""
+
+    def transcript_cursor(self, frontier, cut, *, source):
+        return NoNativeTranscriptCursor(
+            source=source, offset=cut.offset, wire=frontier, file=cut.file_identity(),
+        )
+
+    def external_records(self, root, incarnation):
+        return self.history_source(root, incarnation)
+
+    def history_source(self, root, incarnation):
+        return ExternalTranscript(root, incarnation)
+
+
 @dataclass(frozen=True)
-class UnstartedRuntime(RuntimeLocation):
+class UnstartedRuntime(ExternalTranscriptLocation):
     owner: type[AgentBackend]
     def is_resumable(self) -> bool:
         return False
@@ -43,10 +58,6 @@ class UnstartedRuntime(RuntimeLocation):
     def read_keys(self):
         return ()
 
-    def transcript_cursor(self, frontier, cut, *, source):
-        return NoNativeTranscriptCursor(source=source, offset=cut.offset, wire=frontier,
-                                        file=cut.file_identity())
-
     def history_locations(self, thread, registry, visited):
         yield from thread.inherited_history(registry, visited)
         yield self, thread.parent.own_history
@@ -56,17 +67,11 @@ class UnstartedRuntime(RuntimeLocation):
         came from. A fork's own work is all after its birth, so no date can filter it."""
         return ForkOwnHistory()
 
-    def external_records(self, root, incarnation):
-        return self.history_source(root, incarnation)
-
     def select_session(self, directory, execution, source_reads, *, participant):
         location = participant.comms.registry.claim_fresh_session(participant)
         return location.select_session(
             directory, execution, source_reads, participant=participant,
         )
-
-    def history_source(self, root, incarnation):
-        return ExternalTranscript(root, incarnation)
 
     def storage_files(self):
         return ()

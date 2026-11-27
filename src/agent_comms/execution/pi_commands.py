@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import abstractmethod
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,6 +18,7 @@ from agent_comms.execution.child_process import BoundedRun
 from agent_comms.execution.failure_source import UnrecordedFailureSource
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.launch_runtime import RestartEnvironment
+from agent_comms.execution.native_arguments import ModelProvider
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_input_proof import NativeContextProof, NativeInputCommit
@@ -414,6 +415,17 @@ class SettingCommand(SettingRequest, CatalogQuery):
     def rejected(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
         return (self.result_type(id=response.id, ok=False, error=response.error.require()),)
 
+    def target_provider(self, current_provider: type[ModelProvider]) -> type[ModelProvider]:
+        return current_provider
+
+    @abstractmethod
+    def direct_setting[Result](
+        self,
+        *,
+        on_model: Callable[[str, str], Result],
+        on_thinking: Callable[[str], Result],
+    ) -> Result: ...
+
 
 @dataclass(frozen=True, kw_only=True)
 class SetModel(SettingCommand):
@@ -423,11 +435,32 @@ class SetModel(SettingCommand):
         str | PiOmitted, WireOmitDefault(), WireName("modelId")
     ] = PiOmitted()
 
+    def target_provider(self, current_provider: type[ModelProvider]) -> type[ModelProvider]:
+        return ModelProvider.configured(self.provider) if isinstance(self.provider, str) else current_provider
+
+    def direct_setting[Result](
+        self,
+        *,
+        on_model: Callable[[str, str], Result],
+        on_thinking: Callable[[str], Result],
+    ) -> Result:
+        del on_thinking
+        return on_model(str(self.provider), str(self.model_id))
+
 
 @dataclass(frozen=True, kw_only=True)
 class SetThinkingLevel(SettingCommand):
     result_type = events.ThinkingChanged
     level: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
+
+    def direct_setting[Result](
+        self,
+        *,
+        on_model: Callable[[str, str], Result],
+        on_thinking: Callable[[str], Result],
+    ) -> Result:
+        del on_model
+        return on_thinking(str(self.level))
 
 
 @dataclass(frozen=True, kw_only=True)

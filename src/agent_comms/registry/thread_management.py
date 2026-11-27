@@ -10,7 +10,7 @@ from functools import partial
 from pathlib import Path
 from typing import Self
 
-from agent_comms.agent_backend import NewThreadBackend, RuntimeLocation
+from agent_comms.agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
 from agent_comms.bus_context import BusThreads
 from agent_comms.cli_bridges.history import History
 from agent_comms.cli_verbs.cli_commands import ThreadDeleted
@@ -134,8 +134,11 @@ class NewThreadSpec(ThreadSettings):
         return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
 
     def declaration(self) -> Thread:
-        return NativeThread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
-                      worktree=self.project, **ThreadSettings.field_values(self))
+        backend = AgentBackend.for_provider(self.model.native(NativeArguments(())).provider_type)
+        return NativeThread(
+            name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
+            worktree=self.project, backend=backend, **ThreadSettings.field_values(self),
+        )
 
     def declare(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Thread:
         project = self.project.path
@@ -351,7 +354,9 @@ class ThreadManagement(BusThreads):
             if current.incarnation != original.incarnation:
                 raise RelationViolationError("Thread changed while switching to native Pi.")
             ExternalThread.stored(current)
-            native_backend = NewThreadBackend.selected()
+            native_backend = AgentBackend.for_provider(
+                current.model.native(NativeArguments(())).provider_type,
+            )
             prior = current.session_file.location(native_backend)
             session_file = (
                 current.session_file

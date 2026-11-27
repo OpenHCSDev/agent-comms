@@ -36,6 +36,7 @@ from agent_comms.execution.backend_query import (
 from agent_comms.execution.child_process import NoProcess, ProcessState
 from agent_comms.execution.history_view import OwnHistory
 from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.native_arguments import ModelProvider
 from agent_comms.execution.pi_vocabulary import CompactionReason
 from agent_comms.execution.session_revision import NoSessionObservation, SessionObservation
 from agent_comms.execution.transcript_cursor_reads import (
@@ -292,7 +293,26 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
 
     location_type: ClassVar[type[RuntimeLocation]]
     event_kinds: ClassVar[frozenset[str]]
+    provider_type: ClassVar[type[ModelProvider] | None] = None
     _sealed: ClassVar[bool] = False
+
+    @classmethod
+    def for_provider(cls, provider: type[ModelProvider]) -> type[AgentBackend]:
+        """Resolve the backend declared for ``provider``, defaulting to ``NewThreadBackend``."""
+        for member in cls.members_with(cls):
+            if member.provider_type is provider:
+                return member
+        return NewThreadBackend.selected()
+
+    @classmethod
+    def configured_for(cls, provider: type[ModelProvider]) -> type[AgentBackend]:
+        """Backend a thread on ``cls`` moves to when configured with a model from ``provider``."""
+        return cls.for_provider(provider)
+
+    @classmethod
+    async def apply_setting(cls, owner, configuration, thread: Thread, command) -> None:
+        """Apply one runtime setting change (`SetModel` or `SetThinkingLevel`) for this backend."""
+        await owner.configure_pi_thread(configuration, thread, command)
 
     async def context_for_input(self, thread, context):
         return context

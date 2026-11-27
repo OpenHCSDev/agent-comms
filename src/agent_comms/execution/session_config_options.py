@@ -15,6 +15,7 @@ from acp.schema import (
     SetSessionConfigOptionResponse,
 )
 
+from agent_comms.agent_backend import AgentBackend
 from agent_comms.comms import Comms
 from agent_comms.config_option import (
     CatalogConfigOption,
@@ -25,9 +26,11 @@ from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import IdentityConflict, Refused
 from agent_comms.execution.child_process import join_retirement
 from agent_comms.execution.controller import SessionUpdateSink
+from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.owner_protocol import IncompatibleOwner
 from agent_comms.execution.pi_commands import SettingCommand
+from agent_comms.execution.pi_vocabulary import ThinkingLevel
 from agent_comms.execution.runtime import RuntimeProxy
 from agent_comms.execution.session_effects import SessionEffects
 from agent_comms.execution.session_reads import OwnedObservation, SessionConfigurationSource
@@ -127,6 +130,13 @@ class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
     async def configure_thread(
         self, configuration: ConfigOptions, thread: Thread, command: SettingCommand,
     ) -> None:
+        current_provider = thread.model.native(NativeArguments(())).provider_type
+        target_backend = AgentBackend.for_provider(command.target_provider(current_provider))
+        await target_backend.apply_setting(self, configuration, thread, command)
+
+    async def configure_pi_thread(
+        self, configuration: ConfigOptions, thread: Thread, command: SettingCommand,
+    ) -> None:
         """Store the model and thinking level Pi itself reports for this change."""
         arguments = thread.model.native(configuration.agent_args).with_thinking(
             thread.thinking_level
@@ -142,6 +152,17 @@ class SessionConfigOptions(ConfigurationChanges[ConfigOptions]):
         await self.store_configuration(thread, NextTurnConfiguration(
             model=ChosenModel(model.text), thinking_level=level,
         ))
+
+    async def store_direct_setting(self, thread: Thread, command: SettingCommand) -> None:
+        change = command.direct_setting(
+            on_model=lambda provider, model_id: NextTurnConfiguration(
+                model=ChosenModel(f"{provider}/{model_id}"),
+            ),
+            on_thinking=lambda level: NextTurnConfiguration(
+                thinking_level=ThinkingLevel.member_named(level),
+            ),
+        )
+        await self.store_configuration(thread, change)
 
     async def store_configuration(
         self, thread: Thread, change: NextTurnConfiguration,
