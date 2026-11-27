@@ -37,12 +37,9 @@ from agent_comms.messaging.exporting import (
 )
 from agent_comms.messaging.historical_views import (
     ChannelDisplayHistory,
-    ChannelHistory,
     DMDisplayHistory,
-    DMHistory,
     HistorySource,
     HistoryView,
-    SenderFilteredHistory,
 )
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_notification import (
@@ -84,7 +81,6 @@ from agent_comms.registry.threads import ConversationPreparation, Thread
 from agent_comms.registry.view_unread import transcript_read_state
 from agent_comms.storage.file_observation import FileRevision
 from agent_comms.transcript.transcripts import TranscriptSourceWindow, Transcripts
-from agent_comms.transport.tool_result import ToolResult
 
 from agent_comms.registry.registry_names import DeletedThread
 from agent_comms.messaging.page_traversal import LiveCursor
@@ -361,12 +357,7 @@ class HistoryViews(HistoryReadSource, BusViews):
     def history_page(self, target: CommandTarget, bounds: PageBounds = NEWEST_PAGE,
                      *, viewer: DisplayViewer = AnonymousViewer(), sender: str = "") -> MessagePage:
         """The decoded target selects its scope and participant requirements."""
-        view: HistoryView = target.history_view(
-            viewer, self.bus.require_channel, ChannelHistory, DMHistory,
-        )
-        if sender.strip():
-            view = SenderFilteredHistory(view, sender.strip())
-        return view.page(self.presentation, bounds)
+        return HistoryView.read_page(target, self.presentation, bounds, viewer=viewer, sender=sender)
 
     def attach_history(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
         """Attach preserved history without allowing any historical execution."""
@@ -615,11 +606,7 @@ class HistoryViews(HistoryReadSource, BusViews):
 
     def who(self) -> tuple[ThreadView, ...]:
         """Who is here: live presences, with no unread scan that grows with history."""
-        snapshot = self.registry.snapshot()
-        live = tuple(thread.name for thread in snapshot.active_threads(snapshot.active_candidates()))
-        return tuple(sorted(
-            ThreadView.roster(snapshot, self.agents, self.goals, DEFAULT_ROSTER, names=live),
-            key=lambda view: view.thread.name))
+        return ThreadView.who(self.registry.snapshot(), self.agents, self.goals)
 
     def presence(self) -> tuple[ThreadView, ...]:
         """Presence records without viewer-specific unread scans."""
@@ -629,16 +616,9 @@ class HistoryViews(HistoryReadSource, BusViews):
         return sorted(self.thread_views(), key=lambda view: view.thread.name)
 
     def list_threads(self, active_only: bool = False) -> tuple[ThreadRecord, ...]:
-        """Summarize the default roster's threads with status and pending counts. Archived
-        threads have their own readers; listing them here counted thousands of retired inboxes
-        on every call."""
-        snapshot = self.registry.snapshot()
-        threads = tuple(sorted(snapshot.roster(DEFAULT_ROSTER), key=lambda thread: thread.name))
-        if active_only:
-            threads = tuple(snapshot.active_threads(threads))
-        pending = CountedRead().counts(self.bus, tuple(thread.name for thread in threads))
-        return ThreadRecord.read(
-            snapshot, self.agents, self.goals, threads, pending)
+        """Summarize the default roster's threads with status and pending counts."""
+        return ThreadRecord.list_threads(
+            self.registry.snapshot(), self.bus, self.agents, self.goals, active_only=active_only)
 
     def thread_detail(self, name: str, read: InboxRead) -> ThreadRecord:
         thread = self.registry.require(name)

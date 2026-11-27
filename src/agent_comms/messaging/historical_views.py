@@ -18,7 +18,7 @@ from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.child_process import Platform
 from agent_comms.execution.transcript_routes import TranscriptRoutes
 from agent_comms.messaging.bus import Bus
-from agent_comms.messaging.channel_targets import NamedTarget, ThreadTarget
+from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget, ThreadTarget
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.display_references import (
     HistoryReferenceSource,
@@ -149,6 +149,24 @@ class HistoryView(ABC):
 
     def page(self, presentation: BusPresentation, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         return presentation.bus.history.integrated_page(self, presentation, bounds)
+
+    @classmethod
+    def read_page(
+        cls,
+        target: CommandTarget,
+        presentation: BusPresentation,
+        bounds: PageBounds = NEWEST_PAGE,
+        *,
+        viewer: DisplayViewer = AnonymousViewer(),
+        sender: str = "",
+    ) -> MessagePage:
+        """The decoded target selects its scope and participant requirements."""
+        view: HistoryView = target.history_view(
+            viewer, presentation.bus.require_channel, ChannelHistory, DMHistory,
+        )
+        if sender.strip():
+            view = SenderFilteredHistory(view, sender.strip())
+        return view.page(presentation, bounds)
 
     @abstractmethod
     def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:

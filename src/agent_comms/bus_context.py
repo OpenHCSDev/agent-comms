@@ -29,7 +29,7 @@ from agent_comms.planning.goal_management import Goals
 from agent_comms.presentation import ChannelView, WireRevision
 from agent_comms.registry.agent_activity import AgentActivity
 from agent_comms.registry.activity import ObservedActivity
-from agent_comms.registry.registration import Registration, RegistryBus
+from agent_comms.registry.registration import RegistryBus
 from agent_comms.registry.registry_names import DeletedThread
 from agent_comms.registry.relationship_catalog_source import RelationshipCatalogSource
 from agent_comms.registry.thread_presentation import ThreadPresentation
