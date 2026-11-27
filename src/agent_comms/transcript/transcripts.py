@@ -761,6 +761,26 @@ class Transcripts:
         thread = RegistryOwner.capture_local(initial, incarnation.name).thread
         if thread.turn_lease != lease:
             raise RelationViolationError("Native publication has no current original turn")
+        thread.runtime.record_turn_publication(
+            self,
+            lease=lease,
+            checkpoint=checkpoint,
+            routing=routing,
+            published=published,
+            incarnation=incarnation,
+            thread=thread,
+        )
+
+    def record_native_turn_publication(
+        self,
+        *,
+        lease: TurnLeaseFence,
+        checkpoint: TranscriptCursor,
+        routing: TurnRouting,
+        published: tuple[MessageReference, ...],
+        incarnation: RecordedThreadIncarnation,
+        thread: Thread,
+    ) -> None:
         path = Path(thread.runtime.path)
         revision = FileRevision.capture(path).require(
             RelationViolationError("Native publication has no retained session"))

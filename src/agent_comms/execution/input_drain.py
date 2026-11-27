@@ -1499,13 +1499,47 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
         every drain that finds it."""
         await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
 
+    async def drain_private_inbox(self, session_id: AcpSessionId) -> None:
+        private_root = self.comms.owners.require_private_launch().wire_root_id
+        await self._drain_private_if_changed(session_id, private_root)
+        WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
+
+    async def drain_direct_inbox(self, session_id: AcpSessionId, thread: Thread) -> None:
+        if self.background_wakes_disabled or self.turn_live(session_id):
+            return
+        state = self.state(session_id)
+        if state.pending_turns:
+            WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
+            return
+
+        def capture() -> tuple[ScheduledTurn, ...]:
+            if self.comms.owners.maintenance.read().turn_pending:
+                return ()
+            snapshot = self.comms.registry.snapshot()
+            if snapshot.status(thread.name).is_stopped():
+                return ()
+            inbox = self.comms.bus.inbox(thread.name)
+            messages = tuple(sorted(inbox.page.messages, key=lambda item: item.seq))
+            if not messages:
+                return ()
+            self.comms.bus.reads.mark_displayed(thread.name, inbox.displayed)
+            return tuple(
+                ScheduledTurn.incoming(message, aliases=snapshot.aliases)
+                for message in messages
+            )
+
+        turns = await Coordination.run_worker(capture)
+        if not turns:
+            return
+        state.pending_turns.extend(turns)
+        WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
+
     async def drain_owned_inbox(self, session_id: AcpSessionId) -> None:
         # The revision read below checks this root against the bus marker and
         # the checkpoint, so no separate exclusive bus read is needed here.
         await self.state(session_id).turn.resume(self.comms.owners.maintenance)
-        private_root = self.comms.owners.require_private_launch().wire_root_id
-        await self._drain_private_if_changed(session_id, private_root)
-        WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
+        entry = (await self._own_entry(session_id)).entry
+        await entry.thread.backend.drain_owned_inbox(self, session_id, entry.thread)
 
     @property
     def background_wakes_disabled(self) -> bool:

@@ -488,7 +488,10 @@ class RunningAcpSubprocess(AcpSubprocessState):
 
 
 def resolve_agy_binary() -> str:
-    """Locate ``agy`` on ``PATH`` or under ``~/.local/bin/agy``."""
+    """Locate ``agy`` via ``AGENT_COMMS_AGY_BIN``, ``PATH``, or ``~/.local/bin/agy``."""
+    override = os.environ.get("AGENT_COMMS_AGY_BIN", "").strip()
+    if override:
+        return override
     found = shutil.which("agy")
     if found:
         return found

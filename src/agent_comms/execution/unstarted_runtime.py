@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from agent_comms.agent_backend import AgentBackend, FailedCompaction, RuntimeLocation
 from agent_comms.execution.history_view import ForkOwnHistory
 from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.transcript.no_native_transcript_cursor import NoNativeTranscriptCursor
+
+if TYPE_CHECKING:
+    from agent_comms.execution.turn_lease import TurnLeaseFence
+    from agent_comms.messaging.messages import MessageReference
+    from agent_comms.messaging.routing import TurnRouting
+    from agent_comms.registry.thread_identity import RecordedThreadIncarnation
+    from agent_comms.registry.threads import Thread
+    from agent_comms.transcript.transcript_cursor import TranscriptCursor
+    from agent_comms.transcript.transcripts import Transcripts
 
 
 class ExternalTranscriptLocation(RuntimeLocation):
@@ -17,6 +27,19 @@ class ExternalTranscriptLocation(RuntimeLocation):
         return NoNativeTranscriptCursor(
             source=source, offset=cut.offset, wire=frontier, file=cut.file_identity(),
         )
+
+    def record_turn_publication(
+        self,
+        transcripts: Transcripts,
+        *,
+        lease: TurnLeaseFence,
+        checkpoint: TranscriptCursor,
+        routing: TurnRouting,
+        published: tuple[MessageReference, ...],
+        incarnation: RecordedThreadIncarnation,
+        thread: Thread,
+    ) -> None:
+        del transcripts, lease, checkpoint, routing, published, incarnation, thread
 
     def external_records(self, root, incarnation):
         return self.history_source(root, incarnation)

@@ -62,7 +62,11 @@ from agent_comms.pi_counts import UnreportedCount
 from agent_comms.registry.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 
 if TYPE_CHECKING:
+    from agent_comms.config_options import ConfigOptions
+    from agent_comms.execution.input_drain import InputDrain
     from agent_comms.execution.owned_turn import TurnDelivery
+    from agent_comms.execution.pi_commands import SettingCommand
+    from agent_comms.execution.session_config_options import SessionConfigOptions
     from agent_comms.registry.threads import Thread
 
 
@@ -128,13 +132,22 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
     @classmethod
     async def apply_setting(
         cls,
-        owner: object,
-        configuration: object,
+        owner: SessionConfigOptions,
+        configuration: ConfigOptions,
         thread: Thread,
-        command: object,
+        command: SettingCommand,
     ) -> None:
         del configuration
-        await owner.store_direct_setting(thread, command)  # type: ignore[attr-defined]
+        await owner.store_direct_setting(thread, command)
+
+    @classmethod
+    async def drain_owned_inbox(
+        cls,
+        inputs: InputDrain,
+        session_id: AcpSessionId,
+        thread: Thread,
+    ) -> None:
+        await inputs.drain_direct_inbox(session_id, thread)
 
     def __init__(self, process: AntigravityAcpProcess) -> None:
         self._process = process

@@ -337,3 +337,79 @@ def test_switch_to_native_and_attach_session_for_antigravity_thread(tmp_path: Pa
     )
     assert back_to_pi.backend is not AntigravityAcpBackend
 
+
+@pytest.mark.asyncio
+async def test_comms_agent_drains_and_runs_two_turns_on_antigravity_acp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+    from bus_record_fixture import prepare_native_comms
+    from agent_comms.comms import wire
+    from agent_comms.execution.acp import CommsAgent, RetainedOwnerLaunch
+    from agent_comms.execution.child_process import ProcessIdentity
+    from agent_comms.execution.native_arguments import NativeArguments
+    from agent_comms.registry.threads import NextTurnConfiguration
+
+    fake_script = tmp_path / "fake_agy.py"
+    fake_script.write_text(_FAKE_ACP_SERVER, encoding="utf-8")
+    fake_bin = tmp_path / "fake_agy"
+    fake_bin.write_text(f"#!/bin/sh\nexec {sys.executable} {fake_script} \"$@\"\n", encoding="utf-8")
+    fake_bin.chmod(0o755)
+    monkeypatch.setenv("AGENT_COMMS_AGY_BIN", str(fake_bin))
+
+    root = tmp_path / "bus"
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    comms = prepare_native_comms(wire(root))
+
+    comms.registry.declare(NativeThread("tristan", frozenset(), Checkout(worktree)))
+    thread = comms.registry.declare(NativeThread("agy-e2e", frozenset(), Checkout(worktree)))
+    thread = comms.threads.set_thread_configuration(
+        thread, NextTurnConfiguration(model=ChosenModel("antigravity/gemini-4-neon")),
+    )
+    assert thread.backend is AntigravityAcpBackend
+
+    comms.owners.acquire_thread(thread.name)
+    owner = comms.registry.entry(thread.name).entry.owner_identity
+    proc = ProcessIdentity.capture(os.getpid())
+    env = {
+        **os.environ,
+        "AGENT_COMMS_THREAD": thread.name,
+        "PI_WORKTREE": str(worktree),
+        NativeArguments.binary_key: NativeArguments.default_binary,
+    }
+    launch = RetainedOwnerLaunch(process=proc, interpreter=sys.executable, environment=env)
+
+    agent = CommsAgent(comms, auto_wake=True)
+    sid = AcpSessionId(thread.name)
+    try:
+        await agent.sessions.start_owner(launch, owner)
+
+        comms.messaging.send("tristan", thread.name, "first-ping")
+        for _ in range(80):
+            await asyncio.sleep(0.05)
+            if len(comms.bus.inbox("tristan").page.messages) >= 1 and not agent.inputs.turn_live(sid):
+                break
+        backend = agent.turns.persistent_backends.get(sid)
+        assert isinstance(backend, AntigravityAcpBackend)
+        first_session = str(backend._acp_session)
+        first_pid = backend.runtime_process.pid
+        assert first_session and first_pid > 0
+
+        comms.messaging.send("tristan", thread.name, "second-ping")
+        for _ in range(80):
+            await asyncio.sleep(0.05)
+            if len(comms.bus.inbox("tristan").page.messages) >= 2 and not agent.inputs.turn_live(sid):
+                break
+        replies = [m.body for m in comms.bus.inbox("tristan").page.messages]
+        assert len(replies) == 2
+        assert "first-ping" in replies[0]
+        assert "second-ping" in replies[1]
+        assert str(backend._acp_session) == first_session
+        assert backend.runtime_process.pid == first_pid
+        diag_dir = root / "diagnostics"
+        assert not (list(diag_dir.glob("*.json")) if diag_dir.exists() else [])
+    finally:
+        await agent.shutdown()
+
+

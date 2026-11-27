@@ -51,9 +51,19 @@ from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.transport.tool_result import DeclaredReply
 
 if TYPE_CHECKING:
+    from agent_comms.config_options import ConfigOptions
+    from agent_comms.execution.input_drain import InputDrain
     from agent_comms.execution.owned_turn import TurnDelivery
+    from agent_comms.execution.pi_commands import SettingCommand
+    from agent_comms.execution.session_config_options import SessionConfigOptions
+    from agent_comms.execution.turn_lease import TurnLeaseFence
     from agent_comms.execution.turn_runner import TurnRunner
+    from agent_comms.messaging.messages import MessageReference
+    from agent_comms.messaging.routing import TurnRouting
+    from agent_comms.registry.thread_identity import RecordedThreadIncarnation
     from agent_comms.registry.threads import Thread
+    from agent_comms.transcript.transcript_cursor import TranscriptCursor
+    from agent_comms.transcript.transcripts import Transcripts
 
 
 class BackendDeclarationError(TypeError):
@@ -97,6 +107,26 @@ class RuntimeLocation(DeclaredFamily, TranscriptRuntime, affix='Runtime'):
 
     def transcript_cursor(self, frontier, cut, *, source):
         return frontier.cursor(source.read_key, cut.offset, file=cut.file_identity())
+
+    def record_turn_publication(
+        self,
+        transcripts: Transcripts,
+        *,
+        lease: TurnLeaseFence,
+        checkpoint: TranscriptCursor,
+        routing: TurnRouting,
+        published: tuple[MessageReference, ...],
+        incarnation: RecordedThreadIncarnation,
+        thread: Thread,
+    ) -> None:
+        transcripts.record_native_turn_publication(
+            lease=lease,
+            checkpoint=checkpoint,
+            routing=routing,
+            published=published,
+            incarnation=incarnation,
+            thread=thread,
+        )
 
     def history_locations(self, thread, registry, visited):
         yield self, OwnHistory()
@@ -312,13 +342,24 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     @classmethod
     async def apply_setting(
         cls,
-        owner: object,
-        configuration: object,
+        owner: SessionConfigOptions,
+        configuration: ConfigOptions,
         thread: Thread,
-        command: object,
+        command: SettingCommand,
     ) -> None:
         """Apply one runtime setting change (`SetModel` or `SetThinkingLevel`) for this backend."""
-        await owner.configure_pi_thread(configuration, thread, command)  # type: ignore[attr-defined]
+        await owner.configure_pi_thread(configuration, thread, command)
+
+    @classmethod
+    async def drain_owned_inbox(
+        cls,
+        inputs: InputDrain,
+        session_id: AcpSessionId,
+        thread: Thread,
+    ) -> None:
+        """Drain this thread's inbox inside the worker host."""
+        del thread
+        await inputs.drain_private_inbox(session_id)
 
     async def context_for_input(self, thread, context):
         return context
