@@ -92,6 +92,10 @@ for raw in sys.stdin:
         reply({})
     elif method == "session/prompt":
         sid = params["sessionId"]
+        if sid not in sessions:
+            sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": req_id, "error": {"code": -32602, "message": f"Session not found: {sid}"}}) + "\\n")
+            sys.stdout.flush()
+            continue
         sessions[sid]["turns"] = sessions[sid].get("turns", 0) + 1
         text = " ".join(b.get("text", "") for b in params.get("prompt", []) if b.get("type") == "text")
         update(sid, {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": f"thinking:{sid[:6]}"}})
@@ -257,11 +261,18 @@ async def test_shared_acp_process_multiplexes_two_backends_and_streams_events(tm
             ev async for ev in backend.run_turn(thread, InputContent(text=text), _delivery())
         ]
 
-    events_a, events_b = await asyncio.gather(
-        collect(backend_a, thread_a, "alpha"),
-        collect(backend_b, thread_b, "beta"),
-    )
+    # Run thread A FIRST so `process.alive` is already True when thread B starts with NoAcpSessionId()!
+    events_a = await collect(backend_a, thread_a, "alpha")
     assert process.alive
+    events_b = await collect(backend_b, thread_b, "beta")
+    assert process.alive
+    # Also run both concurrently on the same shared ACP process.
+    events_a2, events_b2 = await asyncio.gather(
+        collect(backend_a, thread_a, "alpha-2"),
+        collect(backend_b, thread_b, "beta-2"),
+    )
+    assert any(isinstance(e, events.Done) and e.ok and "alpha-2" in e.text for e in events_a2)
+    assert any(isinstance(e, events.Done) and e.ok and "beta-2" in e.text for e in events_b2)
     assert any(isinstance(e, AgentInfo) for e in events_a)
     assert any(isinstance(e, events.Thinking) for e in events_a)
     assert any(isinstance(e, events.ToolStart) for e in events_a)

@@ -198,9 +198,9 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
         worktree: Path,
     ) -> tuple[AcpSessionId, bool, Path]:
         storage = AntigravitySessionStorage.from_db_path(Path(thread.writable_runtime.path))
-        active_text = str(self._acp_session)
-        if active_text and self._process.alive:
-            return AcpSessionId(active_text), False, storage.db_path
+        bound_sessions = self._acp_session.selected((), lambda sid: (sid,))
+        if bound_sessions and self._process.alive:
+            return bound_sessions[0], False, storage.db_path
         if storage.exists:
             descriptor = await self._process.resume_session(
                 AcpSessionId(str(storage.conversation_id)), worktree
@@ -282,19 +282,18 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
 
     async def abort[Result](self, owner: asyncio.Task[Result]) -> None:
         del owner
-        active_text = str(self._acp_session)
-        if active_text:
+        for active in self._acp_session.selected((), lambda sid: (sid,)):
             with suppress(AcpRpcError):
-                await self._process.cancel(AcpSessionId(active_text))
+                await self._process.cancel(active)
 
     async def close_idle(self) -> None:
         async with self._lock:
-            active_text = str(self._acp_session)
+            bound_sessions = self._acp_session.selected((), lambda sid: (sid,))
             self._acp_session = NoAcpSessionId()
             self._applied_model = ""
             self._applied_thinking = ""
-            if active_text:
-                await self._process.close_session(AcpSessionId(active_text))
+            for active in bound_sessions:
+                await self._process.close_session(active)
 
     async def compact(self, thread: Thread, instructions: object = "") -> CompactionOutcome:
         async with self._lock:
