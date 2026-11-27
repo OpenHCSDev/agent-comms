@@ -33,11 +33,11 @@ from agent_comms.coordination.obligation_states import (
 from agent_comms.coordination.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.coordination.response import (
     LiveResponseOwner,
-    PublicationAppendDispatches,
     prepare_fenced_response,
     publish_fenced_response,
 )
 from agent_comms.coordination.results import AlreadyApplied
+from agent_comms.coordination.tables.response_schema import PublicationAppendDispatches
 from agent_comms.coordination.tables.executions import (
     ExecutionRecord,
     NoPointedExecution,
