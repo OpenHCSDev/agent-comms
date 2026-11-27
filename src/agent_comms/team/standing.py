@@ -69,6 +69,7 @@ from agent_comms.registry.threads import Thread
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.owner_notices import OrderNotice, TeamNotice
 from agent_comms.team.questions import UnansweredTeammateAsks
+from agent_comms.team.idle_units import IdleExecutors
 from agent_comms.team.standing_rules import (
     ClearingVerb,
     CoreActsStandingRule,
@@ -541,32 +542,11 @@ class HolderGone(IndependentStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan):
+class UnownedWheelSpin(IdleExecutors, IndependentStandingRule, UndatedStandingRule, FamilyScan):
     """A unit holds no next order while the board has unowned rows; Core hands the row to it
     without a teammate turn, restarting the row's review window at the handoff."""
 
     todo: Todo
-
-    recent: ClassVar[int] = 10 * 60
-
-    @classmethod
-    def read_idle(cls, comms: Comms) -> list[Thread]:
-        """A fresh read and an already captured frame share the same idle selection."""
-        return cls.idle(comms, comms.goals.held_orders())
-
-    @classmethod
-    def idle(cls, comms: Comms, scan: HeldOrders, *,
-             snapshot: RegistrySnapshot | None = None) -> list[Thread]:
-        """Available independent executors, regardless of who issued the request."""
-        snapshot = snapshot if snapshot is not None else comms.registry.snapshot()
-        held = {todo.holder for todo in scan.todos}
-        bound = TurnsSince(time.time() - cls.recent)
-        return sorted((candidate
-                       for thread in snapshot.active_threads(snapshot.active_candidates())
-                       if thread.name not in held
-                       for candidate in thread.order_candidates()
-                       if TurnDigestRead(comms.root, candidate, bound).read().turns),
-                      key=lambda thread: thread.name)
 
     def comparison_values(self) -> tuple[object, ...]:
         # Observation times and proposed idle units change; the row and its disposition do not.

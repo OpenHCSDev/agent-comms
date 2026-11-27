@@ -25,7 +25,7 @@ from agent_comms.comms import Comms
 from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.team.rule_deal import MeantStore, RuleDeal, SessionAudit
-from agent_comms.team.standing import UnownedWheelSpin
+from agent_comms.team.idle_units import IdleExecutors
 from agent_comms_hooks import ClaudeTranscriptHook, HookRecord
 
 
@@ -177,7 +177,7 @@ class ReadIdle:
 
     @classmethod
     def read(cls, comms: Comms, binding: Binding) -> Self:
-        return cls(tuple(unit.name for unit in UnownedWheelSpin.read_idle(comms)))
+        return cls(tuple(unit.name for unit in IdleExecutors.read_idle(comms)))
 
     def reasons(self, deferred: tuple[str, ...]) -> Iterator[str]:
         if self.units:
