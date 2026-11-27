@@ -28,10 +28,7 @@ from agent_comms.execution.turn_item import (
 )
 from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.planning.order_goal_actions import CreateProblemGoalAction
-from agent_comms.planning.goals import (
-    CountCheckResult,
-    OrderCheck,
-)
+from agent_comms.planning.order_checks import CountCheckResult, OrderCheck
 from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.planning.orders import (
     ClaimOrder,

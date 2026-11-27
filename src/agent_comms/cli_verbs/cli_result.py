@@ -9,7 +9,6 @@ from typing import TextIO, cast
 
 from pydantic import JsonValue
 
-from agent_comms.execution.pi_vocabulary import ServiceTier
 from agent_comms.nominal.field_codec import SubclassUnion
 from agent_comms.transport.tool_result import DeclaredReply, ToolResult
 
@@ -56,19 +55,6 @@ class RegisteredResult(CliResult):
 @dataclass(frozen=True)
 class ToolCatalogResult(CliResult):
     tools: tuple[dict[str, object], ...]
-
-
-@dataclass(frozen=True)
-class ThreadLaunchSettings(CliResult):
-    """What one thread's native launch needs beyond the tools every thread shares."""
-
-    service_tier: ServiceTier
-    launch_arguments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class ThreadToolCatalogResult(ThreadLaunchSettings, ToolCatalogResult):
-    """The tools and one thread's launch settings together, for a caller that asks once."""
 
 
 class TargetEditResult(CliResult, ToolResult, SubclassUnion, affix="TargetEditResult"):

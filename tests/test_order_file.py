@@ -10,7 +10,7 @@ from typing import get_type_hints
 import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
-from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.order_checks import OrderCheck
 from agent_comms.planning.orders import VerdictAudience
 from agent_comms.projects.repo import Repo
 from agent_comms.storage.recorded_time import RecordedEventTime

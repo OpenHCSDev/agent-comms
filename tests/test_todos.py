@@ -30,12 +30,8 @@ from agent_comms.installer.runtime_record import CorePackage, TextualPackage, To
 from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.planning.goal_actions import ClearGoalAction, SetGoalAction
-from agent_comms.planning.goals import (
-    GoalChangedError,
-    NoGoal,
-    OrderCheck,
-    ProblemGoalOrder,
-)
+from agent_comms.planning.goals import GoalChangedError, NoGoal, ProblemGoalOrder
+from agent_comms.planning.order_checks import OrderCheck
 from agent_comms.planning.order_phase import UnplannedPhase
 from agent_comms.planning.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.planning.order_words import StrikeReason

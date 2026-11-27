@@ -7,7 +7,8 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.cli_verbs.cli_result import ThreadToolCatalogResult, ToolCatalogResult
+from agent_comms.cli_verbs.cli_result import ToolCatalogResult
+from agent_comms.cli_verbs.thread_catalog_result import ThreadToolCatalogResult
 from agent_comms.bus_context import BusContext
 from agent_comms.coordination.tables.board_delivery import ReaderBoardDelivery
 from agent_comms.execution.launch_root import LaunchRoot

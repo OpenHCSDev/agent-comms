@@ -53,7 +53,8 @@ from agent_comms.planning.order_goal_actions import (
     OrderGoalAction,
     ReissuedOrderGoalAction,
 )
-from agent_comms.planning.goals import CountCheckResult, GoalConsentRequired, OrderCheck
+from agent_comms.planning.goals import GoalConsentRequired
+from agent_comms.planning.order_checks import CountCheckResult, OrderCheck
 from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.order_runs import MechanicalOrderRun
 from agent_comms.planning.order_words import StrikeReason

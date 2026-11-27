@@ -72,7 +72,8 @@ from agent_comms.planning.order_goal_actions import (
 )
 from agent_comms.planning.goal_presentation import RunnableExecution
 from agent_comms.planning.goal_states import ActiveGoal
-from agent_comms.planning.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from agent_comms.planning.goals import ProblemGoalOrder
+from agent_comms.planning.order_checks import CountCheckResult, OrderCheck
 from agent_comms.planning.order_runs import MechanicalOrderRun
 from agent_comms.planning.order_story import TeamStory
 from agent_comms.planning.order_words import StrikeReason

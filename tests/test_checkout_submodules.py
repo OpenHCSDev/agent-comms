@@ -15,7 +15,7 @@ from agent_comms.comms import wire
 from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.planning.goal_actions import SetGoalAction
-from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.order_checks import OrderCheck
 from agent_comms.planning.order_runs import MechanicalOrderRun
 from agent_comms.planning.orders import (
     PendingProblemOrder,

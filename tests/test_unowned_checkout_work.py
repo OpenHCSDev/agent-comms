@@ -24,7 +24,7 @@ from agent_comms.execution.turn_item import (
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.messaging.bus import Bus
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
-from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.order_checks import OrderCheck
 from agent_comms.planning.order_runs import MechanicalOrderRun
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
