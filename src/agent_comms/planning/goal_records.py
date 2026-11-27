@@ -9,14 +9,13 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.published_bus import PublishedBus
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import GoalId
-from agent_comms.planning.goal_attempts import GoalAttemptFile, GoalAttemptStore
+from agent_comms.planning.goal_store_access import GoalStoreAccess
 from agent_comms.planning.goal_wait_recovery import (
     GoalInputReview,
     GoalWaitRecovery,
     GoalWaitReview,
 )
 from agent_comms.planning.goal_wait_target import GoalWaitTarget
-from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.planning.goal_work import GoalWorkSource
 from agent_comms.planning.orders import TodoStore
 from agent_comms.registry.agent_activity import AgentActivity
@@ -24,25 +23,16 @@ from agent_comms.registry.registration import Registration
 from agent_comms.registry.threads import Thread
 
 
-class GoalRecords(GoalWaitRecovery, GoalWorkSource):
+class GoalRecords(GoalStoreAccess, GoalWaitRecovery, GoalWorkSource):
     def __init__(self, root: Path, registry: Registration, bus: PublishedBus, agents: AgentActivity):
-        self.root = root
+        super().__init__(root, agents)
         self.registry = registry
         self.bus = bus
-        self.agents = agents
-        self.waits = GoalWaits(root)
         self.dispositions = InputDispositions(root)
-        self.goal_store: GoalAttemptFile = GoalAttemptFile(GoalAttemptStore.path_in(
-            GoalAttemptStore.directory_in(root)))
 
     @cached_property
     def todos(self) -> TodoStore:
         return TodoStore(self.root)
-
-    def open_goal_store(self) -> GoalAttemptStore:
-        store = self.goal_store.open()
-        self.goal_store = store
-        return store
 
     def _goal_input_review(
         self, thread: Thread, goal_id: GoalId, wait_for: Sequence[str]

@@ -19,8 +19,8 @@ from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.coordination.errors import DMPaintedBoundChanged
 from agent_comms.display_order import ChannelSort, NameChannelSort
 from agent_comms.execution.child_process import NoProcess, ProcessState
+from agent_comms.execution.external_transcript_file import ExternalTranscriptFile
 from agent_comms.execution.runtime_info import RuntimeInfo
-from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.messaging.activity_clocks import ChannelActivity
 from agent_comms.messaging.bus import BusSnapshot, DisplayUnread
 from agent_comms.messaging.bus_read_source import BusReadSource
@@ -85,7 +85,6 @@ from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
-from agent_comms.registry.registry_names import DeletedThread
 from agent_comms.registry.relationship_file import RelationshipFile
 from agent_comms.registry.roster_visibility import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.registry.thread_presentation import (
@@ -390,6 +389,25 @@ class ThreadRecord(CliResult):
     )
 
     @classmethod
+    def list_threads(
+        cls,
+        snapshot: RegistrySnapshot,
+        bus: BusReadSource,
+        agents: AgentActivity,
+        goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot, ActivityAnswers],
+        *,
+        active_only: bool = False,
+    ) -> tuple[ThreadRecord, ...]:
+        """Summarize the default roster's threads with status and pending counts. Archived
+        threads have their own readers; listing them here counted thousands of retired inboxes
+        on every call."""
+        threads = tuple(sorted(snapshot.roster(DEFAULT_ROSTER), key=lambda thread: thread.name))
+        if active_only:
+            threads = tuple(snapshot.active_threads(threads))
+        pending = CountedRead().counts(bus, tuple(thread.name for thread in threads))
+        return cls.read(snapshot, agents, goals, threads, pending)
+
+    @classmethod
     def read(cls, snapshot: RegistrySnapshot, agents: AgentActivity,
              goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot, ActivityAnswers], threads: Iterable[Thread],
              pending: Mapping[str, InboxCount]) -> tuple[ThreadRecord, ...]:
@@ -444,6 +462,19 @@ class ThreadView(ThreadRecord):
     runtime: Annotated[RuntimeInfo, PresenceExclude()]
     last_seen: float
     binding: Annotated[ThreadOwnerBinding, PresenceExclude()] = UnavailableThreadOwnerBinding()
+
+    @classmethod
+    def who(
+        cls,
+        snapshot: RegistrySnapshot,
+        agents: AgentActivity,
+        goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot, ActivityAnswers],
+    ) -> tuple[ThreadView, ...]:
+        """Who is here: live presences, with no unread scan that grows with history."""
+        live = tuple(thread.name for thread in snapshot.active_threads(snapshot.active_candidates()))
+        return tuple(sorted(
+            cls.roster(snapshot, agents, goals, DEFAULT_ROSTER, names=live),
+            key=lambda view: view.thread.name))
 
     @classmethod
     def roster(
@@ -682,7 +713,7 @@ class WireRevision(ReadState, ToolResult):
     ]
     external_transcripts: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: ExternalTranscript.source_paths(views.root), StoresView, ExternalTranscriptsView),
+        *revision_source(lambda views: ExternalTranscriptFile.source_paths(views.root), StoresView, ExternalTranscriptsView),
     ]
     team_frames: Annotated[
         tuple[FileRevision, ...],

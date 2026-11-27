@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, TextIO
 
-from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
+from agent_comms.cli_verbs.cli_verb import BusOpener, CliBus, CliCommand
 from agent_comms.cli_verbs.cli_commands import ThreadArgument
 from agent_comms.cli_verbs.cli_result import CliResult
+from agent_comms.installer.active_route import CommsRoute
 from agent_comms.messaging.history_result import HistoryPageResult
+from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_reference import NewestUnreadStart
 from agent_comms.messaging.page_traversal import NewestCursor, PageCursor
+from agent_comms.messaging.publisher import OwnerPublisher
 from agent_comms.nominal.field_codec import Argument
+from agent_comms.registry.route_client import RouteClient
 
 
 @dataclass(frozen=True)
@@ -34,7 +38,15 @@ class InboxCliCommand(ThreadArgument, CliCommand):
         ),
     ] = NewestCursor()
 
-    def apply(self, ctx: CliBus) -> CliResult:
-        inbox = ctx.bus.inbox(self.thread, after=NewestUnreadStart(self.before))
+    def _read(self, bus: MessageBus) -> InboxResult:
+        inbox = bus.inbox(self.thread, after=NewestUnreadStart(self.before))
         shown = tuple(reversed(inbox.page.messages))
         return InboxResult(shown, inbox.page.has_older, len(shown) + inbox.remaining)
+
+    def apply(self, ctx: CliBus) -> CliResult:
+        return self._read(ctx.bus)
+
+    def execute(self, route: CommsRoute, output: TextIO, open_bus: BusOpener) -> int:
+        with RouteClient.client(route) as client:
+            bus = MessageBus(client.root, client.registry, OwnerPublisher)
+            return self._read(bus).write(output)

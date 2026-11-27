@@ -22,6 +22,7 @@ from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import StaleRevision, TranscriptChanged
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.context_entry_reader import ReadsContextEntries
+from agent_comms.execution.external_transcript_file import ExternalTranscriptFile
 from agent_comms.execution.history_view import HistoryView
 from agent_comms.execution.native_entries import (
     MessageEntry,
@@ -1374,12 +1375,11 @@ class StoreRead(TranscriptSource):
 
 
 @dataclass(frozen=True, slots=True)
-class ExternalTranscript(TranscriptSource, DurableStore):
+class ExternalTranscript(TranscriptSource, ExternalTranscriptFile, DurableStore):
     """One sessionless thread's CLI items: published by its bridge, paged by Core."""
 
     root: Path
     incarnation: ThreadIncarnation
-    filename: ClassVar[str] = "external_transcripts.sqlite3"
     tables = ExternalTranscriptRows
     retired_tables = (RetiredDraftRow.table,)
     # The CLI keeps its own items; a lost tail is republished when a watch starts.

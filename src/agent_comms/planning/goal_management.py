@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from functools import cached_property
@@ -24,7 +24,7 @@ from agent_comms.errors import (
     UnresolvedAttemptError,
 )
 from agent_comms.execution.native_input_owner import GoalLaunchOwner
-from agent_comms.execution.turn_lease import ActiveTurn, StoredTurnRecord, TurnDeclaration, TurnRecord
+from agent_comms.execution.turn_lease import StoredTurnRecord, TurnDeclaration, TurnRecord
 from agent_comms.input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
@@ -46,41 +46,23 @@ from agent_comms.planning.goal_actions import (
 )
 from agent_comms.planning.goal_attempts import GoalAttemptStore
 from agent_comms.planning.goal_events import GoalChange, GoalReadFailed
-from agent_comms.planning.goal_failure_observation import GoalFailureEvidence
 from agent_comms.planning.goal_history import GoalHistoryEntry, RecordedGoalHistory
-from agent_comms.planning.goal_ledger import FailedTurnEvidence, Generation
+from agent_comms.planning.goal_ledger import Generation
 from agent_comms.planning.goal_mutation import (
-    GoalFailureProjection,
     GoalFork,
-    GoalGenerationProjection,
     GoalReadyGrantSource,
-    GoalStateProjection,
-    GoalTurnProjection,
-    GoalWaitProjection,
 )
 from agent_comms.planning.goal_permit_source import GoalStoreSource
 from agent_comms.planning.goal_presentation import (
-    AttemptFailedExecution,
-    AttemptUnresolvedExecution,
-    CompletedExecution,
     GoalExecutionControls,
     GoalPublicationSnapshot,
     GoalSnapshot,
-    IdleGoalExecution,
-    PausedExecution,
-    RetryableBlockExecution,
-    RunnableExecution,
-    RunningExecution,
-    StandbyExecution,
 )
 from agent_comms.planning.goal_records import GoalRecords
 from agent_comms.planning.goal_scope import AllGoals, GoalScope, OneGoal
-from agent_comms.planning.goal_snapshots import GoalSnapshots
-from agent_comms.planning.goal_states import PauseSource
-from agent_comms.planning.goal_wait_recovery import OwnerWaitRead
-from agent_comms.planning.goal_wait_target import GoalWaitTarget
+from agent_comms.planning.goal_snapshot_reader import GoalSnapshotReader
 from agent_comms.planning.goal_waits import GoalWait, StandbyReview
-from agent_comms.planning.goals import Goal, GoalDeclaration
+from agent_comms.planning.goals import GoalDeclaration
 from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.order_words import StrikeReason
 from agent_comms.planning.orders import (
@@ -95,98 +77,11 @@ from agent_comms.planning.orders import (
     TodoStore,
 )
 from agent_comms.planning.owner_requests import NewestOpenRequest, RequestDirective
-from agent_comms.registry.agent_activity import ActivityAnswers, AgentActivity
 from agent_comms.registry.registry_document import RegistryDocument, RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import NativeThread, Thread
 
 _LOG = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, kw_only=True)
-class GoalExecutionSource(
-    OwnerWaitRead,
-    GoalStateProjection[GoalExecutionControls, PauseSource],
-    GoalFailureProjection[GoalExecutionControls, FailedTurnEvidence],
-    GoalGenerationProjection[GoalExecutionControls],
-    GoalWaitProjection[GoalExecutionControls],
-    GoalTurnProjection[GoalExecutionControls, ActiveTurn],
-):
-    """One read's original owners; never persisted or used as launch authority."""
-
-    goal: Goal
-    generation: Generation
-    evidence: GoalFailureEvidence[FailedTurnEvidence]
-    agents: ActivityAnswers
-    turns: Mapping[StoredTurnRecord, TurnDeclaration]
-
-    @cached_property
-    def turn(self) -> TurnDeclaration:
-        return self.owner.turn_record.read_in(self.turns)
-
-    @cached_property
-    def owner_alive(self) -> bool:
-        return self.owner.process_alive
-
-    def active(self) -> GoalExecutionControls:
-        return self.wait.execution(self)
-
-    def generation_execution(self) -> GoalExecutionControls:
-        return self.generation.lifecycle.execution(self)
-
-    def idle_execution(self) -> GoalExecutionControls:
-        return self.generation.lifecycle.idle_execution(self)
-
-    def active_turn_execution(self, turn: ActiveTurn) -> GoalExecutionControls:
-        if self.owner_alive and turn.owner == self.owner.process_identity:
-            return RunningExecution(self.goal.id)
-        return self.idle_execution()
-
-    def standby_execution(self) -> GoalExecutionControls:
-        targets = tuple(
-            GoalWaitTarget(target.incarnation.renamed(self.snapshot.canonical_name(target.incarnation.name)))
-            for target in self.wait.targets
-        )
-        inactive = tuple(
-            target for target in targets
-            if not self.agents.is_working(target.incarnation, self.snapshot)
-        )
-        return StandbyExecution(self.goal.id, targets, inactive)
-
-    def paused(self, source: PauseSource) -> GoalExecutionControls:
-        return PausedExecution(self.goal.id, source)
-
-    def blocked(self, reason: str) -> GoalExecutionControls:
-        return RetryableBlockExecution(self.goal.id, reason)
-
-    def completed(self) -> GoalExecutionControls:
-        return CompletedExecution(self.goal.id)
-
-    def turn_execution(self) -> GoalExecutionControls:
-        return self.owner.goal_turn_execution(self, self.turns)
-
-    def external_turn_execution(self) -> GoalExecutionControls:
-        if self.agents.is_working(self.owner.incarnation, self.snapshot):
-            return RunningExecution(self.goal.id)
-        return self.native_runnable()
-
-    def unresolved(self) -> GoalExecutionControls:
-        return AttemptUnresolvedExecution(self.goal.id)
-
-    def native_runnable(self) -> GoalExecutionControls:
-        return RunnableExecution(self.goal.id)
-
-    def runnable(self) -> GoalExecutionControls:
-        return self.owner.goal_runnable_execution(self)
-
-    def failed(self, evidence: FailedTurnEvidence) -> GoalExecutionControls:
-        return AttemptFailedExecution(self.goal.id, evidence)
-
-    def failed_execution(self) -> GoalExecutionControls:
-        return self.evidence.execution(self)
-
-    def execution(self) -> GoalExecutionControls:
-        return self.goal.state.execution(self)
 
 
 class GoalTarget(ABC):
@@ -284,13 +179,13 @@ class GoalPublicationRead:
 
 class Goals(
     GoalRecords,
+    GoalSnapshotReader,
     ProblemGoals,
     WakeWorkSource[Thread],
     GoalFork[Thread, GoalDeclaration],
     MessageDirections[Message],
     GoalStoreSource[GoalAttemptStore],
     GoalReadyGrantSource[NativeThread, Generation],
-    GoalSnapshots[Thread, GoalSnapshot, RegistrySnapshot, ActivityAnswers],
 ):
     def held_orders(self) -> HeldOrders:
         """Capture held work from the goal store against one current registry cut."""
@@ -484,44 +379,6 @@ class Goals(
         # One owner's wait is one keyed row; decoding every wait to pick it cost 70% of each
         # goal_changed, once per hosted session on every goal store change (2026-10-30).
         return self.snapshot_for(snapshot.threads[canonical], snapshot, self.waits.resolve)
-
-    def snapshot_for(self, owner: Thread, snapshot: RegistrySnapshot,
-                     wait: Callable[[GoalDeclaration], GoalWait]) -> GoalSnapshot:
-        snapshot_of_owner, = self.snapshots_for((owner,), snapshot, wait, self.agents)
-        return snapshot_of_owner
-
-    def snapshots_for(self, owners: Iterable[Thread], snapshot: RegistrySnapshot,
-                      wait: Callable[[GoalDeclaration], GoalWait],
-                      activity: ActivityAnswers) -> tuple[GoalSnapshot, ...]:
-        """All goal readers build the same source from the original records. Every owner's
-        generation and failure evidence come from one cut of the goal store; permit
-        attestation keeps GoalAttemptStore's independent fresh readback."""
-        owners = tuple(owners)
-        if not any(owner.goal for owner in owners):
-            return tuple(GoalSnapshot(owner.goal, IdleGoalExecution()) for owner in owners)
-        turns = TurnRecord.read_all(owner.turn_record for owner in owners if owner.goal)
-        with self.open_goal_store().reader_snapshot() as connection:
-            generations = Generation.require_all_in(
-                connection, (goal.id for owner in owners for goal in owner.goal),
-            )
-            return tuple(self._snapshot_in(
-                lambda: connection, owner, snapshot, wait, activity, turns, generations,
-            ) for owner in owners)
-
-    @staticmethod
-    def _snapshot_in(connection: Callable[[], sqlite3.Connection], owner: Thread, snapshot: RegistrySnapshot,
-                     wait: Callable[[GoalDeclaration], GoalWait], activity: ActivityAnswers,
-                     turns: Mapping[StoredTurnRecord, TurnDeclaration],
-                     generations: Mapping[GoalId, Generation]) -> GoalSnapshot:
-        for goal in owner.goal:
-            generation = generations[goal.id]
-            source = GoalExecutionSource(
-                goal=goal, wait=wait(goal), generation=generation,
-                evidence=generation.lifecycle.evidence(connection(), generation),
-                owner=owner, snapshot=snapshot, agents=activity, turns=turns,
-            )
-            return GoalSnapshot(goal, source.execution())
-        return GoalSnapshot(owner.goal, IdleGoalExecution())
 
     def direct(self, name: str, message: Message) -> None:
         """A plain owner message directs the recipient's newest open request."""
