@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms.heartbeat_subjects import TeamHistory
 from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.planning.goal_actions import SetGoalAction
 from agent_comms.planning.goal_states import (
@@ -52,14 +53,13 @@ def test_rule_lookup_validates_a_declaration_cut_once(monkeypatch):
     # Discovery can introduce declarations; settle its resulting generation before counting.
     StandingRule.acquire_declarations()
     calls = []
-    declarations = DeclaredFamily._member_declarations.__func__
+    compile_comparison = FieldCodec.compile_comparison.__func__
 
-    def counted(cls):
-        if cls is StandingRule:
-            calls.append(cls)
-        return declarations(cls)
+    def counted(cls, *types):
+        calls.append(types)
+        return compile_comparison(cls, *types)
 
-    monkeypatch.setattr(DeclaredFamily, "_member_declarations", classmethod(counted))
+    monkeypatch.setattr(FieldCodec, "compile_comparison", classmethod(counted))
     for _ in range(20):
         assert StandingRule.recorded_member(RequestStalled.declared_name) is RequestStalled
     assert calls == []
@@ -77,7 +77,7 @@ def test_rule_lookup_validates_a_declaration_cut_once(monkeypatch):
 
     try:
         assert StandingRule.recorded_member(NewObservedRule.declared_name) is NewObservedRule
-        assert StandingRule in calls
+        assert any(NewObservedRule in batch for batch in calls)
         calls.clear()
         assert StandingRule.recorded_member(NewObservedRule.declared_name) is NewObservedRule
         assert calls == []
