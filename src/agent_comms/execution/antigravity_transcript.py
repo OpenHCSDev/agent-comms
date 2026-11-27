@@ -33,8 +33,8 @@ from agent_comms.transcript.transcript_events import (
 )
 
 _DRAFT_FLUSH_INTERVAL_SECONDS = 0.25
-_JSON_DICT = TypeAdapter(dict[str, JsonValue])
-_JSON_VALUE = TypeAdapter(JsonValue)
+_JSON_DICT: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
+_JSON_VALUE: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 
 def _tool_arguments(raw_input: object) -> dict[str, JsonValue]:
