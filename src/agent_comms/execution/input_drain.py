@@ -24,7 +24,6 @@ from agent_comms.agent_backend import OwnedInboxDrainer
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
 from agent_comms.coordination.cohort import next_sealed_assignment
-from agent_comms.coordination.cohort_foreground import AcceptsDeliveries
 from agent_comms.coordination.cohort_schema import AcceptanceFrontier
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
@@ -48,7 +47,12 @@ from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.proven_source_coverage import SourcePrefix
 from agent_comms.execution.queue_publication import QueuePublication
-from agent_comms.execution.queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
+from agent_comms.execution.queued_input import (
+    DeliveredInput,
+    DirectDeliveredInput,
+    InputHandoffRefused,
+    QueuedInput,
+)
 from agent_comms.execution.reservation_rules import (
     ReservationRule,
     ReservationViolationError,
@@ -1507,7 +1511,11 @@ class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEve
         WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
 
     async def _steer_direct_inbox(self, session_id: AcpSessionId, thread: Thread) -> None:
-        def capture_pending() -> tuple[tuple[Thread, RootId, int], ...]:
+        turn = (await self.effects.turns.active_backend_turn(session_id)).turn
+        if not turn.has_source():
+            return
+
+        def capture_pending() -> tuple[tuple[Thread, tuple[Message, ...], object], ...]:
             if self.comms.owners.maintenance.read().turn_pending:
                 return ()
             snapshot = self.comms.registry.snapshot()
@@ -1518,7 +1526,6 @@ class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEve
             messages = tuple(sorted(inbox.page.messages, key=lambda item: item.seq))
             if not messages:
                 return ()
-            self.comms.bus.reads.mark_displayed(owner.name, inbox.displayed)
             waking = tuple(
                 message
                 for message in messages
@@ -1528,19 +1535,16 @@ class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEve
                 )
             )
             if not waking:
+                self.comms.bus.reads.mark_displayed(owner.name, inbox.displayed)
                 return ()
-            root_id = self.comms.owners.require_private_launch().wire_root_id
-            AcceptsDeliveries(
-                bus=self.comms.bus,
-                root_id=root_id,
-                thread_name=owner.name,
-            ).accept(Coordination(CoordinationStore.path_in(self.comms.root)))
-            return ((owner, root_id, waking[0].seq - 1),)
+            return ((owner, waking, inbox.displayed),)
 
-        for owner, root_id, after_seq in await Coordination.run_worker(capture_pending):
-            await DeliveredInput.deliver_pending(
-                self, session_id, owner, self.comms.bus, root_id, after_seq,
-            )
+        for owner, waking, displayed in await Coordination.run_worker(capture_pending):
+            placed = await DirectDeliveredInput.deliver_direct(self, session_id, owner, waking)
+            if placed:
+                await Coordination.run_worker(
+                    partial(self.comms.bus.reads.mark_displayed, owner.name, displayed)
+                )
 
     async def drain_direct_inbox(self, session_id: AcpSessionId, thread: Thread) -> None:
         if self.background_wakes_disabled:

@@ -500,3 +500,81 @@ async def test_comms_agent_drains_and_runs_two_turns_on_antigravity_acp(
         await agent.shutdown()
 
 
+@pytest.mark.asyncio
+async def test_five_concurrent_antigravity_threads_wake_without_lock_starvation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+    from bus_record_fixture import prepare_native_comms
+    from agent_comms.comms import wire
+    from agent_comms.execution.acp import CommsAgent, RetainedOwnerLaunch
+    from agent_comms.execution.child_process import ProcessIdentity
+    from agent_comms.execution.native_arguments import NativeArguments
+    from agent_comms.messaging.channel_targets import ChannelTarget
+    from agent_comms.messaging.message_notification import MessageNotification
+    from agent_comms.messaging.notification_evidence import AllOutcomes
+    from agent_comms.registry.threads import NextTurnConfiguration
+
+    fake_script = tmp_path / "fake_agy.py"
+    fake_script.write_text(_FAKE_ACP_SERVER, encoding="utf-8")
+    fake_bin = tmp_path / "fake_agy"
+    fake_bin.write_text(f"#!/bin/sh\nexec {sys.executable} {fake_script} \"$@\"\n", encoding="utf-8")
+    fake_bin.chmod(0o755)
+    monkeypatch.setenv("AGENT_COMMS_AGY_BIN", str(fake_bin))
+
+    root = tmp_path / "bus"
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    comms = prepare_native_comms(wire(root))
+
+    comms.messaging.user_identity(Checkout(worktree))
+    names = tuple(f"pm-{idx}" for idx in range(5))
+    for name in names:
+        declared = comms.registry.declare(NativeThread(name, frozenset({"model"}), Checkout(worktree)))
+        comms.threads.set_thread_configuration(
+            declared, NextTurnConfiguration(model=ChosenModel("antigravity/gemini-4-neon")),
+        )
+        comms.owners.acquire_thread(name)
+
+    proc = ProcessIdentity.capture(os.getpid())
+    agent = CommsAgent(comms, auto_wake=True)
+    sids = tuple(AcpSessionId(name) for name in names)
+    try:
+        for name in names:
+            owner = comms.registry.entry(name).entry.owner_identity
+            env = {
+                **os.environ,
+                "AGENT_COMMS_THREAD": name,
+                "PI_WORKTREE": str(worktree),
+                NativeArguments.binary_key: NativeArguments.default_binary,
+            }
+            launch = RetainedOwnerLaunch(process=proc, interpreter=sys.executable, environment=env)
+            await agent.sessions.start_owner(launch, owner)
+
+        sent = comms.messaging.send_user_message(
+            ChannelTarget("#model"), "usage-is-back", worktree=Checkout(worktree),
+        )
+        for _ in range(120):
+            await asyncio.sleep(0.05)
+            msgs = [m for m in comms.bus.bus.since(sent.seq, 50) if m.sender in names]
+            if len(msgs) >= 5 and not any(agent.inputs.turn_live(sid) for sid in sids):
+                break
+        msgs = [m for m in comms.bus.bus.since(sent.seq, 50) if m.sender in names]
+        assert {m.sender for m in msgs} == set(names), f"Missing replies: {msgs}"
+        pids = {
+            agent.turns.persistent_backends[sid].runtime_process.pid
+            for sid in sids
+        }
+        assert len(pids) == 1 and next(iter(pids)) > 0
+
+        ref = sent.reference
+        win = comms.views.message_notifications_for_references(AllOutcomes(), (ref,))
+        summary = MessageNotification.summary(win.outcomes.get((ref.seq, ref.message_id), ()))
+        assert "5 read" in summary, f"Expected 5 read receipts, got {summary!r}"
+
+        diag_dir = root / "diagnostics"
+        assert not (list(diag_dir.glob("*.json")) if diag_dir.exists() else [])
+    finally:
+        await agent.shutdown()
+
+

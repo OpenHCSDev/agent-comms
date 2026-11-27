@@ -74,7 +74,6 @@ class Comms(
         self.messaging.acknowledge_direct_turn_inputs(
             thread,
             origins,
-            root_id=self.owners.require_private_launch().wire_root_id,
             bridge=bridge,
         )
 
