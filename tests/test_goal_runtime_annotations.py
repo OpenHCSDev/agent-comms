@@ -40,12 +40,8 @@ from agent_comms.execution.runtime_observations import (
 )
 from agent_comms.execution.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from agent_comms.execution.session_updates import AgentCommsUpdate
-from agent_comms.execution.turn_context import (
-    CoordinationSegment,
-    PeerState,
-    Provenance,
-    TurnContext,
-)
+from agent_comms.execution.context_provenance import Provenance
+from agent_comms.execution.turn_context import CoordinationSegment, PeerState, TurnContext
 from agent_comms.execution.turn_failure import (
     NativePiTerminalFailure,
     RetryableProviderFailure,

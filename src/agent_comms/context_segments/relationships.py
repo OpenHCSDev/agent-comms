@@ -4,7 +4,8 @@ import hashlib
 import json
 from dataclasses import dataclass
 
-from agent_comms.execution.turn_context import InstructionSegment, OwnerProvenance
+from agent_comms.execution.context_provenance import OwnerProvenance
+from agent_comms.execution.turn_context import InstructionSegment
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry.peer_relation import RelationRecord
 

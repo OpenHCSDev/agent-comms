@@ -48,12 +48,8 @@ from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_input_owner import RegistryOwner
-from agent_comms.execution.turn_context import (
-    ContextSegment,
-    InstructionFile,
-    ResourceProvenance,
-    WireProvenance,
-)
+from agent_comms.execution.context_provenance import ResourceProvenance, WireProvenance
+from agent_comms.execution.turn_context import ContextSegment, InstructionFile
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup

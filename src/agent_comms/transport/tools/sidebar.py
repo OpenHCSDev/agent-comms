@@ -29,11 +29,8 @@ from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.input_origin import HumanInputOrigin
 from agent_comms.execution.session_revision import SessionObservation
 from agent_comms.execution.transcript_sources import TranscriptCursor
-from agent_comms.execution.turn_context import (
-    ContextSourceText,
-    Provenance,
-    SegmentManifest,
-)
+from agent_comms.execution.context_provenance import Provenance
+from agent_comms.execution.turn_context import ContextSourceText, SegmentManifest
 from agent_comms.installer.harness_install import Harness
 from agent_comms.messaging.channel_targets import (
     ChannelSelection,

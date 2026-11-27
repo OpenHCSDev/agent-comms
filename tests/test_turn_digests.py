@@ -26,12 +26,8 @@ from agent_comms.context_store import ContextEntry
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.turn_context import (
-    JournalProvenance,
-    SegmentManifest,
-    UserInputSegment,
-    WireProvenance,
-)
+from agent_comms.execution.context_provenance import JournalProvenance, WireProvenance
+from agent_comms.execution.turn_context import SegmentManifest, UserInputSegment
 from agent_comms.execution.turn_bound import (
     LastTurns,
     TurnBound,

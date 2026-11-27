@@ -9,9 +9,9 @@ from agent_comms.context_segments.native_messages import TranscriptSegment
 from agent_comms.context_store import ContextRequest, ContextSegmentVersion
 from agent_comms.execution.image_input import ImageInput
 from agent_comms.execution.pi_commands import Prompt
+from agent_comms.execution.context_provenance import OwnerProvenance
 from agent_comms.execution.turn_context import (
     ContextManifest,
-    OwnerProvenance,
     RecordedContextTurn,
     SegmentManifest,
     TurnContext,

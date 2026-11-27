@@ -17,8 +17,9 @@ from agent_comms.messaging.message_reads import (
 )
 from agent_comms.nominal.field_codec import MessageId
 from agent_comms.projects.checkouts import Checkout
-from agent_comms.registry.task_owner import TaskOwner
-from agent_comms.registry.task_registry import TaskRegistry
+from agent_comms.registry.registry_names import RegistryNames
+from agent_comms.registry.thread_identity_source import ThreadIdentitySource
+from agent_comms.registry.thread_role_source import ThreadRoleSource
 
 
 class InitialOrigin(ABC):
@@ -28,7 +29,7 @@ class InitialOrigin(ABC):
 
     @abstractmethod
     def require_sender[M](
-        self, message: DirectableMessage[M], sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
+        self, message: DirectableMessage[M], sender_thread: ThreadRoleSource, snapshot: RegistryNames
     ) -> None:
         """Refuse a sender this origin cannot speak for."""
 
@@ -75,11 +76,11 @@ class HumanOrigin(OwnerVoiceOrigin):
     worktree: Checkout
 
     @classmethod
-    def of(cls, user: TaskOwner) -> HumanOrigin:
+    def of(cls, user: ThreadIdentitySource) -> HumanOrigin:
         return cls(user.name, user.incarnation.wire_birth, user.worktree)
 
     def require_sender[M](
-        self, message: DirectableMessage[M], sender_thread: TaskOwner, snapshot: TaskRegistry[TaskOwner]
+        self, message: DirectableMessage[M], sender_thread: ThreadRoleSource, snapshot: RegistryNames
     ) -> None:
         self.require_registered(snapshot)
         if message.sender != self.sender:
@@ -100,7 +101,7 @@ class HumanOrigin(OwnerVoiceOrigin):
             # Programming errors propagate as defects, not ordinary send refusals.
             raise HumanSendRefusedError(error) from error
 
-    def require_registered(self, snapshot: TaskRegistry[TaskOwner]) -> None:
+    def require_registered(self, snapshot: RegistryNames) -> None:
         """Check the determining USER declaration, never a transport or prose role."""
         user = snapshot.threads.get(self.sender)
         if user is None:

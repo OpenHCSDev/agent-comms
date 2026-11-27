@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from agent_comms.execution.turn_context import HistoricalInstructionProvenance
+from agent_comms.execution.context_provenance import HistoricalInstructionProvenance
 from agent_comms.installer.harness_install import Harness
 from agent_comms.nominal.field_codec import WireName
 

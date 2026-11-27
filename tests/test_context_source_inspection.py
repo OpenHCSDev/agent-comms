@@ -20,21 +20,23 @@ from agent_comms.execution.native_turn_context import (
 from agent_comms.execution.pi_commands import AgentCommsInspectContextSegment
 from agent_comms.execution.runtime import RuntimeConnection
 from agent_comms.execution.session_file import NoSessionFile
+from agent_comms.execution.context_provenance import (
+    FileProvenance,
+    JournalProvenance,
+    NativeProvenance,
+    PreviewProvenance,
+    UnattributedProvenance,
+)
 from agent_comms.execution.turn_context import (
     ContextManifest,
     ContextSourceText,
     ContributionCoordinates,
-    FileProvenance,
     InstructionFile,
-    JournalProvenance,
-    NativeProvenance,
     NextContextTurn,
     ObservedDispatchRequest,
-    PreviewProvenance,
     RecordedContextTurn,
     SystemLayerSegment,
     TurnContext,
-    UnattributedProvenance,
     UnobservedDispatchRequest,
     UnretainedSourceText,
     UserInputSegment,

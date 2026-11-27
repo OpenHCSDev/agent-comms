@@ -27,7 +27,7 @@ from agent_comms.execution.turn_goal_permission import GoalPermission, OwnerGoal
 from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.nominal.field_codec import GoalId, ThreadLookup
 from agent_comms.planning.goals import Goal
-from agent_comms.registry.task_registry import ClaimGenerationRead
+from agent_comms.registry.claim_generation_read import ClaimGenerationRead
 from agent_comms.registry.threads import NativeThread, Thread
 
 if TYPE_CHECKING:

@@ -71,11 +71,10 @@ from agent_comms.execution.transcript_routes import (
     SentTextDigest,
     TranscriptProjection,
 )
+from agent_comms.execution.context_provenance import PreviewProvenance, Provenance
 from agent_comms.execution.turn_context import (
     ContextTurn,
     MeasuredNativeSegment,
-    PreviewProvenance,
-    Provenance,
     SegmentManifest,
     TurnContext,
 )

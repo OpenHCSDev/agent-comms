@@ -12,14 +12,13 @@ from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.context_store import LATEST_CONTEXT, ContextManifestCursor
 from agent_comms.coordination.errors import Refused
+from agent_comms.execution.context_provenance import Provenance, Sha256Digest
 from agent_comms.execution.turn_context import (
     ContextManifest,
     ContextSegment,
     ContributionCoordinates,
     NextContextTurn,
-    Provenance,
     ProviderContext,
-    Sha256Digest,
     TurnContext,
 )
 from agent_comms.nominal.field_codec import Argument, FieldCodec

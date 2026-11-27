@@ -4,7 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.execution.turn_context import ContextSegment, OwnerProvenance, WireProvenance
+from agent_comms.execution.context_provenance import OwnerProvenance, WireProvenance
+from agent_comms.execution.turn_context import ContextSegment
 from agent_comms.messaging.exporting import (
     AuthoredSourceScope,
     FullLimit,
