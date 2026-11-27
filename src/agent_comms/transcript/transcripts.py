@@ -54,7 +54,7 @@ from agent_comms.execution.turn_digests import (
     ThreadTurns,
     TurnDigestRead,
 )
-from agent_comms.execution.turn_lease import TurnLeaseFence
+from agent_comms.execution.turn_lease import TurnLeaseFence, TurnState
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.bus_publication import Delivered
@@ -176,7 +176,7 @@ class LivePageSource(PageSource):
         records = runtime.history_source(owner.root, thread.incarnation)
         return ResolvedPageSource(
             thread, runtime, view, owner.root, owner.bus.bus, owner.routes, records,
-            LiveTranscriptReadIdentity,
+            partial(LiveTranscriptReadIdentity, turn_state=thread.turn_state),
             LiveAssignedTranscriptSource.for_thread(owner.root, thread, owner.bus.bus))
 
 
@@ -240,7 +240,12 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     def namespace(self, owner: Transcripts) -> RegistryProvenance:
         """Reacquire this exact source without substituting a live namespace."""
 
-    def publish_turn(self, publish: Callable[[str, Thread], None]) -> None:
+    @property
+    def observed_turn_state(self) -> TurnState:
+        """Recorded evidence holds no live turn state."""
+        return TurnState()
+
+    def publish_turn(self, publish: Callable[[str, Thread, TurnState], None]) -> None:
         """Recorded evidence cannot settle a turn or permit new input."""
 
     def recapture(self, owner: Transcripts) -> TranscriptReadIdentity:
@@ -294,6 +299,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
 @dataclass(frozen=True, slots=True)
 class LiveTranscriptReadIdentity(TranscriptReadIdentity):
     thread: Annotated[Thread, ContentExclude()]
+    turn_state: Annotated[TurnState, ContentExclude()] = field(default_factory=TurnState, kw_only=True)
 
     @projected(view=ContentExclude, name="thread")
     def content_thread(self) -> tuple[ThreadIncarnation, ThreadParent, ThreadText]:
@@ -302,8 +308,12 @@ class LiveTranscriptReadIdentity(TranscriptReadIdentity):
     def namespace(self, owner: Transcripts) -> RegistryProvenance:
         return owner.registry.snapshot()
 
-    def publish_turn(self, publish: Callable[[str, Thread], None]) -> None:
-        publish(self.root, self.thread)
+    @property
+    def observed_turn_state(self) -> TurnState:
+        return self.turn_state
+
+    def publish_turn(self, publish: Callable[[str, Thread, TurnState], None]) -> None:
+        publish(self.root, self.thread, self.turn_state)
 
 
 @dataclass(frozen=True, slots=True)
@@ -486,7 +496,11 @@ class NotifiedThreadPresentation(ThreadPresentation):
         original, current = self.read_identity, other.read_identity
         if original is None or current is None:
             return original is current
-        return original.thread == current.thread and original.same_snapshot(current)
+        return (
+            original.thread == current.thread
+            and original.observed_turn_state == current.observed_turn_state
+            and original.same_snapshot(current)
+        )
 
 
 @dataclass(frozen=True, slots=True)
