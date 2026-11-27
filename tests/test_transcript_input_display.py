@@ -7,13 +7,13 @@ import pytest
 from agent_comms.execution.acp import CommsAgent
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
-from agent_comms.execution.native_entries import TranscriptProjection
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.transcript_routes import (
     DisplayText,
     InputDisplay,
     NoDisplayText,
     SentInputText,
+    TranscriptProjection,
 )
 from agent_comms.execution.turn_item import FreshNativeIdText
 from agent_comms.nominal.field_codec import AcpSessionId

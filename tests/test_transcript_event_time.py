@@ -7,7 +7,8 @@ import pytest
 
 from agent_comms.cli_bridges.claude_protocol import TimedRecord
 from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, RolloutState
-from agent_comms.execution.native_entries import NativeEntry, TranscriptProjection
+from agent_comms.execution.native_entries import NativeEntry
+from agent_comms.execution.transcript_routes import TranscriptProjection
 from agent_comms.messaging.routing import TurnRouting
 from agent_comms.nominal.field_codec import MalformedRecord, RecordedTimestamp
 from agent_comms.projects.checkouts import Checkout

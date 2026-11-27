@@ -58,7 +58,7 @@ def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     comms.bus.mark_read_through("alpha", shown[-1].seq, target=CommandTarget.named("#team"))
     ledger = comms.bus.reads.path.read_bytes()
     revision = comms.bus.bus.revision()
-    segments = comms.bus.awareness_segments(observer, ())
+    segments = AwarenessSegment.for_owner(comms.bus.bus, observer, ())
     frame = "".join(segment.text() for segment in segments)
     (awareness,) = segments
     pointers = awareness.sources
@@ -70,7 +70,7 @@ def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     assert all(record.target == "#team" for record in pointed)
     assert comms.bus.reads.path.read_bytes() == ledger
     assert comms.bus.bus.revision() == revision
-    assert comms.bus.awareness_segments(replace(observer, created_at=observer.created_at + 1), ()) == ()
+    assert AwarenessSegment.for_owner(comms.bus.bus, replace(observer, created_at=observer.created_at + 1), ()) == ()
 
 
 async def test_natural_owned_turn_prepares_observer_pointer_without_native_start(

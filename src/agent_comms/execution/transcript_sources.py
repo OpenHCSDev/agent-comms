@@ -29,7 +29,6 @@ from agent_comms.execution.native_entries import (
     NativeEntry,
     RootEntry,
     SessionEntry,
-    TranscriptProjection,
 )
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_input_proof import (
@@ -63,7 +62,11 @@ from agent_comms.execution.transcript_cursor_reads import (
     TranscriptHistorySource,
     TranscriptRuntime,
 )
-from agent_comms.execution.transcript_routes import TranscriptRoutes, _SessionRoutes
+from agent_comms.execution.transcript_routes import (
+    TranscriptProjection,
+    TranscriptRoutes,
+    _SessionRoutes,
+)
 from agent_comms.execution.turn_bound import TurnBound
 from agent_comms.execution.turn_context import SegmentManifest
 from agent_comms.execution.turn_item import FreshNativeId, NativeItemId, NativeTurnId

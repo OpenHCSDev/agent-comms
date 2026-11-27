@@ -66,6 +66,11 @@ from agent_comms.execution.provider_records import (
 )
 from agent_comms.execution.runtime_observations import AgentInfo, NativeSessionPathObservation
 from agent_comms.execution.tool_results import NoSentMessage, NoToolDiff, ToolDiff
+from agent_comms.execution.transcript_routes import (
+    ProjectedUserMessage,
+    SentTextDigest,
+    TranscriptProjection,
+)
 from agent_comms.execution.turn_context import (
     ContextTurn,
     MeasuredNativeSegment,
@@ -151,9 +156,7 @@ class StrictFields(PiPayload):
 
 if TYPE_CHECKING:
     from agent_comms.execution.backend import NativeSession, TurnSession
-    from agent_comms.execution.native_entries import TranscriptProjection
     from agent_comms.execution.pi_events import AutoRetryEnd
-    from agent_comms.execution.transcript_routes import SentTextDigest
 
 
 # A Pi payload field is omitted from the wire while it holds its default.
@@ -615,7 +618,7 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
         return [replace(event, routing=context.routing) for event in events]
 
 
-class UserMessage(PiMessage):
+class UserMessage(PiMessage, ProjectedUserMessage[PiContent]):
     def is_user_message(self) -> bool:
         return True
 

@@ -50,6 +50,7 @@ from agent_comms.execution.provider_records import ReportedText
 from agent_comms.execution.transcript_routes import (
     InputPresentation,
     NoInputDisplay,
+    TranscriptProjection,
     _SessionRoutes,
 )
 from agent_comms.execution.turn_item import FreshNativeId, NativeItemId
@@ -83,13 +84,6 @@ class ReportedSessionVersion(PiReported[int]):
 
 # Saved native execution reopens only v3 headers.
 STRICT_SESSION_VERSION = ReportedSessionVersion(3)
-
-
-@dataclass(frozen=True)
-class TranscriptProjection:
-    position: int = field(kw_only=True)
-    routing: Routing = NoTurnRouting()
-    input_display: InputPresentation = NoInputDisplay()
 
 
 @dataclass(frozen=True, slots=True)

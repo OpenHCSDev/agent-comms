@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.context_segments.partner_activity import PartnerActivitySegment
 from agent_comms.context_segments.relationships import RelationshipsSegment
 from agent_comms.execution.child_process import NoProcess
@@ -179,7 +180,7 @@ def test_awareness_shows_a_related_peers_messages_first_within_the_same_window(t
 
     def shown():
         relations = comms.relationships.peer_relations("Alice")
-        (segment,) = comms.bus.awareness_segments(owner, relations)
+        (segment,) = AwarenessSegment.for_owner(comms.bus.bus, owner, relations)
         return [row.seq for row in segment.sources]
 
     assert shown() == [earlier.seq, later.seq]
