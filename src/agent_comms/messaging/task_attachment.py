@@ -24,7 +24,7 @@ from agent_comms.messaging.message_reads import MessageReferencesRead
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.projection_source import ProjectionSource
 from agent_comms.messaging.task_callbacks import DeliveredContext, TeamObservation
-from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily, DeclaredFirstMembers
 from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from agent_comms.registry.task_owner import TaskOwner
 from agent_comms.registry.task_registry import TaskRegistry
@@ -33,7 +33,7 @@ from agent_comms.ui_model.message_category import MessageCategory
 
 
 class TaskAttachment(
-    DeclaredFamily, ProjectionSource, affix="TaskAttachment",
+    DeclaredFirstMembers, DeclaredFamily, ProjectionSource, affix="TaskAttachment",
     discovery_package="agent_comms.task_attachments",
 ):
     """Absent attachments have no publication, fact or author effects.

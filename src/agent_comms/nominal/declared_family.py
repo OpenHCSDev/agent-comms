@@ -354,6 +354,18 @@ class AcquiredMembers(FamilyMember):
         return dict.__getitem__(cls.family_root.__registry__, cast(Hashable, name))
 
 
+class DeclaredFirstMembers(AcquiredMembers):
+    """Name lookup answers already-declared members before discovering the package tree."""
+
+    @classmethod
+    def _acquire_named_declarations(cls, name: object) -> None:
+        if not isinstance(name, Hashable):
+            return
+        if dict.__contains__(cls.family_root.__registry__, name):
+            return
+        cls._member_declarations()
+
+
 class ModuleMembers(AcquiredMembers):
     """A family whose declared names select exactly one Python module each."""
 

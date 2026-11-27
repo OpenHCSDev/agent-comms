@@ -4473,7 +4473,11 @@ def _structural_decoder(annotation: object) -> ValueDecoder[object]:
         return decoder.from_annotation(annotation, get_args(annotation))
     if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
         # A leaf document is its own only declared member.
-        leaf_document = annotation.decodes_tagged_records() and annotation._members == (annotation,)
+        leaf_document = (
+            annotation.declared_name is not None
+            and annotation.decodes_tagged_records()
+            and annotation._members == (annotation,)
+        )
         plan = _LeafDocumentDecoder if leaf_document else _FamilyRecordDecoder
         return cast(ValueDecoder[object], plan(annotation))
     return _member_decoders[annotation]

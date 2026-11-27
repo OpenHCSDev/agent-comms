@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily, DeclaredFirstMembers
 
 
-class OrderPhase(DeclaredFamily, affix="Phase", discovery_package='agent_comms.planning.plan_phases'):
+class OrderPhase(
+    DeclaredFirstMembers,
+    DeclaredFamily,
+    affix="Phase",
+    discovery_package="agent_comms.planning.plan_phases",
+):
     """What an order serves: one plan phase, or nothing in any plan."""
 
     @classmethod
