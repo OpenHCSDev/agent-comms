@@ -957,6 +957,7 @@ class RepositoryReads:
         self._statuses: dict[Path, CheckoutStatus] = {}
         self._histories: dict[Path, CheckoutHistory] = {}
         self._worktree_histories: dict[Path, CheckoutHistory] = {}
+        self._common_dirs: dict[Path, Path] = {}
         self._remote_cuts: dict[Path, dict[str, dict[str, str]]] = {}
 
     @classmethod
@@ -1021,10 +1022,22 @@ class RepositoryReads:
     def __del__(self) -> None:
         self.close()
 
+    def common_dir_for(self, checkout: Checkout) -> Path:
+        """Git's shared common directory, without capturing a history cut before fetches."""
+        checkout = checkout.resolved()
+        if checkout.path in self._worktree_histories:
+            return self._worktree_histories[checkout.path].checkout.common_dir
+        common = self._common_dirs.get(checkout.path)
+        if common is None:
+            common = checkout.common_dir
+            self._common_dirs[checkout.path] = common
+        return common
+
     def remote_cuts(self, checkout: Checkout) -> dict[str, dict[str, str]]:
-        """Each remote's published refs: worktrees of one repository share their remotes. The
-        common directory is the one this pass's cut resolved, never asked of Git again."""
-        return self._remote_cuts.setdefault(self.history_for(checkout).checkout.common_dir, {})
+        """Each remote's published refs: worktrees of one repository share their remotes.
+        Resolving the common directory does not capture a history cut, so a following fetch
+        (require_commits / unservable_commits) cannot invalidate a cut taken before it."""
+        return self._remote_cuts.setdefault(self.common_dir_for(checkout), {})
 
     def repository(self, path: Path) -> Repo:
         """The common directory's identity, acquired once within this pass."""
@@ -1037,7 +1050,10 @@ class RepositoryReads:
         mid-read, because head_for found no HEAD for it in the stale listing."""
         checkout = checkout.resolved()
         if checkout.path not in self._worktree_histories:
-            common = checkout.common_dir
+            common = self._common_dirs.get(checkout.path)
+            if common is None:
+                common = checkout.common_dir
+                self._common_dirs[checkout.path] = common
             if common not in self._histories:
                 try:
                     self._histories[common] = CheckoutHistory.capture(checkout)
