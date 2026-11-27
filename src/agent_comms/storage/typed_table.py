@@ -3396,6 +3396,9 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
     ) -> tuple[SQLiteSchemaDifference, ...]:
         """What reconciling the file changed, using the decoded practice choice."""
         schema = cls.schema_at(path)
+        with closing(cls.read_snapshot(path)) as snapshot:
+            if not schema.schema_differs(snapshot):
+                return ()
         rebuild = practice.rebuild_for(cls, path)
         with cls.exclusive_writer(path, uri=True) as db:
             return schema.reconcile_schema(db, cls.schema_change(path), rebuild=rebuild)
