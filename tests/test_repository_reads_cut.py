@@ -1,5 +1,4 @@
 """One pass's repository cut against worktrees that appear or vanish while it reads."""
-import subprocess
 import re
 import pickle
 from itertools import product
@@ -406,3 +405,30 @@ def test_head_paths_skip_worktree_submodules_and_logs(main: Path) -> None:
     assert submodule_file not in paths
     assert log_file not in paths
     assert not any("modules" in path.parts or "logs" in path.parts for path in paths)
+
+
+def test_remote_cuts_do_not_capture_history_before_fetch(main: Path, monkeypatch) -> None:
+    """ClosedPullRequestWatch and prepare_pull_request call remote_heads before require_commits.
+    If remote_cuts captures CheckoutHistory prematurely, git fetch rewriting packed-refs trips
+    GitGraphSource.require_current() with 'Git history sources changed after their captured cut'."""
+    reads = RepositoryReads()
+    linked = main.parent / "linked-remote-cuts"
+    git(main, "worktree", "add", "-b", "linked-remote", str(linked))
+
+    with monkeypatch.context() as patched:
+        patched.setattr(
+            CheckoutHistory,
+            "capture",
+            classmethod(lambda cls, checkout, previous=None: pytest.fail(
+                "remote_cuts captured CheckoutHistory before history_for")),
+        )
+        main_cut = reads.remote_cuts(Checkout(main))
+        assert reads.remote_cuts(Checkout(linked)) is main_cut
+
+    # Simulate git fetch / pack-refs mutating packed-refs after remote_cuts and before history_for.
+    git(main, "pack-refs", "--all")
+    head = git(main, "rev-parse", "HEAD")
+    history = reads.history_for(Checkout(main))
+    history.include(head)
+    assert head in history.graph
+
