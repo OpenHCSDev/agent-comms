@@ -4218,10 +4218,60 @@ class _PairKeyDictDecoder[K, V](_DictDecoder[K, V]):
 
 
 @dataclass(frozen=True, slots=True)
+class _TaggedDocumentForm[Member: DeclaredFamily]:
+    """Family document form: requires the family discriminator tag."""
+
+    decoder: _FamilyRecordDecoder[Member]
+
+    def fits_wire(self, data: object) -> bool:
+        return False
+
+    def shape_refusal(self, data: object) -> MalformedRecord:
+        if isinstance(data, dict):
+            return MalformedRecord(
+                f"Expected a string family {self.decoder.target.family_discriminator}."
+            )
+        return MalformedRecord("Expected a family object.")
+
+    def encode_document(self, value: Member) -> object:
+        return self.decoder.encode(value)
+
+    def decode_document(self, data: object) -> Member:
+        return self.decoder.decode(data)
+
+
+class _LeafDocumentForm[Member: DeclaredFamily](_TaggedDocumentForm[Member]):
+    """A directly declared leaf document omits its family selector."""
+
+    @property
+    def leaf(self) -> ValueDecoder[object]:
+        """The decoder of the record this document declares directly."""
+        return _member_decoders[self.decoder.target]
+
+    def fits_wire(self, data: object) -> bool:
+        return self.leaf.fits_wire(data)
+
+    def shape_refusal(self, data: object) -> MalformedRecord:
+        # The direct leaf form is this document's declared shape.
+        return self.leaf.shape_refusal(data)
+
+    def encode_document(self, value: Member) -> object:
+        return _member_decoders[type(value)].encode(value)
+
+    def decode_document(self, data: object) -> Member:
+        return cast(Member, self.leaf.decode_bound(data, {}))
+
+
+@dataclass(frozen=True, slots=True)
 class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
     """The encoded object carries its member's name under the family tag."""
 
     target: type[Member]
+
+    def _document(self) -> _TaggedDocumentForm[Member]:
+        """Resolve leaf-vs-family document form lazily so value encoding never walks a
+        distributed family's discovery package."""
+        return _LeafDocumentForm(self) if self.target.is_leaf_document() else _TaggedDocumentForm(self)
 
     def field_paths(self, key: str, seen: set[type]) -> tuple[tuple[str, ...], ...]:
         return tuple(path for member in self.target.members_with(self.target)
@@ -4232,13 +4282,19 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
         return isinstance(data, dict) and isinstance(data.get(self.target.family_discriminator), str)
 
     def fits_wire(self, data: object) -> bool:
-        return self.tagged(data)
+        return self.tagged(data) or self._document().fits_wire(data)
 
     def encode(self, value: Member) -> dict[str, object]:
         return self.encode_shared(value, ValueEncoding())
 
     def encode_shared(self, value: Member, encoding: ValueEncoding) -> dict[str, object]:
         return {**value.record_tag(), **encoding.encode(_member_decoders[type(value)], value)}
+
+    def encode_document(self, value: Member) -> object:
+        return self._document().encode_document(value)
+
+    def decode_document(self, data: object) -> Member:
+        return self._document().decode_document(data)
 
     def compared(self, value: Member) -> object:
         return _member_decoders[type(value)].compared(value)
@@ -4262,13 +4318,11 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
         return {self.target.family_discriminator: text}
 
     def shape_refusal(self, data: object) -> MalformedRecord:
-        if isinstance(data, dict):
-            return MalformedRecord(f"Expected a string family {self.target.family_discriminator}.")
-        return MalformedRecord("Expected a family object.")
+        return self._document().shape_refusal(data)
 
     def member(self, data: object) -> tuple[type[Member], dict]:
         if not self.tagged(data):
-            raise _FamilyRecordDecoder.shape_refusal(self, data)
+            raise _TaggedDocumentForm(self).shape_refusal(data)
         tag = self.target.family_discriminator
         return _declared_member(self.target, data[tag]), {
             key: value for key, value in data.items() if key != tag
@@ -4277,28 +4331,6 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
     def decode_bound(self, data: object, context: Mapping[str, object]) -> Member:
         member, payload = self.member(data)
         return cast(Member, _member_decoders[member].decode_bound(payload, context))
-
-
-class _LeafDocumentDecoder(_FamilyRecordDecoder):
-    """A directly declared leaf document omits its family selector."""
-
-    @property
-    def leaf(self) -> ValueDecoder[object]:
-        """The decoder of the record this document declares directly."""
-        return _member_decoders[self.target]
-
-    def fits_wire(self, data: object) -> bool:
-        return self.tagged(data) or self.leaf.fits_wire(data)
-
-    def shape_refusal(self, data: object) -> MalformedRecord:
-        # The direct leaf form is this document's declared shape.
-        return self.leaf.shape_refusal(data)
-
-    def encode_document(self, value: DeclaredFamily) -> object:
-        return _member_decoders[type(value)].encode(value)
-
-    def decode_document(self, data: object) -> object:
-        return self.leaf.decode_bound(data, {})
 
 
 @dataclass(frozen=True, slots=True)
@@ -4472,14 +4504,7 @@ def _structural_decoder(annotation: object) -> ValueDecoder[object]:
     else:
         return decoder.from_annotation(annotation, get_args(annotation))
     if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
-        # A leaf document is its own only declared member.
-        leaf_document = (
-            annotation.declared_name is not None
-            and annotation.decodes_tagged_records()
-            and annotation._members == (annotation,)
-        )
-        plan = _LeafDocumentDecoder if leaf_document else _FamilyRecordDecoder
-        return cast(ValueDecoder[object], plan(annotation))
+        return cast(ValueDecoder[object], _FamilyRecordDecoder(annotation))
     return _member_decoders[annotation]
 
 
