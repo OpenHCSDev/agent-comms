@@ -293,7 +293,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
 
     location_type: ClassVar[type[RuntimeLocation]]
     event_kinds: ClassVar[frozenset[str]]
-    provider_type: ClassVar[type[ModelProvider] | None] = None
+    provider_type: ClassVar[type[ModelProvider]] = ModelProvider
     _sealed: ClassVar[bool] = False
 
     @classmethod
@@ -310,9 +310,15 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         return cls.for_provider(provider)
 
     @classmethod
-    async def apply_setting(cls, owner, configuration, thread: Thread, command) -> None:
+    async def apply_setting(
+        cls,
+        owner: object,
+        configuration: object,
+        thread: Thread,
+        command: object,
+    ) -> None:
         """Apply one runtime setting change (`SetModel` or `SetThinkingLevel`) for this backend."""
-        await owner.configure_pi_thread(configuration, thread, command)
+        await owner.configure_pi_thread(configuration, thread, command)  # type: ignore[attr-defined]
 
     async def context_for_input(self, thread, context):
         return context

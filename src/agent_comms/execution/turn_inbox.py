@@ -56,6 +56,18 @@ class InputContent(TurnInputContent):
     images: tuple[ImageInput, ...] = ()
     contributions: tuple[InputContributionCoordinates, ...] = ()
 
+    def acp_prompt_blocks(self) -> list[dict[str, object]]:
+        blocks: list[dict[str, object]] = []
+        if self.text:
+            blocks.append({"type": "text", "text": self.text})
+        for image in self.images:
+            blocks.append({
+                "type": "image",
+                "mimeType": image.mime_type,
+                "data": image.data,
+            })
+        return blocks
+
 
 class TurnInboxItem(ABC):
     """An inbox item carries its input identities; the forwarding owner dispatches it."""

@@ -16,7 +16,8 @@ import os
 import shutil
 import sqlite3
 import uuid
-from asyncio import Future, Lock, Queue, Task
+from abc import ABC, abstractmethod
+from asyncio import Future, Lock, Queue, StreamReader, StreamWriter, Task
 from asyncio.subprocess import DEVNULL, PIPE, Process
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import suppress
@@ -29,6 +30,7 @@ from pydantic import Field, JsonValue, ValidationError
 
 from agent_comms.config_option import CatalogChoice
 from agent_comms.execution.antigravity_acp_events import (
+    AcpConfigKey,
     AcpConfigOptionKind,
     AcpConfigOptionWire,
     AcpDescriptorBuilder,
@@ -38,12 +40,17 @@ from agent_comms.execution.antigravity_acp_events import (
     AcpWireModel,
     AntigravityAcpUpdate,
 )
-from agent_comms.execution.child_process import Platform, ProcessIdentity
+from agent_comms.execution.child_process import NoProcess, Platform, ProcessIdentity, ProcessState
 from agent_comms.execution.native_session_files import SessionFiles
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import AcpSessionId, NominalText
 from agent_comms.storage.store_files import AtomicFile
 
-
 DEFAULT_ANTIGRAVITY_HOME: Path = Path(".gemini/antigravity-cli")
+
+
+class AntigravityConversationId(NominalText):
+    """Nominal identifier for one Antigravity conversation database on disk."""
 
 
 class TranscriptModelLineWire(AcpWireModel):
@@ -55,59 +62,112 @@ class TranscriptModelLineWire(AcpWireModel):
 class AcpRpcErrorWire(AcpWireModel):
     """JSON-RPC error payload decoded once at the ACP stdio boundary."""
 
-    code: int = -32603
+    code: int = 0
     message: str = "Unknown ACP error"
-    data: JsonValue = None
+    data: JsonValue = ""
 
     def to_exception(self) -> AcpRpcError:
         return AcpRpcError(self.code, self.message, self.data)
 
 
+class AcpSessionUpdateParamsWire(AcpWireModel):
+    """Parameters of an ACP `session/update` notification."""
+
+    session_key: str = Field(default="", alias="sessionId")
+    update: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class AcpQueueItem(ABC):
+    """Item placed onto a per-session ACP update queue."""
+
+    @abstractmethod
+    def frames(self) -> tuple[AcpPromptFrame, ...]: ...
+
+
+@dataclass(frozen=True)
+class AcpQueuedUpdate(AcpQueueItem):
+    update: AntigravityAcpUpdate
+
+    def frames(self) -> tuple[AcpPromptFrame, ...]:
+        return (AcpUpdateFrame(self.update),)
+
+
+@dataclass(frozen=True)
+class AcpQueueClosed(AcpQueueItem):
+    def frames(self) -> tuple[AcpPromptFrame, ...]:
+        return ()
+
+
+class AcpNotificationMethod(DeclaredFamily, affix="NotificationMethod"):
+    """Nominal dispatch for inbound JSON-RPC notifications from ``agy acp``."""
+
+    @classmethod
+    def deliver(
+        cls,
+        params: Mapping[str, JsonValue],
+        session_queues: Mapping[AcpSessionId, Queue[AcpQueueItem]],
+    ) -> None:
+        del params, session_queues
+
+
+class SessionUpdateNotificationMethod(AcpNotificationMethod, declared_name="session/update"):
+    @classmethod
+    def deliver(
+        cls,
+        params: Mapping[str, JsonValue],
+        session_queues: Mapping[AcpSessionId, Queue[AcpQueueItem]],
+    ) -> None:
+        try:
+            parsed = AcpSessionUpdateParamsWire.model_validate(params)
+        except ValidationError:
+            return
+        if not parsed.session_key:
+            return
+        sid = AcpSessionId(parsed.session_key)
+        if sid in session_queues:
+            session_queues[sid].put_nowait(
+                AcpQueuedUpdate(AntigravityAcpUpdate.decode_wire(parsed.update))
+            )
+
+
+class OtherNotificationMethod(AcpNotificationMethod, declared_name="other"):
+    pass
+
+
 class AcpRpcEnvelopeWire(AcpWireModel):
     """Top-level JSON-RPC 2.0 frame emitted by ``agy acp``."""
 
-    id: int | None = None
+    id: int = 0
     method: str = ""
-    params: dict[str, JsonValue] | None = None
-    result: dict[str, JsonValue] | None = None
-    error: AcpRpcErrorWire | None = None
+    params: dict[str, JsonValue] = Field(default_factory=dict)
+    result: dict[str, JsonValue] = Field(default_factory=dict)
+    error: AcpRpcErrorWire = Field(default_factory=AcpRpcErrorWire)
 
     def unwrap_result(self) -> dict[str, JsonValue]:
-        if self.error is not None:
+        if self.error.code != 0:
             raise self.error.to_exception()
-        return self.result if self.result is not None else {}
+        return self.result
 
     def deliver(
         self,
         pending: dict[int, Future[AcpRpcEnvelopeWire]],
-        session_queues: dict[str, Queue[AntigravityAcpUpdate | None]],
+        session_queues: Mapping[AcpSessionId, Queue[AcpQueueItem]],
     ) -> None:
-        if self.id is not None and self.id in pending:
-            future = pending.pop(self.id, None)
-            if future is not None and not future.done():
+        if self.id > 0 and self.id in pending:
+            future = pending.pop(self.id)
+            if not future.done():
                 future.set_result(self)
             return
-        if self.method == "session/update" and self.params is not None:
-            try:
-                params = AcpSessionUpdateParamsWire.model_validate(self.params)
-            except ValidationError:
-                return
-            queue = session_queues.get(params.session_id)
-            if queue is not None:
-                queue.put_nowait(AntigravityAcpUpdate.decode_wire(params.update))
-
-
-class AcpSessionUpdateParamsWire(AcpWireModel):
-    """Parameters of an ACP `session/update` notification."""
-
-    session_id: str = Field(default="", alias="sessionId")
-    update: dict[str, JsonValue] = Field(default_factory=dict)
+        if self.method:
+            AcpNotificationMethod.member_or_default(self.method, OtherNotificationMethod).deliver(
+                self.params, session_queues
+            )
 
 
 class AcpSessionResultWire(AcpWireModel):
     """Result returned by `session/new` or `session/resume`."""
 
-    session_id: str = Field(default="", alias="sessionId")
+    session_key: str = Field(default="", alias="sessionId")
     config_options: list[AcpConfigOptionWire] = Field(default_factory=list, alias="configOptions")
 
 
@@ -122,28 +182,41 @@ class AntigravitySessionStorage:
     """Single owner of one Antigravity conversation's durable files on disk."""
 
     root: Path
-    conversation_id: str
+    conversation_id: AntigravityConversationId
 
-    TRANSIENT_BRAIN_NAMES: ClassVar[frozenset[str]] = frozenset({
-        ".agy-thread.json",
-        ".agy-goal-cursor.json",
-    })
+    TRANSIENT_BRAIN_NAMES: ClassVar[frozenset[str]] = frozenset(
+        {
+            ".agy-thread.json",
+            ".agy-goal-cursor.json",
+        }
+    )
     TRANSIENT_BRAIN_SUFFIXES: ClassVar[tuple[str, ...]] = (".agy-checkpoint.json",)
 
     @classmethod
-    def default_root(cls, home: Path | None = None) -> Path:
-        return (home or Path.home()) / DEFAULT_ANTIGRAVITY_HOME
+    def default_root(cls) -> Path:
+        return Path.home() / DEFAULT_ANTIGRAVITY_HOME
 
     @classmethod
-    def for_id(cls, conversation_id: str, *, home: Path | None = None) -> Self:
-        return cls(root=cls.default_root(home), conversation_id=conversation_id)
+    def root_for_home(cls, home: Path) -> Path:
+        return home / DEFAULT_ANTIGRAVITY_HOME
+
+    @classmethod
+    def for_id(cls, conversation_id: AntigravityConversationId) -> Self:
+        return cls(root=cls.default_root(), conversation_id=conversation_id)
+
+    @classmethod
+    def for_home(cls, conversation_id: AntigravityConversationId, home: Path) -> Self:
+        return cls(root=cls.root_for_home(home), conversation_id=conversation_id)
 
     @classmethod
     def from_db_path(cls, db_path: Path) -> Self:
         resolved = db_path.expanduser().resolve()
-        if resolved.parent.name == "conversations" and resolved.suffix == ".db":
-            return cls(root=resolved.parent.parent, conversation_id=resolved.stem)
-        return cls(root=resolved.parent, conversation_id=resolved.stem)
+        conv = AntigravityConversationId(resolved.stem)
+        parent = resolved.parent
+        candidate = parent.parent
+        if candidate / "conversations" / f"{conv}.db" == resolved:
+            return cls(root=candidate, conversation_id=conv)
+        return cls(root=parent, conversation_id=conv)
 
     @property
     def db_path(self) -> Path:
@@ -155,7 +228,7 @@ class AntigravitySessionStorage:
 
     @property
     def brain_dir(self) -> Path:
-        return self.root / "brain" / self.conversation_id
+        return self.root / "brain" / str(self.conversation_id)
 
     @property
     def transcript_path(self) -> Path:
@@ -169,9 +242,7 @@ class AntigravitySessionStorage:
 
     def last_written(self) -> float:
         mtimes = [
-            path.stat().st_mtime
-            for path in (self.db_path, self.transcript_path)
-            if path.is_file()
+            path.stat().st_mtime for path in (self.db_path, self.transcript_path) if path.is_file()
         ]
         return max(mtimes, default=0.0)
 
@@ -203,7 +274,7 @@ class AntigravitySessionStorage:
             or any(name.endswith(suffix) for suffix in self.TRANSIENT_BRAIN_SUFFIXES)
         }
 
-    def clone_to(self, child_id: str) -> AntigravitySessionStorage:
+    def clone_to(self, child_id: AntigravityConversationId) -> AntigravitySessionStorage:
         """Atomically fork this conversation into ``child_id`` with a fresh trajectory identity.
 
         Uses SQLite's online ``backup()`` API so live WAL-mode conversations fork losslessly
@@ -225,7 +296,7 @@ class AntigravitySessionStorage:
                 new_trajectory = str(uuid.uuid4())
                 dst_conn.execute(
                     "UPDATE trajectory_meta SET trajectory_id = ?, cascade_id = ?",
-                    (new_trajectory, child_id),
+                    (new_trajectory, str(child_id)),
                 )
                 dst_conn.commit()
             finally:
@@ -252,25 +323,28 @@ class AntigravitySessionFiles(SessionFiles):
     """Lifecycle-owned storage files for one Antigravity conversation."""
 
     storage: AntigravitySessionStorage
+    session: Path
+    members: tuple[Path, ...]
 
-    @property
-    def session(self) -> Path:
-        return self.storage.db_path
+    @classmethod
+    def for_storage(cls, storage: AntigravitySessionStorage) -> Self:
+        db = storage.db_path
+        lock = db.with_suffix(".db.lock")
+        return cls(
+            storage=storage,
+            session=db,
+            members=(
+                db,
+                Path(f"{db}-wal"),
+                Path(f"{db}-shm"),
+                lock,
+                storage.annotations_path,
+            ),
+        )
 
     @property
     def writer_lock(self) -> Path:
-        return self.storage.db_path.with_suffix(".db.lock")
-
-    @property
-    def members(self) -> tuple[Path, ...]:
-        db = self.storage.db_path
-        return (
-            db,
-            Path(f"{db}-wal"),
-            Path(f"{db}-shm"),
-            self.writer_lock,
-            self.storage.annotations_path,
-        )
+        return self.session.with_suffix(".db.lock")
 
     def delete(self) -> int:
         freed = super().delete()
@@ -288,7 +362,7 @@ class AntigravitySessionFiles(SessionFiles):
 class AcpSessionDescriptor:
     """Metadata returned by ``session/new`` or ``session/resume`` on ``agy acp``."""
 
-    session_id: str
+    session_id: AcpSessionId
     current_model: str = ""
     thought_level: str = ""
     models: tuple[CatalogChoice, ...] = ()
@@ -299,9 +373,9 @@ class AcpSessionDescriptor:
         wire = AcpSessionResultWire.model_validate(result)
         builder = AcpDescriptorBuilder()
         for option in wire.config_options:
-            AcpConfigOptionKind.of(option.id).apply_to_descriptor(option, builder)
+            AcpConfigOptionKind.of(AcpConfigKey(option.id)).apply_to_descriptor(option, builder)
         return cls(
-            session_id=wire.session_id,
+            session_id=AcpSessionId(wire.session_key),
             current_model=builder.current_model,
             thought_level=builder.thought_level,
             models=tuple(builder.models),
@@ -312,105 +386,183 @@ class AcpSessionDescriptor:
 class AcpRpcError(RuntimeError):
     """Structured JSON-RPC error returned by ``agy acp``."""
 
-    def __init__(self, code: int, message: str, data: object = None) -> None:
+    def __init__(self, code: int, message: str, data: object = "") -> None:
         super().__init__(f"Antigravity ACP error {code}: {message}")
         self.code = code
         self.rpc_message = message
         self.data = data
 
 
-class _AcpSubprocess:
-    """Single owner of the underlying ``agy acp`` asyncio subprocess handle."""
+class AcpSubprocessState(ABC):
+    """Nominal lifecycle state of the shared ``agy acp`` subprocess."""
 
-    def __init__(self, proc: Process) -> None:
+    alive: bool = False
+
+    @property
+    @abstractmethod
+    def identity(self) -> ProcessState: ...
+
+    @abstractmethod
+    async def write_line(self, encoded: bytes) -> None: ...
+
+    @abstractmethod
+    async def terminate(self) -> None: ...
+
+
+class StoppedAcpSubprocess(AcpSubprocessState):
+    """No ``agy acp`` subprocess is running."""
+
+    alive = False
+
+    @property
+    def identity(self) -> ProcessState:
+        return NoProcess()
+
+    async def write_line(self, encoded: bytes) -> None:
+        del encoded
+        raise ConnectionError("Antigravity ACP server is not running")
+
+    async def terminate(self) -> None:
+        return None
+
+
+class RunningAcpSubprocess(AcpSubprocessState):
+    """One live ``agy acp`` subprocess and its background stdout reader."""
+
+    def __init__(
+        self,
+        proc: Process,
+        stdin: StreamWriter,
+        stdout: StreamReader,
+        pid: int,
+    ) -> None:
         self._proc = proc
+        self._stdin = stdin
+        self._stdout = stdout
+        self._pid = pid
+        self._running = True
+        self._reader: tuple[Task[None], ...] = ()
+
+    def attach_reader(self, reader: Task[None]) -> None:
+        self._reader = (reader,)
+
+    def mark_exited(self) -> None:
+        self._running = False
 
     @property
     def alive(self) -> bool:
-        return self._proc.returncode is None
+        return self._running
 
     @property
-    def identity(self) -> ProcessIdentity | None:
-        if not self.alive or self._proc.pid is None:
-            return None
-        return ProcessIdentity.capture(self._proc.pid)
+    def identity(self) -> ProcessState:
+        return ProcessIdentity.capture(self._pid) if self._running else NoProcess()
 
     async def readline(self) -> bytes:
-        assert self._proc.stdout is not None
-        return await self._proc.stdout.readline()
+        return await self._stdout.readline()
 
     async def write_line(self, encoded: bytes) -> None:
-        if not self.alive or self._proc.stdin is None:
+        if not self._running:
             raise ConnectionError("Antigravity ACP server is not running")
-        self._proc.stdin.write(encoded)
-        await self._proc.stdin.drain()
+        self._stdin.write(encoded)
+        await self._stdin.drain()
 
     async def terminate(self) -> None:
-        if not self.alive:
-            return
-        self._proc.terminate()
-        try:
-            await asyncio.wait_for(self._proc.wait(), timeout=3.0)
-        except TimeoutError:
-            self._proc.kill()
-            with suppress(ProcessLookupError, OSError):
-                await self._proc.wait()
+        was_running = self._running
+        self._running = False
+        if was_running:
+            with suppress(ProcessLookupError):
+                self._proc.terminate()
+            try:
+                await asyncio.wait_for(self._proc.wait(), timeout=3.0)
+            except TimeoutError:
+                with suppress(ProcessLookupError):
+                    self._proc.kill()
+                with suppress(ProcessLookupError):
+                    await self._proc.wait()
+        for reader in self._reader:
+            if not reader.done():
+                reader.cancel()
+                with suppress(asyncio.CancelledError):
+                    await reader
+        self._reader = ()
+
+
+def resolve_agy_binary() -> str:
+    """Locate ``agy`` on ``PATH`` or under ``~/.local/bin/agy``."""
+    found = shutil.which("agy")
+    if found:
+        return found
+    local_bin = Path.home() / ".local/bin/agy"
+    if local_bin.is_file():
+        return str(local_bin)
+    return "agy"
 
 
 class AntigravityAcpProcess:
     """One shared ``agy acp`` process multiplexing arbitrary concurrent sessions over stdio."""
 
-    DEFAULT_COMMAND: ClassVar[tuple[str, ...]] = (
-        "agy",
-        "acp",
-        "--dangerously-skip-permissions",
-        "--disable-telemetry",
-    )
     RPC_TIMEOUT_SECONDS: ClassVar[float] = 60.0
+
+    @classmethod
+    def default_command(cls) -> tuple[str, ...]:
+        return (
+            resolve_agy_binary(),
+            "acp",
+            "--dangerously-skip-permissions",
+            "--disable-telemetry",
+        )
 
     def __init__(
         self,
-        command: Sequence[str] | None = None,
+        command: Sequence[str] = (),
         *,
-        environment: Mapping[str, str] | None = None,
+        environment: Mapping[str, str] = {},
     ) -> None:
-        self._command = tuple(command) if command is not None else self.DEFAULT_COMMAND
-        self._environment = dict(environment) if environment is not None else None
-        self._subproc: _AcpSubprocess | None = None
-        self._reader_task: Task[None] | None = None
+        self._command = tuple(command) if command else self.default_command()
+        self._environment = dict(environment)
+        self._state: AcpSubprocessState = StoppedAcpSubprocess()
         self._start_lock = Lock()
         self._write_lock = Lock()
         self._next_id = 0
         self._pending: dict[int, Future[AcpRpcEnvelopeWire]] = {}
-        self._session_queues: dict[str, Queue[AntigravityAcpUpdate | None]] = {}
-        self._active_sessions: set[str] = set()
+        self._session_queues: dict[AcpSessionId, Queue[AcpQueueItem]] = {}
+        self._active_sessions: set[AcpSessionId] = set()
         self._initialized = False
 
     @property
     def alive(self) -> bool:
-        return self._subproc is not None and self._subproc.alive
+        return self._state.alive
 
     @property
-    def process_identity(self) -> ProcessIdentity | None:
-        return self._subproc.identity if self._subproc is not None else None
+    def process_identity(self) -> ProcessState:
+        return self._state.identity
 
     async def ensure_started(self) -> None:
         async with self._start_lock:
             if self.alive and self._initialized:
                 return
             await self._stop_locked()
+            env = self._environment if self._environment else dict(os.environ)
             proc = await asyncio.create_subprocess_exec(
                 *self._command,
                 stdin=PIPE,
                 stdout=PIPE,
                 stderr=DEVNULL,
-                env=self._environment,
+                env=env,
                 limit=16 * 1024 * 1024,
             )
-            self._subproc = _AcpSubprocess(proc)
-            self._reader_task = asyncio.create_task(
-                self._read_loop(self._subproc), name="antigravity-acp-reader",
+            stdin = proc.stdin
+            stdout = proc.stdout
+            pid = proc.pid
+            if not (
+                isinstance(stdin, StreamWriter) and isinstance(stdout, StreamReader) and pid > 0
+            ):
+                raise ConnectionError("Antigravity ACP subprocess missing stdio pipes")
+            running = RunningAcpSubprocess(proc, stdin, stdout, pid)
+            running.attach_reader(
+                asyncio.create_task(self._read_loop(running), name="antigravity-acp-reader")
             )
+            self._state = running
             await self._call_locked_unchecked(
                 "initialize",
                 {"protocolVersion": 1, "clientCapabilities": {}},
@@ -418,10 +570,10 @@ class AntigravityAcpProcess:
             )
             self._initialized = True
 
-    async def _read_loop(self, subproc: _AcpSubprocess) -> None:
+    async def _read_loop(self, running: RunningAcpSubprocess) -> None:
         try:
             while True:
-                raw = await subproc.readline()
+                raw = await running.readline()
                 if not raw:
                     break
                 try:
@@ -430,41 +582,40 @@ class AntigravityAcpProcess:
                     continue
                 envelope.deliver(self._pending, self._session_queues)
         finally:
+            running.mark_exited()
             error = ConnectionError("Antigravity ACP server exited unexpectedly")
             for future in list(self._pending.values()):
                 if not future.done():
                     future.set_exception(error)
             self._pending.clear()
             for queue in list(self._session_queues.values()):
-                queue.put_nowait(None)
+                queue.put_nowait(AcpQueueClosed())
             self._initialized = False
 
     async def _send_json(self, payload: Mapping[str, object]) -> None:
-        if self._subproc is None or not self._subproc.alive:
-            raise ConnectionError("Antigravity ACP server is not running")
         encoded = (json.dumps(payload) + "\n").encode("utf-8")
         async with self._write_lock:
-            await self._subproc.write_line(encoded)
+            await self._state.write_line(encoded)
 
     async def _call_locked_unchecked(
         self,
         method: str,
         params: Mapping[str, object],
         *,
-        timeout: float | None = None,
+        timeout: float = 0.0,
     ) -> dict[str, JsonValue]:
         self._next_id += 1
         req_id = self._next_id
-        future: asyncio.Future[AcpRpcEnvelopeWire] = asyncio.get_running_loop().create_future()
+        future: Future[AcpRpcEnvelopeWire] = asyncio.get_running_loop().create_future()
         self._pending[req_id] = future
         try:
             await self._send_json(
                 {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}
             )
-            if timeout is None:
-                reply = await future
-            else:
+            if timeout > 0.0:
                 reply = await asyncio.wait_for(future, timeout=timeout)
+            else:
+                reply = await future
         finally:
             self._pending.pop(req_id, None)
         return reply.unwrap_result()
@@ -474,7 +625,7 @@ class AntigravityAcpProcess:
         method: str,
         params: Mapping[str, object],
         *,
-        timeout: float | None = RPC_TIMEOUT_SECONDS,
+        timeout: float = RPC_TIMEOUT_SECONDS,
     ) -> dict[str, JsonValue]:
         await self.ensure_started()
         return await self._call_locked_unchecked(method, params, timeout=timeout)
@@ -490,16 +641,22 @@ class AntigravityAcpProcess:
         additional_dirs: Sequence[Path | str] = (),
         system_prompt_append: str = "",
     ) -> AcpSessionDescriptor:
+        extras: dict[str, object] = {}
+        if additional_dirs:
+            extras = {
+                **extras,
+                "additionalDirectories": [str(Path(d).resolve()) for d in additional_dirs],
+            }
+        if system_prompt_append:
+            extras = {
+                **extras,
+                "_meta": {"antigravity": {"systemPrompt": {"append": system_prompt_append}}},
+            }
         params: dict[str, object] = {
             "cwd": str(Path(cwd).resolve()),
             "mcpServers": [],
+            **extras,
         }
-        if additional_dirs:
-            params["additionalDirectories"] = [str(Path(d).resolve()) for d in additional_dirs]
-        if system_prompt_append:
-            params["_meta"] = {
-                "antigravity": {"systemPrompt": {"append": system_prompt_append}}
-            }
         result = await self.call("session/new", params)
         descriptor = AcpSessionDescriptor.from_rpc(result)
         self._active_sessions.add(descriptor.session_id)
@@ -507,53 +664,61 @@ class AntigravityAcpProcess:
 
     async def resume_session(
         self,
-        session_id: str,
+        session_id: AcpSessionId,
         cwd: Path | str,
         *,
         additional_dirs: Sequence[Path | str] = (),
     ) -> AcpSessionDescriptor:
+        extras: dict[str, object] = (
+            {"additionalDirectories": [str(Path(d).resolve()) for d in additional_dirs]}
+            if additional_dirs
+            else {}
+        )
         params: dict[str, object] = {
-            "sessionId": session_id,
+            "sessionId": str(session_id),
             "cwd": str(Path(cwd).resolve()),
             "mcpServers": [],
+            **extras,
         }
-        if additional_dirs:
-            params["additionalDirectories"] = [str(Path(d).resolve()) for d in additional_dirs]
         result = await self.call("session/resume", params)
         descriptor = AcpSessionDescriptor.from_rpc(result)
         self._active_sessions.add(descriptor.session_id)
         return descriptor
 
-    async def set_config_option(self, session_id: str, config_id: str, value: str) -> None:
+    async def set_config_option(
+        self,
+        session_id: AcpSessionId,
+        config_key: AcpConfigKey,
+        value: str,
+    ) -> None:
         await self.call(
             "session/set_config_option",
-            {"sessionId": session_id, "configId": config_id, "value": value},
+            {"sessionId": str(session_id), "configId": str(config_key), "value": value},
         )
 
     async def prompt(
         self,
-        session_id: str,
+        session_id: AcpSessionId,
         blocks: Sequence[Mapping[str, object]],
     ) -> AsyncIterator[AcpPromptFrame]:
         """Stream decoded `AcpUpdateFrame`s for ``session_id`` and end with `AcpResultFrame`."""
         await self.ensure_started()
-        queue: asyncio.Queue[AntigravityAcpUpdate | None] = asyncio.Queue()
+        queue: Queue[AcpQueueItem] = Queue()
         self._session_queues[session_id] = queue
         prompt_task = asyncio.create_task(
             self._call_locked_unchecked(
                 "session/prompt",
-                {"sessionId": session_id, "prompt": list(blocks)},
-                timeout=None,
+                {"sessionId": str(session_id), "prompt": list(blocks)},
+                timeout=0.0,
             ),
-            name=f"antigravity-prompt-{session_id[:8]}",
+            name=f"antigravity-prompt-{str(session_id)[:8]}",
         )
         try:
             while True:
                 if prompt_task.done():
                     while not queue.empty():
-                        item = queue.get_nowait()
-                        if item is not None:
-                            yield AcpUpdateFrame(item)
+                        for frame in queue.get_nowait().frames():
+                            yield frame
                     result = AcpPromptResultWire.model_validate(await prompt_task)
                     yield AcpResultFrame(result.stop_reason)
                     return
@@ -563,48 +728,40 @@ class AntigravityAcpProcess:
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 if get_task in done:
-                    item = get_task.result()
-                    if item is not None:
-                        yield AcpUpdateFrame(item)
+                    for frame in get_task.result().frames():
+                        yield frame
                 else:
                     get_task.cancel()
                     with suppress(asyncio.CancelledError):
                         await get_task
         except asyncio.CancelledError:
-            with suppress(AcpRpcError, ConnectionError, OSError):
+            with suppress(AcpRpcError):
                 await self.cancel(session_id)
             prompt_task.cancel()
-            with suppress(asyncio.CancelledError, AcpRpcError, ConnectionError, OSError):
+            with suppress(asyncio.CancelledError, AcpRpcError):
                 await prompt_task
             raise
         finally:
             self._session_queues.pop(session_id, None)
 
-    async def cancel(self, session_id: str) -> None:
+    async def cancel(self, session_id: AcpSessionId) -> None:
         if not self.alive:
             return
-        await self.notify("session/cancel", {"sessionId": session_id})
+        await self.notify("session/cancel", {"sessionId": str(session_id)})
 
-    async def close_session(self, session_id: str) -> None:
+    async def close_session(self, session_id: AcpSessionId) -> None:
         self._active_sessions.discard(session_id)
         if self.alive:
-            with suppress(AcpRpcError, ConnectionError, TimeoutError):
-                await self.call("session/close", {"sessionId": session_id}, timeout=10.0)
+            with suppress(AcpRpcError):
+                await self.call("session/close", {"sessionId": str(session_id)}, timeout=10.0)
         if not self._active_sessions:
             await self.shutdown()
 
     async def _stop_locked(self) -> None:
-        subproc = self._subproc
-        reader = self._reader_task
-        self._subproc = None
-        self._reader_task = None
+        state = self._state
+        self._state = StoppedAcpSubprocess()
         self._initialized = False
-        if subproc is not None:
-            await subproc.terminate()
-        if reader is not None and not reader.done():
-            reader.cancel()
-            with suppress(asyncio.CancelledError):
-                await reader
+        await state.terminate()
 
     async def shutdown(self) -> None:
         async with self._start_lock:
@@ -622,10 +779,8 @@ class AntigravityAcpPool:
         cls,
         runner: object,
         *,
-        command: Sequence[str] | None = None,
+        command: Sequence[str] = (),
     ) -> AntigravityAcpProcess:
-        process = cls._by_runner.get(runner)
-        if process is None:
-            process = AntigravityAcpProcess(command=command)
-            cls._by_runner[runner] = process
-        return process
+        if runner not in cls._by_runner:
+            cls._by_runner[runner] = AntigravityAcpProcess(command=command)
+        return cls._by_runner[runner]

@@ -17,6 +17,7 @@ from agent_comms.agent_backend import AgentBackend, Forks, PlacedCompaction, Thr
 from agent_comms.execution.antigravity_acp import (
     AntigravityAcpPool,
     AntigravityAcpProcess,
+    AntigravityConversationId,
     AntigravitySessionFiles,
     AntigravitySessionStorage,
 )
@@ -29,6 +30,7 @@ from agent_comms.execution.antigravity_backend import AntigravityAcpBackend, Ant
 from agent_comms.execution.native_arguments import AntigravityProvider, SelectedModel
 from agent_comms.execution.pi_vocabulary import HighThinkingLevel
 from agent_comms.execution.runtime_observations import AgentInfo, ContextInfo
+from agent_comms.execution.send_outcome import NO_SEND_BOUNDARY
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_inbox import InputContent
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
@@ -143,10 +145,13 @@ def test_antigravity_backend_nominal_registration_and_provider_dispatch() -> Non
 
 
 def test_antigravity_session_storage_wal_safe_clone_and_deletion(tmp_path: Path) -> None:
-    parent = AntigravitySessionStorage(root=tmp_path / ".gemini/antigravity-cli", conversation_id="parent-uuid")
+    parent = AntigravitySessionStorage(
+        root=tmp_path / ".gemini/antigravity-cli",
+        conversation_id=AntigravityConversationId("parent-uuid"),
+    )
     _make_fake_antigravity_db(parent, title="Original Thread")
 
-    child = parent.clone_to("child-uuid")
+    child = parent.clone_to(AntigravityConversationId("child-uuid"))
     assert child.exists
     assert child.annotations_path.read_text(encoding="utf-8") == 'title:"Original Thread"\n'
     assert child.transcript_path.is_file()
@@ -160,7 +165,7 @@ def test_antigravity_session_storage_wal_safe_clone_and_deletion(tmp_path: Path)
     assert traj_id != "orig-traj-id"
     assert steps == 2
 
-    freed = AntigravitySessionFiles(child).delete()
+    freed = AntigravitySessionFiles.for_storage(child).delete()
     assert freed > 0
     assert not child.exists
     assert not child.annotations_path.exists()
@@ -216,12 +221,6 @@ async def test_shared_acp_process_multiplexes_two_backends_and_streams_events(tm
     backend_b = AntigravityAcpBackend.for_worker(runner, AcpSessionId("b"))
     assert backend_a._process is process is backend_b._process
 
-    class _AllowBoundary:
-        @contextmanager
-        def send_original(self, native_id, text):
-            del native_id, text
-            yield SimpleNamespace(admitted=True, reason="")
-
     class _StartListener:
         started_events = (events.OriginalInputStarted(),)
 
@@ -232,12 +231,12 @@ async def test_shared_acp_process_multiplexes_two_backends_and_streams_events(tm
     def _delivery():
         return SimpleNamespace(
             worktree=str(tmp_path),
-            send_boundary=_AllowBoundary(),
+            send_boundary=NO_SEND_BOUNDARY,
             input_start=_StartListener(),
         )
 
-    loc_a = AntigravitySession.fresh(home=tmp_path)
-    loc_b = AntigravitySession.fresh(home=tmp_path)
+    loc_a = AntigravitySession.fresh_in(tmp_path)
+    loc_b = AntigravitySession.fresh_in(tmp_path)
     thread_a = NativeThread(
         "agy-a", frozenset(), Checkout(tmp_path),
         backend=AntigravityAcpBackend,
@@ -290,7 +289,7 @@ def test_switch_to_native_and_attach_session_for_antigravity_thread(tmp_path: Pa
 
     storage = AntigravitySessionStorage(
         root=tmp_path / ".gemini/antigravity-cli",
-        conversation_id="existing-agy-uuid",
+        conversation_id=AntigravityConversationId("existing-agy-uuid"),
     )
     _make_fake_antigravity_db(storage, title="Existing Agy")
     (storage.brain_dir / ".system_generated/logs/transcript.jsonl").write_text(

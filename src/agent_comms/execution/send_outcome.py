@@ -20,6 +20,18 @@ if TYPE_CHECKING:
 
 
 class SendOutcome(ABC):
+    @property
+    def denial_reason(self) -> str:
+        return "Input send was not granted."
+
+    def run_direct[Result](
+        self,
+        on_granted: Callable[[], Result],
+        on_denied: Callable[[str], Result],
+    ) -> Result:
+        del on_granted
+        return on_denied(self.denial_reason)
+
     def resume(self, inbox: TurnInbox) -> None:
         pass
 
@@ -37,6 +49,14 @@ class SendOutcome(ABC):
 
 
 class GrantedSend(SendOutcome):
+    def run_direct[Result](
+        self,
+        on_granted: Callable[[], Result],
+        on_denied: Callable[[str], Result],
+    ) -> Result:
+        del on_denied
+        return on_granted()
+
     def resume(self, inbox: TurnInbox) -> None:
         inbox.ready.set()
 
@@ -79,6 +99,10 @@ class AuthorityChangedSend(SendOutcome):
     INFO and dropped, so nobody could see which check was wrong."""
 
     refusal: ReservationViolationError
+
+    @property
+    def denial_reason(self) -> str:
+        return f"Input authority changed before native send: {self.refusal}"
 
     def apply(self, inputs: InputForwarding, session: NativeSession,
               item: TurnInboxItem, write: Callable[[], None]) -> Awaitable[bool]:

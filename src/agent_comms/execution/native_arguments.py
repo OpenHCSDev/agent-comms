@@ -244,13 +244,13 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
 
     @classmethod
     def catalog_models(cls) -> tuple[tuple[str, str, str], ...]:
-        """Declared `(model_id, display_name, description)` choices owned directly by this provider."""
+        """Declared `(model_id, label, description)` choices owned directly by this provider."""
         return ()
 
     @classmethod
-    def thinking_levels(cls) -> tuple[str, ...] | None:
-        """Static thinking levels owned by this provider, or `None` to query Pi dynamically."""
-        return None
+    def thinking_levels(cls) -> tuple[str, ...]:
+        """Static thinking levels owned by this provider, or empty to query Pi dynamically."""
+        return ()
 
 
 class NoSelectedModel(ModelProvider, declared_name=None):

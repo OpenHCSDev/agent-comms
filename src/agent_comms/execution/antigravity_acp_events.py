@@ -15,8 +15,12 @@ from agent_comms.config_option import CatalogChoice
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.runtime_observations import ContextInfo
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import ToolCallId
+from agent_comms.nominal.field_codec import NominalText, ToolCallId
 from agent_comms.pi_counts import ReportedCount, UnreportedCount
+
+
+class AcpConfigKey(NominalText):
+    """Nominal ACP configuration option key (`model`, `thought_level`, ...)."""
 
 
 class AcpWireModel(WireModel):
@@ -25,17 +29,22 @@ class AcpWireModel(WireModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True, defer_build=True)
 
 
+class AcpLeafContent(AcpWireModel):
+    """Inner leaf text block inside an ACP content envelope."""
+
+    type: str = ""
+    text: str = ""
+
+
 class AcpContentBlock(AcpWireModel):
     """One ACP content block (`{type: 'text', text: ...}` or `{type: 'content', content: ...}`)."""
 
     type: str = ""
     text: str = ""
-    content: AcpContentBlock | None = None
+    content: AcpLeafContent = Field(default_factory=AcpLeafContent)
 
     def extract_text(self) -> str:
-        if self.content is not None:
-            return self.content.extract_text()
-        return self.text
+        return self.content.text or self.text
 
 
 class AcpConfigChoiceWire(AcpWireModel):
@@ -49,7 +58,7 @@ class AcpConfigChoiceWire(AcpWireModel):
         return CatalogChoice(
             name=self.name or self.value,
             value=self.value,
-            description=self.description or None,
+            description=self.description,
         )
 
 
@@ -89,8 +98,8 @@ class AcpConfigOptionKind(DeclaredFamily, affix="AcpConfigOption"):
     """Nominal ACP configuration option identity shared by session init and live updates."""
 
     @classmethod
-    def of(cls, option_id: str) -> type[AcpConfigOptionKind]:
-        return cls.member_or_default(option_id, OtherAcpConfigOption)
+    def of(cls, option_key: AcpConfigKey) -> type[AcpConfigOptionKind]:
+        return cls.member_or_default(str(option_key), OtherAcpConfigOption)
 
     @classmethod
     def apply_to_descriptor(
@@ -256,50 +265,59 @@ class UserMessageChunkAcpUpdate(AntigravityAcpUpdate, declared_name="user_messag
 
 
 class ToolCallAcpUpdate(AntigravityAcpUpdate, declared_name="tool_call"):
-    tool_call_id: str = Field(default="agy-tool", alias="toolCallId")
+    tool_call_key: str = Field(default="agy-tool", alias="toolCallId")
     title: str = ""
     kind: str = ""
     name: str = ""
-    raw_input: JsonValue = Field(default=None, alias="rawInput")
+    raw_input: JsonValue = Field(default="", alias="rawInput")
 
     def convert(self, state: AcpTurnStreamState) -> Iterator[AgentEvent]:
-        call_id = self.tool_call_id or "agy-tool"
+        call_key = self.tool_call_key or "agy-tool"
         title = self.title or self.kind or "tool"
         name = self.name or title
-        state.tool_names[call_id] = name
-        start = events.ToolStart.from_call(ToolCallId(call_id), name, self.raw_input)
+        state.tool_names[call_key] = name
+        start = events.ToolStart.from_call(ToolCallId(call_key), name, self.raw_input)
         if title and not start.title:
             start = events.ToolStart(
-                id=start.id, name=start.name, title=title, args=start.args, kind=start.kind,
+                id=start.id,
+                name=start.name,
+                title=title,
+                args=start.args,
+                kind=start.kind,
             )
         yield start
 
 
 class ToolCallUpdateAcpUpdate(AntigravityAcpUpdate, declared_name="tool_call_update"):
-    tool_call_id: str = Field(default="agy-tool", alias="toolCallId")
+    tool_call_key: str = Field(default="agy-tool", alias="toolCallId")
     title: str = ""
     status: str = ""
     content: list[AcpContentBlock] = Field(default_factory=list)
     raw_output: str = Field(default="", alias="rawOutput")
 
     def convert(self, state: AcpTurnStreamState) -> Iterator[AgentEvent]:
-        call_id = self.tool_call_id or "agy-tool"
-        name = state.tool_names.get(call_id) or self.title or "tool"
+        call_key = self.tool_call_key or "agy-tool"
+        name = state.tool_names.get(call_key) or self.title or "tool"
         parts = [block.extract_text() for block in self.content]
         output = "\n".join(part for part in parts if part) or self.raw_output
-        yield from AcpToolStatus.of(self.status).emit(ToolCallId(call_id), name, output)
+        yield from AcpToolStatus.of(self.status).emit(ToolCallId(call_key), name, output)
 
 
 class UsageUpdateAcpUpdate(AntigravityAcpUpdate, declared_name="usage_update"):
-    used: int | None = None
-    size: int | None = None
+    used: int = 0
+    size: int = 0
 
     def convert(self, state: AcpTurnStreamState) -> Iterator[AgentEvent]:
         del state
-        if self.used is not None or self.size is not None:
+        if self.size > 0:
             yield ContextInfo(
-                context_used=ReportedCount(self.used) if self.used is not None else UnreportedCount(),
-                context_size=ReportedCount(self.size) if self.size is not None else UnreportedCount(),
+                context_used=ReportedCount(self.used),
+                context_size=ReportedCount(self.size),
+            )
+        elif self.used > 0:
+            yield ContextInfo(
+                context_used=ReportedCount(self.used),
+                context_size=UnreportedCount(),
             )
 
 
@@ -308,7 +326,7 @@ class ConfigOptionUpdateAcpUpdate(AntigravityAcpUpdate, declared_name="config_op
 
     def convert(self, state: AcpTurnStreamState) -> Iterator[AgentEvent]:
         for option in self.config_options:
-            AcpConfigOptionKind.of(option.id).apply_to_turn(option, state)
+            AcpConfigOptionKind.of(AcpConfigKey(option.id)).apply_to_turn(option, state)
         return iter(())
 
 

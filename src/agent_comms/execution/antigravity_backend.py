@@ -10,13 +10,12 @@ and ``abort`` — with zero per-thread TUI processes and zero tmux poking.
 from __future__ import annotations
 
 import asyncio
-import base64
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import (
@@ -32,15 +31,18 @@ from agent_comms.execution.antigravity_acp import (
     AcpRpcError,
     AntigravityAcpPool,
     AntigravityAcpProcess,
+    AntigravityConversationId,
     AntigravitySessionFiles,
     AntigravitySessionStorage,
 )
 from agent_comms.execution.antigravity_acp_events import (
     ANTIGRAVITY_ACP_EVENT_KINDS,
+    AcpConfigKey,
     AcpTurnStreamState,
     AntigravityAcpUpdate,
 )
-from agent_comms.execution.child_process import NoProcess, ProcessState
+from agent_comms.execution.backend_query import TurnInputContent
+from agent_comms.execution.child_process import ProcessState
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_arguments import AntigravityProvider
 from agent_comms.execution.runtime_observations import (
@@ -48,11 +50,19 @@ from agent_comms.execution.runtime_observations import (
     ReportedNativeSessionPath,
 )
 from agent_comms.execution.turn_failure import BackendFailed
-from agent_comms.execution.turn_inbox import InputContent
 from agent_comms.execution.unstarted_runtime import ExternalTranscriptLocation
-from agent_comms.nominal.field_codec import AcpSessionId, InputId
+from agent_comms.nominal.field_codec import (
+    AcpSessionId,
+    AcpSessionSelection,
+    InputId,
+    NoAcpSessionId,
+)
 from agent_comms.pi_counts import UnreportedCount
 from agent_comms.registry.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
+
+if TYPE_CHECKING:
+    from agent_comms.execution.owned_turn import TurnDelivery
+    from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -62,8 +72,15 @@ class AntigravitySession(ExternalTranscriptLocation, declared_name="antigravity_
     path: str
 
     @classmethod
-    def fresh(cls, *, home: Path | None = None) -> Self:
-        storage = AntigravitySessionStorage.for_id(str(uuid.uuid4()), home=home)
+    def fresh(cls) -> Self:
+        storage = AntigravitySessionStorage.for_id(AntigravityConversationId(str(uuid.uuid4())))
+        return cls(str(storage.db_path))
+
+    @classmethod
+    def fresh_in(cls, home: Path) -> Self:
+        storage = AntigravitySessionStorage.for_home(
+            AntigravityConversationId(str(uuid.uuid4())), home
+        )
         return cls(str(storage.db_path))
 
     @property
@@ -74,7 +91,7 @@ class AntigravitySession(ExternalTranscriptLocation, declared_name="antigravity_
         return self.storage.last_written()
 
     def storage_files(self) -> tuple[AntigravitySessionFiles, ...]:
-        return (AntigravitySessionFiles(self.storage),)
+        return (AntigravitySessionFiles.for_storage(self.storage),)
 
     @property
     def saved_model(self) -> ThreadModel:
@@ -86,39 +103,32 @@ class AntigravitySession(ExternalTranscriptLocation, declared_name="antigravity_
         return DeclaredModel(f"antigravity/{observed}")
 
 
-def _prompt_blocks(content: InputContent) -> list[dict[str, object]]:
-    blocks: list[dict[str, object]] = []
-    if content.text:
-        blocks.append({"type": "text", "text": content.text})
-    for image in content.images:
-        blocks.append({
-            "type": "image",
-            "mimeType": image.mime_type,
-            "data": base64.b64encode(image.data).decode("ascii"),
-        })
-    return blocks
-
-
-def _selected_model_id(*, provider: object = None, model_id: str = "") -> str:
+def _selected_model_name(*, provider: object = "", model_id: object = "") -> str:
     del provider
-    return model_id
+    return str(model_id)
 
 
 class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigravity_acp"):
-    """Antigravity over ACP: many concurrent thread sessions multiplexed on one ``agy acp`` server."""
+    """Antigravity over ACP: concurrent thread sessions multiplexed on one ``agy acp`` server."""
 
     location_type: ClassVar[type[RuntimeLocation]] = AntigravitySession
     event_kinds: ClassVar[frozenset[str]] = ANTIGRAVITY_ACP_EVENT_KINDS
     provider_type: ClassVar[type[AntigravityProvider]] = AntigravityProvider
 
     @classmethod
-    async def apply_setting(cls, owner, configuration, thread, command) -> None:
+    async def apply_setting(
+        cls,
+        owner: object,
+        configuration: object,
+        thread: Thread,
+        command: object,
+    ) -> None:
         del configuration
-        await owner.store_direct_setting(thread, command)
+        await owner.store_direct_setting(thread, command)  # type: ignore[attr-defined]
 
     def __init__(self, process: AntigravityAcpProcess) -> None:
         self._process = process
-        self._acp_session_id: str | None = None
+        self._acp_session: AcpSessionSelection = NoAcpSessionId()
         self._applied_model: str = ""
         self._applied_thinking: str = ""
         self._lock = asyncio.Lock()
@@ -136,20 +146,21 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
     @classmethod
     async def fork(
         cls,
-        parent,
+        parent: Thread,
         launcher: str,
         runtime: LaunchRuntime,
         root: Path,
     ) -> AntigravitySession:
         del launcher, runtime, root
         source = AntigravitySessionStorage.from_db_path(Path(parent.runtime.path))
-        cloned = await asyncio.to_thread(source.clone_to, str(uuid.uuid4()))
+        cloned = await asyncio.to_thread(
+            source.clone_to, AntigravityConversationId(str(uuid.uuid4()))
+        )
         return AntigravitySession(str(cloned.db_path))
 
     @property
     def runtime_process(self) -> ProcessState:
-        identity = self._process.process_identity
-        return identity if identity is not None else NoProcess()
+        return self._process.process_identity
 
     def _remember_applied(self, state: AcpTurnStreamState) -> None:
         if state.current_model:
@@ -159,56 +170,71 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
 
     async def _ensure_acp_session(
         self,
-        thread,
+        thread: Thread,
         *,
         worktree: Path,
-    ) -> tuple[str, bool, Path]:
+    ) -> tuple[AcpSessionId, bool, Path]:
         storage = AntigravitySessionStorage.from_db_path(Path(thread.writable_runtime.path))
-        if self._acp_session_id is not None and self._process.alive:
-            return self._acp_session_id, False, storage.db_path
+        active_text = str(self._acp_session)
+        if active_text and self._process.alive:
+            return AcpSessionId(active_text), False, storage.db_path
         if storage.exists:
-            descriptor = await self._process.resume_session(storage.conversation_id, worktree)
-            self._acp_session_id = descriptor.session_id
+            descriptor = await self._process.resume_session(
+                AcpSessionId(str(storage.conversation_id)), worktree
+            )
+            self._acp_session = descriptor.session_id
             self._applied_model = descriptor.current_model
             self._applied_thinking = descriptor.thought_level
             return descriptor.session_id, False, storage.db_path
         descriptor = await self._process.new_session(worktree)
-        self._acp_session_id = descriptor.session_id
+        self._acp_session = descriptor.session_id
         self._applied_model = descriptor.current_model
         self._applied_thinking = descriptor.thought_level
-        actual = AntigravitySessionStorage(root=storage.root, conversation_id=descriptor.session_id)
+        actual = AntigravitySessionStorage(
+            root=storage.root,
+            conversation_id=AntigravityConversationId(str(descriptor.session_id)),
+        )
         return descriptor.session_id, True, actual.db_path
 
-    async def _sync_configuration(self, session_id: str, thread) -> None:
-        wanted_model = thread.model.set_model(_selected_model_id)
+    async def _sync_configuration(self, session_id: AcpSessionId, thread: Thread) -> None:
+        wanted_model = thread.model.set_model(_selected_model_name)
         if wanted_model and wanted_model != self._applied_model:
-            await self._process.set_config_option(session_id, "model", wanted_model)
+            await self._process.set_config_option(session_id, AcpConfigKey("model"), wanted_model)
             self._applied_model = wanted_model
         wanted_thinking = thread.thinking_level.wire_value()
         if wanted_thinking and wanted_thinking != self._applied_thinking:
-            await self._process.set_config_option(session_id, "thought_level", wanted_thinking)
+            await self._process.set_config_option(
+                session_id, AcpConfigKey("thought_level"), wanted_thinking
+            )
             self._applied_thinking = wanted_thinking
 
     async def run_turn(
         self,
-        thread,
-        content: InputContent,
-        delivery,
+        thread: Thread,
+        content: TurnInputContent,
+        delivery: TurnDelivery,
     ) -> AsyncIterator[AgentEvent]:
         async with self._lock:
             native_input_id = InputId.mint()
             with delivery.send_boundary.send_original(native_input_id, content.text) as outcome:
-                if not outcome.admitted:
-                    yield events.Done(text=outcome.reason, ok=False)
-                    return
-                delivery.input_start.original(native_input_id, content.text)
+                refusal = outcome.run_direct(
+                    on_granted=lambda: (
+                        delivery.input_start.original(native_input_id, content.text),
+                        "",
+                    )[1],
+                    on_denied=lambda reason: reason,
+                )
+            if refusal:
+                yield events.Done(text=refusal, ok=False)
+                return
             yield events.PromptAccepted()
             for started_event in delivery.input_start.started_events:
                 yield started_event
 
             try:
                 session_id, created, db_path = await self._ensure_acp_session(
-                    thread, worktree=Path(delivery.worktree),
+                    thread,
+                    worktree=Path(delivery.worktree),
                 )
                 if created:
                     yield AgentInfo(
@@ -221,41 +247,45 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
                     current_model=self._applied_model,
                     thought_level=self._applied_thinking,
                 )
-                async for frame in self._process.prompt(session_id, _prompt_blocks(content)):
+                async for frame in self._process.prompt(session_id, content.acp_prompt_blocks()):
                     for event in frame.apply(state, self._remember_applied):
                         yield event
                 yield events.StreamSettled()
                 yield events.Done(text=state.full_text, ok=True)
-            except (AcpRpcError, ConnectionError, OSError) as error:
+            except (AcpRpcError, ConnectionError, TimeoutError) as error:
                 message = str(error)
                 yield events.Error(text=message)
                 yield events.Done(text=message, ok=False, failure=BackendFailed(message))
 
     async def abort[Result](self, owner: asyncio.Task[Result]) -> None:
         del owner
-        if self._acp_session_id is not None:
-            with suppress(AcpRpcError, ConnectionError, OSError):
-                await self._process.cancel(self._acp_session_id)
+        active_text = str(self._acp_session)
+        if active_text:
+            with suppress(AcpRpcError):
+                await self._process.cancel(AcpSessionId(active_text))
 
     async def close_idle(self) -> None:
         async with self._lock:
-            session_id = self._acp_session_id
-            self._acp_session_id = None
+            active_text = str(self._acp_session)
+            self._acp_session = NoAcpSessionId()
             self._applied_model = ""
             self._applied_thinking = ""
-            if session_id is not None:
-                await self._process.close_session(session_id)
+            if active_text:
+                await self._process.close_session(AcpSessionId(active_text))
 
-    async def compact(self, thread, instructions: str | None) -> CompactionOutcome:
+    async def compact(self, thread: Thread, instructions: object = "") -> CompactionOutcome:
         async with self._lock:
             try:
                 session_id, _, _ = await self._ensure_acp_session(
-                    thread, worktree=thread.worktree.path,
+                    thread,
+                    worktree=thread.worktree.path,
                 )
-                prompt_text = f"/compact {instructions.strip()}" if instructions else "/compact"
+                extra = instructions.strip() if isinstance(instructions, str) else ""
+                prompt_text = f"/compact {extra}" if extra else "/compact"
                 state = AcpTurnStreamState()
                 async for frame in self._process.prompt(
-                    session_id, [{"type": "text", "text": prompt_text}],
+                    session_id,
+                    [{"type": "text", "text": prompt_text}],
                 ):
                     for _ in frame.apply(state, self._remember_applied):
                         pass
@@ -263,7 +293,7 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
                     summary=state.full_text or "Compacted via Antigravity ACP",
                     tokens_before=UnreportedCount(),
                 )
-            except (AcpRpcError, ConnectionError, OSError) as error:
+            except (AcpRpcError, ConnectionError, TimeoutError) as error:
                 return FailedCompaction(str(error))
 
 

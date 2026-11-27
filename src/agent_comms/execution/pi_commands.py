@@ -436,7 +436,9 @@ class SetModel(SettingCommand):
     ] = PiOmitted()
 
     def target_provider(self, current_provider: type[ModelProvider]) -> type[ModelProvider]:
-        return ModelProvider.configured(self.provider) if isinstance(self.provider, str) else current_provider
+        if isinstance(self.provider, str):
+            return ModelProvider.configured(self.provider)
+        return current_provider
 
     def direct_setting[Result](
         self,

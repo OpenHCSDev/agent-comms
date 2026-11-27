@@ -74,6 +74,8 @@ class ConfigurationChanges[Configuration](ABC):
 class SessionConfigOption(CatalogConfigOption, declared_name=None):
     """A catalog-backed session option that also applies changes to a Thread."""
 
+    owner: ConfigOptions
+
     @abstractmethod
     async def apply(
         self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
@@ -126,8 +128,10 @@ class ThinkingLevelConfigOption(ThinkingSetting, SessionConfigOption):
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
         if not thread.model.discovers_thinking_levels:
             return []
-        declared_levels = thread.model.native(self.owner.agent_args).provider_type.thinking_levels()
-        if declared_levels is not None:
+        declared_levels = (
+            thread.model.native(self.owner.agent_args).provider_type.thinking_levels()
+        )
+        if declared_levels:
             return [CatalogChoice(value=level, name=level.title()) for level in declared_levels]
         data = await GetAvailableThinkingLevels().discover(
             self.owner.launch.binary,
