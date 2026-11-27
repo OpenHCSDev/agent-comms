@@ -318,3 +318,22 @@ def test_switch_to_native_and_attach_session_for_antigravity_thread(tmp_path: Pa
     assert Path(attached.runtime.path).resolve() == storage.db_path.resolve()
     assert attached.model == DeclaredModel("antigravity/gemini-4-neon")
 
+    # Persisting via set_thread_configuration switches backend both into and out of AntigravityAcpBackend.
+    from agent_comms.registry.threads import NextTurnConfiguration
+
+    pi_thread = comms.registry.declare(NativeThread("pi-to-agy", frozenset(), Checkout(tmp_path)))
+    migrated = comms.threads.set_thread_configuration(
+        pi_thread, NextTurnConfiguration(model=ChosenModel("antigravity/gemini-4-neon")),
+    )
+    assert migrated.backend is AntigravityAcpBackend
+    assert isinstance(migrated.runtime, AntigravitySession)
+    reattached = comms.threads.attach_session(
+        migrated, str(storage.db_path), process=NoProcess(),
+    )
+    assert reattached.backend is AntigravityAcpBackend
+    assert Path(reattached.runtime.path).resolve() == storage.db_path.resolve()
+    back_to_pi = comms.threads.set_thread_configuration(
+        reattached, NextTurnConfiguration(model=ChosenModel("openai-codex/gpt-5.6-sol")),
+    )
+    assert back_to_pi.backend is not AntigravityAcpBackend
+

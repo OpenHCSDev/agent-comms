@@ -549,7 +549,14 @@ class ThreadManagement(BusThreads):
         """
         def configure(thread: NativeThread) -> Thread:
             thread.require_original_model_configuration(original)
-            return configuration.configured(thread)
+            updated = configuration.configured(thread)
+            if updated.backend is not thread.backend:
+                fresh = updated.backend.new_location(self.root, updated.worktree.path)
+                return replace(
+                    updated,
+                    session_file=RegistrySessionLocation.from_path(fresh.read_key, self.root),
+                )
+            return updated
 
         updated = self.registry.update_member(original.name, NativeThread, configure)
         ThreadCatalog.publish(updated, self.root)

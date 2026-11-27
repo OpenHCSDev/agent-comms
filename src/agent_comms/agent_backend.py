@@ -299,7 +299,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     @classmethod
     def for_provider(cls, provider: type[ModelProvider]) -> type[AgentBackend]:
         """Resolve the backend declared for ``provider``, defaulting to ``NewThreadBackend``."""
-        for member in cls.members_with(cls):
+        for member in AgentBackend.members_with(AgentBackend):
             if member.provider_type is provider:
                 return member
         return NewThreadBackend.selected()

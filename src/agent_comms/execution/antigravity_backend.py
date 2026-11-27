@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import (
+    AgentBackend,
     CompactionOutcome,
     FailedCompaction,
     Forks,
@@ -114,6 +115,15 @@ class AntigravityAcpBackend(Forks, ThreadServingBackend, declared_name="antigrav
     location_type: ClassVar[type[RuntimeLocation]] = AntigravitySession
     event_kinds: ClassVar[frozenset[str]] = ANTIGRAVITY_ACP_EVENT_KINDS
     provider_type: ClassVar[type[AntigravityProvider]] = AntigravityProvider
+
+    @classmethod
+    def registered_over(cls, previous: type[AgentBackend]) -> type[AgentBackend]:
+        del previous
+        return cls
+
+    @classmethod
+    def as_native_backend(cls, incoming: type[AgentBackend]) -> type[AgentBackend]:
+        return incoming
 
     @classmethod
     async def apply_setting(
