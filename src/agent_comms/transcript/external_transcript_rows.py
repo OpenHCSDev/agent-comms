@@ -24,8 +24,6 @@ from agent_comms.storage.typed_table import (
     TypedTable,
 )
 from agent_comms.transcript.transcript_events import ToolStartTranscript, TranscriptEvent
-from agent_comms.transport.native_tools import MutatingPathTool
-from agent_comms.transport.tool_declaration import ToolDeclaration
 
 
 class ReplyWindow(DeclaredFamily, affix="Replies"):
@@ -336,8 +334,7 @@ class ExternalEventRow(ExternalTranscriptRows, TypedTable):
             cls(thread, seq, ordinal, event).insert(connection)
 
     @classmethod
-    def unjudged_query(cls, thread, todo, since):
-        tools = tuple(tool.declared_name for tool in ToolDeclaration.members_with(MutatingPathTool))
+    def unjudged_query(cls, thread, todo, since, tools: tuple[str, ...]):
         judged = todo.judged_calls
         placeholders = lambda values: ",".join("?" for _ in values)
         where = (f'e.thread=? AND e.kind=? AND e.tool IN ({placeholders(tools)}) '

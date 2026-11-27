@@ -47,7 +47,8 @@ from agent_comms.registry.registry_privacy import RegistryPrivacy
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.threads import ConversationPreparation, Thread
 from agent_comms.transcript.transcript_events import IncomingTranscript, TurnDigest
-from agent_comms.transport.tool_declaration import EditCall
+from agent_comms.transport.native_tools import MutatingPathTool
+from agent_comms.transport.tool_declaration import EditCall, ToolDeclaration
 from agent_comms.transport.tool_result import ToolResult
 
 
@@ -277,9 +278,13 @@ class OrderEditRead[Result](OrderRead[Result]):
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> Result:
         return self.when_readable(lambda: self.project_edits(self.edits_from_turns(turns)))
 
+    @staticmethod
+    def mutating_tool_names() -> tuple[str, ...]:
+        return tuple(tool.declared_name for tool in ToolDeclaration.members_with(MutatingPathTool))
+
     def from_external(self, source: StoreRead) -> Result:
         return self.when_readable(lambda: self.project_edits(
-            self.owned(source.unjudged(self.todo, self.bound.at))))
+            self.owned(source.unjudged(self.todo, self.bound.at, self.mutating_tool_names()))))
 
     def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         return self.owned(self.edit_calls_from_turns(turns))
@@ -398,8 +403,9 @@ class OrderEditCountBatch(ThreadRead[OrderEditCountCut]):
             return following
         with transcript.reading() as source:
             revision = source.cut()
+            tools = OrderEditRead.mutating_tool_names()
             return OrderEditCountCut(self.reads, revision, tuple(
-                (read.todo.id, tuple(source.unjudged(read.todo, read.bound.at)))
+                (read.todo.id, tuple(source.unjudged(read.todo, read.bound.at, tools)))
                 for read in self.reads
             ))
 
