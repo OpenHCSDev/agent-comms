@@ -63,7 +63,8 @@ from agent_comms.planning.goal_failure_owner import GoalFailureOwner
 from agent_comms.planning.goal_mutation import GoalFork
 from agent_comms.planning.goals import GoalConsentRequired, GoalDeclaration, NoGoal
 from agent_comms.planning.task_scope import TaskScope
-from agent_comms.projects.checkouts import Checkout, RepositoryReads
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import RepositoryReads
 from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.heartbeat_delivery import (
     HeartbeatDelivery,

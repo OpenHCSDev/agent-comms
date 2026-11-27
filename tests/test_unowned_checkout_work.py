@@ -39,10 +39,8 @@ from agent_comms.planning.orders import (
 )
 from agent_comms.planning.problem_findings import ExpectedProblem
 from agent_comms.projects.change_report import FileLine
-from agent_comms.projects.checkouts import (
-    Checkout,
-    RepositoryReads,
-)
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import RepositoryReads
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule
 from agent_comms.projects.work_branches import UnreadableCheckoutRead, WorkBranches

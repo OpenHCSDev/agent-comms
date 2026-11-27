@@ -22,7 +22,7 @@ from agent_comms.planning.nominal_census import NominalPlanReadings
 from agent_comms.planning.orders import ProgressRead, Todo
 from agent_comms.planning.plan_reading import PlanReadings, RetainedPlanReadings
 from agent_comms.presentation import WireRevision
-from agent_comms.projects.checkouts import RepositoryReads
+from agent_comms.projects.git_history import RepositoryReads
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.storage.watch_phase import WatchPhase

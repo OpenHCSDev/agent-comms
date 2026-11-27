@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 import fixture_git
-from agent_comms.projects.checkouts import (
-    Checkout,
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import (
     CheckoutHistory,
     CommitMessages,
     CommitsNaming,
@@ -108,7 +108,7 @@ def test_retention_checks_refs_and_worktree_heads(main: Path, change: str) -> No
     elif change == "worktree":
         git(main, "worktree", "add", "--detach", str(main.parent / "later-cut"))
     following = RepositoryReads.retaining(reads).history_for(Checkout(main))
-    actual = Checkout(main).read()
+    actual = CheckoutHistory.capture(Checkout(main))
     assert following.refs == actual.refs
     assert following.heads == actual.heads
     assert original.refs == before_refs and original.heads == before_heads
@@ -130,7 +130,7 @@ def test_retaining_reloads_changed_git_replacement_policy(main: Path) -> None:
     following_reads = RepositoryReads.retaining(reads)
     following = following_reads.history_for(Checkout(main))
     assert following.refs == previous.refs and following.heads == previous.heads
-    assert following.graph == Checkout(main).read().graph
+    assert following.graph == CheckoutHistory.capture(Checkout(main)).graph
     assert following.graph[original].parents == ()
     assert following.messages.naming('P304') == {original}
     assert previous.graph == before and previous.messages.naming('P303') == {original}
@@ -153,7 +153,7 @@ def test_retaining_reloads_changed_shallow_boundary(main: Path) -> None:
     following_reads = RepositoryReads.retaining(reads)
     following = following_reads.history_for(Checkout(main))
     assert following.refs == previous.refs and following.heads == previous.heads
-    assert following.graph == Checkout(main).read().graph
+    assert following.graph == CheckoutHistory.capture(Checkout(main)).graph
     assert tuple(following.graph) == (tip,)
     assert previous.graph == before
     shallow.unlink()
@@ -174,7 +174,7 @@ def test_retaining_reloads_changed_graft_boundary(main: Path) -> None:
     following_reads = RepositoryReads.retaining(reads)
     following = following_reads.history_for(Checkout(main))
     assert following.refs == previous.refs and following.heads == previous.heads
-    assert following.graph == Checkout(main).read().graph
+    assert following.graph == CheckoutHistory.capture(Checkout(main)).graph
     assert tuple(following.graph) == (tip,)
     assert previous.graph == before
     graft.unlink()
@@ -197,7 +197,7 @@ def test_retaining_reloads_changed_replacement_setting(main: Path) -> None:
     following_reads = RepositoryReads.retaining(reads)
     following = following_reads.history_for(Checkout(main))
     assert following.refs == previous.refs and following.heads == previous.heads
-    assert following.graph == Checkout(main).read().graph
+    assert following.graph == CheckoutHistory.capture(Checkout(main)).graph
     assert following.messages.naming('P303') == {original}
     assert previous.graph == before
     git(main, 'config', 'core.useReplaceRefs', 'true')
@@ -275,7 +275,7 @@ def test_moved_worktree_head_does_not_rediscover_unchanged_graph_sources(
 def test_lazy_git_query_refuses_a_moved_captured_source(main: Path, read: str) -> None:
     git(main, 'commit', '--allow-empty', '-m', 'captured original')
     original = git(main, 'rev-parse', 'HEAD')
-    history = Checkout(main).read()
+    history = CheckoutHistory.capture(Checkout(main))
     history.include(original)
     replacement = git(main, 'commit-tree', 'HEAD^{tree}', '-m', 'late replacement')
     git(main, 'replace', original, replacement)
@@ -334,7 +334,7 @@ def test_captured_history_maps_keep_order_and_reject_reader_mutation(main: Path,
 
 
 def test_captured_graph_owns_its_supplied_mapping(main: Path) -> None:
-    original = Checkout(main).read().graph
+    original = CheckoutHistory.capture(Checkout(main)).graph
     supplied = dict(original)
     captured = type(original)(original.source, supplied)
     supplied.clear()
@@ -367,7 +367,7 @@ def test_message_filters_preserve_each_selected_walk_and_old_capture(main):
     git(main, "checkout", "main")
     git(main, "commit", "--allow-empty", "-m", "P1 main")
     git(main, "merge", "--no-ff", "side", "-m", "P12 merge")
-    history = Checkout(main).read()
+    history = CheckoutHistory.capture(Checkout(main))
     for refs, excluded, first_parent in (
         (("main",), (), False), (("side", "main"), (), False),
         (("main",), (base,), False), (("main",), (), True),
@@ -381,7 +381,7 @@ def test_message_filters_preserve_each_selected_walk_and_old_capture(main):
     before = tuple(history.commits(("main",), selected=CommitsNaming("P1")))
     git(main, "commit", "--allow-empty", "-m", "P1 later")
     assert tuple(history.commits(("main",), selected=CommitsNaming("P1"))) == before
-    assert len(tuple(Checkout(main).read().commits(("main",), selected=CommitsNaming("P1")))) == len(before) + 1
+    assert len(tuple(CheckoutHistory.capture(Checkout(main)).commits(("main",), selected=CommitsNaming("P1")))) == len(before) + 1
 
 
 def test_head_paths_skip_worktree_submodules_and_logs(main: Path) -> None:

@@ -21,7 +21,8 @@ from agent_comms.nominal.field_codec import ThreadLookup, TurnId
 from agent_comms.planning.goal_history import GoalHistoryEntry, GoalHistoryStore
 from agent_comms.planning.goal_mutation import GoalFork
 from agent_comms.planning.goal_scope import AllGoals, GoalScope
-from agent_comms.projects.checkouts import Checkout, CheckoutTransfer, RepositoryReads
+from agent_comms.projects.checkouts import Checkout, CheckoutTransfer
+from agent_comms.projects.git_history import RepositoryReads
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.storage_rules import StorageRule

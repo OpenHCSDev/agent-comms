@@ -62,6 +62,7 @@ from agent_comms.projects.change_report import (
     OrderRoots,
 )
 from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import CheckoutHistory
 from agent_comms.projects.git_errors import (
     GitCommandError,
     UnavailableCommitError,
@@ -302,13 +303,13 @@ def test_failed_plan_acquisition_is_unknown_and_retries_without_main_moving(git_
     evidence = CommitMerged(head)
     plans = RetainedNominalPlanReadings()
     Repo.git(repo.checkout, "remote", "set-url", "origin", str(repo.checkout / "absent-remote"))
-    failed = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
+    failed = plans.prepare_reading(repo, (), (evidence,), history=CheckoutHistory.capture(Checkout(repo.checkout)))
     assert isinstance(failed.read(evidence), EvidenceUnread)
     assert head in failed.describe(evidence) and "origin" in failed.describe(evidence)
     plans.observe_reading(failed, (evidence,))
     plans.finish_pass()
     Repo.git(repo.checkout, "remote", "set-url", "origin", str(case.source.remote_path))
-    recovered = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
+    recovered = plans.prepare_reading(repo, (), (evidence,), history=CheckoutHistory.capture(Checkout(repo.checkout)))
     assert recovered.main.commit == failed.main.commit
     assert repo.has_commit(head)
     prepared = case.snapshot()
@@ -336,7 +337,7 @@ def test_one_pass_answers_each_evidence_once_for_every_served_teammate(git_prepa
     repo = git_preparation.repository
     evidence = CountedEvidence()
     plans = RetainedNominalPlanReadings()
-    history = Checkout(repo.checkout).read()
+    history = CheckoutHistory.capture(Checkout(repo.checkout))
     plans.begin_pass()
     readings = tuple(plans.prepare_reading(repo, (), (evidence,), history=history) for _ in range(3))
     for reading in readings:
@@ -354,7 +355,7 @@ def test_one_pass_answers_each_evidence_once_for_every_served_teammate(git_prepa
 def test_unexpected_plan_object_loss_is_unknown_not_phase_completion(git_preparation):
     repo = git_preparation.repository
     reading = RetainedNominalPlanReadings().prepare_reading(
-        repo, (), (), history=Checkout(repo.checkout).read())
+        repo, (), (), history=CheckoutHistory.capture(Checkout(repo.checkout)))
     missing = CommitMerged("f" * 40)
     assert isinstance(reading.read(missing), EvidenceUnread)
     assert not reading.holds(missing)
@@ -395,7 +396,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     trace = tmp_path / "observation.trace2.jsonl"
     monkeypatch.setenv("GIT_TRACE2_EVENT", str(trace))
     before = case.snapshot()
-    main = MainTree(repo, head, NominalCensus(), history=Checkout(repo.checkout).read())
+    main = MainTree(repo, head, NominalCensus(), history=CheckoutHistory.capture(Checkout(repo.checkout)))
     assert main.has("src/promised.py")
     assert not main.has("src/deleted.py")
     assert main.missing(paths) == (False, True, False)
@@ -412,7 +413,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
         Repo.git_pipeline(repo.checkout, ("cat-file", "blob", objects[0]), ("hash-object", "--stdin"))
     evidence = BusStorageAbsent()
     plans = RetainedNominalPlanReadings()
-    failed = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
+    failed = plans.prepare_reading(repo, (), (evidence,), history=CheckoutHistory.capture(Checkout(repo.checkout)))
     plans.observe_reading(failed, (evidence,))
     plans.finish_pass()
     assert isinstance(failed.read(evidence), EvidenceUnread)
@@ -432,7 +433,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     assert patches == WorkBranches(source.checkout).prepare_patch_ids((head,))
     assert reader.prepare_whole_patch_ids(base, head) == WorkBranches(source.checkout).prepare_whole_patch_ids(base, head)
     prepared = case.snapshot()
-    recovered = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
+    recovered = plans.prepare_reading(repo, (), (evidence,), history=CheckoutHistory.capture(Checkout(repo.checkout)))
     plans.observe_reading(recovered, (evidence,))
     plans.finish_pass()
     assert recovered.main.commit == failed.main.commit == head

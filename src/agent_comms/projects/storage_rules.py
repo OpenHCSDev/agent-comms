@@ -29,7 +29,8 @@ from agent_comms.execution.child_process import ResidentMemory
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, MalformedRecord, ValueDirective
 from agent_comms.planning.problem_number import ProblemNumber
-from agent_comms.projects.checkouts import Checkout, RepositoryReads
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import RepositoryReads
 from agent_comms.projects.git_errors import GitCommandError
 from agent_comms.projects.repo import Repo
 from agent_comms.projects.repository_environment import RepositoryEnvironment

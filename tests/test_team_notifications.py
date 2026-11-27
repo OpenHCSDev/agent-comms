@@ -48,7 +48,8 @@ from agent_comms.planning.plan_phases import (
 )
 from agent_comms.planning.todo_refusals import TeammateOccupied
 from agent_comms.presentation import NoRevision
-from agent_comms.projects.checkouts import Checkout, UnpushedHead
+from agent_comms.projects.checkouts import Checkout
+from agent_comms.projects.git_history import UnpushedHead
 from agent_comms.projects.head_review import PullRequestHead
 from agent_comms.projects.repository_name import RepositoryName
 from agent_comms.projects.work_branches import WorkBranchError
