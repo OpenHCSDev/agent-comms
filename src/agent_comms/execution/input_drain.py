@@ -1516,16 +1516,27 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
             if self.comms.owners.maintenance.read().turn_pending:
                 return ()
             snapshot = self.comms.registry.snapshot()
-            if snapshot.status(thread.name).is_stopped():
+            owner = snapshot.require(thread.name)
+            if snapshot.status(owner.name).is_stopped():
                 return ()
-            inbox = self.comms.bus.inbox(thread.name)
+            if owner.goal.accepts_following_handoff():
+                return ()
+            inbox = self.comms.bus.inbox(owner.name)
             messages = tuple(sorted(inbox.page.messages, key=lambda item: item.seq))
             if not messages:
                 return ()
-            self.comms.bus.reads.mark_displayed(thread.name, inbox.displayed)
+            self.comms.bus.reads.mark_displayed(owner.name, inbox.displayed)
+            waking = tuple(
+                message
+                for message in messages
+                if message.sender != owner.name
+                and message.role.response_policy(message).starts_turn_for(
+                    message, owner.name, snapshot.aliases
+                )
+            )
             return tuple(
                 ScheduledTurn.incoming(message, aliases=snapshot.aliases)
-                for message in messages
+                for message in waking
             )
 
         turns = await Coordination.run_worker(capture)

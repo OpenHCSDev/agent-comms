@@ -431,6 +431,14 @@ async def test_comms_agent_drains_and_runs_two_turns_on_antigravity_acp(
         assert "second-ping" in replies[1]
         assert str(backend._acp_session) == first_session
         assert backend.runtime_process.pid == first_pid
+
+        # Alert/Notice messages must NOT wake the thread (no alert ping-pong storms).
+        from agent_comms.messaging.messages import AlertKind, NoticeRole
+
+        comms.messaging.send("tristan", thread.name, "non-waking alert", AlertKind, role=NoticeRole())
+        await asyncio.sleep(0.3)
+        assert len(comms.bus.inbox("tristan").page.messages) == 2
+
         diag_dir = root / "diagnostics"
         assert not (list(diag_dir.glob("*.json")) if diag_dir.exists() else [])
     finally:
