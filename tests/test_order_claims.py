@@ -29,10 +29,8 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
 )
 from agent_comms.planning.goal_actions import SetGoalAction
-from agent_comms.planning.goals import (
-    OrderCheck,
-    ProblemGoalOrder,
-)
+from agent_comms.planning.goals import ProblemGoalOrder
+from agent_comms.planning.order_checks import OrderCheck
 from agent_comms.planning.order_runs import ApplicationOrderRun
 from agent_comms.planning.order_words import (
     DeliveryReport,

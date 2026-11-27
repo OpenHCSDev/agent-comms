@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from agent_comms.cli_verbs.cli_result import ThreadLaunchSettings, ToolCatalogResult
+from agent_comms.cli_verbs.cli_result import ToolCatalogResult
+from agent_comms.cli_verbs.thread_catalog_result import ThreadLaunchSettings
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.field_codec import FieldCodec

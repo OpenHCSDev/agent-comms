@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.execution.child_process import BoundedRun
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.planning.goals import CountCheckResult
+from agent_comms.planning.order_checks import CountCheckResult
 from agent_comms.planning.orders import (
     OrderDelivery,
     RecordedCommitDelivery,

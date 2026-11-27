@@ -10,7 +10,7 @@ from agent_comms.transport.connector import ConnectorSendTool
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.channel_targets import TeammatesTag
 from agent_comms.nominal.field_codec import GoalId
-from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.order_checks import OrderCheck
 from agent_comms.planning.order_runs import MechanicalOrderRun
 from agent_comms.planning.orders import (
     ClaimOrder,

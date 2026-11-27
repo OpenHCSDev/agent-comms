@@ -11,7 +11,7 @@ from agent_comms.installer.runtime_record import ToadPackage
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.planning import orders
 from agent_comms.planning.goal_actions import SetGoalAction
-from agent_comms.planning.goals import CountCheckResult, OrderCheck
+from agent_comms.planning.order_checks import CountCheckResult, OrderCheck
 from agent_comms.planning.orders import (
     ChangeTodoState, DoneTodoState, OpenTodoState, PendingProblemOrder,
     RestoreHolderTodo, TriageScope, WithdrawTodo,

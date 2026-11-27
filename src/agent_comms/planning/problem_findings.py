@@ -11,7 +11,7 @@ from typing import (
 from agent_comms.errors import TodoError
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import Description, NullMember, SingleFieldValue, SubclassUnion
-from agent_comms.planning.goals import OrderCheck
+from agent_comms.planning.order_checks import OrderCheck
 from agent_comms.projects.change_report import Declaration, FileLine, SourceRevision, SourceRoots
 
 

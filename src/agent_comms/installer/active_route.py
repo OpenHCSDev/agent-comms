@@ -25,7 +25,6 @@ from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from agent_comms.installer.native_package import VerifiedNativePackage
-from agent_comms.installer.reporting import RootWriter
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText, ScratchName
@@ -420,7 +419,7 @@ class RouteFile(ABC):
                       publish: Callable[[], None], directory: int) -> str:
         return f"replaced {path}; old route kept at {self.replace(path, publish, directory)}"
 
-    def outgoing_writer(self, outgoing: RootWriter, unposted: RootWriter) -> RootWriter:
+    def outgoing_writer[Writer](self, outgoing: Writer, unposted: Writer) -> Writer:
         """Who posts install reports before install routes to its bus: the outgoing runtime,
         which borrows this file like every client."""
         return outgoing
@@ -429,7 +428,7 @@ class RouteFile(ABC):
 class ReplaceableRoute(RouteFile):
     """Selects no bus: install and the repair both replace it."""
 
-    def outgoing_writer(self, outgoing: RootWriter, unposted: RootWriter) -> RootWriter:
+    def outgoing_writer[Writer](self, outgoing: Writer, unposted: Writer) -> Writer:
         """Every borrower of the default root refuses this file, the outgoing runtime
         included, so nothing posts until install's route step replaces it."""
         return unposted

@@ -14,11 +14,7 @@ from agent_comms.installer.build_identity import RecordedBuildIdentity
 from agent_comms.installer.runtime_record import CorePackage
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.nominal.field_codec import FieldCodec, RecordProblems
-from agent_comms.planning.goals import (
-    CheckedCommit,
-    CountCheckResult,
-    OrderCheck,
-)
+from agent_comms.planning.order_checks import CheckedCommit, CountCheckResult, OrderCheck
 from agent_comms.planning.order_runs import ApplicationOrderRun
 from agent_comms.planning.orders import (
     CorrectCheckTodo,

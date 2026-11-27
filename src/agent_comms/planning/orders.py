@@ -5,7 +5,6 @@ import json
 import re
 import sqlite3
 import subprocess
-import sys
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
@@ -26,7 +25,6 @@ from typing import Annotated, ClassVar, Self, cast, get_args, get_origin
 from agent_comms.coordination.session import NativeCapture
 from agent_comms.errors import MissingSourceLine, TodoError
 from agent_comms.execution.child_process import ChildResult, OrderCheckFailedError
-from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.installer.build_identity import (
     BuildIdentity,
     CommitInstallation,
@@ -79,9 +77,8 @@ from agent_comms.planning.delivery_evidence import (
     TodoProblems,
     WorkingEvidence,
 )
-from agent_comms.planning.goal_scope import OneGoal
 from agent_comms.planning.goal_work import GoalAssignment, GoalAssignments
-from agent_comms.planning.goals import CheckedCommit, OrderCheck
+from agent_comms.planning.order_checks import CheckedCommit, OrderCheck
 from agent_comms.planning.order_phase import OrderPhase, UnplannedPhase
 from agent_comms.planning.order_runs import ApplicationOrderRun, OrderRun
 from agent_comms.planning.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
@@ -100,7 +97,6 @@ from agent_comms.planning.owner_requests import (
     RequestAtRevision,
     RequestDirective,
     RequestLink,
-    RequestSelection,
     RequestState,
 )
 from agent_comms.planning.problem_findings import (

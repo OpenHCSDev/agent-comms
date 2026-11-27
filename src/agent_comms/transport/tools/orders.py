@@ -37,7 +37,8 @@ from agent_comms.planning.order_goal_actions import (
     CreateProblemGoalAction,
     OrderGoalAction,
 )
-from agent_comms.planning.goals import Goal, OrderCheck
+from agent_comms.planning.goals import Goal
+from agent_comms.planning.order_checks import OrderCheck
 from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.order_phase import OrderPhase
 from agent_comms.planning.order_story import OrderStory, TeamStory

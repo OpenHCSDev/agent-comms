@@ -60,7 +60,12 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.planning.delivery_evidence import DeliveryEvidence, TodoProblems, WorkingEvidence
 from agent_comms.planning.order_goal_actions import CreateProblemGoalAction, OrderGoalAction
-from agent_comms.planning.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
+from agent_comms.planning.order_checks import (
+    CheckCommand,
+    CheckResult,
+    CountCheckResult,
+    OrderCheck,
+)
 from agent_comms.planning.order_phase import OrderPhase
 from agent_comms.planning.order_words import (
     DirectiveText,
