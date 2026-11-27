@@ -501,15 +501,20 @@ class Goals(
             return tuple(GoalSnapshot(owner.goal, IdleGoalExecution()) for owner in owners)
         turns = TurnRecord.read_all(owner.turn_record for owner in owners if owner.goal)
         with self.open_goal_store().reader_snapshot() as connection:
-            return tuple(self._snapshot_in(lambda: connection, owner, snapshot, wait, activity, turns)
-                         for owner in owners)
+            generations = Generation.require_all_in(
+                connection, (goal.id for owner in owners for goal in owner.goal),
+            )
+            return tuple(self._snapshot_in(
+                lambda: connection, owner, snapshot, wait, activity, turns, generations,
+            ) for owner in owners)
 
     @staticmethod
     def _snapshot_in(connection: Callable[[], sqlite3.Connection], owner: Thread, snapshot: RegistrySnapshot,
                      wait: Callable[[GoalDeclaration], GoalWait], activity: ActivityAnswers,
-                     turns: Mapping[StoredTurnRecord, TurnDeclaration]) -> GoalSnapshot:
+                     turns: Mapping[StoredTurnRecord, TurnDeclaration],
+                     generations: Mapping[GoalId, Generation]) -> GoalSnapshot:
         for goal in owner.goal:
-            generation = Generation.require_in(connection(), goal.id)
+            generation = generations[goal.id]
             source = GoalExecutionSource(
                 goal=goal, wait=wait(goal), generation=generation,
                 evidence=generation.lifecycle.evidence(connection(), generation),

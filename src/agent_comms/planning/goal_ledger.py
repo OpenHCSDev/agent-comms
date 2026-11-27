@@ -209,6 +209,24 @@ class Generation(GoalLedgerTable, TypedTable, GoalGenerationRead, GenerationFail
         except RowNotFoundError as error:
             raise MissingGoalGenerationError(goal_id) from error
 
+    @classmethod
+    def require_all_in(
+        cls, db: sqlite3.Connection, goal_ids: Iterable[GoalId],
+    ) -> dict[GoalId, Self]:
+        wanted = tuple(dict.fromkeys(goal_ids))
+        if not wanted:
+            return {}
+        marks = ",".join("?" for _ in wanted)
+        try:
+            rows = cls.select(db, where=f"{{goal_id}} IN ({marks})", parameters=wanted)
+        except (sqlite3.Error, MalformedRecord) as error:
+            raise StorageUncertainError("Invalid persisted goal generation.") from error
+        found = {row.goal_id: row for row in rows}
+        for goal_id in wanted:
+            if goal_id not in found:
+                raise MissingGoalGenerationError(goal_id)
+        return found
+
     def advance(
         self, conn: sqlite3.Connection, successor: Generation, *, digest: str = ""
     ) -> Generation:
