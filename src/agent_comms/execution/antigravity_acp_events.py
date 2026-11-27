@@ -15,7 +15,12 @@ from agent_comms.cli_bridges.wire_models import DeclaredWireFamily, WireModel
 from agent_comms.config_option import CatalogChoice
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.runtime_observations import ContextInfo
-from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
+from agent_comms.execution.turn_phase import (
+    ModelWaitPhase,
+    ReplyingPhase,
+    ThinkingPhase,
+    TurnPhase,
+)
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import NominalText, ToolCallId
 from agent_comms.pi_counts import ReportedCount, UnreportedCount
@@ -88,7 +93,6 @@ class AcpTurnStreamState:
 
     text_chunks: list[str] = field(default_factory=list)
     tool_names: dict[str, str] = field(default_factory=dict)
-    active_tools: dict[ToolCallId, str] = field(default_factory=dict)
     phase: TurnPhase = field(default_factory=ModelWaitPhase)
     current_model: str = ""
     thought_level: str = ""
@@ -96,18 +100,6 @@ class AcpTurnStreamState:
     @property
     def full_text(self) -> str:
         return "".join(self.text_chunks)
-
-    def tool_started(self, call_id: ToolCallId, label: str) -> None:
-        self.active_tools[call_id] = label
-        self.phase = ToolRunningPhase(tools=tuple(self.active_tools.items()))
-
-    def tool_finished(self, call_id: ToolCallId) -> None:
-        self.active_tools.pop(call_id, None)
-        self.phase = (
-            ToolRunningPhase(tools=tuple(self.active_tools.items()))
-            if self.active_tools
-            else ModelWaitPhase()
-        )
 
 
 class AcpConfigOptionKind(DeclaredFamily, affix="AcpConfigOption"):
@@ -220,7 +212,7 @@ class CompletedToolStatus(AcpToolStatus, declared_name="completed"):
         name: str,
         output: str,
     ) -> Iterator[AgentEvent]:
-        state.tool_finished(call_id)
+        state.phase = state.phase.tool_ended(call_id)
         yield events.ToolEnd(id=call_id, name=name, ok=True, output=output)
 
 
@@ -233,7 +225,7 @@ class FailedToolStatus(AcpToolStatus, declared_name="failed"):
         name: str,
         output: str,
     ) -> Iterator[AgentEvent]:
-        state.tool_finished(call_id)
+        state.phase = state.phase.tool_ended(call_id)
         yield events.ToolEnd(id=call_id, name=name, ok=False, output=output)
 
 
@@ -268,7 +260,7 @@ class AgentMessageChunkAcpUpdate(AntigravityAcpUpdate, declared_name="agent_mess
     def convert(self, state: AcpTurnStreamState) -> Iterator[AgentEvent]:
         text = self.content.extract_text()
         if text:
-            state.phase = ModelWaitPhase("Replying")
+            state.phase = ReplyingPhase()
             state.text_chunks.append(text)
             yield events.Chunk(text=text)
 
@@ -279,7 +271,7 @@ class AgentThoughtChunkAcpUpdate(AntigravityAcpUpdate, declared_name="agent_thou
     def convert(self, state: AcpTurnStreamState) -> Iterator[AgentEvent]:
         text = self.content.extract_text()
         if text:
-            state.phase = ModelWaitPhase("Thinking")
+            state.phase = ThinkingPhase()
             yield events.Thinking(text=text)
 
 
@@ -309,7 +301,7 @@ class ToolCallAcpUpdate(AntigravityAcpUpdate, declared_name="tool_call"):
                 args=start.args,
                 kind=start.kind,
             )
-        state.tool_started(call_id, start.title or name)
+        state.phase = state.phase.tool_started(call_id, start.title or name)
         yield start
 
 

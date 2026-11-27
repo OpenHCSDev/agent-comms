@@ -274,9 +274,10 @@ async def test_shared_acp_process_multiplexes_two_backends_and_streams_events(tm
     assert any(isinstance(e, events.Done) and e.ok and "alpha-2" in e.text for e in events_a2)
     assert any(isinstance(e, events.Done) and e.ok and "beta-2" in e.text for e in events_b2)
     from agent_comms.execution.turn_phase import (
-        ModelWaitPhase,
         NativePhaseChanged,
+        ReplyingPhase,
         SettlingStatsPhase,
+        ThinkingPhase,
         ToolRunningPhase,
     )
 
@@ -286,9 +287,9 @@ async def test_shared_acp_process_multiplexes_two_backends_and_streams_events(tm
     assert any(isinstance(e, events.ToolEnd) and e.ok for e in events_a)
     assert any(isinstance(e, ContextInfo) for e in events_a)
     phases_a = [e.phase for e in events_a if isinstance(e, NativePhaseChanged)]
-    assert any(isinstance(p, ModelWaitPhase) and p.detail == "Thinking" for p in phases_a)
+    assert any(isinstance(p, ThinkingPhase) for p in phases_a)
     assert any(isinstance(p, ToolRunningPhase) and p.tools for p in phases_a)
-    assert any(isinstance(p, ModelWaitPhase) and p.detail == "Replying" for p in phases_a)
+    assert any(isinstance(p, ReplyingPhase) for p in phases_a)
     assert any(isinstance(p, SettlingStatsPhase) for p in phases_a)
     done_a = [e for e in events_a if isinstance(e, events.Done)][-1]
     done_b = [e for e in events_b if isinstance(e, events.Done)][-1]
