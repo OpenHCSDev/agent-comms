@@ -1361,8 +1361,8 @@ class StoreRead(TranscriptSource):
              FieldCodec.encode(ToolStartTranscript), since),
         ).fetchone()[0]
 
-    def unjudged(self, todo, since):
-        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo, since)
+    def unjudged(self, todo, since, tools: tuple[str, ...]):
+        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo, since, tools)
         with closing(self.connection.execute(
             'SELECT timestamp,call_id,json_extract(event,\'$.tool\') FROM '
             '(SELECT e.event, e.timestamp, e.call_id, e.seq, e.ordinal, '
