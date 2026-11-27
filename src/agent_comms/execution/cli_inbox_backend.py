@@ -22,7 +22,6 @@ from agent_comms.agent_backend import (
     NewThreadBackend,
     RuntimeLocation,
 )
-from agent_comms.execution.history_view import ForkOwnHistory
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.unstarted_runtime import ExternalTranscriptLocation
 from agent_comms.nominal.field_codec import AcpSessionId
@@ -61,16 +60,6 @@ class CliInboxRuntime(ExternalTranscriptLocation):
 
     def arguments(self):
         return {}
-
-    def read_keys(self):
-        return ()
-
-    def history_locations(self, thread, registry, visited):
-        yield from thread.inherited_history(registry, visited)
-        yield self, thread.parent.own_history
-
-    def view_from_fork(self, view, fork_birth):
-        return ForkOwnHistory()
 
     def storage_files(self):
         if not self.path:

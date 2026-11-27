@@ -317,6 +317,19 @@ def test_switch_to_native_and_attach_session_for_antigravity_thread(tmp_path: Pa
     assert attached.backend is AntigravityAcpBackend
     assert Path(attached.runtime.path).resolve() == storage.db_path.resolve()
     assert attached.model == DeclaredModel("antigravity/gemini-4-neon")
+    assert attached.runtime.read_keys() == ()
+
+    # Sidebar unread indexing must never try to parse Antigravity's binary SQLite `.db` as Pi JSONL.
+    from agent_comms.registry.roster_visibility import RosterVisibility
+    from agent_comms.ui_model.sidebar import SidebarModel
+
+    for visibility in (
+        RosterVisibility(stopped=False, archived=False),
+        RosterVisibility(stopped=True, archived=False),
+        RosterVisibility(stopped=True, archived=True),
+    ):
+        snapshot = comms.views.viewer_snapshot(Checkout(tmp_path), visibility)
+        SidebarModel.derive(snapshot)
 
     # Persisting via set_thread_configuration switches backend both into and out of AntigravityAcpBackend.
     from agent_comms.registry.threads import NextTurnConfiguration

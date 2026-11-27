@@ -23,6 +23,19 @@ if TYPE_CHECKING:
 class ExternalTranscriptLocation(RuntimeLocation):
     """Runtime location whose conversation history is paged from `ExternalTranscript`."""
 
+    def read_keys(self) -> tuple[str, ...]:
+        """External-transcript runtimes have no Pi JSONL transcript files to index."""
+        return ()
+
+    def history_locations(self, thread, registry, visited):
+        yield from thread.inherited_history(registry, visited)
+        yield self, thread.parent.own_history
+
+    def view_from_fork(self, view, fork_birth):
+        """history_source reads the asking thread's own records, whichever thread this location
+        came from. A fork's own work is all after its birth, so no date can filter it."""
+        return ForkOwnHistory()
+
     def transcript_cursor(self, frontier, cut, *, source):
         return NoNativeTranscriptCursor(
             source=source, offset=cut.offset, wire=frontier, file=cut.file_identity(),
@@ -77,18 +90,6 @@ class UnstartedRuntime(ExternalTranscriptLocation):
 
     def arguments(self):
         return {}
-
-    def read_keys(self):
-        return ()
-
-    def history_locations(self, thread, registry, visited):
-        yield from thread.inherited_history(registry, visited)
-        yield self, thread.parent.own_history
-
-    def view_from_fork(self, view, fork_birth):
-        """history_source reads the asking thread's own records, whichever thread this location
-        came from. A fork's own work is all after its birth, so no date can filter it."""
-        return ForkOwnHistory()
 
     def select_session(self, directory, execution, source_reads, *, participant):
         location = participant.comms.registry.claim_fresh_session(participant)
