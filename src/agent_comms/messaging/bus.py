@@ -309,6 +309,21 @@ class BusReader(
                 raise UnclaimedError(seq)
             return rows[0].claim_transition
 
+    def _at_sequences(
+        self, db: sqlite3.Connection, sequences: tuple[int, ...],
+    ) -> tuple[BusRecord, ...]:
+        """Read immutable committed records through this process's per-file decoded cache."""
+        if not sequences:
+            return ()
+        decoded = DecodedRecords.of(self.path).records
+        missing = tuple(dict.fromkeys(seq for seq in sequences if seq not in decoded))
+        if missing:
+            for seq, record in zip(missing, BusCapability.at_sequences(db, missing), strict=True):
+                decoded[seq] = record
+            while len(decoded) > DecodedRecords.limit:
+                decoded.popitem(last=False)
+        return tuple(decoded[seq] for seq in sequences)
+
     def records(self, sequences: Iterable[int]) -> tuple[BusRecord, ...]:
         """These records in order from one joined read, never one query per table per row.
 
@@ -359,12 +374,12 @@ class BusReader(
     def keyed_messages(self, publication_key: str) -> tuple[BusRecord, ...]:
         """Read at most the one original bound to this publication key."""
         with self.observing() as db:
-            return BusCapability.at_sequences(
+            return self._at_sequences(
                 db, tuple(KeyedPublication.publication_sequences(db, publication_key)))
 
     def page(self, before: int, limit: int) -> tuple[BusRecord, ...]:
         with self.observing() as db:
-            return BusCapability.at_sequences(db, tuple(row.seq for row in BusRow.select(
+            return self._at_sequences(db, tuple(row.seq for row in BusRow.select(
                 db, where="{seq} < ?", parameters=(before,),
                 order_by=("seq",), descending=True, limit=limit)))
 
@@ -389,7 +404,7 @@ class BusReader(
     def since(self, after: int, limit: int) -> tuple[BusRecord, ...]:
         """One ascending keyset page after the last scanned bus sequence."""
         with self.observing() as db:
-            return BusCapability.at_sequences(db, tuple(row.seq for row in BusRow.select(
+            return self._at_sequences(db, tuple(row.seq for row in BusRow.select(
                 db, where="{seq} > ?", parameters=(after,),
                 order_by=("seq",), limit=limit)))
 
@@ -398,7 +413,7 @@ class BusReader(
             rows = db.execute(
                 f'SELECT seq FROM "{Addressed.table.declared_name}" '
                 'WHERE target=? AND seq>? ORDER BY seq LIMIT ?', (target, after, limit))
-            return BusCapability.at_sequences(db, tuple(FieldCodec.decode(int, row[0]) for row in rows))
+            return self._at_sequences(db, tuple(FieldCodec.decode(int, row[0]) for row in rows))
 
     def scoped_page(
         self, predicate: str, parameters: tuple[object, ...], *, lower: int = 0,
@@ -419,7 +434,7 @@ class BusReader(
                 f'ORDER BY seq {order} LIMIT ?',
                 (*parameters, lower, upper, *(kind.declared_name for kind in kinds), limit),
             )
-            return BusCapability.at_sequences(db, tuple(FieldCodec.decode(int, row[0]) for row in rows))
+            return self._at_sequences(db, tuple(FieldCodec.decode(int, row[0]) for row in rows))
 
     def newest_per_conversation(
         self, predicate: str, parameters: tuple[object, ...], *, after: int, through: int,
@@ -437,7 +452,7 @@ class BusReader(
                     (*parameters, after, through),
                 )
             )
-            return BusCapability.at_sequences(db, tuple(positions))
+            return self._at_sequences(db, tuple(positions))
 
     def latest_conversations(
         self, predicate: str, parameters: tuple[object, ...], through: int,
@@ -606,7 +621,7 @@ class BusReader(
         with self.observing() as db:
             sequences = {row.seq for original in references
                          for row in AnsweredSource.select(db, original=original.seq)}
-            return BusCapability.at_sequences(db, tuple(sorted(sequences)))
+            return self._at_sequences(db, tuple(sorted(sequences)))
 
     def recipient_replies(
         self, keys: tuple[tuple[ThreadLookup, MessageReference], ...],
