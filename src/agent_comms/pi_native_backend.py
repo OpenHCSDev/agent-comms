@@ -53,6 +53,7 @@ from agent_comms.execution.native_transcript import (
 from agent_comms.execution.pi_commands import Compact, NativeQuery
 from agent_comms.execution.pi_events import NativePiEvent
 from agent_comms.execution.pi_wire import PiOmitted
+from agent_comms.execution.private_nk_entrypoint import RootLaunch
 from agent_comms.execution.selected.session import SavedSelectedSession
 from agent_comms.execution.session_revision import SessionObservation, SessionRevision
 from agent_comms.execution.turn_inbox import InputContent
@@ -292,7 +293,7 @@ class PiNativeBackend(
     ) -> PiSessionFile:
         """Copy the parent's whole saved history with Pi's own session manager."""
         package = await CoordinationWork.run_worker(
-            lambda: resolve_comms_route(None).package_for_command(launcher, runtime)
+            lambda: RootLaunch.package_for_command(resolve_comms_route(None), launcher, runtime)
         )
         directory = await CoordinationWork.run_worker(partial(ForkedSession.prepared_directory, root))
         identity = await RuntimeForkHelper.run(

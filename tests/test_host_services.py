@@ -37,10 +37,9 @@ from agent_comms.host_services.connector import (
 )
 from agent_comms.installer.active_route import (
     ActiveRoute,
-    ActiveRouteFile,
     active_route_path,
-    route_new_bus,
 )
+from agent_comms.installer.route_publication import ActiveRoutePublisher, route_new_bus
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.harness_install import CodexHarness
@@ -458,7 +457,7 @@ def test_connector_refuses_a_different_published_bus(connector_service, tmp_path
     StoreBackup.copy_tree(service.launch.path, other)
     route = ActiveRoute(other, RecordedBusIdentity.capture(Bus.path_in(other)))
     path = active_route_path()
-    ActiveRouteFile(path).publish(
+    ActiveRoutePublisher(path).publish(
         route, lambda current, publish, directory: current.replace(path, publish, directory))
 
     with pytest.raises(ServiceNotServingError, match="published route selects") as refused:

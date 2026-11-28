@@ -21,10 +21,6 @@ from metaclass_registry.mro_dispatch import MroDispatch, handles
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.execution.launch_root import LaunchRoot
-from agent_comms.execution.launch_runtime import LaunchRuntime
-from agent_comms.execution.native_arguments import NativeArguments
-from agent_comms.execution.private_nk_entrypoint import PrivateNkLaunch, RootLaunch
-from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText, ScratchName
@@ -109,32 +105,6 @@ class ActiveRouteFile(FileTransactions, SingleFileStore, DependentStateTier):
                 return change(original, directory)
             return self.change_current(lambda: None, lambda _: nullcontext(read()), commit)
 
-    def publish[Result](
-        self, route: ActiveRoute,
-        change: Callable[[RouteFile, Callable[[], None], int], Result],
-    ) -> Result:
-        """Stage and validate before EX; publication uses the current file's policy."""
-        if self.path.name != RouteFile.filename or not self.path.is_absolute():
-            raise ValueError("active comms route requires its absolute route path")
-        payload = route.encoded()
-        route.launch().validate()
-        with self._directory() as directory:
-            @contextmanager
-            def prepare(_: None) -> Iterator[tuple[RouteFile, Callable[[], None]]]:
-                original = RouteFile.read(self.path)
-                with original.writer(self.path, directory).prepared(payload) as publish:
-                    route.launch().validate()
-                    yield original, publish
-
-            def commit(prepared: tuple[RouteFile, Callable[[], None]]) -> Result:
-                original, publish = prepared
-                OwnedDirectoryRole.held(directory, self.path.parent,
-                                        ValueError("active comms route directory changed"))
-                route.observe_root()
-                return change(original, publish, directory)
-
-            return self.change_current(lambda: None, prepare, commit)
-
 
 @dataclass(frozen=True, slots=True)
 class CommsRoute(ABC):
@@ -149,18 +119,6 @@ class CommsRoute(ABC):
 
     def observe_root(self) -> Path:
         return self.root.resolve()
-
-    def launch(self) -> RootLaunch:
-        """This root's launch, decoded from its marker and this installation's pin."""
-        return RootLaunch.derive(self)
-
-    def package_for_command(
-        self, command: str, runtime: LaunchRuntime,
-    ) -> VerifiedNativePackage:
-        """Acquire this route's verified native Pi package after validating ``command``."""
-        package = self.launch().launched_package()
-        package.require_command(command, Path(NativeArguments.owner_launcher(runtime)))
-        return package
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,9 +258,6 @@ class ActiveRoute(CommsRoute, PublishedRoute):
             raise RelationViolationError("route bus was replaced")
         return super(ActiveRoute, self).observe_root()
 
-    def launch(self) -> PrivateNkLaunch:
-        return RootLaunch.derive(self).require_private()
-
 
 def resolve_comms_route(root: Path | str | None = None) -> CommsRoute:
     """Resolve one current selection without creating stores or reading registry."""
@@ -340,15 +295,6 @@ def read_active_route(path: Path | None = None) -> PublishedRoute:
     return _ActiveRouteDecode.handler_for(type(source.revision))(
         _ACTIVE_ROUTE_DECODE, source.revision, source, path,
     )
-
-
-def route_new_bus(route: ActiveRoute, path: Path) -> str:
-    """Route to this bus unless the file already selects one: install's answer and the
-    owner's repair. A replaced file is kept beside the new one under a backup name, so a
-    live route is still only ever installed once."""
-    return ActiveRouteFile(path).publish(
-        route, lambda current, publish, directory:
-        current.route_new_bus(route, path, publish, directory))
 
 
 class RouteFileSelection(DeclaredFamily, affix="Selection", declared_name=None):

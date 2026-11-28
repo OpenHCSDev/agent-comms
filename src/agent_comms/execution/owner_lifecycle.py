@@ -326,7 +326,7 @@ class OwnerLifecycle:
         Acquisition verifies the immutable package once; check() still
         refuses a replaced root.
         """
-        return resolve_comms_route(self.root).launch()
+        return RootLaunch.derive(resolve_comms_route(self.root))
 
     def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:
         """Choose this runtime's reviewed native entrypoint for a private handoff."""

@@ -32,6 +32,7 @@ from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_session_files import NativeAgentSettings, NativeSessionFiles
 from agent_comms.execution.participant_identity import ParticipantIdentity
 from agent_comms.execution.pi_vocabulary import NoThinkingOverride, ThinkingChoice
+from agent_comms.execution.private_nk_entrypoint import RootLaunch
 from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.installer.active_route import ActiveRoute, resolve_comms_route
 from agent_comms.installer.native_package import MANIFEST, SYSTEM_PROMPT, VerifiedNativePackage
@@ -113,7 +114,7 @@ def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
     root = LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     started()
-    package = resolve_comms_route(root.path).launch().require_private().validate()
+    package = RootLaunch.derive(resolve_comms_route(root.path)).require_private().validate()
     environment = dict(os.environ)
     argv, environment = NativePiRpcLaunch.bootstrap(
         package, tuple(sys.argv[1:]), Path.cwd(), environment,
@@ -194,7 +195,7 @@ class NativePiRpcLaunch:
 
         The launch is the caller's root's; without one, this process's selection.
         """
-        return resolve_comms_route(root).package_for_command(command, runtime)
+        return RootLaunch.package_for_command(resolve_comms_route(root), command, runtime)
 
     @classmethod
     def catalog(

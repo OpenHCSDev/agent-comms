@@ -14,6 +14,7 @@ import pytest
 from agent_comms.comms import Comms, wire
 from agent_comms.execution.child_process import SpawnedProcess
 from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.private_nk_entrypoint import RootLaunch
 from agent_comms.installer.active_route import (
     ActiveRoute,
     ActiveRouteFile,
@@ -22,8 +23,8 @@ from agent_comms.installer.active_route import (
     RelationViolationError,
     active_route_path,
     read_active_route,
-    route_new_bus,
 )
+from agent_comms.installer.route_publication import route_new_bus
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstalledProgram
@@ -51,7 +52,7 @@ def old_route(path, route):
     path.parent.mkdir(mode=0o700, parents=True)
     path.write_text(json.dumps({
         "version": 2, "root": str(route.root),
-        "wire_root_id": route.launch().wire_root_id,
+        "wire_root_id": RootLaunch.derive(route).require_private().wire_root_id,
     }))
     path.chmod(0o600)
     return path.read_bytes()
@@ -310,7 +311,8 @@ def test_preparation_lends_no_route_lock_and_commits_only_its_current_directory(
                 child = subprocess.run([
                     sys.executable, "-c",
                     "from pathlib import Path; import sys; "
-                    "from agent_comms.installer.active_route import ActiveRoute, route_new_bus; "
+                    "from agent_comms.installer.active_route import ActiveRoute; "
+                    "from agent_comms.installer.route_publication import route_new_bus; "
                     "from agent_comms.messaging.bus import Bus; "
                     "from agent_comms.messaging.recorded_bus import RecordedBusIdentity; "
                     "root=Path(sys.argv[1]); "

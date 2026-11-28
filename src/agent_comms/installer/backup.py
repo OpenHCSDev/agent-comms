@@ -29,6 +29,7 @@ from agent_comms.installer.active_route import (
     active_route_path,
 )
 from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.route_publication import ActiveRoutePublisher
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.storage.file_observation import (
@@ -356,7 +357,7 @@ class StoreBackup:
                 # The store still owns EX, including uncertain durability acknowledgement.
                 self.route_revision = FileRevision.capture(self.route)
 
-        return ActiveRouteFile(self.route).publish(route, publish)
+        return ActiveRoutePublisher(self.route).publish(route, publish)
 
     def route_original(self) -> bool:
         return SavedRoute.read(self.path / RouteFile.filename).matches(self.route)
