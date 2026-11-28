@@ -112,7 +112,7 @@ class CollectivePolicy(ResponsePolicy):
         return tuple(dict.fromkeys(audience))
 
     def guidance(self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
-        return "collective; reply if you are answering, or say IGNORE if you are not answering so you don't leave it on read"
+        return "collective; reply if you are answering, or say IGNORE if you are not answering (you can mark answering/not_answering with comms_ack)"
 
 
 class MentionedPolicy(CollectivePolicy):
@@ -134,7 +134,7 @@ class MentionedPolicy(CollectivePolicy):
         names = ", ".join(f"@{name}" for name in self.mentioned(message, aliases))
         return (
             f"mentioned; addressed to {names}; "
-            "reply if you are answering, or say IGNORE if you are not answering so you don't leave it on read"
+            "reply if you are answering, or say IGNORE if you are not answering (you can mark answering/not_answering with comms_ack)"
         )
 
 

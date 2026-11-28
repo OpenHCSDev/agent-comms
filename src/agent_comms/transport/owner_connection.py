@@ -16,6 +16,7 @@ from typing import IO, TYPE_CHECKING, ClassVar, Self, cast
 
 from agent_comms.coordination.work import CoordinationWork
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.messaging.message_files import MAX_SEND_REQUEST_BYTES
 from agent_comms.execution.child_process import ProcessIdentity
 from agent_comms.execution.owner_protocol import OwnerLine
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
@@ -206,7 +207,9 @@ class OwnerConnection:
             await CoordinationWork.run_worker(partial(self._require_connect_owner, owner, process))
             try:
                 with PrivateSocketRole.address(path) as address:
-                    reader, writer = await asyncio.open_unix_connection(address, limit=8 * 1024 * 1024)
+                    reader, writer = await asyncio.open_unix_connection(
+                        address, limit=MAX_SEND_REQUEST_BYTES,
+                    )
             except (FileNotFoundError, ConnectionRefusedError):
                 await asyncio.sleep(0.05)
                 continue

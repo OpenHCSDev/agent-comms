@@ -384,7 +384,7 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
                 notification = outcome.project(observation, source.sender_lookup)
                 state = evidence[source.message.reference].consumed_progress(
                     recipient.recipient_lookup, notification.state
-                ).live_progress(observation)
+                )
                 notification = replace(notification, state=state,
                                        changed=notification.changed or state.is_consumed())
                 notification = evidence[source.message.reference].answered(

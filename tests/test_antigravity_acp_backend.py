@@ -1038,36 +1038,104 @@ def test_progress_reply_role_preserves_channel_mentions_and_keeps_dm_notice() ->
     )
 
 
-def test_harness_consumed_progress_shows_answering_while_live_turn_runs() -> None:
-    """Direct-harness reads promote to Answering while the recipient's active turn runs on them,
-    and return to plain Read once the turn finishes or on earlier turns."""
-    from agent_comms.messaging.frozen_recipient import FrozenRecipient
-    from agent_comms.messaging.message_notification import MessageNotification
-    from agent_comms.messaging.notification_contracts import TurnStartCheck
-    from agent_comms.messaging.notification_progress import (
-        ConsumingProgress,
-        HarnessConsumedProgress,
+def test_explicit_receipt_choices_separate_read_answering_answered_and_not_answering(
+    tmp_path: Path,
+) -> None:
+    """Read never auto-defaults to Answering; explicit Answering flips to Answered automatically
+    when the reply lands, and Not answering settles without waiting for a reply."""
+    from bus_record_fixture import prepare_native_comms
+    from agent_comms.cli_bridges.harness_delivery_states import (
+        AnsweringReceiptChoice,
+        NotAnsweringReceiptChoice,
+        ReadReceiptChoice,
     )
-    from agent_comms.nominal.field_codec import ThreadLookup
+    from agent_comms.cli_bridges.history import RemoteWatchHistory
+    from agent_comms.comms import wire
+    from agent_comms.messaging.message_notification import MessageNotification
+    from agent_comms.messaging.notification_evidence import AllOutcomes
 
-    class _TurnCheck(TurnStartCheck):
-        def __init__(self, active: bool) -> None:
-            self._active = active
+    root = tmp_path / "comms-root"
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    comms = prepare_native_comms(wire(root))
+    comms.registry.declare(NativeThread("tristan", frozenset({"team"}), Checkout(wt)))
+    comms.registry.declare(NativeThread("peer-a", frozenset({"team"}), Checkout(wt)))
+    comms.registry.declare(NativeThread("peer-b", frozenset({"team"}), Checkout(wt)))
 
-        def turn_started_by(self, updated_at_ms: int) -> bool:
-            del updated_at_ms
-            return self._active
+    sent = comms.messaging.send("tristan", "#team", "check receipts")
+    ref = sent.message.reference
 
-    read_state = HarnessConsumedProgress(1_700_000_000_000)
-    answering = read_state.live_progress(_TurnCheck(True))
-    settled = read_state.live_progress(_TurnCheck(False))
-    assert isinstance(answering, ConsumingProgress)
-    assert settled is read_state
+    def summary() -> str:
+        win = comms.views.message_notifications_for_references(AllOutcomes(), (ref,))
+        return MessageNotification.summary(win.outcomes.get((ref.seq, ref.message_id), ()))
 
-    recipient = FrozenRecipient(ThreadLookup("r-1"), "comms-a")
-    sender = ThreadLookup("user-1")
-    assert MessageNotification.summary((MessageNotification(recipient, sender, answering),)) == "1 read · 1 answering"
-    assert MessageNotification.summary((MessageNotification(recipient, sender, settled),)) == "1 read"
+    # 1. Plain Read does not auto-default to Answering.
+    comms.messaging.acknowledge_deliveries(
+        "peer-a", (ref,), bridge=RemoteWatchHistory, status=ReadReceiptChoice,
+    )
+    comms.messaging.acknowledge_deliveries(
+        "peer-b", (ref,), bridge=RemoteWatchHistory, status=ReadReceiptChoice,
+    )
+    assert summary() == "2 read"
+
+    # 2. Explicit Answering and Not answering choices show in the summary.
+    comms.messaging.acknowledge_deliveries(
+        "peer-a", (ref,), bridge=RemoteWatchHistory, status=AnsweringReceiptChoice,
+    )
+    comms.messaging.acknowledge_deliveries(
+        "peer-b", (ref,), bridge=RemoteWatchHistory, status=NotAnsweringReceiptChoice,
+    )
+    assert summary() == "2 read · 1 answering · 1 not answering"
+
+    # 3. Sending a reply automatically flips Answering -> Answered with no second ack.
+    comms.messaging.send("peer-a", "#team", "on it", answers=(ref,))
+    assert summary() == "2 read · 1 answered · 1 not answering"
+
+
+@pytest.mark.asyncio
+async def test_direct_delivered_input_records_wire_origin_and_antigravity_allows_mcp_fork(
+    tmp_path: Path,
+) -> None:
+    """Steered direct-inbox messages carry WireInputOrigin (for automatic answers= linking),
+    and AntigravityAcpBackend allows MCP fork calls under its own thread name."""
+    from bus_record_fixture import prepare_native_comms
+    from agent_comms.comms import wire
+    from agent_comms.execution.acp import CommsAgent
+    from agent_comms.execution.input_origin import WireInputOrigin
+    from agent_comms.execution.queued_input import DirectDeliveredInput
+    from agent_comms.pi_native_backend import PiNativeBackend
+    from agent_comms.registry.threads import NextTurnConfiguration
+    from agent_comms_hooks import ToolRefusedError
+
+    root = tmp_path / "comms-root"
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    comms = prepare_native_comms(wire(root))
+    comms.registry.declare(NativeThread("tristan", frozenset({"team"}), Checkout(wt)))
+    acp_thread = comms.registry.declare(NativeThread("acp-peer", frozenset({"team"}), Checkout(wt)))
+    acp_thread = comms.threads.set_thread_configuration(
+        acp_thread, NextTurnConfiguration(model=ChosenModel("antigravity/gemini-4-neon")),
+    )
+    pi_thread = comms.registry.declare(NativeThread("pi-peer", frozenset({"team"}), Checkout(wt)))
+
+    # Polymorphic join_forking_caller: Antigravity ACP allows, Native Pi refuses.
+    acp_thread.join_forking_caller(lambda: None)
+    assert pi_thread.backend is PiNativeBackend
+    with pytest.raises(ToolRefusedError, match="Native Pi"):
+        pi_thread.join_forking_caller(lambda: None)
+
+    # DirectDeliveredInput.reserve_direct must record WireInputOrigin, not UnattributedInputOrigin.
+    msg = comms.messaging.send("tristan", "#team", "steered ping").message
+    agent = CommsAgent(comms, auto_wake=False)
+    try:
+        reserved: list = []
+        DirectDeliveredInput.reserve_direct(agent.inputs, acp_thread.name, (msg,), (), reserved)
+        assert len(reserved) == 1
+        stored = agent.inputs.dispositions.read((msg.bus_key(acp_thread),)).lookup(msg.bus_key(acp_thread))
+        assert isinstance(stored.origin, WireInputOrigin)
+        assert stored.origin.reference == msg.reference
+    finally:
+        await agent.shutdown()
 
 
 @pytest.mark.asyncio

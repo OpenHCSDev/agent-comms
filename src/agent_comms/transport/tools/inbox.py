@@ -10,6 +10,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated
 
+from agent_comms.cli_bridges.harness_delivery_states import (
+    DeliveryReceiptChoice,
+    ReadReceiptChoice,
+)
 from agent_comms.cli_bridges.history import RemoteWatchHistory
 from agent_comms.bus_context import BusContext
 from agent_comms.input_attempt import UnresolvedInputReference
@@ -144,34 +148,39 @@ class CommsInboxTool(MessagesArea, ShortListed, NativeToolRequest):
 
 @dataclass(frozen=True)
 class DeliveryAcknowledged(ToolResult):
-    """The received messages whose delivery this thread confirmed into its context."""
+    """The received messages whose receipt state this thread recorded."""
 
     thread: str
     acknowledged: tuple[MessageReference, ...]
+    status: type[DeliveryReceiptChoice] = ReadReceiptChoice
 
     def compact_text(self) -> str:
         if not self.acknowledged:
-            return f"Acked {self.thread}: none"
+            return f"Acked {self.thread} ({self.status.declared_name}): none"
         tail = f" (through {self.acknowledged[-1].name})"
-        return f"Acked {self.thread}: {len(self.acknowledged)} msgs{tail}"
+        return f"Acked {self.thread} ({self.status.declared_name}): {len(self.acknowledged)} msgs{tail}"
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsAckTool(MessagesArea, ThreadToolRequest, declared_name="comms_ack"):
     label = "Acknowledge Delivery"
     description = (
-        "Confirm that the named received messages entered this thread's context, settling "
-        "their delivery state to Read when the harness writes no local transcript. Only "
-        "messages this thread actually received may be acknowledged."
+        "Record your receipt status for received messages: read (default), answering (switches "
+        "to Answered automatically when your reply lands), or not_answering. Only messages this "
+        "thread actually received may be acknowledged."
     )
     messages: Annotated[
         tuple[MessageReference, ...],
         *tool_field("Received message references ({seq, message_id}) to acknowledge"),
     ]
+    status: Annotated[
+        type[DeliveryReceiptChoice],
+        *tool_field("Receipt status: read (default), answering, or not_answering"),
+    ] = ReadReceiptChoice
 
     def apply(self, comms: BusContext, caller: ThreadCaller) -> DeliveryAcknowledged:
         thread = caller.own_thread()
         acknowledged = comms.messaging.acknowledge_deliveries(
-            thread, self.messages, bridge=RemoteWatchHistory,
+            thread, self.messages, bridge=RemoteWatchHistory, status=self.status,
         )
-        return DeliveryAcknowledged(thread, acknowledged)
+        return DeliveryAcknowledged(thread, acknowledged, status=self.status)
