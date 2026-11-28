@@ -1295,11 +1295,13 @@ async def test_drain_direct_inbox_skips_stored_not_sent_without_replaying_or_dis
 
 
 @pytest.mark.asyncio
-async def test_collective_channel_post_does_not_hijack_running_goal_turn_or_forge_answered(
+async def test_collective_channel_post_steers_running_goal_turn_without_hijacking_replies(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An unmentioned collective channel post arriving during an active goal turn must not
-    steer into the goal turn, leak goal progress into the channel, or mark itself Answered."""
+    """An unmentioned collective channel post arriving during an active goal turn MUST steer
+    into the running turn immediately (recording Read right away instead of sitting on Sent),
+    while never hijacking active_reply_targets to leak goal progress into the channel or forge
+    Answered; if left unanswered when the turn ends, it settles as Not answering."""
     import os
     from bus_record_fixture import prepare_native_comms
     from agent_comms.comms import wire
@@ -1311,8 +1313,33 @@ async def test_collective_channel_post_does_not_hijack_running_goal_turn_or_forg
     from agent_comms.messaging.notification_evidence import AllOutcomes
     from agent_comms.registry.threads import NextTurnConfiguration
 
-    goal_and_ignore_server = """
-import json, sys, time, uuid
+    steered_log = tmp_path / "steered_prompts.json"
+    release_goal = tmp_path / "release_goal.flag"
+    goal_and_steer_server = f"""
+import json, pathlib, sys, threading, time, uuid
+
+steered_path = pathlib.Path({str(steered_log)!r})
+release_path = pathlib.Path({str(release_goal)!r})
+lock = threading.Lock()
+steered_prompts = []
+
+def send(payload):
+    with lock:
+        sys.stdout.write(json.dumps(payload) + "\\n")
+        sys.stdout.flush()
+
+def run_goal_turn(sid, rid):
+    deadline = time.monotonic() + 10.0
+    while not release_path.exists() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    for update in (
+        {{"sessionUpdate": "agent_message_chunk", "content": {{"type": "text", "text": "internal goal progress monologue"}}}},
+        {{"sessionUpdate": "tool_call", "toolCallId": "call-g1", "name": "run_command", "title": "run_command", "rawInput": {{"CommandLine": "true"}}}},
+        {{"sessionUpdate": "tool_call_update", "toolCallId": "call-g1", "name": "run_command", "status": "completed", "rawOutput": "ok"}},
+        {{"sessionUpdate": "agent_message_chunk", "content": {{"type": "text", "text": "internal goal done"}}}},
+    ):
+        send({{"jsonrpc": "2.0", "method": "session/update", "params": {{"sessionId": sid, "update": update}}}})
+    send({{"jsonrpc": "2.0", "id": rid, "result": {{"stopReason": "end_turn"}}}})
 
 for raw in sys.stdin:
     if not raw.strip():
@@ -1320,36 +1347,29 @@ for raw in sys.stdin:
     msg = json.loads(raw)
     method = msg.get("method")
     rid = msg.get("id")
-    params = msg.get("params") or {}
-    def send(payload):
-        sys.stdout.write(json.dumps(payload) + "\\n")
-        sys.stdout.flush()
+    params = msg.get("params") or {{}}
     if method == "initialize":
-        send({"jsonrpc": "2.0", "id": rid, "result": {"protocolVersion": 1}})
+        send({{"jsonrpc": "2.0", "id": rid, "result": {{"protocolVersion": 1}}}})
     elif method in ("session/new", "session/resume"):
         sid = params.get("sessionId") or str(uuid.uuid4())
-        send({"jsonrpc": "2.0", "id": rid, "result": {"sessionId": sid, "configOptions": []}})
+        send({{"jsonrpc": "2.0", "id": rid, "result": {{"sessionId": sid, "configOptions": []}}}})
     elif method == "session/prompt":
         sid = params["sessionId"]
         prompt_text = " ".join(b.get("text", "") for b in params.get("prompt", []) if isinstance(b, dict))
         if "[agent-comms from" in prompt_text:
-            send({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": sid, "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "IGNORE"}}}})
+            steered_prompts.append(prompt_text)
+            steered_path.write_text(json.dumps(steered_prompts), encoding="utf-8")
+            send({{"jsonrpc": "2.0", "id": rid, "result": {{"stopReason": "end_turn"}}}})
         elif "GOAL_WORK_HOLD" in prompt_text:
-            time.sleep(0.35)
-            for update in (
-                {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "internal goal progress monologue"}},
-                {"sessionUpdate": "tool_call", "toolCallId": "call-g1", "name": "run_command", "title": "run_command", "rawInput": {"CommandLine": "true"}},
-                {"sessionUpdate": "tool_call_update", "toolCallId": "call-g1", "name": "run_command", "status": "completed", "rawOutput": "ok"},
-                {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "internal goal done"}},
-            ):
-                send({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": sid, "update": update}})
-        send({"jsonrpc": "2.0", "id": rid, "result": {"stopReason": "end_turn"}})
+            threading.Thread(target=run_goal_turn, args=(sid, rid), daemon=True).start()
+        else:
+            send({{"jsonrpc": "2.0", "id": rid, "result": {{"stopReason": "end_turn"}}}})
     elif rid is not None:
-        send({"jsonrpc": "2.0", "id": rid, "result": {}})
+        send({{"jsonrpc": "2.0", "id": rid, "result": {{}}}})
 """
-    fake_script = tmp_path / "fake_agy_goal_ignore.py"
-    fake_script.write_text(goal_and_ignore_server, encoding="utf-8")
-    fake_bin = tmp_path / "fake_agy_goal_ignore"
+    fake_script = tmp_path / "fake_agy_goal_steer.py"
+    fake_script.write_text(goal_and_steer_server, encoding="utf-8")
+    fake_bin = tmp_path / "fake_agy_goal_steer"
     fake_bin.write_text(f"#!/bin/sh\nexec {sys.executable} {fake_script} \"$@\"\n", encoding="utf-8")
     fake_bin.chmod(0o755)
     monkeypatch.setenv("AGENT_COMMS_AGY_BIN", str(fake_bin))
@@ -1391,7 +1411,28 @@ for raw in sys.stdin:
             worktree=Checkout(worktree),
         )
         ref = sent.reference
+
+        # 1. Must steer immediately and record Read WHILE the goal turn is still running.
         summary = ""
+        for _ in range(120):
+            await asyncio.sleep(0.05)
+            win = comms.views.message_notifications_for_references(AllOutcomes(), (ref,))
+            summary = MessageNotification.summary(
+                win.outcomes.get((ref.seq, ref.message_id), ())
+            )
+            if "1 read" in summary and steered_log.is_file():
+                break
+        assert agent.inputs.turn_live(sid), "Goal turn should still be running when steered"
+        assert "1 read" in summary, (
+            f"Collective post during busy goal turn stayed unseen instead of steering: {summary!r}"
+        )
+        steered_prompts = json.loads(steered_log.read_text(encoding="utf-8"))
+        assert len(steered_prompts) == 1
+        assert f"{ref.seq}-{ref.message_id}" in steered_prompts[0]
+        assert "plain turn text is NOT auto-sent" in steered_prompts[0]
+
+        # 2. Release goal turn; internal monologue must NOT leak to #comms or forge Answered.
+        release_goal.write_text("go", encoding="utf-8")
         for _ in range(120):
             await asyncio.sleep(0.05)
             win = comms.views.message_notifications_for_references(AllOutcomes(), (ref,))
@@ -1401,15 +1442,16 @@ for raw in sys.stdin:
             if "not answering" in summary:
                 break
         assert summary == "1 read · 1 not answering", (
-            f"Collective post during goal turn must settle as Not answering, never Answered: {summary!r}"
+            f"Unanswered steered collective post must settle as Not answering, never Answered: {summary!r}"
         )
         posted_by_agent = [
             m.body for m in comms.bus.inbox("tristan").page.messages if m.sender == thread.name
         ]
         assert posted_by_agent == [], (
-            f"Goal monologue or IGNORE leaked into #comms: {posted_by_agent!r}"
+            f"Goal monologue leaked into #comms: {posted_by_agent!r}"
         )
     finally:
+        release_goal.write_text("go", encoding="utf-8")
         await agent.shutdown()
 
 
