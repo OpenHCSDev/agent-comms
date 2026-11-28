@@ -186,6 +186,7 @@ class _WatchStateOwner[State](Protocol):
 
 @dataclass(frozen=True)
 class HookSession(SocketWatch, ABC):
+    enrolled: ClassVar[bool] = False
     endpoint: SessionEndpoint
 
     def require_bound(self) -> None:
@@ -212,6 +213,8 @@ class UnboundSession(HookSession):
 
 @dataclass(frozen=True)
 class BoundSession(HookSession):
+    enrolled: ClassVar[bool] = True
+
     def require_bound(self) -> None:
         """Enrollment is already established by this state; socket liveness is separate."""
 

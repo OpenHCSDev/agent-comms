@@ -79,7 +79,6 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.pi_counts import UnreportedCount
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
-from agent_comms.registry.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -148,7 +147,7 @@ class AntigravityAcpBackend(
         cls,
         owner: ThreadSettingApplier[Configuration, Command],
         configuration: Configuration,
-        thread: Thread,
+        thread,
         command: Command,
     ) -> None:
         del configuration
@@ -159,7 +158,7 @@ class AntigravityAcpBackend(
         cls,
         inputs: OwnedInboxDrainer,
         session_id: AcpSessionId,
-        thread: Thread,
+        thread,
     ) -> None:
         await inputs.drain_direct_inbox(session_id, thread)
 
@@ -167,7 +166,7 @@ class AntigravityAcpBackend(
     def acknowledge_turn_inputs(
         cls,
         acknowledger: TurnInputAcknowledger,
-        thread: Thread,
+        thread,
         origins: tuple[Message, ...],
     ) -> None:
         acknowledger.acknowledge_direct_turn_inputs(
@@ -180,7 +179,7 @@ class AntigravityAcpBackend(
     def ignore_turn_inputs(
         cls,
         acknowledger: TurnInputAcknowledger,
-        thread: Thread,
+        thread,
         origins: tuple[Message, ...],
     ) -> None:
         acknowledger.ignore_direct_turn_inputs(
@@ -200,7 +199,7 @@ class AntigravityAcpBackend(
         return ExternalTurnTranscriptSink.for_turn(root, incarnation, turn_id, opening)
 
     @classmethod
-    def join_forking_caller(cls, thread: Thread, join_child: object) -> None:
+    def join_forking_caller(cls, thread, join_child: object) -> None:
         """Multiplexed Antigravity ACP sessions share the host MCP grant and act as their own thread."""
         del thread, join_child
 
@@ -228,7 +227,7 @@ class AntigravityAcpBackend(
     @classmethod
     async def fork(
         cls,
-        parent: Thread,
+        parent,
         launcher: str,
         runtime: LaunchRuntime,
         root: Path,
@@ -252,7 +251,7 @@ class AntigravityAcpBackend(
 
     async def _ensure_acp_session(
         self,
-        thread: Thread,
+        thread,
         *,
         worktree: Path,
     ) -> tuple[AcpSessionId, bool, Path]:
@@ -278,7 +277,7 @@ class AntigravityAcpBackend(
         )
         return descriptor.session_id, True, actual.db_path
 
-    async def _sync_configuration(self, session_id: AcpSessionId, thread: Thread) -> None:
+    async def _sync_configuration(self, session_id: AcpSessionId, thread) -> None:
         wanted_model = thread.model.set_model(_selected_model_name)
         if wanted_model and wanted_model != self._applied_model:
             await self._process.set_config_option(session_id, AcpConfigKey("model"), wanted_model)
@@ -292,7 +291,7 @@ class AntigravityAcpBackend(
 
     async def run_turn(
         self,
-        thread: Thread,
+        thread,
         content: TurnInputContent,
         delivery: DirectTurnDelivery,
     ) -> AsyncIterator[AgentEvent]:
@@ -401,7 +400,7 @@ class AntigravityAcpBackend(
             for active in bound_sessions:
                 await self._process.close_session(active)
 
-    async def compact(self, thread: Thread, instructions: object = "") -> CompactionOutcome:
+    async def compact(self, thread, instructions: object = "") -> CompactionOutcome:
         async with self._lock:
             try:
                 session_id, _, _ = await self._ensure_acp_session(

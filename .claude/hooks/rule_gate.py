@@ -386,7 +386,7 @@ def core_gates(event: HookEvent) -> bool:
     sys.path.insert(0, str(team_directory().parent.parent))
     from agent_comms_hooks import LaunchedPrompt
     from agent_comms_hooks.watch import SessionEndpoint
-    enrolled = SessionEndpoint(event.session).session().when_bound(lambda: False, lambda: True)
+    enrolled = SessionEndpoint(event.session).session().enrolled
     return enrolled or LaunchedPrompt.variable in os.environ
 
 
