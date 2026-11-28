@@ -59,6 +59,9 @@ class ContinuationGoalPermission(GoalPermission):
     def allows(self, current: GoalDeclaration) -> bool:
         return current.active().accepts_observation(self.goal_id, 0)
 
+    def allows_routed(self, current: GoalDeclaration) -> bool:
+        return self.allows(current)
+
     def describe(self) -> str:
         return f"continuation of goal {self.goal_id}"
 

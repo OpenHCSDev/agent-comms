@@ -65,6 +65,17 @@ class ResponsePolicy(DeclaredFamily, ProjectionSource, affix="Policy"):
         """Whether a direct-inbox backend without a hidden triage phase wakes on this message."""
         return name in self.required_responders(message, (name,), aliases=aliases)
 
+    def steers_live_turn_for(
+        self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES
+    ) -> bool:
+        """Whether this message may steer an already-running turn and claim its reply targets.
+
+        Unmentioned collective channel posts wake an idle thread for a dedicated triage turn
+        instead of hijacking an active goal turn or unrelated reply turn.
+        """
+        del message, name, aliases
+        return False
+
     def context_peer(self, owner: str, sender: str, target: str) -> str | None:
         return None
 
@@ -93,6 +104,12 @@ class DirectPolicy(NoChannelRecipients, ResponsePolicy):
     def direct_wake_for(self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES) -> bool:
         return self.starts_turn
 
+    def steers_live_turn_for(
+        self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES
+    ) -> bool:
+        del message, name, aliases
+        return self.starts_turn
+
     def guidance(self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
         return "direct; reply to the sender"
 
@@ -116,6 +133,11 @@ class CollectivePolicy(ResponsePolicy):
 
 
 class MentionedPolicy(CollectivePolicy):
+    def steers_live_turn_for(
+        self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES
+    ) -> bool:
+        return self.direct_wake_for(message, name, aliases)
+
     def required_responders(
         self, message: ResponseMessageSource, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES
     ) -> tuple[str, ...]:
