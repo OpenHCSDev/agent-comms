@@ -55,7 +55,6 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.errors import UnexposedToolError
 from agent_comms.execution.child_process import (
-    ForkserverHelper,
     GitChildren,
     HelperStart,
     OutlivesLauncherLifetime,
@@ -65,6 +64,7 @@ from agent_comms.execution.child_process import (
     SpawnedProcess,
     join_retirement,
 )
+from agent_comms.execution.forkserver_helper import ForkserverHelper
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue

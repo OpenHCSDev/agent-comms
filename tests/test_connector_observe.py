@@ -8,7 +8,7 @@ from aiohttp import WSMsgType
 from aiohttp.test_utils import TestClient, TestServer
 
 from agent_comms.comms import Comms
-from agent_comms.execution.child_process import ForkserverHelper
+from agent_comms.execution.forkserver_helper import ForkserverHelper
 from agent_comms.transport.connector import Connector, ObservationRelay
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout

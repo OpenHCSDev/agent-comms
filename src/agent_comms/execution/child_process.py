@@ -12,7 +12,6 @@ import fcntl
 import json
 import math
 import multiprocessing
-from multiprocessing import forkserver, resource_tracker, util
 import os
 import pwd
 import re
@@ -67,9 +66,7 @@ from typing import (
     Any,
     ClassVar,
     NoReturn,
-    Protocol,
     Self,
-    cast,
 )
 
 from agent_comms.errors import RelationViolationError
@@ -2115,6 +2112,10 @@ class HelperStart(WorkerStart):
         shared with every other process pool in this interpreter.
         """
         if os.name == "posix":
+            # Android's Python has no _multiprocessing (bionic lacks named semaphores) and
+            # uses ForkedStart instead of HelperStart, so keep resource_tracker off module load.
+            from multiprocessing import resource_tracker
+
             resource_tracker.ensure_running()
 
     def retire(self) -> None:
@@ -2131,66 +2132,6 @@ class SpawnedHelper(HelperStart):
 
     def context(self) -> multiprocessing.context.SpawnContext:
         return multiprocessing.get_context("spawn")
-
-
-class _ForkServerState(Protocol):
-    _lock: threading.Lock
-    _forkserver_pid: int | None
-    _forkserver_alive_fd: int | None
-    _forkserver_address: str | bytes | None
-    _forkserver_authkey: bytes | None
-
-
-@dataclass(frozen=True)
-class ForkserverHelper(HelperStart):
-    """Helpers forked from a single-threaded forkserver that preloads its modules once.
-
-    A long-lived server (such as the connector serving remote ``/observe`` sockets) cannot
-    fork from itself once its event loop and thread pool are running, yet spawning a fresh
-    interpreter per reconnect pays the full import and schema-discovery graph on every drop.
-    A forkserver imports ``preload`` once and forks each helper warm; ``retire`` closes its
-    alive pipe and stops a still-preloading forkserver so server shutdown never waits out an
-    in-flight import.
-    """
-
-    preload: tuple[str, ...] = ()
-
-    def context(self) -> multiprocessing.context.ForkServerContext:
-        context = multiprocessing.get_context("forkserver")
-        context.set_forkserver_preload(list(self.preload))
-        return context
-
-    def prepare(self) -> None:
-        super().prepare()
-        if os.name == "posix":
-            self.context()
-            forkserver.ensure_running()
-
-    def retire(self) -> None:
-        if os.name != "posix":
-            return
-        server = cast(_ForkServerState, forkserver._forkserver)
-        with server._lock:
-            pid = server._forkserver_pid
-            if pid is None:
-                return
-            alive_fd = server._forkserver_alive_fd
-            address = server._forkserver_address
-            server._forkserver_alive_fd = None
-            server._forkserver_pid = None
-            server._forkserver_address = None
-            server._forkserver_authkey = None
-        if alive_fd is not None:
-            os.close(alive_fd)
-        reaped, _ = os.waitpid(pid, os.WNOHANG)
-        if reaped == 0:
-            with suppress(ProcessLookupError):
-                os.kill(pid, signal.SIGTERM)
-            with suppress(ChildProcessError):
-                os.waitpid(pid, 0)
-        if address is not None and not util.is_abstract_socket_namespace(address):
-            with suppress(FileNotFoundError):
-                os.unlink(address)
 
 
 class ForkedStart(WorkerStart):
