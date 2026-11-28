@@ -12,7 +12,7 @@ from typing import ClassVar, Self, cast
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.execution.child_process import Platform, ProcessName, WorkerStart
-from agent_comms.execution.launch_runtime import ThreadLaunch
+from agent_comms.execution.thread_launch import ThreadLaunch
 from agent_comms.transport.remote_core import RemoteCoreAccess
 from agent_comms.transport.request import ReadRequest, ToolRequest
 from agent_comms.transport.tool_result import ToolResult

@@ -37,7 +37,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import ProcessIdentity, join_retirement
 from agent_comms.execution.controller import NO_CONTROLLER, NoController
 from agent_comms.execution.input_key import InputKey, InputKeyText
-from agent_comms.execution.launch_runtime import ThreadLaunch
+from agent_comms.execution.thread_launch import ThreadLaunch
 from agent_comms.execution.owner_protocol import IncompatibleOwner, IncompatibleOwnerError
 from agent_comms.execution.runtime import RuntimeProxy
 from agent_comms.execution.runtime_observations import NativeMetadataObservation

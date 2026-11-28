@@ -19,7 +19,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.execution.fresh_private_session import create_fresh_private_session
 from agent_comms.execution.launch_root import LaunchRoot
-from agent_comms.execution.launch_runtime import ThreadLaunch
+from agent_comms.execution.thread_launch import ThreadLaunch
 from agent_comms.execution.native_entries import ImportedSessionWriter, NativeEntry
 from agent_comms.execution.native_session_files import CheckSession
 from agent_comms.execution.session_file import RegistrySessionLocation

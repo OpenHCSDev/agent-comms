@@ -6,7 +6,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.errors import UnknownChannelError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.execution.launch_runtime import ThreadLaunch
+from agent_comms.execution.thread_launch import ThreadLaunch
 from agent_comms.messaging.channel_targets import CommandTarget, DeclaredTag
 from agent_comms.messaging.channels import AllChannel, BuiltinChannelView
 from agent_comms.messaging.messages import InfoKind, Message

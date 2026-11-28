@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution import launch_runtime
+from agent_comms.execution.thread_launch import ThreadLaunch
 from agent_comms.execution.child_process import NoProcess, Platform, ProcessIdentity, ProcessState
 from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
@@ -72,7 +73,7 @@ class RetainedOwnerLaunch(DeclaredReply):
                 f"in {result.process}; its selection recorded {selection.interpreter} in {process}"
             )
         platform.require(process)
-        route = launch_runtime.ThreadLaunch.current(result.environment).name
+        route = ThreadLaunch.current(result.environment).name
         if not result.environment.get(NativeArguments.binary_key):
             raise RelationViolationError("Owner launch configuration cannot be verified")
         # A worker's launch name may have been renamed since exec. The original

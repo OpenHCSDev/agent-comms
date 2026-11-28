@@ -13,6 +13,7 @@ from typing import ClassVar
 
 
 from agent_comms.execution.agent_event import AgentEvent as AgentEvent
+from agent_comms.execution.compaction_redeal import CompactionRedeal
 from agent_comms.execution.acp_failure import (
     NativeTurnOutcome,
     NoRetry,
@@ -50,7 +51,6 @@ from agent_comms.execution.input_event_source import InputEventSource
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, ToolCallId, TurnId
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
-from agent_comms.team.rule_deal import CompactedDeal, Redeals
 from agent_comms.transcript.transcript_events import SentTranscript
 from agent_comms.transport.tool_declaration import OtherAction, ToolAction, ToolDeclaration
 
@@ -179,7 +179,7 @@ class CompactionEvent(AgentEvent, DeclaredFamily, affix="Event"):
     def phase(self) -> str:
         """ACP phase of this observation."""
 
-    def deal_rules(self, deal: Redeals) -> None:
+    def deal_rules(self, deal: CompactionRedeal) -> None:
         """Only a compaction that placed its summary drops the rules from context."""
 
     @property
@@ -218,10 +218,10 @@ class CompactionEnd(CompactionFinish):
     def phase(self) -> str:
         return "end"
 
-    def deal_rules(self, deal: Redeals) -> None:
+    def deal_rules(self, deal: CompactionRedeal) -> None:
         """The summary that replaced the context is a paraphrase of the rules: deal them again,
         saying when it compacted so the fresh context reads the cause instead of guessing it."""
-        deal.redeal(CompactedDeal(datetime.now().astimezone().isoformat(timespec="seconds")))
+        deal.redeal_compacted(datetime.now().astimezone().isoformat(timespec="seconds"))
 
     async def transcript_changed(self, publish: Callable[[], Awaitable[None]]) -> None:
         await publish()

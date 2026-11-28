@@ -11,10 +11,8 @@ from typing import TYPE_CHECKING
 from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.execution.fresh_private_session import create_fresh_private_session
-from agent_comms.execution.launch_runtime import (
-    RestartEnvironment,
-    ThreadLaunch,
-)
+from agent_comms.execution.launch_runtime import RestartEnvironment
+from agent_comms.execution.thread_launch import ThreadLaunch
 from agent_comms.execution.native_arguments import (
     NativeArguments,
     NativeInputProofArgument,

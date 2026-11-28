@@ -16,7 +16,7 @@ from agent_comms.comms import wire
 from agent_comms.config_options import ConfigOptions
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity, SpawnedProcess
-from agent_comms.execution.launch_runtime import ThreadLaunch
+from agent_comms.execution.thread_launch import ThreadLaunch
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
 from agent_comms.messaging.bus import Bus

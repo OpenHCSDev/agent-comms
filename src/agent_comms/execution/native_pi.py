@@ -14,7 +14,8 @@ from pathlib import Path
 
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.execution.launch_root import LaunchRoot, started
-from agent_comms.execution.launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
+from agent_comms.execution.launch_runtime import LaunchRuntime, RestartEnvironment
+from agent_comms.execution.thread_launch import ThreadLaunch
 from agent_comms.execution.native_arguments import NativeArguments, SelectedModel
 from agent_comms.execution.native_entries import (
     NO_EVIDENCE_READ,
