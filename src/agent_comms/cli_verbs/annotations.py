@@ -6,9 +6,8 @@ from typing import Annotated, Literal
 
 from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_result import CliResult
-from agent_comms.cli_verbs.target_fields import ChoiceTargetField
 from agent_comms.coordination.working_memory_annotations import WorkingMemoryAnnotations
-from agent_comms.nominal.field_codec import Argument, Editor
+from agent_comms.nominal.field_codec import Argument
 from agent_comms.working_memory.working_memory_labels import ClassifierVersion, QuestionVersion
 
 
@@ -19,7 +18,6 @@ class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
     )
     operation: Annotated[
         Literal["calibration"],
-        Editor(ChoiceTargetField),
         Argument(flags=("operation",), options={"help": "calibration"}),
     ]
     question: Annotated[

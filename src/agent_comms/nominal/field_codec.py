@@ -4307,6 +4307,12 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
         return tuple((member.label, {self.target.family_discriminator: member.declared_name})
                      for member in self.target.members_with(self.target))
 
+    def select_editor[Editor](self, unrestricted: Editor, choices: Editor) -> Editor:
+        members = self.target.members_with(self.target)
+        if members and all(is_dataclass(member) and not fields(member) for member in members):
+            return choices
+        return unrestricted
+
     def argument_options(self, argument: Argument) -> dict[str, object]:
         """Every member is a command-line choice, labelled or not."""
         return {"choices": list(self.target.names())}

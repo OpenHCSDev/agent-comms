@@ -7,9 +7,8 @@ from typing import Annotated
 from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_commands import NameArgument, _tags
 from agent_comms.cli_verbs.cli_result import CliResult, RegisteredResult
-from agent_comms.cli_verbs.target_fields import ChoiceTargetField
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState
-from agent_comms.nominal.field_codec import Argument, Editor, Normalize
+from agent_comms.nominal.field_codec import Argument, Normalize
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from agent_comms.registry.threads import ExternalThread, Thread
@@ -35,7 +34,6 @@ class RegisterCliCommand(NameArgument, CliCommand):
     ] = dataclasses.field(default_factory=NoProcess)
     execution: Annotated[
         type[Thread],
-        Editor(ChoiceTargetField),
         Argument(
             flags=("--execution",),
         ),
