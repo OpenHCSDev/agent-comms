@@ -11,7 +11,7 @@ from typing import Annotated
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.execution.child_process import NoProcess, ProcessState
 from agent_comms.execution.runtime_info import RuntimeInfo
-from agent_comms.messaging.bus_read_source import BusReadSource
+from agent_comms.messaging.pending_count_source import PendingCountSource
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -66,19 +66,19 @@ class InboxRead(DeclaredFamily, affix="Read"):
     """Whether a thread read counts each thread's unread messages."""
 
     @abstractmethod
-    def counts(self, bus: BusReadSource, names: Sequence[str]) -> Mapping[str, InboxCount]: ...
+    def counts(self, bus: PendingCountSource, names: Sequence[str]) -> Mapping[str, InboxCount]: ...
 
 
 @dataclass(frozen=True)
 class CountedRead(InboxRead):
-    def counts(self, bus: BusReadSource, names: Sequence[str]) -> Mapping[str, InboxCount]:
+    def counts(self, bus: PendingCountSource, names: Sequence[str]) -> Mapping[str, InboxCount]:
         # One bus snapshot for every thread, not one per thread.
         return {name: CountedInbox(count) for name, count in bus.pending_counts_all(names).items()}
 
 
 @dataclass(frozen=True)
 class UncountedRead(InboxRead):
-    def counts(self, bus: BusReadSource, names: Sequence[str]) -> Mapping[str, InboxCount]:
+    def counts(self, bus: PendingCountSource, names: Sequence[str]) -> Mapping[str, InboxCount]:
         return {name: UncountedInbox() for name in names}
 
 
@@ -101,7 +101,7 @@ class ThreadRecord(CliResult):
     def list_threads(
         cls,
         snapshot: RegistrySnapshot,
-        bus: BusReadSource,
+        bus: PendingCountSource,
         agents: AgentActivity,
         goals: GoalSnapshots[Thread, GoalExecutionSnapshot, RegistrySnapshot, ActivityAnswers],
         *,
