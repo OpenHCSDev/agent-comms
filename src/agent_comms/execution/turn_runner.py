@@ -107,12 +107,18 @@ class ProjectResumeCheck(BackgroundWake, OwnerTurnScheduleCheck):
             self.require_valid()
         except ReservationViolationError:
             return
-        if entry.status.answers_later and entry.thread.owes_project_resume:
+        if not entry.status.answers_later:
+            return
+        if entry.thread.owes_project_resume:
             resume = ScheduledTurn.resuming_in_project(entry.thread.worktree)
-            pending = inputs.state(session_id).pending_turns
-            if resume not in pending:
-                pending.append(resume)
-            WakeScheduleCheck(session_id=session_id, inputs=inputs).schedule()
+        elif entry.thread.owes_install_resume:
+            resume = ScheduledTurn.resuming_after_install()
+        else:
+            return
+        pending = inputs.state(session_id).pending_turns
+        if resume not in pending:
+            pending.append(resume)
+        WakeScheduleCheck(session_id=session_id, inputs=inputs).schedule()
 
 
 class OccupiedOwnerTurnRule(ReservationRule):

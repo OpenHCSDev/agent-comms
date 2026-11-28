@@ -12,6 +12,7 @@ from dataclasses import (
 from typing import TYPE_CHECKING
 
 from agent_comms.execution.turn_failure import BackendFailed, NoTurnFailure, TurnFailure
+from agent_comms.execution.turn_phase import CancellingPhase, ShutdownPhase, TurnPhase
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
 
 if TYPE_CHECKING:
@@ -30,6 +31,9 @@ class TurnTerminal(TurnInterruption):
 
     def interrupting(self, prior: TurnTerminal) -> TurnTerminal:
         return prior
+
+    def cancellation_phase(self) -> TurnPhase:
+        return CancellingPhase()
 
     def reported(self, event: Done) -> Done:
         return event
@@ -118,6 +122,13 @@ class OperatorStopped(TurnTerminal):
             permit.stop(store)
 
 
+class InstallStopped(OperatorStopped):
+    """An install's maintenance stop interrupted a running turn; resume after restart."""
+
+    def cancellation_phase(self) -> TurnPhase:
+        return ShutdownPhase()
+
+
 class OwnerStop(asyncio.Future[TurnTerminal], TurnInterruption):
     """The worker's existing stop wait carries the operator's actual reason.
 
@@ -134,7 +145,8 @@ class OwnerStop(asyncio.Future[TurnTerminal], TurnInterruption):
 
     def request(self) -> None:
         if not self.done():
-            self.set_result(OperatorStopped())
+            self.set_result(self.maintenance.read().selected(
+                held=InstallStopped(), granted=OperatorStopped()))
 
     @property
     def terminal(self) -> TurnTerminal:
@@ -142,4 +154,4 @@ class OwnerStop(asyncio.Future[TurnTerminal], TurnInterruption):
             return self.result()
         # A held ingress is the install's stop, declared before any owner is signalled.
         return self.maintenance.read().selected(
-            held=OperatorStopped(), granted=EndedWithoutResult())
+            held=InstallStopped(), granted=EndedWithoutResult())
