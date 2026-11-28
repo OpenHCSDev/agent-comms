@@ -38,7 +38,7 @@ from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.pi_payloads import PiResponseData, StateData
 from agent_comms.storage.private_path import PrivateSocketRole
-from agent_comms.team.rule_deal import DealDelivery
+from agent_comms.team.deal_delivery import DealDelivery
 
 if TYPE_CHECKING:
 

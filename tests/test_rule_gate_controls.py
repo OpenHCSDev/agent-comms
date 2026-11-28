@@ -14,8 +14,8 @@ from agent_comms.projects.rule_probes import (
     HuntProbe, NoEditsHuntProbe, Probe, ProbeContext,
 )
 from agent_comms.team.pi_rule_gate import PiRedeal, RulesUnread
+from agent_comms.team.deal_delivery import EmptyDealDelivery
 from agent_comms.team.rule_deal import (
-    EmptyDealDelivery,
     FullDealMode,
     OffDealMode,
     OffRuleCheckPolicy,

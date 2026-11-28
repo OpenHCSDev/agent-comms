@@ -14,7 +14,7 @@ from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.execution.persistent_pi_session import PersistentPiSession
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
-from agent_comms.team.rule_deal import EmptyDealDelivery
+from agent_comms.team.deal_delivery import EmptyDealDelivery
 
 
 async def one_turn_events(agent_bin, agent_args, task, cwd, env_extra=None,

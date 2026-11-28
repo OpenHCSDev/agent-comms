@@ -26,7 +26,8 @@ from agent_comms.messaging.compaction_notices import CompactionNotice
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.storage.recorded_time import RecordedEventTime
 from agent_comms.team.meant_voice import BusVoice
-from agent_comms.team.rule_deal import DealtRuleGate, Mute, Owed, ReadSpan, RuleDeal, Voice
+from agent_comms.team.deal_delivery import ReadSpan
+from agent_comms.team.rule_deal import DealtRuleGate, Mute, Owed, RuleDeal, Voice
 from agent_comms_hooks import Bash, ClaudeToolHook, ClaudeTranscriptHook, HookRecord
 from agent_comms_hooks.shell_commands import ConnectCommand, EmergencyHookStop, ShellCommand
 

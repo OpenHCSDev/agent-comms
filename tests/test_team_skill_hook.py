@@ -73,6 +73,7 @@ from agent_comms.team.team_hud import (
     UnreadableUsage,
 )
 from agent_comms.team.vibe_check import OverloadDegradation
+from agent_comms.team.deal_delivery import ReadSpan
 from agent_comms.team.rule_deal import (
     AuditDue,
     CompactedDeal,
@@ -80,7 +81,6 @@ from agent_comms.team.rule_deal import (
     OffRuleCheckPolicy,
     Owed,
     OwnerWordsAnswer,
-    ReadSpan,
     RequiredRuleCheckPolicy,
     RuleGateSettings,
     SessionAudit,

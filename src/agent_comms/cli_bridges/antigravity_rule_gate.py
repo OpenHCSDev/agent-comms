@@ -31,17 +31,19 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.repo import Repo
 from agent_comms.storage.store_files import AtomicFile
+from agent_comms.team.deal_delivery import (
+    DealDelivery,
+    EmptyDealDelivery,
+    InjectedDelivery,
+    ReadSpan,
+)
 from agent_comms.team.rule_deal import (
     AuditDue,
     CompactedDeal,
     CompactionDeal,
-    DealDelivery,
     DealTrigger,
     DealtRuleGate,
-    EmptyDealDelivery,
-    InjectedDelivery,
     Owed,
-    ReadSpan,
     StartedDeal,
     UnstampedCompactionDeal,
 )

@@ -103,7 +103,7 @@ from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import InputId, MalformedRecord
 from agent_comms.pi_counts import UsageAccount
 from agent_comms.pi_payloads import AssistantMessage, UserMessage
-from agent_comms.team.rule_deal import DealDelivery
+from agent_comms.team.deal_delivery import DealDelivery
 from agent_comms.transport.native_tool_mode import NativeToolMode
 from agent_comms.transport.native_tool_transport import (
     ToolTransport,
