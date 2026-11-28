@@ -70,7 +70,7 @@ class BusRouteKeys(BusRouteIdentity):
     first_seq: int
     indexes: ClassVar = (
         ExpressionIndex(("{target}", "{sender}", "coalesce({sender_lookup}, '')"), unique=True),
-        Index(("target", "sender", "sender_lookup", "first_seq")),
+        Index(("sender", "sender_lookup", "first_seq", "target")),
     )
     """A public sender has no lookup and stores NULL, which no primary key holds and every
     NULL-distinct UNIQUE admits twice; the expression makes it one route like any other."""
@@ -92,12 +92,18 @@ class BusRouteKeys(BusRouteIdentity):
     ) -> list[str]:
         """Probe only captured sender identities, never retired route names or births."""
         return [row[0] for row in db.execute(
-            f'''SELECT DISTINCT route.sender
-            FROM "{cls.declared_name}" AS route
-            JOIN json_each(?) AS target ON route.target=target.value
-            JOIN json_each(?) AS sender ON route.sender=sender.key
-            JOIN json_each(sender.value) AS lookup ON route.sender_lookup IS lookup.value
-            WHERE route.first_seq<=?''',
+            f'''WITH target AS MATERIALIZED (
+                SELECT value AS target FROM json_each(?)
+            ), sender AS MATERIALIZED (
+                SELECT s.key AS sender,l.value AS sender_lookup
+                FROM json_each(?) AS s,json_each(s.value) AS l
+            )
+            SELECT DISTINCT route.sender
+            FROM sender
+            CROSS JOIN "{cls.declared_name}" AS route
+                ON route.sender=sender.sender AND route.sender_lookup IS sender.sender_lookup
+                    AND route.first_seq<=?
+            CROSS JOIN target ON target.target=route.target''',
             (json.dumps(targets), json.dumps(dict(senders)), through))]
 
 
@@ -184,10 +190,11 @@ class RouteCounts(ABC):
     ), route_keys AS MATERIALIZED (
         SELECT route.target,route.sender,route.sender_lookup,sender.since
         FROM arguments
-        JOIN "{BusRouteKeys.declared_name}" AS route ON route.first_seq<=arguments.through
-        JOIN request_targets AS target ON target.target=route.target
-        JOIN sender_keys AS sender ON sender.sender=route.sender
-            AND sender.sender_lookup IS route.sender_lookup
+        CROSS JOIN sender_keys AS sender
+        CROSS JOIN "{BusRouteKeys.declared_name}" AS route
+            ON route.sender=sender.sender AND route.sender_lookup IS sender.sender_lookup
+                AND route.first_seq<=arguments.through
+        CROSS JOIN request_targets AS target ON target.target=route.target
         WHERE arguments.after=0 OR EXISTS (SELECT 1 FROM "{BusRouteCounts.declared_name}" AS row
             WHERE row.target=route.target AND row.sender=route.sender
                 AND row.sender_lookup IS route.sender_lookup
