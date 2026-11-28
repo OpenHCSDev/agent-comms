@@ -33,6 +33,7 @@ from agent_comms.installer.native_package import (
     VerifiedNativePackage,
 )
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.team.rule_deal import EmptyDealDelivery
 
 
 def main(fixture: Path):
@@ -125,7 +126,8 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
     launch = NativePiRpcLaunch.managed(
         "pi", arguments, package=verified, worktree=project,
         root=comms.root, owner=thread.incarnation.require_recorded(),
-        directory=root, session_file=str(session), environment=environment,
+        directory=root, delivery=EmptyDealDelivery(),
+        session_file=str(session), environment=environment,
     )
     child = subprocess.Popen(launch.argv,
         cwd=launch.cwd, env=launch.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
