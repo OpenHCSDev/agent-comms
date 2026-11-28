@@ -6,7 +6,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.execution.native_entries import SessionEntry
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_session_files import (
@@ -43,7 +43,7 @@ def create_fresh_private_session(
                     raise OSError("Fresh-session write made no progress")
                 pending = pending[written:]
             os.fsync(descriptor)
-        Platform.current().sync_directory(session_dir)
+        HostPlatform.current().sync_directory(session_dir)
         return NativeSessionIdentity(session_id, str(path))
     except OSError as error:
         # A failed sync can leave a committed file. Preserve it, never infer success.

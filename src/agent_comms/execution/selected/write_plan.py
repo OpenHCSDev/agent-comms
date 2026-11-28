@@ -25,7 +25,7 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.tables.assignments import WakeAssignment
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -135,7 +135,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
         # Also on an existing directory: a previous mkdir may have survived
         # while its parent fsync failed. Do not acknowledge a later intent
         # until the directory entry itself is known durable.
-        Platform.current().sync_directory(self.comms.root)
+        HostPlatform.current().sync_directory(self.comms.root)
 
     def _validate_dir(self) -> bool:
         try:
@@ -232,7 +232,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
                 stream.write(data)
                 stream.flush()
                 os.fsync(stream.fileno())
-                Platform.current().sync_directory(self.directory)
+                HostPlatform.current().sync_directory(self.directory)
 
             return SelectedWriteAcceptedUpdate(operation_id, source_seq, selected[0].assignment_id)
 

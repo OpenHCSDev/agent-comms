@@ -35,7 +35,7 @@ from agent_comms.coordination.errors import (
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.execution.child_process import LockHolder, Platform
+from agent_comms.execution.host_platform import HostFilesystem, HostPlatform, LockHolder
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import PathText, ScratchName
 from agent_comms.storage.file_observation import (
@@ -114,7 +114,7 @@ class StoreLockContention:
         if not math.isfinite(self.seconds) or self.seconds < 0:
             raise ValueError("Store lock wait must be finite and nonnegative")
 
-    def waits(self, descriptor: int, platform: Platform, *, mode: LockMode) -> Iterator[float]:
+    def waits(self, descriptor: int, platform: HostFilesystem, *, mode: LockMode) -> Iterator[float]:
         """One physical acquisition algorithm; drivers own sync/async waiting."""
         remaining = self.seconds
         refused = platform.store_lock_waits()
@@ -134,11 +134,11 @@ class StoreLockContention:
             else:
                 return
 
-    def acquire(self, descriptor: int, platform: Platform, *, mode: LockMode) -> None:
+    def acquire(self, descriptor: int, platform: HostFilesystem, *, mode: LockMode) -> None:
         for delay in self.waits(descriptor, platform, mode=mode):
             time.sleep(delay)
 
-    async def acquire_async(self, descriptor: int, platform: Platform, *, mode: LockMode) -> None:
+    async def acquire_async(self, descriptor: int, platform: HostFilesystem, *, mode: LockMode) -> None:
         for delay in self.waits(descriptor, platform, mode=mode):
             await asyncio.sleep(delay)
 
@@ -645,7 +645,7 @@ class UnacquiredStoreLock:
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
         contention: StoreLockContention, lock_type: type[StoreLock],
     ) -> Iterator[StoreLock]:
-        platform = Platform.current()
+        platform = HostPlatform.current()
         with _store_lock_file(store_path) as lock_file:
             contention.acquire(lock_file.fileno(), platform, mode=mode)
             with StoreLockAcquisition.holding(
@@ -658,7 +658,7 @@ class UnacquiredStoreLock:
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
         contention: StoreLockContention, lock_type: type[StoreLock],
     ) -> AsyncIterator[StoreLock]:
-        platform = Platform.current()
+        platform = HostPlatform.current()
         with _store_lock_file(store_path) as lock_file:
             await contention.acquire_async(lock_file.fileno(), platform, mode=mode)
             with StoreLockAcquisition.holding(
@@ -721,7 +721,7 @@ class StoreLockAcquisition:
     @classmethod
     @contextmanager
     def holding(
-        cls, store_path: Path, file: BinaryIO, platform: Platform, read_budget: StoreReadBudget,
+        cls, store_path: Path, file: BinaryIO, platform: HostFilesystem, read_budget: StoreReadBudget,
         *, mode: LockMode, lock_type: type[StoreLock],
     ) -> Iterator[StoreLock]:
         with ExitStack() as resources:
@@ -757,7 +757,7 @@ class BorrowedStoreLock(StoreLock):
             if FileIdentity.from_stat(os.fstat(file.fileno())) != expected:
                 raise RelationViolationError(f"Borrowed lock does not belong to {self.path}")
             with StoreLockAcquisition.holding(
-                self.path, file, Platform.current(), UNBOUNDED_STORE_READ,
+                self.path, file, HostPlatform.current(), UNBOUNDED_STORE_READ,
                 mode=ExclusiveLock(), lock_type=StoreLock,
             ) as held:
                 yield held
@@ -797,7 +797,7 @@ class AtomicFile:
         output, temporary = self._stage()
         try:
             with output:
-                Platform.current().make_private_descriptor(output.fileno(), self.mode)
+                HostPlatform.current().make_private_descriptor(output.fileno(), self.mode)
                 yield output, temporary
         finally:
             self._discard(temporary)
@@ -846,7 +846,7 @@ class AtomicFile:
 
     def replace(self, staged: Path) -> None:
         """Publish an independently prepared file after syncing its data."""
-        Platform.current().sync_file(staged)
+        HostPlatform.current().sync_file(staged)
         self._publish(staged)
 
     def _publish(self, staged: Path) -> None:
@@ -860,14 +860,14 @@ class AtomicFile:
         os.replace(staged, self.path)
 
     def _create_new(self, staged: Path) -> None:
-        Platform.current().publish_new_file(staged, self.path)
+        HostPlatform.current().publish_new_file(staged, self.path)
 
     def _sync_directory(self) -> None:
-        Platform.current().sync_directory(self.path.parent)
+        HostPlatform.current().sync_directory(self.path.parent)
 
     def sync(self) -> None:
         """Sync an existing file without replacing an open database's inode."""
-        platform = Platform.current()
+        platform = HostPlatform.current()
         platform.sync_file(self.path)
         platform.sync_directory(self.path.parent)
 
@@ -906,7 +906,7 @@ class DirectoryAtomicFile(AtomicFile):
 
     def _create_new(self, staged: Path) -> None:
         self._require_directory()
-        Platform.current().publish_new_file(staged.name, self.path.name, src_dir_fd=self.directory,
+        HostPlatform.current().publish_new_file(staged.name, self.path.name, src_dir_fd=self.directory,
                                             dst_dir_fd=self.directory)
 
     def _require_directory(self) -> None:

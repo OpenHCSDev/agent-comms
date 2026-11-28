@@ -15,7 +15,7 @@ from typing import Self
 
 from agent_comms.coordination.errors import CoordinationReadUnavailable, CoordinationError
 from agent_comms.coordination.schema import CoordinatorTable
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.storage.locked_store import FileStore, InputCaptureFile, SQLiteReader
 from agent_comms.storage.store_files import DEFAULT_STORE_CONTENTION, StoreContention
@@ -158,11 +158,11 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile, InputCaptureFi
                 self.write_ahead(Path(staging))
                 # Another initializer may win; never overwrite its inode.
                 with suppress(FileExistsError):
-                    Platform.current().publish_new_file(staging, self.path)
+                    HostPlatform.current().publish_new_file(staging, self.path)
             finally:
                 Path(staging).unlink(missing_ok=True)
         self._private_file()
-        Platform.current().make_private(self.path, 0o600)
+        HostPlatform.current().make_private(self.path, 0o600)
 
     @classmethod
     def write_ahead(cls, path: Path) -> None:
@@ -188,7 +188,7 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile, InputCaptureFi
 
     def _enforce_private_modes(self) -> None:
         for candidate in self.files(self.path):
-            Platform.current().make_private(candidate, 0o600)
+            HostPlatform.current().make_private(candidate, 0o600)
 
     def close(self) -> None:
         self._connection.close()

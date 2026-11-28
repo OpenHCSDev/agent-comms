@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.storage.file_observation import FileIdentity
 
@@ -219,7 +219,7 @@ class PrivateDirectoryRole(PrivateRole):
         for parent in reversed(missing):
             parent.mkdir(mode=cls.permissions, exist_ok=True)
             cls.require(parent.lstat(), RelationViolationError("New directory is not private"))
-            Platform.current().sync_directory(parent.parent)
+            HostPlatform.current().sync_directory(parent.parent)
 
     @classmethod
     def require_private_tree(
@@ -267,7 +267,7 @@ class PrivateSocketRole(PrivateRole):
         refusal = ValueError("Socket directory changed during acquisition")
         with TrustedAncestorRole.reading(path.parent, refusal) as fd:
             TrustedAncestorRole.held(fd, path.parent, refusal)
-            with Platform.current().socket_address(path, fd) as address:
+            with HostPlatform.current().socket_address(path, fd) as address:
                 yield address
 
 
@@ -301,11 +301,11 @@ class TrustedAncestorRole(FilesystemRole):
 
     @classmethod
     def accepts_owner(cls, uid: int) -> bool:
-        return Platform.current().trusted_ancestor_owner(uid)
+        return HostPlatform.current().trusted_ancestor_owner(uid)
 
     @classmethod
     def accepts_permissions(cls, observed: os.stat_result) -> bool:
-        return not Platform.current().ancestor_write_bits(observed) or bool(observed.st_mode & stat.S_ISVTX)
+        return not HostPlatform.current().ancestor_write_bits(observed) or bool(observed.st_mode & stat.S_ISVTX)
 
 
 class FilesystemRule(DeclaredFamily, affix="Rule"):

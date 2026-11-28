@@ -20,7 +20,7 @@ from typing import Annotated, ClassVar, Iterator, Self
 
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.installer.active_route import (
     ActiveRoute,
     ActiveRouteFile,
@@ -324,7 +324,7 @@ class StoreBackup:
     def retire(self) -> Path:
         archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
         self.path.rename(archived)
-        Platform.current().sync_directory(archived.parent)
+        HostPlatform.current().sync_directory(archived.parent)
         print(f'Restored data backup kept at {archived}', flush=True)
         return archived
 
@@ -477,11 +477,11 @@ class StoreBackup:
             source = resource.live(self.root)
             if not resource.owner.file_matches(source, name, saved):
                 resource.owner.restore_file(source, name, self.data_root, saved)
-        Platform.current().sync_directory(self.root)
+        HostPlatform.current().sync_directory(self.root)
         self.restore_route()
         if not self.stores_original():
             raise UpgradeRefused('Selected stores differ after backup restoration')
         restored = rebuild()
         self.restoring.unlink()
-        Platform.current().sync_directory(self.path)
+        HostPlatform.current().sync_directory(self.path)
         return restored

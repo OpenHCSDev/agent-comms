@@ -15,7 +15,7 @@ from typing import Self
 
 from agent_comms.coordination.errors import DMScopeChanged, HistoricalSourceChanged
 from agent_comms.errors import UnregisteredThreadError
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.execution.transcript_routes import TranscriptRoutes
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.channel_targets import CommandTarget, NamedTarget, ThreadTarget
@@ -447,7 +447,7 @@ class HistorySource(MessageHistory, HistoryReferenceSource):
         if catalog_path.exists():
             target = destination / catalog_path.name
             shutil.copy2(catalog_path, target)
-            Platform.current().sync_file(target)
+            HostPlatform.current().sync_file(target)
         TranscriptRoutes(root).retain(destination)
         self.require_original(root)
         if FileRevision.capture(catalog_path) != catalog_revision:
@@ -456,7 +456,7 @@ class HistorySource(MessageHistory, HistoryReferenceSource):
             raise ValueError("Historical bus changed during snapshot; retry")
         if not self.provenance.threads:
             raise ValueError("Historical source has no identity declarations")
-        Platform.current().sync_directory(destination)
+        HostPlatform.current().sync_directory(destination)
         return HistorySource(
             str(destination.resolve()), self.original_root, self.bus_identity,
             RecordedBusIdentity.capture(archived.path), self.snapshot_bus_revision,
@@ -688,8 +688,8 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
                     raise ValueError("Historical catalog changed before publication; retry")
                 PrivateDirectoryRole.make_parents(parent)
                 stage.rename(target)
-                Platform.current().sync_directory(parent)
-                Platform.current().sync_directory(self.path.parent)
+                HostPlatform.current().sync_directory(parent)
+                HostPlatform.current().sync_directory(self.path.parent)
                 source = replace(prepared, root=str(target.resolve()))
                 return DocumentChange((*sources, source), source)
 

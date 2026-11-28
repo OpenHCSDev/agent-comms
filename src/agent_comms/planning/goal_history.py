@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Annotated, Self
 
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -203,7 +203,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             raise GoalHistoryError("Cannot create goal history database.") from error
         else:
             os.close(descriptor)
-        if not Platform.current().is_private(self.path.stat(), 0o600):
+        if not HostPlatform.current().is_private(self.path.stat(), 0o600):
             raise GoalHistoryError("Goal history database must be owner-only.")
         try:
             with closing(self._connect()) as connection:

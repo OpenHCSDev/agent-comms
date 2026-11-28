@@ -16,7 +16,7 @@ import aiohttp
 from aiohttp.abc import AbstractResolver, ResolveResult
 from yarl import URL
 
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     Id128,
@@ -99,7 +99,7 @@ class ClientHttpsConnection(http.client.HTTPSConnection):
         raw = socket.create_connection(
             self.connect_address(), self.timeout, self.source_address,
         )
-        Platform.current().configure_client_socket(raw)
+        HostPlatform.current().configure_client_socket(raw)
         self.sock = self._context.wrap_socket(raw, server_hostname=self.host)
 
     def _send_output(self, message_body=None, encode_chunked: bool = False) -> None:
