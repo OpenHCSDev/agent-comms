@@ -14,7 +14,8 @@ from agent_comms.execution.native_output import AssistantOutput, ToolOutput
 from agent_comms.execution.pi_events import NativeOutputCommitted, PiEvent
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.session_updates import AgentCommsUpdate
-from agent_comms.execution.transcript_sources import NativeTranscript, Through
+from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.transcript_sources import Through
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,

@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 
 from agent_comms.agent_backend import RuntimeLocation
-from agent_comms.execution.native_record_file import SessionCut
 from agent_comms.execution.transcript_cursor_reads import MarksSourceRead, TranscriptRuntime
+from agent_comms.execution.transcript_record_base import RecordsCut
 from agent_comms.execution.transcript_sources import (
     FileTranscriptCursor,
     NoWireFrontier,
@@ -30,5 +30,5 @@ class NoNativeTranscriptCursor(FileTranscriptCursor):
     def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
         return replace(self, wire=frontier)
 
-    def mark_read(self, reads: MarksSourceRead[SessionCut], viewer: str, runtime: TranscriptRuntime) -> None:
+    def mark_read(self, reads: MarksSourceRead[RecordsCut], viewer: str, runtime: TranscriptRuntime) -> None:
         """There is no painted native transcript to acknowledge."""

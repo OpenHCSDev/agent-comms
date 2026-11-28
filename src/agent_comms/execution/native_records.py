@@ -10,17 +10,10 @@ from agent_comms.execution.native_entries import (
     NoEntryId,
     RecordedEntry,
 )
+from agent_comms.execution.transcript_record_base import TranscriptRecord
 from agent_comms.execution.transcript_routes import TranscriptProjection
 from agent_comms.execution.turn_item import FreshNativeId
 from agent_comms.nominal.field_codec import MalformedRecord
-
-
-class TranscriptRecord:
-    """A source position; only native records can project a decoded native entry."""
-
-    def project[Result](self, projection: Callable[[NativeRecord], Result]) -> Result | tuple[()]:
-        """External records have events already, but no native entry for this callback."""
-        return ()
 
 
 @dataclass(frozen=True)

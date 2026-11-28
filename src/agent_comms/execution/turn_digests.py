@@ -18,7 +18,7 @@ from agent_comms.execution.transcript_sources import (
     StoreRead,
     TranscriptSource,
 )
-from agent_comms.execution.native_record_file import RecordsCut
+from agent_comms.execution.transcript_record_base import RecordsCut
 from agent_comms.execution.turn_bound import TurnBound, TurnsSince
 from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.message_reference import MessageReference

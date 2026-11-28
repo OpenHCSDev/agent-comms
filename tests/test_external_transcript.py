@@ -7,11 +7,11 @@ from agent_comms.cli_bridges.runtime_updates import EarlierItems, FinishedItem
 from agent_comms.comms import wire
 from agent_comms.coordination.errors import StaleRevision
 from agent_comms.errors import RelationViolationError
+from agent_comms.execution.native_transcript import TurnDraftPublication
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.session_updates import encode_updates
 from agent_comms.execution.transcript_sources import (
     LatestPage,
-    TurnDraftPublication,
     UnreadTranscriptCursor,
 )
 from agent_comms.execution.turn_bound import LastTurns
@@ -119,7 +119,7 @@ def test_captured_draft_cannot_delete_a_later_turns_draft(tmp_path):
 @pytest.mark.asyncio
 async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
     turn_turn_id = NativeTurnId('turn')
-    from agent_comms.execution.transcript_sources import TurnDraftPublication
+    from agent_comms.execution.native_transcript import TurnDraftPublication
 
     comms = wire(tmp_path / "wire")
     comms.registry.declare(NativeThread('cli', frozenset(), Checkout(tmp_path)))

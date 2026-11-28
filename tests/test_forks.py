@@ -34,7 +34,8 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.errors import RelationViolationError, TodoError
 from agent_comms.execution.session_file import RegistrySessionLocation
-from agent_comms.execution.transcript_sources import ExternalTranscript, NativeTranscript, StoreRead
+from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.transcript_sources import ExternalTranscript, StoreRead
 from agent_comms.execution.turn_bound import TurnBound, TurnsSince
 from agent_comms.execution.turn_digests import (
     OrderEditCountRead,

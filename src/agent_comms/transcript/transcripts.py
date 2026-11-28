@@ -30,17 +30,19 @@ from agent_comms.execution.history_view import HistoryView, OwnHistory
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.native_output import NativeRecordLocation
-from agent_comms.execution.native_record_file import RecordsCut, SessionCut
-from agent_comms.execution.native_runtime_input import PublishedReplyRevision
+from agent_comms.execution.native_record_file import SessionCut
 from agent_comms.execution.native_session_files import NativeSessionFiles
+from agent_comms.execution.native_transcript import (
+    LiveAssignedTranscriptSource,
+    NativeTranscript,
+)
+from agent_comms.execution.transcript_record_base import PublishedReplyRevision, RecordsCut
 from agent_comms.execution.transcript_routes import TranscriptRoutes
 from agent_comms.execution.transcript_sources import (
     AssignedTranscriptSource,
     AtFrontier,
     ExternalTranscript,
     LatestPage,
-    LiveAssignedTranscriptSource,
-    NativeTranscript,
     NativeTranscriptCursor,
     PageLimit,
     PagePosition,

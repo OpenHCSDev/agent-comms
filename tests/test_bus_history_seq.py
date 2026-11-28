@@ -11,8 +11,8 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.errors import HumanSendRefusedError
+from agent_comms.execution.native_transcript import NativeTranscript
 from agent_comms.execution.transcript_sources import (
-    NativeTranscript,
     NativeTranscriptCursor,
     TranscriptCursor,
 )
