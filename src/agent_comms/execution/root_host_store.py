@@ -21,11 +21,10 @@ from agent_comms.execution.root_runtime import (
     RootRuntimeStore,
 )
 from agent_comms.installer.native_build_inputs import DetachedChildStdio
-from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBus
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.storage.file_observation import FileIdentity
-from agent_comms.storage.locked_store import DocumentChange
+from agent_comms.storage.locked_store import BusStoreFile, DocumentChange
 from agent_comms.storage.private_path import PrivateSocketRole
 from agent_comms.transport.owner_connection import socket_path
 
@@ -78,6 +77,6 @@ class RootHostStore(RootRuntimeStore, HostRetirement, declared_name=None):
                 with PrivateSocketRole.address(path) as address:
                     listener.bind(str(address))
                 listener.listen()
-                bus = RecordedBus(FileIdentity.from_stat(Bus.path_in(self.path.parent).stat()))
+                bus = RecordedBus(FileIdentity.from_stat(BusStoreFile.path_in(self.path.parent).stat()))
                 return DocumentChange(replace(current, host=RecordedRootHost(child.identity, bus)), child.identity)
             return self.update(launch)

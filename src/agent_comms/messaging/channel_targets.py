@@ -21,6 +21,7 @@ from agent_comms.errors import (
     UnregisteredThreadError,
 )
 from agent_comms.messaging.activity_clocks import ActivityClocks
+from agent_comms.messaging.bus_display_index import BusDisplayIndex
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
 from agent_comms.messaging.response_policy import DirectPolicy, MentionedPolicy, ResponsePolicy
@@ -183,7 +184,6 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.messaging.bus_display_index import BusDisplayIndex
         from agent_comms.messaging.bus_tables import AwaitingAnswerSource
         return (BusDisplayIndex, AwaitingAnswerSource)
 
@@ -229,7 +229,8 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
         raise ValueError("History requires a #channel or DM peer.")
 
     def history_result(self, require_channel: Callable[[str], Channel],
-                       direct: type[HistoryPageResult], messages: tuple[Message, ...],
+                       direct: type[HistoryPageResult], channel: type[HistoryPageResult],
+                       everything: type[HistoryPageResult], messages: tuple[Message, ...],
                        has_older: bool) -> HistoryPageResult:
         raise ValueError("History requires a #channel or DM peer.")
 
@@ -467,8 +468,10 @@ class ThreadTarget(NamedTarget):
         return viewer.direct_history(direct, self)
 
     def history_result(self, require_channel: Callable[[str], Channel],
-                       direct: type[HistoryPageResult], messages: tuple[Message, ...],
+                       direct: type[HistoryPageResult], channel: type[HistoryPageResult],
+                       everything: type[HistoryPageResult], messages: tuple[Message, ...],
                        has_older: bool) -> HistoryPageResult:
+        del require_channel, channel, everything
         return direct.for_target(self.name, messages, has_older)
 
     def contexts(
@@ -635,9 +638,13 @@ class ChannelTarget(NamedTarget):
         return channel(require_channel(self.name).history_scope())
 
     def history_result(self, require_channel: Callable[[str], Channel],
-                       direct: type[HistoryPageResult], messages: tuple[Message, ...],
+                       direct: type[HistoryPageResult], channel: type[HistoryPageResult],
+                       everything: type[HistoryPageResult], messages: tuple[Message, ...],
                        has_older: bool) -> HistoryPageResult:
-        result_type = require_channel(self.name).history_result_type
+        del direct
+        result_type = require_channel(self.name).select_history_result(
+            channel=channel, everything=everything,
+        )
         return result_type.for_target(self.name, messages, has_older)
 
     def pending_count(

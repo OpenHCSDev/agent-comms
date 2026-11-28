@@ -14,8 +14,8 @@ from pathlib import Path
 from agent_comms import errors
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
-from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
+from agent_comms.storage.locked_store import BusStoreFile
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ class RouteSelection:
         route = resolve_comms_route(root.path)
         selected_root = route.observe_root()
         return cls(
-            route, selected_root, RecordedBusIdentity.capture(Bus.path_in(selected_root))
+            route, selected_root, RecordedBusIdentity.capture(BusStoreFile.path_in(selected_root))
         )
 
     def root_is_current(self, source: str | Path) -> bool:
