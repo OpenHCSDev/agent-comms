@@ -17,7 +17,8 @@ from agent_comms.messaging.bus_publication import AgentOrigin
 from agent_comms.messaging.notification_evidence import OutcomeViewer, OwnerOutcomes
 from agent_comms.messaging.read_basis import DisplayViewer, OperatorOutcomes, ReadAuthority
 from agent_comms.nominal.field_codec import FieldCodec, WireForm
-from agent_comms.presentation import SentMessageSummary, ThreadRecord
+from agent_comms.presentation import SentMessageSummary
+from agent_comms.thread_views import ThreadRecord
 from agent_comms.projects.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.thread_identity import ThreadIncarnation

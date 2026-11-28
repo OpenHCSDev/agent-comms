@@ -5,7 +5,7 @@ from time import perf_counter
 from statistics import median
 
 from agent_comms.planning.goal_actions import PausedGoalAction, SetGoalAction
-from agent_comms.presentation import ThreadView
+from agent_comms.thread_views import ThreadView
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.registry.activity import ActivityState

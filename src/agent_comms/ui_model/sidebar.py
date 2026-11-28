@@ -24,7 +24,8 @@ from agent_comms.messaging.display_references import (
     UnavailableReferences,
 )
 from agent_comms.messaging.read_ledger import NoReadNotice, ReadNotice
-from agent_comms.presentation import CoordinationSnapshot, ThreadView
+from agent_comms.presentation import CoordinationSnapshot
+from agent_comms.thread_views import ThreadView
 from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_model import ThreadModel
 from agent_comms.registry.thread_presentation import SessionDisconnected, ThreadPresentationStatus
