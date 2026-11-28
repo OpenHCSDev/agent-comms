@@ -123,6 +123,9 @@ class ObservationHost(ABC):
     @abstractmethod
     def mark_busy(self) -> None: ...
 
+    @abstractmethod
+    def observe_again(self) -> None: ...
+
 
 class ObservationRequest(TaggedUnion, affix=""):
     """A UI request. A remote UI sends it over the connector, so each record carries its kind."""
@@ -135,6 +138,9 @@ class InterestRequest(TaggedRecordMember, ObservationRequest, declared_name=None
 class ObservationStep:
     def publish(self, host: ObservationHost) -> None:
         pass
+
+    def continue_stepping(self, host: ObservationHost) -> None:
+        host.observe_again()
 
 
 @final

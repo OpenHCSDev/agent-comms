@@ -176,7 +176,9 @@ class LiveObservationInterest(ObservationInterest):
     async def observe(
         self, service: ObservationService, revision: WireRevision, attempted: set[int],
     ) -> None:
-        observations = tuple(self.observations.items())
+        observations = tuple(sorted(
+            self.observations.items(), key=lambda item: item[1].priority,
+        ))
         for kind, observation in observations:
             await service.answer_pending(attempted)
             if self.observations.get(kind) is not observation:
@@ -201,6 +203,8 @@ class ObservationLifetime:
 
 class Observation[InterestT: InterestRequest](ObservationLifetime):
     """Retire a revision's vanished sources before presenting its observations."""
+
+    priority: ClassVar[int] = 1
 
     def __init__(self, request: InterestT):
         self.request = request
@@ -258,7 +262,7 @@ class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
                 self.step(service, revision)
         else:
             result.publish(service)
-            service.observe_again()
+            result.continue_stepping(service)
 
     @abstractmethod
     def read(
@@ -267,6 +271,20 @@ class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
 
     def after_read(self, service: ObservationService) -> None:
         """Subscribe to completion when this observation has unfinished preparation."""
+
+
+@dataclass(frozen=True)
+class RetryObservationStep(ObservationStep):
+    """A store read hit transient contention: invalidate this reading and retry after busy pause."""
+
+    reading: ReadingObservation
+
+    def publish(self, host: ObservationHost) -> None:
+        self.reading.invalidate()
+        host.mark_busy()
+
+    def continue_stepping(self, host: ObservationHost) -> None:
+        """Wait for retry_busy to schedule the next pass instead of tight-spinning."""
 
 
 class HeldSidebarCut(ABC):
@@ -405,18 +423,21 @@ class _TeamHudReadOutcome(MroDispatch):
     @handles(ReadValue)
     def observed(
         self, outcome: ReadValue[TeamHudObserved], revision: WireRevision,
+        reading: ReadingObservation,
     ) -> ObservationStep:
         return outcome.value
 
     @handles(RetryableRead)
     def retrying(
         self, outcome: RetryableRead[TeamHudObserved], revision: WireRevision,
+        reading: ReadingObservation,
     ) -> ObservationStep:
-        return ObservationStep()
+        return RetryObservationStep(reading)
 
     @handles(ReadUnreadable)
     def unreadable(
         self, outcome: ReadUnreadable[TeamHudObserved], revision: WireRevision,
+        reading: ReadingObservation,
     ) -> ObservationStep:
         return TeamHudUnreadable(revision, outcome.cause)
 
@@ -431,7 +452,7 @@ class RetainedTeamFrames:
     selection: TeamBoardSelection
 
     def observed(
-        self, comms: Comms, revision: WireRevision,
+        self, comms: Comms, revision: WireRevision, reading: ReadingObservation,
     ) -> Generator[ObservationStep]:
         outcome = UnreadableHistory.outcome(
             lambda: TeamHudObserved(
@@ -440,7 +461,7 @@ class RetainedTeamFrames:
             ),
         )
         yield _TeamHudReadOutcome.handler_for(type(outcome))(
-            _TEAM_HUD_READ_OUTCOME, outcome, revision,
+            _TEAM_HUD_READ_OUTCOME, outcome, revision, reading,
         )
 
 
@@ -453,7 +474,7 @@ class TeamHudReading(ReadingObservation[ObserveTeamHud]):
         self, comms: Comms, revision: WireRevision,
     ) -> Generator[ObservationStep]:
         """Consume the root-owned atomic publication for this selection."""
-        return RetainedTeamFrames(self.request.selection).observed(comms, revision)
+        return RetainedTeamFrames(self.request.selection).observed(comms, revision, self)
 
     def read(
         self, comms: Comms, revision: WireRevision,
@@ -473,14 +494,14 @@ class BatchRead(ABC):
 
 
 class PendingBatch(BatchRead):
-    """The store could not be read yet; the family's requests wait for the next pass."""
+    """The store could not be read yet; the family's requests wait for retry_busy."""
 
     def settled(
         self, family: ReadNotifications, current: list[NotificationBatch],
         pending: set[ReadNotifications],
     ) -> Iterator[ObservationStep]:
         pending.add(family)
-        yield ObservationStep()  # Keep the interest until its source can be read.
+        return iter(())
 
 
 @dataclass(frozen=True, eq=False)
@@ -592,6 +613,7 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
     references no current batch covers. Scrolling therefore reads the newly visible rows,
     not every visible row again."""
 
+    priority = 0
     view = NotificationsView()
 
     def __init__(self, request: ObserveNotifications):
@@ -645,6 +667,8 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
         for request in self.request.reads:
             if request.family not in pending:
                 yield from self.answer(request, revision)
+        if pending:
+            yield RetryObservationStep(self)
 
     def batch(
         self, request: ReadNotifications, comms: Comms, revision: WireRevision,
@@ -1026,7 +1050,7 @@ class ObservationService(ObservationHost, MroDispatch):
             await self.busy.wait()
             self.busy.clear()
             await asyncio.sleep(ReadBusy.retry_seconds)
-            self.changed.set()
+            self.observe_again()
 
     async def pass_once(self) -> None:
         """One wake: answer waiting reads, then observe once if a change is due."""
