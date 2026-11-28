@@ -64,6 +64,7 @@ from agent_comms.messaging.response_message_source import ResponseMessageSource
 from agent_comms.messaging.retained_task_facts import ExactTaskFact
 from agent_comms.messaging.sending import Messaging
 from agent_comms.nominal.field_codec import NullMember, PresentMember, ThreadLookup
+from agent_comms.planning.goal_action_store import GoalActionStore
 from agent_comms.planning.goal_actions import GoalAction, SetGoalAction, StandbyGoalAction
 from agent_comms.planning.goal_attempt_phase import GoalAttemptPhase
 from agent_comms.planning.goal_attempts import LaunchPermit
@@ -146,7 +147,8 @@ def test_goal_publication_callback_annotations_resolve(
 
 @pytest.mark.parametrize("callback", (GoalAction.prepare, StandbyGoalAction.prepare))
 def test_goal_preparation_uses_its_record_owner(callback: Callable[..., object]) -> None:
-    assert get_type_hints(callback)["goals"] is GoalRecords
+    assert get_type_hints(callback)["goals"] is GoalActionStore
+    assert issubclass(GoalRecords, GoalActionStore)
 
 
 @pytest.mark.parametrize("declaration", (GoalDeclaration, *GoalDeclaration.__subclasses__()))

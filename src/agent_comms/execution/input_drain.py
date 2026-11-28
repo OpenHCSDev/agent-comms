@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial, reduce

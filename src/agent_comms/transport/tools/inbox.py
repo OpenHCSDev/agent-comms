@@ -25,7 +25,7 @@ from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
 from agent_comms.nominal.compact_text import compact_format
 from agent_comms.nominal.field_codec import GoalId, NullMember, WireOmitDefault
-from agent_comms.planning.goal_waits import NoStandbyReview, StandbyReview
+from agent_comms.planning.goal_wait_recovery import NoStandbyReview, StandbyReview
 from agent_comms.transport.request import tool_field
 from agent_comms.transport.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.transport.tool_request import (
@@ -63,10 +63,9 @@ class InboxPageRead(ToolResult):
                 f"Unresolved inputs: {len(self.unresolved_inputs)} "
                 "(use comms_input_delivery to inspect)"
             )
-        if not isinstance(self.standby_review, NoStandbyReview):
-            rendered = compact_format(self.standby_review)
-            if rendered:
-                parts.append(rendered)
+        rendered = compact_format(self.standby_review)
+        if rendered:
+            parts.append(rendered)
         return "\n\n".join(parts)
 
 

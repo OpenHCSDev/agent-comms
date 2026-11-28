@@ -9,12 +9,9 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import Annotated, ClassVar
 
-from agent_comms.execution.input_key import InputKey, InputKeyText
-from agent_comms.input_attempt import StoredInput, UnresolvedInput
 from agent_comms.messaging.bus import BusReader
 from agent_comms.messaging.bus_publication import Delivered
-from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
+from agent_comms.nominal.field_codec import GoalId, GoalWaitId, ThreadLookup, TurnId
 from agent_comms.planning.goal_mutation import GoalWaitProjection
 from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.planning.goals import Goal, GoalDeclaration
@@ -199,42 +196,15 @@ class RecordedGoalWait(GoalWait):
         )
 
 
-class InputExclusion(DeclaredFamily, affix="Exclusion"):
-    """Why a standby review leaves an unresolved input out; its declared name is its wire value."""
+@dataclass(frozen=True, kw_only=True)
+class OwnerWaitRead:
+    """A registry snapshot, the goal owner's thread in it, and that goal's wait, read together."""
 
+    __slots__ = ()
 
-class OwnerInputWithoutBusSequenceExclusion(InputExclusion):
-    """The owner's own input has no bus sequence, so no dependency sent it."""
-
-
-class NotADirectReplyFromDeclaredDependenciesExclusion(InputExclusion):
-    """A bus input that is not a direct reply from the declared dependencies."""
-
-
-@dataclass(frozen=True)
-class ExcludedInput(UnresolvedInput):
-    reason: type[InputExclusion] = field(kw_only=True)
-
-    @classmethod
-    def excluded(cls, row: StoredInput, reason: type[InputExclusion]) -> ExcludedInput:
-        return cls.of(row, reason=reason)
-
-
-@dataclass(frozen=True)
-class NoStandbyReview(NullMember):
-    """No standby was asked for, so the page carries no review."""
-
-
-@dataclass(frozen=True)
-class StandbyReview:
-    """The reply form of a goal input review: eligible messages and their exact keys."""
-
-    goal_id: GoalId
-    wait_for: tuple[str, ...]
-    reviewed_inputs: tuple[Annotated[InputKey, InputKeyText], ...]
-    messages: tuple[UnresolvedInput, ...]
-    already_reviewed_inputs: tuple[UnresolvedInput, ...]
-    excluded_inputs: tuple[ExcludedInput, ...]
+    snapshot: RegistrySnapshot
+    owner: Thread
+    wait: GoalWait
 
 
 class GoalWaitsRows(StoreRows):

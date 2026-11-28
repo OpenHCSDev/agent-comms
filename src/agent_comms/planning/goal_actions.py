@@ -13,17 +13,15 @@ from agent_comms.nominal import field_codec
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     GoalId,
-    GoalWaitId,
     MessageId,
     RetryDecisionId,
 )
-from agent_comms.nominal.lifecycle_capability import Settled
 from agent_comms.planning.attempt_resolution import ComplianceDecision, RetryDecision
 from agent_comms.planning.command import Command
+from agent_comms.planning.goal_action_store import GoalActionStore, PreparedStandbyReview
 from agent_comms.planning.goal_control import GoalControlSource
 from agent_comms.planning.goal_mentions import bind_goal_mentions
 from agent_comms.planning.goal_mutation import GoalMutation
-from agent_comms.planning.goal_records import GoalRecords
 from agent_comms.planning.goal_scope import AllGoals, OneGoal
 from agent_comms.planning.goal_states import (
     ActiveGoal,
@@ -37,8 +35,6 @@ from agent_comms.planning.goal_states import (
     PauseSource,
     RuntimePause,
 )
-from agent_comms.planning.goal_wait_recovery import GoalInputReview
-from agent_comms.planning.goal_waits import GoalWaits, RecordedGoalWait
 from agent_comms.planning.goals import (
     Goal,
     GoalChangedError,
@@ -141,7 +137,7 @@ class GoalPrecondition:
             raise GoalChangedError(thread, self.expected_checkpoint)
         if self.expected_owner is not None and (
             thread.process_identity != self.expected_owner
-            or not ctx.goals.registry.status(thread.name).is_running()
+            or not ctx.goals.is_thread_running(thread.name)
         ):
             raise ValueError("The goal owner changed; refresh its state.")
         self.goal_id.require(goal)
@@ -151,7 +147,7 @@ class GoalPrecondition:
 
 @dataclass(frozen=True)
 class GoalActionContext:
-    goals: GoalRecords
+    goals: GoalActionStore
     thread: Thread
     actor: type = RuntimeInvocable
 
@@ -179,7 +175,7 @@ class GoalAction[Result: GoalDeclaration](
     expect: GoalPrecondition = GoalPrecondition()
     def complete_wait(self, ctx: GoalActionContext) -> None:
         """Clear the goal's wait after apply; members that preserve it override."""
-        ctx.thread.goal.clear_wait(ctx.goals.waits.clear)
+        ctx.thread.goal.clear_wait(ctx.goals.clear_goal_wait)
 
     @classmethod
     async def after_update(cls, scheduler: object, session_id: object) -> None:
@@ -215,7 +211,7 @@ class GoalAction[Result: GoalDeclaration](
         if not isinstance(self, actor):
             raise ValueError(f"This actor cannot take goal action {self.declared_name!r}.")
 
-    def prepare(self, goals: GoalRecords, name: str, actor: type) -> GoalAction[Result]:
+    def prepare(self, goals: GoalActionStore, name: str, actor: type) -> GoalAction[Result]:
         return self
 
     def apply(self, ctx: GoalPublicationContext) -> Result:
@@ -230,7 +226,7 @@ class GoalAction[Result: GoalDeclaration](
             replace(ctx.thread, goal=goal),
             ctx.edit.document.status(ctx.thread.name), new_owner=False,
         )
-        ctx.goals.registry._commit_registration(ctx.edit, change)
+        ctx.goals.commit_registration(ctx.edit, change)
         self.complete_wait(ctx)
         return goal
 
@@ -310,8 +306,7 @@ class ActiveGoalAction(
         return ActiveGoal()
 
     def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
-        generation = ctx.goals.open_goal_store().require_generation(goal.id)
-        generation.lifecycle.resume_status(ctx.thread.executing)
+        ctx.goals.resume_goal_generation(goal.id, ctx.thread.executing)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -331,11 +326,9 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
         return ActiveGoal()
 
     def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
-        store = ctx.goals.open_goal_store()
-        generation = store.require_generation(goal.id)
-        generation.lifecycle.continue_work(store, generation, ComplianceDecision(self.witness))
-        resumed = store.require_generation(goal.id)
-        resumed.lifecycle.resume_status(ctx.thread.executing)
+        ctx.goals.comply_goal_generation(
+            goal.id, ComplianceDecision(self.witness), ctx.thread.executing,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -349,10 +342,12 @@ class StandbyGoalAction(GoalReportAction, ModelInvocable, RuntimeInvocable):
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()
 
-    def prepare(self, goals: GoalRecords, name: str, actor: type) -> GoalAction[Goal]:
-        ctx = GoalActionContext(goals, goals.registry.require(name), actor)
+    def prepare(self, goals: GoalActionStore, name: str, actor: type) -> GoalAction[Goal]:
+        ctx = GoalActionContext(goals, goals.require_thread(name), actor)
         self.expect.check(ctx)
-        review = goals._goal_input_review(ctx.thread, ctx.thread.goal.require().id, self.wait_for)
+        review = goals.prepare_standby_review(
+            ctx.thread, ctx.thread.goal.require().id, self.wait_for,
+        )
         self.expect.check(GoalActionContext(goals, review.owner, actor))
         return PreparedStandbyGoalAction(
             expect=replace(self.expect, expected_checkpoint=review.owner.goal.captured),
@@ -367,97 +362,11 @@ class StandbyGoalAction(GoalReportAction, ModelInvocable, RuntimeInvocable):
 class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
     """Only the action prepared from real replies can publish this exact wait."""
 
-    review: GoalInputReview
+    review: PreparedStandbyReview
 
     def before_goal_publish(self, goal: Goal, ctx: GoalActionContext) -> None:
-        review = self.review
-        review.require_current(ctx.goals, ctx.thread)
-        thread = ctx.thread
-        reported_turn = ctx.reported_turn
-        wait_targets = review.targets
-        aliases = review.owners
-        dispositions = ctx.goals.dispositions
-        unknown = {row.key: row for row in review.unknown}
-        # An input delivered into this recipient's turn after the inbox cut is already handled.
-        delivered = dispositions.read(
-            tuple(key for key in self.reviewed_inputs if key not in unknown)).started_for(aliases)
-        reviewed_keys = tuple(key for key in dict.fromkeys(self.reviewed_inputs)
-                              if key not in delivered)
-        if any(key not in unknown or unknown[key].sequence is None for key in reviewed_keys):
-            raise ValueError("Review only this recipient's exact unresolved bus input keys.")
-        if not set(reviewed_keys) <= review.eligible_keys:
-            raise ValueError("Review only direct inputs from these declared dependencies.")
-        pending = next(
-            (
-                row
-                for row in review.unknown
-                if row.key in review.eligible_keys
-                and row.key not in reviewed_keys
-                and not row.reviewed_for_goal(goal.id)
-            ),
-            None,
-        )
-        if pending is not None:
-            sequence = pending.sequence
-            raise ValueError(
-                f"Dependency reply {sequence} is already pending or UNKNOWN. "
-                f"Call comms_inbox with standby={{'goal_id': {goal.id!r}, "
-                f"'wait_for': {list(self.wait_for)!r}}}. Inspect standby_review.messages, then "
-                "pass only standby_review.reviewed_inputs to comms_goal to wait "
-                "for a later reply. Do not pass excluded owner or other dependency inputs. "
-                "This does not mark them STARTED or replay them."
-            )
-        snapshot = ctx.goals.registry.snapshot()
-        if not any(
-            ctx.goals.agents.answers_later(target.incarnation, snapshot)
-            for target in wait_targets
-        ):
-            names = ", ".join(f"@{target.incarnation.name}" for target in wait_targets)
-            raise ValueError(
-                f"No thread this wait names will answer ({names}): none has a live bridge or "
-                "process. Inspect its registered process before declaring standby."
-            )
-        closed = GoalWaits.closed_wait_group(
-            thread.name,
-            wait_targets,
-            ctx.goals.waits.read(),
-            snapshot,
-            ctx.goals.agents,
-        )
-        if closed:
-            names = ", ".join(f"@{name}" for name in closed)
-            raise ValueError(
-                f"Standby would close a dependency wait group ({names}). "
-                "At least one agent must remain able to work or reply. "
-                "Continue independent work or change the dependencies."
-            )
-        dispositions.review_for_goal(
-            reviewed_keys,
-            observed=tuple(unknown[key] for key in reviewed_keys),
-            owners=aliases,
-            goal_id=goal.id,
-            goal_revision=goal.revision,
-            turn_id=reported_turn,
-        )
-        # Commit scheduling authority first. A crash before the registry
-        # progress update must leave this same goal waiting, not runnable.
-        reporting_lease = thread.turn_lease
-        ctx.goals.waits.record(
-            RecordedGoalWait(
-                goal.id,
-                GoalWaitId.mint(),
-                goal.revision,
-                review.through_seq,
-                wait_targets,
-                owner=thread.incarnation.require_recorded(),
-                report_turn_id=reporting_lease.stored_turn_id(),
-                report_turn_generation=reporting_lease.stored_generation(),
-                target_turn_generations=tuple(
-                    snapshot.threads[snapshot.canonical_name(target.incarnation.name)]
-                    .turn_lease.stored_generation()
-                    for target in wait_targets
-                ),
-            )
+        self.review.commit_standby(
+            goal, ctx.thread, ctx.reported_turn, self.wait_for, self.reviewed_inputs,
         )
 
 
@@ -518,14 +427,7 @@ class ReplacementGoalAction[Result: GoalDeclaration](GoalAction[Result]):
 
     @staticmethod
     def retire(goal: Goal, ctx: GoalActionContext) -> None:
-        # Revoke the old protected goal before replacing its registry identity.
-        attempts = ctx.goals.open_goal_store()
-        generation = attempts.snapshot(goal.id)
-        if generation is not None and not generation.lifecycle.items_with(Settled, generation):
-            attempts.retire_goal(
-                goal.id, expected_generation=generation.number,
-                attempt_id=generation.attempt_id,
-            )
+        ctx.goals.retire_goal_generation(goal.id)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -552,15 +454,15 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
     def create(self, ctx: GoalActionContext) -> Goal:
         goal = Goal(
             text=self.text.strip(), id=self.goal_id, revision=1, order=self.order,
-            published_seq=ctx.goals.bus.bus.revision(),
+            published_seq=ctx.goals.bus_revision(),
         )
         goal = replace(
             goal,
             mention_source=bind_goal_mentions(
-                goal.text, goal.id, goal.revision, ctx.thread, ctx.goals.registry.snapshot()
+                goal.text, goal.id, goal.revision, ctx.thread, ctx.goals.registry_snapshot()
             ),
         )
-        ctx.goals.open_goal_store().create_goal(goal.id)
+        ctx.goals.create_goal_generation(goal.id)
         return goal
 
 
@@ -595,7 +497,7 @@ class EditGoalAction(GoalAction[Goal], OwnerInvocable, RuntimeInvocable, PeerInv
             text=text,
             revision=revision,
             mention_source=bind_goal_mentions(
-                text, goal.id, revision, ctx.thread, ctx.goals.registry.snapshot()
+                text, goal.id, revision, ctx.thread, ctx.goals.registry_snapshot()
             ),
         )
 
@@ -631,5 +533,4 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
 
     def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
         """A blocked goal leaves its state machine only through the attempt ledger's retry."""
-        store = ctx.goals.open_goal_store()
-        store.authorize_current_retry(goal.id, RetryDecision(RetryDecisionId.mint()))
+        ctx.goals.authorize_goal_retry(goal.id, RetryDecision(RetryDecisionId.mint()))
