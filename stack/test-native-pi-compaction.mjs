@@ -100,11 +100,11 @@ try {
     const used=(mode==='threshold'||mode==='wip'||mode==='preflight') ? 90000 : (mode==='policy' ? 300001 : 30000);
     const statedLines='Now: adding an event class\nUncommitted: stack/patch test edits\nNext: run the focused tests';
     for(let turn=0;turn<4;turn++){
-        const historyRepeats=mode==='oversized' ? 25000 : 1500;
+        const historyRepeats=turn===3 ? 500 : (mode==='oversized' ? 25000 : 1500);
         manager.appendMessage({role:'user',content:`OLD_FACT_${turn} `+'old history '.repeat(historyRepeats),timestamp:2*turn+1});
         const stated=mode==='wip' && turn===1
             ? [{type:'text',text:`Working.\n${statedLines}`}]
-            : [{type:'text',text:`old answer ${turn}`}];
+            : [{type:'text',text:turn===3 ? `old answer ${turn} `+'recent reply '.repeat(200) : `old answer ${turn}`}];
         manager.appendMessage({role:'assistant',content:stated,api:model.api,
             provider:model.provider,model:model.id,stopReason:'stop',timestamp:2*turn+2,
             usage:{input:used-100,output:100,cacheRead:0,cacheWrite:0,totalTokens:used,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
