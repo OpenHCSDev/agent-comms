@@ -13,7 +13,11 @@ from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
-from agent_comms.messaging.read_basis import DMDisplayScope, MessageDisplayScope
+from agent_comms.messaging.read_basis import (
+    ChannelDisplayScope,
+    DMDisplayScope,
+    MessageDisplayScope,
+)
 from agent_comms.messaging.response_policy import NO_ALIASES
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -256,7 +260,9 @@ class DeliveryScope(MessageDisplayScope):
         return self.delivers(message.sender, message.target)
 
     def selection(self, target: CommandTarget, snapshot, catalog) -> MessageDisplayScope:
-        return target.display_scope(self.actor, snapshot, catalog, DMDisplayScope)
+        return target.display_scope(
+            self.actor, snapshot, catalog, DMDisplayScope, ChannelDisplayScope,
+        )
 
     def canonical(self, name: str) -> str:
         return self.aliases.get(name, name)

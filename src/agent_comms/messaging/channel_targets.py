@@ -22,6 +22,7 @@ from agent_comms.errors import (
 )
 from agent_comms.messaging.activity_clocks import ActivityClocks
 from agent_comms.messaging.bus_display_index import BusDisplayIndex
+from agent_comms.messaging.channel_sources import ChannelScopeFactory
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionSource
 from agent_comms.messaging.response_policy import DirectPolicy, MentionedPolicy, ResponsePolicy
@@ -528,7 +529,9 @@ class ThreadTarget(NamedTarget):
     def display_scope(
         self, viewer: str, snapshot: RegistryProvenance,
         require_channel: Callable[[str], Channel], direct_scope: type[DMDisplayScope],
+        channel_scope: type[ChannelScopeFactory[MessageDisplayScope]],
     ) -> MessageDisplayScope:
+        del channel_scope
         return direct_scope.capture(
             viewer, snapshot.require(self.selected_name(snapshot)).name, snapshot)
 
@@ -635,7 +638,7 @@ class ChannelTarget(NamedTarget):
 
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
-        return channel(require_channel(self.name).history_scope())
+        return channel.for_channel(require_channel(self.name))
 
     def history_result(self, require_channel: Callable[[str], Channel],
                        direct: type[HistoryPageResult], channel: type[HistoryPageResult],
@@ -708,8 +711,10 @@ class ChannelTarget(NamedTarget):
     def display_scope(
         self, viewer: str, snapshot: RegistryProvenance,
         require_channel: Callable[[str], Channel], direct_scope: type[DMDisplayScope],
+        channel_scope: type[ChannelScopeFactory[MessageDisplayScope]],
     ) -> MessageDisplayScope:
-        return require_channel(self.name).history_scope()
+        del viewer, snapshot, direct_scope
+        return require_channel(self.name).history_scope(channel_scope)
 
     def conversation_key(self, sender: str, snapshot: RegistryProvenance, channel: type[ChannelConversation], direct: type[DMConversation]) -> Conversation:
         return channel(target=self.name)

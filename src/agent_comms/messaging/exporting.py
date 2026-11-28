@@ -19,7 +19,7 @@ from agent_comms.messaging.bus_tables import MessageIdentitySource
 from agent_comms.messaging.channels import Channel
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message, StoredWireHistory
-from agent_comms.messaging.read_basis import DMDisplayScope
+from agent_comms.messaging.read_basis import ChannelDisplayScope, DMDisplayScope
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from agent_comms.registry.registration import Registration
@@ -156,7 +156,7 @@ class ChannelScope(WireExportScope):
     def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
         channel = require_channel(self.channel)
         channel.require_routable()
-        history = channel.history_scope()
+        history = channel.history_scope(ChannelDisplayScope)
         predicate, parameters = history.index_predicate
         return ResolvedExportScope(self, predicate, parameters)
 

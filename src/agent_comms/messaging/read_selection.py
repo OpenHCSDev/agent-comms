@@ -61,7 +61,7 @@ class CapturedSelection:
     @property
     def scopes(self) -> tuple[ChannelDisplayScope, ...]:
         return tuple(
-            channel.display_scope(self.registry)
+            channel.display_scope(self.registry, ChannelDisplayScope)
             for channel in self.channels.values()
         )
 
@@ -74,4 +74,4 @@ class CapturedSelection:
 
     def scope(self, target: str) -> ChannelDisplayScope:
         channel = self.catalog.require_channel(target, self.activity)
-        return channel.display_scope(self.registry)
+        return channel.display_scope(self.registry, ChannelDisplayScope)
