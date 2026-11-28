@@ -1522,7 +1522,7 @@ class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEve
                 return ()
             snapshot = self.comms.registry.snapshot()
             owner = snapshot.require(thread.name)
-            if snapshot.status(owner.name).is_stopped() or owner.goal.accepts_following_handoff():
+            if snapshot.status(owner.name).is_stopped():
                 return ()
             inbox = self.comms.bus.inbox(owner.name)
             messages = tuple(sorted(inbox.page.messages, key=lambda item: item.seq))
