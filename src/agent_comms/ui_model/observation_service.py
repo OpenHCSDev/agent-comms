@@ -54,9 +54,9 @@ from agent_comms.presentation import (
     CoordinationSnapshot,
     NoRevision,
     ReadState,
-    ThreadView,
     WireRevision,
 )
+from agent_comms.thread_views import ThreadView
 from agent_comms.registry.activity import ObservedActivity
 from agent_comms.registry.registry_document import RegistrySnapshot, UnreadRegistry
 from agent_comms.registry.registry_names import DeletedThread

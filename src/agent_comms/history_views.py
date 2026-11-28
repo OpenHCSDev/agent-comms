@@ -98,14 +98,11 @@ from agent_comms.presentation import (
     BusPresentation,
     ChannelView,
     CoordinationSnapshot,
-    CountedRead,
-    InboxRead,
     NoRevision,
     ReadState,
-    ThreadRecord,
-    ThreadView,
     WireRevision,
 )
+from agent_comms.thread_views import CountedRead, InboxRead, ThreadRecord, ThreadView
 from agent_comms.registry.catalog_document import CatalogDocument
 from agent_comms.registry.collaboration_ledger import CollaborationLedger
 from agent_comms.registry.registry_document import RegistrySnapshot

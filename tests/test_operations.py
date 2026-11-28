@@ -28,7 +28,7 @@ from agent_comms.messaging.read_basis import NamedViewer
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_native_backend import PiSessionFile
-from agent_comms.presentation import CountedInbox, CountedRead, UncountedRead
+from agent_comms.thread_views import CountedInbox, CountedRead, UncountedRead
 from agent_comms.projects.checkouts import (
     Checkout,
     LaunchCheckout,

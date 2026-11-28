@@ -10,7 +10,7 @@ from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.publisher import OwnerPublisher
 from agent_comms.nominal.field_codec import Argument, WireForm
 from agent_comms.planning.goal_snapshot_reader import GoalSnapshotReader
-from agent_comms.presentation import ThreadRecord
+from agent_comms.thread_views import ThreadRecord
 from agent_comms.registry.route_client import ActivityClient
 
 

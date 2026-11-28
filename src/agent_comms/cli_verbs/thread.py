@@ -8,7 +8,7 @@ from agent_comms.cli_verbs.cli_verb import CliBus, CliCommand
 from agent_comms.cli_verbs.cli_commands import NameArgument
 from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize
-from agent_comms.presentation import CountedRead, InboxRead, UncountedRead
+from agent_comms.thread_views import CountedRead, InboxRead, UncountedRead
 from agent_comms.transport.owner_requests import NativeChildProcessReply
 
 

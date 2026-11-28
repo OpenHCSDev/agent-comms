@@ -10,6 +10,7 @@ from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.relationship_catalog_source import RelationshipCatalogSource
 from agent_comms.registry.roster_visibility import RosterVisibility
+from agent_comms.thread_views import ThreadView
 
 
 class RelationshipSource(SentHistorySource[RegistrySnapshot]):
@@ -25,4 +26,4 @@ class RelationshipSource(SentHistorySource[RegistrySnapshot]):
     @abstractmethod
     def thread_views(
         self, visibility: RosterVisibility,
-    ) -> tuple[presentation.ThreadView, ...]: ...
+    ) -> tuple[ThreadView, ...]: ...

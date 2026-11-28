@@ -5,7 +5,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, fields, replace
 from typing import Annotated, ClassVar, Literal
 
-from agent_comms import presentation
 from agent_comms.display_order import ThreadSort
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.messages import Message
@@ -23,6 +22,7 @@ from agent_comms.registry.threads import Thread
 from agent_comms.storage.locked_store import DocumentChange
 from agent_comms.storage.maintenance_barrier import CarriedDocument
 from agent_comms.storage.store_files import DependentStateTier, SingleFileStore
+from agent_comms.thread_views import ThreadView
 
 
 class MutualThreadRelation(ABC):
@@ -56,7 +56,7 @@ class MutualThreadRelation(ABC):
     def entry_goal_contacts(self) -> tuple[GoalDerivedContact, ...]:
         return ()
 
-    def entry(self, identity: ThreadIncarnation, person: presentation.ThreadView | None,
+    def entry(self, identity: ThreadIncarnation, person: ThreadView | None,
               available: bool, current: RelationshipEntry | None) -> RelationshipEntry:
         return RelationshipEntry(
             identity.name, "thread", person if available else None,
@@ -189,7 +189,7 @@ class GoalDerivedContact(MutualThreadRelation):
 class RelationshipEntry:
     target: str
     kind: str
-    person: presentation.ThreadView | None = None
+    person: ThreadView | None = None
     sequence: int = 0
     timestamp: float = 0
     detail: str = ""
@@ -284,7 +284,7 @@ class SortableRelationshipGroup(RelationshipGroup):
 class RelationshipContext:
     registry: RegistrySnapshot
     thread: Thread
-    people: dict[str, presentation.ThreadView]
+    people: dict[str, ThreadView]
     messages: tuple[Message, ...]
     delivery: DeliveryScope
     edges: tuple[Collaboration, ...]

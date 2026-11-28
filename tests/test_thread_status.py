@@ -17,7 +17,7 @@ from agent_comms.execution.child_process import NoProcess, ProcessIdentity
 from agent_comms.execution.pi_vocabulary import ServiceTier
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.presentation import CountedRead, ThreadView
+from agent_comms.thread_views import CountedRead, ThreadView
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.activity import Activity, ActivityState
 from agent_comms.registry.registration import Registration

@@ -14,7 +14,7 @@ import pytest
 from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from agent_comms.comms import Comms
 from agent_comms.messaging.bus_route_counts import BusRouteCounts
-from agent_comms.presentation import CountedInbox
+from agent_comms.thread_views import CountedInbox
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.thread_identity import (

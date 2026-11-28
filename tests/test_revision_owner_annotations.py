@@ -11,16 +11,15 @@ from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.published_bus import PublishedBus
 from agent_comms.planning.goal_management import Goals
 from agent_comms.planning.goal_presentation import GoalExecutionControls, GoalSnapshot
+from agent_comms.planning.goal_snapshot_reader import GoalSnapshotReader
 from agent_comms.presentation import (
     BusPresentation,
     CoordinationSnapshot,
-    InboxRead,
-    ThreadRecord,
-    ThreadView,
     WireRevision,
     expiry_period_changed,
     revision_source,
 )
+from agent_comms.thread_views import InboxRead, ThreadRecord, ThreadView
 from agent_comms.registry.agent_activity import ActivityAnswers
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
@@ -52,7 +51,8 @@ def test_presentation_sources_are_actual_nominal_providers() -> None:
     goal_source = get_origin(goal_alias)
     owner, snapshot_contract, registry_contract, activity_contract = get_args(goal_alias)
     assert bus_source in MessageBus.__bases__
-    assert goal_source in Goals.__bases__
+    assert issubclass(Goals, goal_source)
+    assert goal_source in GoalSnapshotReader.__bases__
     assert not isabstract(MessageBus)
     assert not isabstract(Goals)
     assert bus_source.opened_activity is PublishedBus.opened_activity
@@ -61,7 +61,7 @@ def test_presentation_sources_are_actual_nominal_providers() -> None:
     assert activity_contract is ActivityAnswers
     assert snapshot_contract in GoalSnapshot.__bases__
     assert get_type_hints(GoalSnapshot)["execution"] is GoalExecutionControls
-    owning_alias, = (base for base in Goals.__orig_bases__
+    owning_alias, = (base for base in GoalSnapshotReader.__orig_bases__
                       if get_origin(base) is goal_source)
     assert get_args(owning_alias) == (Thread, GoalSnapshot, RegistrySnapshot, ActivityAnswers)
     owner_parameter, snapshot_parameter, registry_parameter, activity_parameter = goal_source.__type_params__
