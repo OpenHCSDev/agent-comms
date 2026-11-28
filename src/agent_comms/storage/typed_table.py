@@ -3284,6 +3284,14 @@ class StoreWriter(PublishedSQLiteFile):
     # store that must survive power loss raises its own bar (goal stores declare EXTRA).
     synchronous: ClassVar[str] = "NORMAL"
 
+    @classmethod
+    def apply_connection_policy(cls, connection: sqlite3.Connection) -> None:
+        """The per-connection policy every WAL writer here applies: referential integrity on,
+        and the one synchronous durability this family shares. A store that opens a WAL
+        connection applies this and nothing of its own, so no two openers can disagree."""
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute(f"PRAGMA synchronous = {cls.synchronous}")
+
     @property
     @abstractmethod
     def store(self) -> WrittenFile:
@@ -3589,8 +3597,7 @@ class WalStore(SQLiteReader, StoreWriter, StoreLockFile):
         connection = self.writer(
             path, isolation_level=None, check_same_thread=check_same_thread)
         try:
-            connection.execute(f"PRAGMA synchronous={self.synchronous}")
-            connection.execute("PRAGMA foreign_keys=ON")
+            self.apply_connection_policy(connection)
             if not SQLiteJournalMode.write_ahead(connection.execute("PRAGMA journal_mode=WAL")):
                 raise RelationViolationError(f"{self.filename} requires WAL")
             yield connection
