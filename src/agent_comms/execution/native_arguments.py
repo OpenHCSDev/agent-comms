@@ -20,12 +20,12 @@ from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevel
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.transport.native_tool_mode import NativeToolMode
 
 if TYPE_CHECKING:
     from agent_comms.execution.owner_lifecycle import OwnerLifecycle
     from agent_comms.execution.channel_coding_tools import CodingToolOwner
     from agent_comms.team.rule_deal import UndealtRecord
-    from agent_comms.transport.native_tool_transport import NativeToolMode
     from agent_comms.registry.thread_model import ThreadModel
 
 logger = logging.getLogger(__name__)

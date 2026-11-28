@@ -42,7 +42,7 @@ from agent_comms.storage.storage_room import NoRoomNeeded
 from agent_comms.team.pi_rule_gate import PiRuleGate, RulesUnread
 from agent_comms.team.rule_deal import AuditDue, StartedDeal
 from agent_comms.transport.native_tool_call import DuplicateToolCallIdentity, SelectedToolBusy
-from agent_comms.transport.native_tool_transport import OwnerToolConnection
+from agent_comms.transport.native_tool_mode import OwnerToolConnection
 from agent_comms.transport.native_tools import NativeToolDeclaration
 from agent_comms.transport.tool_denial import SelectedToolDenied
 from agent_comms_hooks.skill import DeckReader

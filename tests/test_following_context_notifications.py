@@ -38,7 +38,7 @@ from agent_comms.messaging.notification_progress import DeliveryProgress, ShownT
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.nominal.lifecycle_capability import Unresolved
 from agent_comms.private_send_claim import PrivateSendClaim
-from agent_comms.transport.native_tool_transport import OwnerToolConnection
+from agent_comms.transport.native_tool_mode import OwnerToolConnection
 from conftest import accept_initial, publish_initial
 from native_proof_cases import append_input_entry
 from test_coordinated_runtime import tmp_path  # noqa: F401

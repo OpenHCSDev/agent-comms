@@ -23,7 +23,7 @@ from agent_comms.execution.turn_context import InstructionFile
 from agent_comms.messaging.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.nominal.field_codec import ClaimId
 from agent_comms.registry.threads import Thread
-from agent_comms.transport.native_tool_transport import NativeToolMode
+from agent_comms.transport.native_tool_mode import NativeToolMode
 
 if TYPE_CHECKING:
     from agent_comms.execution.channel_coding_tools import CodingToolOwner

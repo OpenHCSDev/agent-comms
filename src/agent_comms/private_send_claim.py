@@ -51,7 +51,7 @@ from agent_comms.nominal.field_codec import AcpSessionId, InputId, RootId
 from agent_comms.nominal.text_digest import TextDigest
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.storage.maintenance_barrier import MaintenanceBarrier
-from agent_comms.transport.native_tool_transport import NativeToolMode
+from agent_comms.transport.native_tool_mode import NativeToolMode
 from agent_comms.transport.project_request import ProjectRuntimeRequest
 
 

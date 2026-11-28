@@ -9,8 +9,8 @@ from pathlib import Path
 from agent_comms.comms import Comms
 from agent_comms.registry.threads import Thread
 from agent_comms.registry.thread_catalog import ThreadCatalog
+from agent_comms.transport.native_tool_mode import NativeToolMode
 from agent_comms.transport.native_tool_transport import (
-    NativeToolMode,
     ToolTransport,
     UnboundToolTransport,
 )

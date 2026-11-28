@@ -60,9 +60,9 @@ from agent_comms.transport.native_tool_call import (
     NativeToolCall,
     SelectedToolBusy,
 )
+from agent_comms.transport.native_tool_mode import NativeToolMode
 from agent_comms.transport.native_tool_transport import (
     GatedToolTransport,
-    NativeToolMode,
     NativeToolRound,
     ToolListener,
     UnboundToolTransport,

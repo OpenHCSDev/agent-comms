@@ -70,7 +70,7 @@ from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, GoalId, Tu
 from agent_comms.planning.goals import Goal
 from agent_comms.registry.threads import NativeThread, Thread
 from agent_comms.registry.roster_visibility import DEFAULT_ROSTER
-from agent_comms.transport.native_tool_transport import NativeToolMode
+from agent_comms.transport.native_tool_mode import NativeToolMode
 from agent_comms.transport.tools.goals import CommsSetGoalTool
 
 from agent_comms.execution.owned_turn_runner import OwnedTurnRunner
