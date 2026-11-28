@@ -18,6 +18,7 @@ from agent_comms.bus_context import BusContext
 from agent_comms.coordination.service_passes import (
     BoardUnavailable,
     ServiceFailures,
+    ServicePasses,
     ServicePassStore,
     ServiceReading,
 )
@@ -36,7 +37,7 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.nominal.shared_json import SharedJson
 from agent_comms.planning.orders import NoCommitProgress, Todo
 from agent_comms.planning.plan_phase_base import Plan, PlanPhase
-from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.storage.file_observation import FileRevision
 from agent_comms.storage.locked_store import JsonDocument
 from agent_comms.task_attachments.disclosure_text import ViewFacts, ViewSectionFacts, ViewTable
@@ -251,7 +252,23 @@ class TeamHud(TeamHudRecord):
     """
 
     def with_plan(self, plan: TeamPlan) -> Self:
-        return self if self.phases == plan.phases else replace(self, phases=plan.phases)
+        if self.phases == plan.phases:
+            return self
+        updated = replace(self, phases=plan.phases)
+        for name in ("alarm_source", "alarm_displays", "alarms", "board"):
+            if name in self.__dict__:
+                object.__setattr__(updated, name, self.__dict__[name])
+        return updated
+
+    def with_services(self, passes: ServicePasses, owner: RecordedThreadIncarnation) -> Self:
+        heartbeat = passes.heartbeat_completed_at(owner)
+        if self.services == passes and self.heartbeat == heartbeat:
+            return self
+        updated = super().with_services(passes, owner)
+        for name in ("groups", "plain_group_text", "alarm_source", "alarm_displays", "alarms", "board"):
+            if name in self.__dict__:
+                object.__setattr__(updated, name, self.__dict__[name])
+        return updated
 
     def compact_text(self) -> str:
         return "\n".join(self.frame)
@@ -409,7 +426,7 @@ class TeamHud(TeamHudRecord):
             object.__setattr__(self, "display", previous.display)
         return self
 
-    @property
+    @cached_property
     def board(self) -> tuple[BoardEntry, ...]:
         """The one action-filtered set captured from Ping.on_board for this observation."""
         return tuple(ping.board_entry() for ping in self.open_pings)
@@ -574,12 +591,165 @@ class RetainedTeamBoard:
 
 
 @dataclass(frozen=True)
-class _CachedBoardPublication:
+class _BoardPublicationView:
+    """One board publication cut, decoded directly unless cached by FileRevision."""
+
+    publication: TeamBoardPublication
+
+    @staticmethod
+    def _decode_packets(
+        records: Mapping[ThreadIncarnation, JsonValue],
+    ) -> dict[ThreadIncarnation, tuple[TeamUpdate, ...]]:
+        if not records:
+            return {}
+        packets = FieldCodec.record_key(TeamHudRecord, "packets")
+        decoded = FieldCodec.decode_shared(
+            tuple[tuple[TeamUpdate, ...], ...],
+            [raw[packets] for raw in records.values()],
+        )
+        return dict(zip(records, decoded, strict=True))
+
+    def records_mapping(self) -> Mapping[ThreadIncarnation, JsonValue]:
+        return TeamBoardPublicationStore.frame_records(self.publication.frames)
+
+    def _require_record(
+        self, owner: RecordedThreadIncarnation, health: ServiceReading, path: Path
+    ) -> JsonValue:
+        records = self.records_mapping()
+        if owner not in records:
+            raise BoardUnavailable(health, f"Tristan frame missing for {owner.name}: {path}")
+        return records[owner]
+
+    def huds(self, selection: TeamBoardSelection) -> tuple[TeamHud, ...]:
+        records = self.records_mapping()
+        raws = [raw for recipient, raw in records.items() if selection.includes(recipient)]
+        if not raws:
+            return ()
+        return FieldCodec.decode_shared(tuple[TeamHud, ...], raws)
+
+    def packet_map(self) -> dict[ThreadIncarnation, tuple[TeamUpdate, ...]]:
+        return self._decode_packets(self.records_mapping())
+
+    def _decode_hud_for(
+        self, owner: RecordedThreadIncarnation, health: ServiceReading, path: Path
+    ) -> TeamHud:
+        return FieldCodec.decode_shared(TeamHud, self._require_record(owner, health, path))
+
+    def _decorate_for(
+        self, owner: RecordedThreadIncarnation, base: TeamHud, passes: ServicePasses
+    ) -> TeamHud:
+        return base.with_services(passes, owner).with_plan(self.publication.plan)
+
+    def read_cut_huds(
+        self, selection: TeamBoardSelection, passes: ServicePasses
+    ) -> tuple[TeamHud, ...]:
+        return tuple(
+            sorted(
+                (
+                    self._decorate_for(hud.teammate.require_recorded(), hud, passes)
+                    for hud in self.huds(selection)
+                ),
+                key=lambda hud: hud.teammate.name,
+            )
+        )
+
+    def read_for(
+        self,
+        owner: RecordedThreadIncarnation,
+        passes: ServicePasses,
+        health: ServiceReading,
+        path: Path,
+    ) -> TeamHud:
+        return self._decorate_for(owner, self._decode_hud_for(owner, health, path), passes)
+
+
+@dataclass(frozen=True)
+class _CachedBoardPublication(_BoardPublicationView):
     """Process-local cache entry keyed by exact FileRevision of team_frames.json."""
 
     revision: FileRevision
-    publication: TeamBoardPublication
-    packets: Mapping[ThreadIncarnation, tuple[TeamUpdate, ...]] | None = None
+    _huds: dict[ThreadIncarnation, TeamHud] = field(default_factory=dict, repr=False, compare=False)
+    _served_huds: dict[ThreadIncarnation, TeamHud] = field(
+        default_factory=dict, repr=False, compare=False
+    )
+
+    @cached_property
+    def _records(self) -> Mapping[ThreadIncarnation, JsonValue]:
+        return MappingProxyType(TeamBoardPublicationStore.frame_records(self.publication.frames))
+
+    @cached_property
+    def _packets(self) -> Mapping[ThreadIncarnation, tuple[TeamUpdate, ...]]:
+        return MappingProxyType(self._decode_packets(self._records))
+
+    def records_mapping(self) -> Mapping[ThreadIncarnation, JsonValue]:
+        return self._records
+
+    def huds(self, selection: TeamBoardSelection) -> tuple[TeamHud, ...]:
+        records = self._records
+        selected = tuple(recipient for recipient in records if selection.includes(recipient))
+        if not selected:
+            return ()
+        with _board_publication_lock:
+            cached = dict(self._huds)
+        missing = tuple(recipient for recipient in selected if recipient not in cached)
+        if not missing:
+            return tuple(cached[recipient] for recipient in selected)
+        decoded_missing = FieldCodec.decode_shared(
+            tuple[TeamHud, ...],
+            [records[recipient] for recipient in missing],
+        )
+        newly_decoded = dict(zip(missing, decoded_missing, strict=True))
+        with _board_publication_lock:
+            self._huds.update(newly_decoded)
+        return tuple(
+            newly_decoded[recipient] if recipient in newly_decoded else cached[recipient]
+            for recipient in selected
+        )
+
+    def packet_map(self) -> dict[ThreadIncarnation, tuple[TeamUpdate, ...]]:
+        return dict(self._packets)
+
+    def _decode_hud_for(
+        self, owner: RecordedThreadIncarnation, health: ServiceReading, path: Path
+    ) -> TeamHud:
+        with _board_publication_lock:
+            if owner in self._huds:
+                return self._huds[owner]
+        base = super()._decode_hud_for(owner, health, path)
+        with _board_publication_lock:
+            self._huds[owner] = base
+        return base
+
+    def _decorate_for(
+        self, owner: RecordedThreadIncarnation, base: TeamHud, passes: ServicePasses
+    ) -> TeamHud:
+        with _board_publication_lock:
+            if owner in self._served_huds:
+                previous = self._served_huds[owner]
+                decorated = previous.with_services(passes, owner)
+                if decorated is not previous:
+                    self._served_huds[owner] = decorated
+                return decorated
+        decorated = super()._decorate_for(owner, base, passes)
+        with _board_publication_lock:
+            self._served_huds[owner] = decorated
+        return decorated
+
+    def read_for(
+        self,
+        owner: RecordedThreadIncarnation,
+        passes: ServicePasses,
+        health: ServiceReading,
+        path: Path,
+    ) -> TeamHud:
+        with _board_publication_lock:
+            if owner in self._served_huds:
+                previous = self._served_huds[owner]
+                decorated = previous.with_services(passes, owner)
+                if decorated is not previous:
+                    self._served_huds[owner] = decorated
+                return decorated
+        return super().read_for(owner, passes, health, path)
 
 
 _board_publication_lock = threading.Lock()
@@ -611,20 +781,31 @@ class TeamBoardPublicationStore(
                 _board_publication_cache.pop(self.path, None)
             return None
 
-    def read(self) -> TeamBoardPublication:
+    def _read_view(self) -> _BoardPublicationView:
         revision = self._stat_revision()
         if revision is None:
-            return self.empty()
+            return _BoardPublicationView(self.empty())
         with _board_publication_lock:
             cached = _board_publication_cache.get(self.path)
             if cached is not None and cached.revision == revision:
-                return cached.publication
+                return cached
         publication = self._read_unlocked()
-        after = self._stat_revision()
-        if after == revision:
+        if self._stat_revision() == revision:
+            entry = _CachedBoardPublication(publication, revision)
             with _board_publication_lock:
-                _board_publication_cache[self.path] = _CachedBoardPublication(revision, publication)
-        return publication
+                _board_publication_cache[self.path] = entry
+            return entry
+        return _BoardPublicationView(publication)
+
+    def _view_for(self, publication: TeamBoardPublication) -> _BoardPublicationView:
+        with _board_publication_lock:
+            cached = _board_publication_cache.get(self.path)
+            if cached is not None and cached.publication is publication:
+                return cached
+        return _BoardPublicationView(publication)
+
+    def read(self) -> TeamBoardPublication:
+        return self._read_view().publication
 
     def _publish_encoded_unlocked(self, encoded: JsonValue) -> None:
         with _board_publication_lock:
@@ -652,21 +833,15 @@ class TeamBoardPublicationStore(
         publication: TeamBoardPublication | None = None,
     ) -> dict[ThreadIncarnation, JsonValue]:
         publication = self.read() if publication is None else publication
-        return self.frame_records(publication.frames)
+        return dict(self._view_for(publication).records_mapping())
 
     def huds(
         self,
         selection: TeamBoardSelection = AllTeamBoards(),
         publication: TeamBoardPublication | None = None,
     ) -> tuple[TeamHud, ...]:
-        return FieldCodec.decode_shared(
-            tuple[TeamHud, ...],
-            [
-                raw
-                for recipient, raw in self.records(publication).items()
-                if selection.includes(recipient)
-            ],
-        )
+        publication = self.read() if publication is None else publication
+        return self._view_for(publication).huds(selection)
 
     def retained(
         self,
@@ -687,32 +862,8 @@ class TeamBoardPublicationStore(
         publication: TeamBoardPublication | None = None,
     ) -> dict[ThreadIncarnation, tuple[TeamUpdate, ...]]:
         """Per-recipient packets derived from the one shared retained frame cut."""
-        revision: FileRevision | None = None
-        if publication is None:
-            revision = self._stat_revision()
-            if revision is None:
-                return {}
-            with _board_publication_lock:
-                cached = _board_publication_cache.get(self.path)
-                if cached is not None and cached.revision == revision:
-                    if cached.packets is not None:
-                        return dict(cached.packets)
-                    publication = cached.publication
-            if publication is None:
-                publication = self._read_unlocked()
-        records = self.records(publication)
-        packets = FieldCodec.record_key(TeamHudRecord, "packets")
-        decoded = FieldCodec.decode_shared(
-            tuple[tuple[TeamUpdate, ...], ...],
-            [raw[packets] for raw in records.values()],
-        )
-        result = dict(zip(records, decoded, strict=True))
-        if revision is not None and self._stat_revision() == revision:
-            with _board_publication_lock:
-                _board_publication_cache[self.path] = _CachedBoardPublication(
-                    revision, publication, MappingProxyType(result),
-                )
-        return result
+        publication = self.read() if publication is None else publication
+        return self._view_for(publication).packet_map()
 
     @staticmethod
     def captured_frames(huds: tuple[TeamHud, ...]) -> SharedJson:
@@ -834,24 +985,13 @@ class TeamBoardPublicationStore(
         passes = ServicePassStore.at(root).read()
         health = ServiceReading(services=passes)
         store = cls.at(root)
-        publication = store.read()
-        frames = store.huds(selection, publication)
-        huds = tuple(
-            sorted(
-                (
-                    hud.with_services(
-                        passes, hud.teammate.require_recorded()
-                    ).with_plan(publication.plan)
-                    for hud in frames
-                ),
-                key=lambda hud: hud.teammate.name,
-            )
-        )
+        view = store._read_view()
+        huds = view.read_cut_huds(selection, passes)
         if not huds and passes.failing:
             raise BoardUnavailable(health, "no published teammate frame.")
         return TeamBoardCut(
             huds,
-            frozenset(owner for owner in publication.changed if selection.includes(owner)),
+            frozenset(owner for owner in view.publication.changed if selection.includes(owner)),
         )
 
     @classmethod
@@ -871,12 +1011,4 @@ class TeamBoardPublicationStore(
         passes = ServicePassStore.at(comms.root).read()
         health = ServiceReading().with_services(passes, owner)
         store = cls.at(comms.root)
-        publication = store.read()
-        records = store.records(publication)
-        if owner not in records:
-            raise BoardUnavailable(
-                health,
-                f"Tristan frame missing for {owner.name}: {store.path}",
-            )
-        hud = FieldCodec.decode(TeamHud, records[owner])
-        return hud.with_services(passes, owner).with_plan(publication.plan)
+        return store._read_view().read_for(owner, passes, health, store.path)
