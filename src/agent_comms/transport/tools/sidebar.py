@@ -59,6 +59,7 @@ from agent_comms.messaging.message_files import (
     MessageFilesRead,
     SendsFiles,
 )
+from agent_comms.registry.agent_settings_wire import ScopedSettingsProjection
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
 from agent_comms.messaging.page_traversal import LatestSequence
@@ -654,3 +655,47 @@ class CommsWireRevisionTool(ReadRequest[WireRevision]):
 
     label = "Bus revision"
     description = "The bus revision that thread, relationship, and conversation views derive from."
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsAgentSettingsTool(ReadRequest[ScopedSettingsProjection]):
+    """Read hierarchical agent settings, authored ancestor layers, and resolved provenance."""
+
+    label = "Agent settings"
+    description = (
+        "Read one scope's authored overrides across its Global -> Project -> [Channel] -> Thread "
+        "ancestry together with Core's resolved values and provenance."
+    )
+    scope: Annotated[
+        str,
+        *tool_field(
+            "ScopeKey string: '' (global), 'project::<id>', 'project::<id>::channel::<ch>', "
+            "'project::<id>::thread::<name>', or 'agent::<name>'"
+        ),
+    ] = ""
+    channel: Annotated[
+        str,
+        *tool_field("Optional surrounding channel when resolving a thread scope"),
+    ] = ""
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSetAgentSettingsTool(ToolRequest[ScopedSettingsProjection]):
+    """Update or clear authored agent-settings overrides at one scope; requires a human UI caller."""
+
+    label = "Set agent settings"
+    description = (
+        "Set or clear authored overrides at one ScopeKey; null values clear a field back to "
+        "inheritance from its parent scope. Requires a human UI caller."
+    )
+    scope: Annotated[str, *tool_field("Target ScopeKey string")] = ""
+    values: Annotated[
+        dict[str, JsonValue],
+        *tool_field(
+            "GlobalAgentSettings dotted field paths to wire values; null resets a field to inherit"
+        ),
+    ]
+    channel: Annotated[
+        str,
+        *tool_field("Optional surrounding channel for the returned resolved projection"),
+    ] = ""
