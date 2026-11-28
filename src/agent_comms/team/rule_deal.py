@@ -190,6 +190,9 @@ class Voice(ABC):
     def escalate(self, deal: RuleDeal, audit: SessionAudit) -> None:
         """A successful audit edit wrote a non-answer to its open question."""
 
+    def mute(self) -> Voice:
+        return Mute()
+
 
 class Speaking(Voice):
     """A voice that reaches its session. The question and its escalation are decided here, for

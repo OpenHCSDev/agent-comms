@@ -43,7 +43,7 @@ from agent_comms.execution.pi_rpc import PiRpcChannel
 from agent_comms.execution.pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from agent_comms.execution.request_progress import NO_REQUEST_OBSERVER, RequestObserver
 from agent_comms.execution.selected.session import SelectedSession
-from agent_comms.execution.transcript_sources import DraftFold, DraftPublication
+from agent_comms.execution.native_transcript import DraftPublication
 from agent_comms.execution.turn_context import InputContributionCoordinates
 from agent_comms.execution.turn_failure import TurnFailure
 from agent_comms.execution.turn_inbox import TurnInbox
@@ -316,7 +316,7 @@ class TrackedTurnSession(TurnSession, FollowingTurnSource[OwnedSend]):
                     ownership.push_async_callback(self.retain_or_close)
                     def acquire_draft() -> DraftPublication:
                         with self.startup.measurements.operation("draft_publication_worker"):
-                            return drafts.enter_context(DraftFold.publication(
+                            return drafts.enter_context(DraftPublication.open(
                                 self.startup.root, self.command.input_id))
 
                     with self.startup.measurements.operation("draft_publication_acquisition"):

@@ -6,8 +6,7 @@ from dataclasses import dataclass, field
 from sqlite3 import Connection
 from typing import Annotated, ClassVar
 
-from agent_comms.execution.native_record_file import RecordsCut
-from agent_comms.execution.native_records import TranscriptRecord
+from agent_comms.execution.transcript_record_base import RecordsCut, TranscriptRecord
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily

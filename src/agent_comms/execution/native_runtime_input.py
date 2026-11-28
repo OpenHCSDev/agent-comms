@@ -46,6 +46,7 @@ from agent_comms.execution.native_session_reopen import (
     NoSessionRetention,
     PiSessionId,
 )
+from agent_comms.execution.transcript_record_base import PublishedReplyRevision
 from agent_comms.execution.selected.triage import (
     AbsentTriageDecisionRecord,
     RecordedTriageText,
@@ -93,14 +94,6 @@ class NativeRuntimeTable(PrivateCoordinatorTable):
 
     __slots__ = ()
     schema_error = PublicationActivationBlocked
-
-
-@dataclass(frozen=True)
-class PublishedReplyRevision(TypedRow):
-    """Derived identity of this source's immutable published native relations."""
-
-    through_seq: int
-    inputs: int
 
 
 @dataclass(frozen=True)

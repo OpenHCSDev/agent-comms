@@ -28,7 +28,8 @@ from aiohttp.test_utils import TestClient, TestServer
 from yarl import URL
 
 from agent_comms.comms import Comms, wire
-from agent_comms.execution.transcript_sources import EarlierThan, NativeTranscript
+from agent_comms.execution.native_transcript import NativeTranscript
+from agent_comms.execution.transcript_sources import EarlierThan
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.coordination.service_passes import ServicePassStore

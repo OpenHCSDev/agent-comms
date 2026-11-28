@@ -48,7 +48,10 @@ from agent_comms.execution.persistent_pi_session import (
     PersistentPiSession as PersistentPiSession,
 )
 from agent_comms.execution.runtime_observations import AgentInfo
-from agent_comms.execution.transcript_sources import NativeTranscript
+from agent_comms.execution.native_transcript import (
+    NativeTranscript,
+    NativeTranscriptLocation,
+)
 from agent_comms.execution.pi_commands import Compact, NativeQuery
 from agent_comms.execution.pi_events import NativePiEvent
 from agent_comms.execution.pi_wire import PiOmitted
@@ -97,7 +100,7 @@ PI_0_85_1_EVENT_KINDS: frozenset[str] = frozenset({
 
 
 @dataclass(frozen=True)
-class PiSessionFile(RuntimeLocation):
+class PiSessionFile(NativeTranscriptLocation, RuntimeLocation):
     """The native backend's stored Pi transcript."""
 
     path: str

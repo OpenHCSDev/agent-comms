@@ -23,6 +23,7 @@ from agent_comms.execution.pi_commands import Compact, ExactResponse, PiCommand,
 from agent_comms.execution.pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from agent_comms.execution.pi_vocabulary import ThinkingLevelField
 from agent_comms.execution.pi_wire import PiOmitted
+from agent_comms.execution.native_transcript import NativeTranscriptLocation
 from agent_comms.execution.transcript_sources import TranscriptSource
 from agent_comms.nominal import field_codec
 from agent_comms.pi_payloads import PiResponseData
@@ -31,7 +32,7 @@ from agent_comms.transcript.external_transcript_rows import ExternalCut
 
 
 @dataclass(frozen=True)
-class DurableDatabase(SessionFiles, RuntimeLocation):
+class DurableDatabase(SessionFiles, NativeTranscriptLocation, RuntimeLocation):
     path: str
 
     def __post_init__(self):

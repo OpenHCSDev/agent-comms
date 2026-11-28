@@ -187,6 +187,9 @@ class RuntimeLocation(DeclaredFamily, TranscriptRuntime, affix='Runtime'):
     def read_keys(self):
         return (self.read_key,)
 
+    def native_cut(self, key: str):
+        raise BackendDeclarationError(f"{type(self).__name__} owns no native transcript file")
+
     def transcript_cursor(self, frontier, cut, *, source):
         return frontier.cursor(source.read_key, cut.offset, file=cut.file_identity())
 
