@@ -47,6 +47,7 @@ from agent_comms.nominal.field_codec import FieldCodec, SingleFieldValue
 from agent_comms.planning.goal_waits import GoalWaits
 from agent_comms.projects.checkouts import Checkout, LaunchCheckout
 from agent_comms.registry.agent_activity import AgentActivity
+from agent_comms.registry.agent_settings_store import AgentSettingsStore
 from agent_comms.registry.catalog_store import ChannelCatalog
 from agent_comms.registry.collaboration_ledger import CollaborationLedger
 from agent_comms.registry.heartbeat_delivery import HeartbeatDelivery
@@ -529,6 +530,7 @@ class ThreadManagement(BusThreads):
         self.agents.activity.rename_thread(previous, current)
         self.agents.runtime_info.rename_thread(previous, current)
         self.ledger.rename_thread(previous, current)
+        AgentSettingsStore.at(self.root).rename_thread(previous, current)
         self.catalog.change(lambda document: document.rename_thread(previous, current))
 
     def heartbeat(self, name: str) -> None:
@@ -637,6 +639,7 @@ class ThreadManagement(BusThreads):
             transcript_read_state(self.bus.reads.path),
             GoalWaits(self.root),
             RelationshipStore.at(self.root),
+            AgentSettingsStore.at(self.root),
         )
         ThreadOwnedState.require_complete(states)
         return states

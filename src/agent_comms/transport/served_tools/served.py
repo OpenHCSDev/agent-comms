@@ -192,6 +192,7 @@ from agent_comms.transport.tools.sidebar import (
     CommsImportThreadTool,
     CommsLatestSequenceTool,
     CommsMarkPageReadTool,
+    CommsAgentSettingsTool,
     CommsMarkThreadViewReadTool,
     CommsMessageFilesTool,
     CommsMessageFileTool,
@@ -208,6 +209,7 @@ from agent_comms.transport.tools.sidebar import (
     CommsSavedSourceTool,
     CommsServedRootTool,
     CommsSessionThreadTool,
+    CommsSetAgentSettingsTool,
     CommsSetRelationshipOrderTool,
     CommsSortChannelsTool,
     CommsSortChannelTool,
@@ -230,6 +232,8 @@ from agent_comms.transport.tools.sidebar import (
     TargetActionsRead,
     ThreadViewMarked,
 )
+from agent_comms.registry.agent_settings import AgentSettings
+from agent_comms.registry.agent_settings_wire import AgentSettingsScope, ScopedSettingsProjection
 from agent_comms.ui_model.retired_views import RetiredViews
 from agent_comms.working_memory.working_memory_labels import JevClassifier
 from agent_comms_hooks import ToolRefusedError
@@ -547,6 +551,28 @@ class ServedCommsThreadConfigurationTool(
 
     def apply(self, comms: Comms, caller: ToolCaller) -> CoordinationChangedUpdate:
         return comms.configuration.answer(self.thread)
+
+
+class ServedCommsAgentSettingsTool(
+    ScreensArea, CoreRead[ScopedSettingsProjection], CommsAgentSettingsTool
+):
+    """Serving CommsAgentSettingsTool."""
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ScopedSettingsProjection:
+        scope = AgentSettingsScope.parse(self.scope)
+        return AgentSettings.at(comms.root).projection(scope, channel=self.channel)
+
+
+class ServedCommsSetAgentSettingsTool(
+    ScreensArea, HumanToolRequest[ScopedSettingsProjection], CommsSetAgentSettingsTool
+):
+    """Serving CommsSetAgentSettingsTool."""
+
+    def answered(self, comms: Comms) -> ScopedSettingsProjection:
+        scope = AgentSettingsScope.parse(self.scope)
+        return AgentSettings.at(comms.root).update_scope(
+            scope, self.values, channel=self.channel
+        )
 
 
 class ServedCommsSessionThreadTool(
