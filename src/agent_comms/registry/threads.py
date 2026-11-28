@@ -1107,11 +1107,7 @@ class NativeThread(Thread):
         return self.turn_record.read_in(turns).project_activity(activity)
 
     def join_forking_caller(self, join_child: Callable[[], None]) -> None:
-        del join_child
-        raise ToolRefusedError(
-            f"Thread {self.name!r} runs on Native Pi; "
-            "call comms_cli_inbox first to take it over from a CLI/MCP session."
-        )
+        self.backend.join_forking_caller(self, join_child)
 
 
 @dataclass(frozen=True, kw_only=True)

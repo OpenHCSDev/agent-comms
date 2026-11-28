@@ -7,15 +7,20 @@ attempts can declare these families without importing the bridge transport.
 from __future__ import annotations
 
 import sqlite3
+from abc import abstractmethod
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination.assignment_states import AssignmentState
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_evidence import ConsumptionEvidence
-from agent_comms.messaging.notification_progress import DeliveryProgress, HarnessConsumedProgress
+from agent_comms.messaging.notification_progress import (
+    ConsumingProgress,
+    DeliveryProgress,
+    HarnessConsumedProgress,
+)
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import TranscriptRecordId
 from agent_comms.storage.recorded_time import Timestamped
@@ -218,3 +223,84 @@ class AcknowledgedReceipt(ObservedInputEvidence):
     entered its context when its harness writes no local transcript."""
 
     timestamp: float
+
+
+@dataclass(frozen=True)
+class AnsweringReceipt(ObservedInputEvidence):
+    """The recipient explicitly chose to answer this message; sending a reply settles it to Answered."""
+
+    timestamp: float
+
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
+        return progress.model_consumed(ConsumingProgress(self.at_ms))
+
+
+class DeliveryReceiptChoice(DeclaredFamily, affix="ReceiptChoice"):
+    """What receipt state a recipient records for a received message."""
+
+    outcome: ClassVar[type[Outcome]]
+
+    @classmethod
+    @abstractmethod
+    def monitor(cls, timestamp: float) -> MonitorEvidence: ...
+
+    @classmethod
+    def update_existing(
+        cls,
+        row: HarnessDelivery,
+        timestamp: float,
+        assignments: AssignmentStore,
+        db: sqlite3.Connection,
+    ) -> None:
+        row.apply(
+            partial(replace, outcome=cls.outcome, monitor=cls.monitor(timestamp)),
+            assignments,
+            db,
+        )
+
+
+class ReadReceiptChoice(DeliveryReceiptChoice):
+    """Record that the message entered context without promising a reply."""
+
+    outcome = DeliveredOutcome
+
+    @classmethod
+    def monitor(cls, timestamp: float) -> MonitorEvidence:
+        return AcknowledgedReceipt(timestamp)
+
+
+class ExplicitReceiptChoice(DeliveryReceiptChoice, declared_name=None):
+    """An explicit answering/not-answering decision supersedes a plain Read receipt."""
+
+    @classmethod
+    def update_existing(
+        cls,
+        row: HarnessDelivery,
+        timestamp: float,
+        assignments: AssignmentStore,
+        db: sqlite3.Connection,
+    ) -> None:
+        replace(
+            row, outcome=cls.outcome, monitor=cls.monitor(timestamp),
+        ).record(assignments, db)
+
+
+class AnsweringReceiptChoice(ExplicitReceiptChoice):
+    """Record that this recipient chose to answer; its committed reply flips this to Answered."""
+
+    outcome = DeliveredOutcome
+
+    @classmethod
+    def monitor(cls, timestamp: float) -> MonitorEvidence:
+        return AnsweringReceipt(timestamp)
+
+
+class NotAnsweringReceiptChoice(ExplicitReceiptChoice):
+    """Record that this recipient read the message and chose not to answer."""
+
+    outcome = FilteredOutcome
+
+    @classmethod
+    def monitor(cls, timestamp: float) -> MonitorEvidence:
+        del timestamp
+        return IgnoredMonitor()

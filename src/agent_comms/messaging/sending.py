@@ -8,10 +8,9 @@ from pathlib import Path
 import time
 
 from agent_comms.cli_bridges.harness_delivery_states import (
-    AcknowledgedReceipt,
-    DeliveredOutcome,
-    FilteredOutcome,
-    IgnoredMonitor,
+    DeliveryReceiptChoice,
+    NotAnsweringReceiptChoice,
+    ReadReceiptChoice,
     UnconfirmedOutcome,
 )
 from agent_comms.coordination.assignment_store import AssignmentStore
@@ -196,8 +195,9 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         *,
         bridge: type[HarnessSession] = HarnessSession,
         timestamp: float | None = None,
+        status: type[DeliveryReceiptChoice] = ReadReceiptChoice,
     ) -> tuple[MessageReference, ...]:
-        """Confirm that the named received messages entered this recipient's context."""
+        """Record a receipt state (read, answering, or not_answering) for received messages."""
         unique = tuple(dict.fromkeys(references))
         if not unique:
             return ()
@@ -210,8 +210,8 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
             raise UnreceivedAnswerError(
                 f"{owner.name} never received {', '.join(r.message_id for r in unreceived)}"
                 ", so it cannot acknowledge it")
-        self._record_acknowledged_deliveries(
-            owner, unique, time.time() if timestamp is None else timestamp, bridge=bridge,
+        self._record_receipt_choice(
+            owner, unique, status, time.time() if timestamp is None else timestamp, bridge=bridge,
         )
         return unique
 
@@ -241,23 +241,9 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         refs = tuple(dict.fromkeys(origin.reference for origin in origins if origin.seq > 0))
         if not refs:
             return ()
-        lookup = owner.incarnation.require_recorded().lookup
-        evidence = IgnoredMonitor()
-        path = str(CoordinationStore.path_in(self.root))
-        with NativeCoordinationSession(path) as session, session.writing() as db:
-            assignments = AssignmentStore(session)
-            for ref in refs:
-                existing = HarnessDelivery.for_recipients(db, ((lookup, ref),))
-                if existing:
-                    for row in existing:
-                        replace(
-                            row, outcome=FilteredOutcome, monitor=evidence,
-                        ).record(assignments, db)
-                else:
-                    HarnessDelivery(
-                        bridge, lookup, ref.message_id, ref.seq,
-                        FilteredOutcome, monitor=evidence,
-                    ).record(assignments, db)
+        self._record_receipt_choice(
+            owner, refs, NotAnsweringReceiptChoice, time.time(), bridge=bridge,
+        )
         return refs
 
     def _settle_answered_remote_deliveries(
@@ -282,18 +268,18 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
                 if issubclass(row.outcome, UnconfirmedOutcome)
             ))
         if pending:
-            self._record_acknowledged_deliveries(owner, pending, timestamp)
+            self._record_receipt_choice(owner, pending, ReadReceiptChoice, timestamp)
 
-    def _record_acknowledged_deliveries(
+    def _record_receipt_choice(
         self,
         owner: Thread,
         references: tuple[MessageReference, ...],
+        choice: type[DeliveryReceiptChoice],
         timestamp: float,
         *,
         bridge: type[HarnessSession] = HarnessSession,
     ) -> None:
         lookup = owner.incarnation.require_recorded().lookup
-        evidence = AcknowledgedReceipt(timestamp)
         path = str(CoordinationStore.path_in(self.root))
         with NativeCoordinationSession(path) as session, session.writing() as db:
             assignments = AssignmentStore(session)
@@ -301,14 +287,11 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
                 existing = HarnessDelivery.for_recipients(db, ((lookup, ref),))
                 if existing:
                     for row in existing:
-                        row.apply(
-                            partial(replace, outcome=DeliveredOutcome, monitor=evidence),
-                            assignments, db,
-                        )
+                        choice.update_existing(row, timestamp, assignments, db)
                 else:
                     HarnessDelivery(
                         bridge, lookup, ref.message_id, ref.seq,
-                        DeliveredOutcome, monitor=evidence,
+                        choice.outcome, monitor=choice.monitor(timestamp),
                     ).record(assignments, db)
 
     def _answered_by(self, owner: Thread, target: str,

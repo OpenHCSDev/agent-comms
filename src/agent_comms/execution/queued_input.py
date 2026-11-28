@@ -474,6 +474,7 @@ class DirectDeliveredInput(BusDeliveredInput):
                 row = ReservedInput(
                     key, message.seq, canonical, context.claimed_identity.claimed_generation,
                     message.target, prompt,
+                    origin=WireInputOrigin(cut.privacy.namespace, message.reference),
                 )
                 with ExitStack() as ownership:
                     inputs.dispositions.reserve_originals(row, ownership=ownership)

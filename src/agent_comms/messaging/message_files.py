@@ -32,7 +32,8 @@ from agent_comms.transport.request import tool_field
 from agent_comms.transport.tool_result import ToolResult
 from agent_comms_hooks import ToolRefusedError
 
-MAX_MESSAGE_FILE_BYTES = 8 * 1024 * 1024
+MAX_MESSAGE_FILE_MIB = 32
+MAX_MESSAGE_FILE_BYTES = MAX_MESSAGE_FILE_MIB * 1024 * 1024
 """The most file bytes one message carries, all its files together."""
 
 MAX_FILE_NAME_LENGTH = 255
@@ -79,11 +80,11 @@ class FileUpload:
         if not MIME_TYPE.fullmatch(self.mime_type):
             raise ValueError(f"Unsupported file type: {self.mime_type!r}")
         if len(self.data) > MAX_MESSAGE_FILE_TEXT:
-            raise ValueError("Files exceed the 8 MiB message limit.")
+            raise ValueError(f"Files exceed the {MAX_MESSAGE_FILE_MIB} MiB message limit.")
         if not self.content:
             raise ValueError("File data is empty.")
         if self.size > MAX_MESSAGE_FILE_BYTES:
-            raise ValueError("Files exceed the 8 MiB message limit.")
+            raise ValueError(f"Files exceed the {MAX_MESSAGE_FILE_MIB} MiB message limit.")
 
     @classmethod
     def of(cls, name: str, mime_type: str, content: bytes) -> FileUpload:
@@ -109,7 +110,7 @@ class FileUpload:
     def require_bounded(uploads: tuple[FileUpload, ...]) -> None:
         """One message's files fit its limit together."""
         if sum(upload.size for upload in uploads) > MAX_MESSAGE_FILE_BYTES:
-            raise ValueError("Files exceed the 8 MiB message limit.")
+            raise ValueError(f"Files exceed the {MAX_MESSAGE_FILE_MIB} MiB message limit.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -119,7 +120,9 @@ class SendsFiles:
 
     files: Annotated[
         tuple[FileUpload, ...],
-        *tool_field("Files the message carries: name, mimeType and base64 data; 8 MiB in all"),
+        *tool_field(
+            f"Files the message carries: name, mimeType and base64 data; {MAX_MESSAGE_FILE_MIB} MiB in all"
+        ),
         WireOmitDefault(),
     ] = ()
 

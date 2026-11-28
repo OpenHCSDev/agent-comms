@@ -199,6 +199,11 @@ class AntigravityAcpBackend(
     ) -> TurnTranscriptSink:
         return ExternalTurnTranscriptSink.for_turn(root, incarnation, turn_id, opening)
 
+    @classmethod
+    def join_forking_caller(cls, thread: Thread, join_child: object) -> None:
+        """Multiplexed Antigravity ACP sessions share the host MCP grant and act as their own thread."""
+        del thread, join_child
+
     def __init__(self, process: AntigravityAcpProcess) -> None:
         self._process = process
         self._acp_session: AcpSessionSelection = NoAcpSessionId()

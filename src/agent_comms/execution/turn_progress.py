@@ -108,6 +108,18 @@ class TurnProgress(AgentEventConsumer[Comms]):
     def origins(self):
         return self.original.origins
 
+    @property
+    def active_reply_targets(self) -> tuple[str, ...]:
+        """Initial turn reply targets plus any bus messages steered into this turn."""
+        return tuple(dict.fromkeys((
+            *self.turn.reply_targets,
+            *(
+                origin.exact_reply_target
+                for origin in self.delivered_origins.values()
+                if origin.sender != self.thread_name
+            ),
+        )))
+
     @handles(ContextObserved)
     async def observe_context(self, event):
         await CoordinationWork.run_worker(partial(
@@ -148,7 +160,7 @@ class TurnProgress(AgentEventConsumer[Comms]):
 
     @handles(events.Chunk)
     async def chunk(self, event: events.Chunk) -> None:
-        if self.turn.reply_targets:
+        if self.active_reply_targets:
             self.reply_parts.append(event.text)
         await self.transcript_sink.on_chunk(event.text)
 
@@ -162,18 +174,19 @@ class TurnProgress(AgentEventConsumer[Comms]):
                 await self.consume(events.Notice(text=text))
 
     def _publishable_reply_targets(self, text: str) -> tuple[str, ...]:
+        targets = self.active_reply_targets
         if SelectedTriage.suppresses_channel_reply(text):
             return tuple(
                 kept
-                for target in self.turn.reply_targets
+                for target in targets
                 for kept in CommandTarget.named(target).keep_on_ignore(target)
             )
-        return self.turn.reply_targets
+        return targets
 
     def publish_progress(self, progress: str) -> tuple[SendResult, ...]:
         """Join the committed notice and consume its streamed text together."""
         results: tuple[SendResult, ...] = ()
-        if self.turn.reply_targets:
+        if self.active_reply_targets:
             if progress and "".join(self.reply_parts) == progress:
                 # Committed assistant text before tool work or steer handling. Channel
                 # targets keep ConversationRole so @mentions wake peers and receipts resolve;
@@ -373,7 +386,7 @@ class TurnProgress(AgentEventConsumer[Comms]):
             # failure notice non-waking, including for human reply targets.
             notice_targets = tuple(
                 dict.fromkeys(
-                    (*self.turn.reply_targets,)
+                    (*self.active_reply_targets,)
                     + tuple(
                         origin.exact_reply_target
                         for origin in self.origins

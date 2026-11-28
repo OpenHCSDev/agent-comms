@@ -27,6 +27,7 @@ from agent_comms.transport import serving
 from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.errors import CoordinationError, IdentityConflict, Refused
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging.message_files import MAX_SEND_REQUEST_BYTES
 from agent_comms.execution.controller import (
     UNBOUND_CONTROLLER,
     CancelledOutcome,
@@ -263,7 +264,7 @@ class RuntimeServer(AcpUpdateSink):
             self.listener.listen()
             self.listener.setblocking(False)
             self.server = await asyncio.start_unix_server(
-                self.handle, sock=self.listener, limit=8 * 1024 * 1024,
+                self.handle, sock=self.listener, limit=MAX_SEND_REQUEST_BYTES,
                 cleanup_socket=False,
             )
         except BaseException:

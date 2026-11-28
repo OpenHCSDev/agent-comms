@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms import agent_events as events
 from agent_comms.errors import RelationViolationError
+from agent_comms_hooks import ToolRefusedError
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.backend_query import (
     BackendQuery,
@@ -515,6 +516,15 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     @classmethod
     def require_forkable(cls, parent: Thread) -> None:
         raise RelationViolationError(f"{cls.__name__} does not support forking.")
+
+    @classmethod
+    def join_forking_caller(cls, thread: Thread, join_child: Callable[[], None]) -> None:
+        """Native Pi threads run under their own process rather than a shared MCP grant."""
+        del join_child
+        raise ToolRefusedError(
+            f"Thread {thread.name!r} runs on Native Pi; "
+            "call comms_cli_inbox first to take it over from a CLI/MCP session."
+        )
 
     @classmethod
     def registered_over(cls, previous: type[AgentBackend]) -> type[AgentBackend]:
