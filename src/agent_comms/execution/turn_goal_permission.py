@@ -31,6 +31,13 @@ class GoalPermission(ABC):
         return dependency.current(wait)
 
 
+class RoutedGoalPermission(GoalPermission):
+    """A goal permission captured with an active goal authorizes routed turns under that same goal."""
+
+    def allows_routed(self, current: GoalDeclaration) -> bool:
+        return self.allows(current)
+
+
 @dataclass(frozen=True)
 class OwnerGoalPermission(GoalPermission):
     authority: GoalTurnAuthority
@@ -42,25 +49,19 @@ class OwnerGoalPermission(GoalPermission):
         return self.authority.describe()
 
 
-class PublishedGoalPermission(OwnerGoalPermission):
+class PublishedGoalPermission(RoutedGoalPermission, OwnerGoalPermission):
     """This running input itself wrote the captured declaration."""
-
-    def allows_routed(self, current: GoalDeclaration) -> bool:
-        return self.allows(current)
 
     def dependency_current(self, dependency: InputDependency, wait: GoalWait) -> bool:
         return dependency.current(wait) or wait.allows_routed_input()
 
 
 @dataclass(frozen=True)
-class ContinuationGoalPermission(GoalPermission):
+class ContinuationGoalPermission(RoutedGoalPermission):
     goal_id: GoalId
 
     def allows(self, current: GoalDeclaration) -> bool:
         return current.active().accepts_observation(self.goal_id, 0)
-
-    def allows_routed(self, current: GoalDeclaration) -> bool:
-        return self.allows(current)
 
     def describe(self) -> str:
         return f"continuation of goal {self.goal_id}"
