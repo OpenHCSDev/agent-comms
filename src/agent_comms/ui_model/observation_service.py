@@ -62,6 +62,8 @@ from agent_comms.registry.registry_document import RegistrySnapshot, UnreadRegis
 from agent_comms.registry.registry_names import DeletedThread
 from agent_comms.registry.thread_presentation import ThreadPresentation
 from agent_comms.registry.view_unread import ReplyIndexResult
+from agent_comms.storage.locked_store import LockedStore
+from agent_comms.storage.typed_table import TypedTable
 from agent_comms.team.team_board_selection import TeamBoardSelection
 from agent_comms.team.team_hud import TeamBoardPublicationStore
 from agent_comms.ui_model.observation import (
@@ -1066,6 +1068,15 @@ class ServiceEnd(EncodedConnection):
 
 
 OBSERVATION_SERVICE_PROCESS = ProcessName("ac-observation")
+OBSERVATION_PRELOAD_MODULE = f"{__package__}.observation_preload"
+
+
+def warm_observation_forkserver() -> None:
+    """Load store declarations, build declared table schemas once, and freeze the heap."""
+    LockedStore.load_declarations()
+    for table in TypedTable.members_with(TypedTable):
+        _ = table.schema_names
+    started()
 
 
 def serve_encoded(route: CommsRoute, service_socket: socket.socket) -> None:
