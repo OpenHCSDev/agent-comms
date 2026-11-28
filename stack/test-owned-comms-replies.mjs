@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
