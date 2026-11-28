@@ -165,13 +165,18 @@ class EscalationNotice(OwnerNotice, declared_name=None):
             cls.burst(comms, teammate, lines)
 
     @classmethod
+    def since(cls) -> float:
+        """The oldest line of this kind still open: a burst stops asking after its horizon."""
+        return time.time() - cls.horizon
+
+    @classmethod
     def lines(cls, source: BusReader, snapshot: RegistrySnapshot, teammate: str,
               before: float) -> tuple[Message, ...]:
-        """This burst kind's lines to the teammate's birth within the horizon, newest first."""
+        """This burst kind's lines to the teammate's birth still open, newest first."""
         notice = cls.of(snapshot, teammate)
         with source.observing() as db:
             sent = EscalationPosition.sent(
-                db, notice.teammate.require_recorded().lookup, time.time() - cls.horizon, before)
+                db, notice.teammate.require_recorded().lookup, cls.since(), before)
         return tuple(message for message in sent if message.task == notice)
 
     @classmethod
@@ -203,3 +208,10 @@ class VibeCheckNotice(EscalationNotice, declared_name="vibe_check"):
 @dataclass(frozen=True)
 class ChokeholdNotice(EscalationNotice, declared_name="chokehold"):
     title = "chokehold"
+
+    @classmethod
+    def since(cls) -> float:
+        """A chokehold's pause has no horizon, so neither has its question: the paused birth's
+        answer releases it however long after the burst it comes. With a horizon, a goal paused
+        past it could never be answered or replaced (claude-laptop, paused 2026-11-09)."""
+        return 0.0
