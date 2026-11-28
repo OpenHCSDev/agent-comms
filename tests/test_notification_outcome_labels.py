@@ -85,3 +85,57 @@ def test_only_queued_and_pending_queued_progress_report_is_queued():
         AnsweredProgress(queued, response),
     ):
         assert not state.is_queued(), f"{type(state).__name__} must not report is_queued()"
+
+
+def test_summary_counts_read_across_all_opened_statuses():
+    response = AnsweredResponse(MessageReference(123, MessageId('1' * 12)), 2000)
+
+    def peer(name: str, progress) -> MessageNotification:
+        return MessageNotification(FrozenRecipient(LOOKUP, name), LOOKUP, progress)
+
+    assert MessageNotification.summary(()) == "Sent"
+    assert MessageNotification.summary((peer("a", UnrecordedProgress()),)) == "Sent"
+    assert MessageNotification.summary((peer("a", HumanReadProgress()),)) == "1 read"
+
+    # Six Not answering -> all six read and not answering.
+    six_ignored = tuple(peer(f"p{i}", IgnoredProgress(UnrecordedProgress())) for i in range(6))
+    assert MessageNotification.summary(six_ignored) == "6 read · 6 not answering"
+
+    # One plain Read + five Not answering -> 6 read · 5 not answering.
+    one_read_five_ignored = (
+        peer("reader", HarnessConsumedProgress(AT)),
+        *(peer(f"p{i}", IgnoredProgress(UnrecordedProgress())) for i in range(5)),
+    )
+    assert MessageNotification.summary(one_read_five_ignored) == "6 read · 5 not answering"
+
+    # Mixed read, answering, answered (even without harness proof), not answering, and unread Sent.
+    mixed = (
+        peer("plain-read", HarnessConsumedProgress(AT)),
+        peer("busy", ConsumingProgress(AT)),
+        peer("replied", AnsweredProgress(UnrecordedProgress(), response)),
+        peer("skip-1", IgnoredProgress(UnrecordedProgress())),
+        peer("skip-2", IgnoredProgress(ShownToModelProgress(AT))),
+        peer("skip-3", IgnoredProgress(SentProgress(AT))),
+        peer("still-sent", PendingProgress(UnrecordedProgress())),
+    )
+    assert (
+        MessageNotification.summary(mixed)
+        == "6 read · 1 answering · 1 answered · 3 not answering"
+    )
+
+    # Failed after ConsumingProgress counts as read, never live answering, and keeps its failure prefix.
+    failed = peer("crashed", FailedProgress(ConsumingProgress(AT)))
+    failed_summary = MessageNotification.summary((failed,))
+    assert "1 read" in failed_summary
+    assert "answering" not in failed_summary
+    assert "failed" in failed_summary
+
+    # Queued stays visible beside read counts.
+    queued_and_read = (
+        peer("q", QueuedProgress(AT)),
+        peer("r1", HarnessConsumedProgress(AT)),
+        peer("r2", IgnoredProgress(UnrecordedProgress())),
+    )
+    q_summary = MessageNotification.summary(queued_and_read)
+    assert q_summary.startswith("Queued ")
+    assert q_summary.endswith(" · 2 read · 1 not answering")
