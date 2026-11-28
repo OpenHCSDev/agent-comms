@@ -160,6 +160,11 @@ class NativeTranscript(ReadsNativeInputs, TranscriptSource):
     def publication_revision(self, root: Path, recipient: RecordedThreadIncarnation):
         return self.cut().publication_revision(root, self, recipient)
 
+    def present_publication_revision(
+        self, root: Path, recipient: RecordedThreadIncarnation
+    ) -> PublishedReplyRevision:
+        return NativeRuntimeInput.publication_revision(root, self, recipient.lookup)
+
     @contextmanager
     def projection(self, sources, routes):
         """Project records through their native input and the session's routes."""

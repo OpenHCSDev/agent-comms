@@ -9,7 +9,6 @@ from typing import BinaryIO
 
 from agent_comms.coordination.errors import TranscriptChanged
 from agent_comms.execution.native_records import NativeRecord
-from agent_comms.execution.native_runtime_input import NativeRuntimeInput
 from agent_comms.execution.native_session_reopen import PiSessionId
 from agent_comms.execution.transcript_record_base import PublishedReplyRevision, RecordsCut
 from agent_comms.messaging.transcript_read_mark import MarksTranscriptRead
@@ -122,7 +121,7 @@ class PresentSessionCut(SessionCut):
     def publication_revision(
         self, root: Path, reader: ReadsNativeInputs, recipient: RecordedThreadIncarnation
     ) -> PublishedReplyRevision:
-        return NativeRuntimeInput.publication_revision(root, reader, recipient.lookup)
+        return reader.present_publication_revision(root, recipient)
 
 
 class ReadsNativeInputs(ABC):
@@ -136,3 +135,8 @@ class ReadsNativeInputs(ABC):
 
     @abstractmethod
     def inputs_for(self, records: Sequence[NativeRecord], *, floor: int = 0) -> tuple[NativeRecord, ...]: ...
+
+    @abstractmethod
+    def present_publication_revision(
+        self, root: Path, recipient: RecordedThreadIncarnation
+    ) -> PublishedReplyRevision: ...
