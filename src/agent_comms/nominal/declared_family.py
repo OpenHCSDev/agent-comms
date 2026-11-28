@@ -83,6 +83,7 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
                 LazyDiscoveryDict(enable_cache=False) if discovery_package else {}
             )
             namespace["declared_name"] = None
+            namespace["__registry_key__"] = "declared_name"
             config = namespace["__registry_config__"] = RegistryConfig(
                 registry_dict=registry,
                 key_attribute="declared_name",
