@@ -44,7 +44,7 @@ from agent_comms.messaging.bus_identity import BusIdentityStore
 from agent_comms.messaging.bus_read import UiRead
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.exporting import EverythingScope, FullLimit, JsonlFormat
-from agent_comms.messaging.send_result import MessagePublished
+from agent_comms.messaging.published_message import MessagePublished
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordProblems, RootId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.projects.git_errors import FailedGitCommand

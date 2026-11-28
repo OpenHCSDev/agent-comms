@@ -76,7 +76,7 @@ from agent_comms.messaging.bus_identity import BusIdentityStore
 from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.message_files import MAX_SEND_REQUEST_BYTES
 from agent_comms.messaging.messages import QuestionKind
-from agent_comms.messaging.send_result import MessagePublished
+from agent_comms.messaging.published_message import MessagePublished
 from agent_comms.messaging.task_sources import OwnerRequestAttachment
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import (

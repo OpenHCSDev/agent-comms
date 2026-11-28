@@ -5,7 +5,7 @@ reply, and its composer stayed held as if the send had failed."""
 
 from agent_comms.cli_verbs.cli_commands import ThreadArchivedResult
 from agent_comms.messaging.channels import Channel
-from agent_comms.messaging.send_result import MessagePublished
+from agent_comms.messaging.published_message import MessagePublished
 from agent_comms.transport.served_tools.served import (
     CommsAuthoredTaskTool,
     ServedCommsArchiveTool,

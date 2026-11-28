@@ -24,7 +24,7 @@ from agent_comms.execution.turn_digests import (
     UnavailableOrderEdits,
     UnjudgedEdits,
 )
-from agent_comms.messaging.send_result import MessagePublished
+from agent_comms.messaging.published_message import MessagePublished
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     MessageId,

@@ -57,9 +57,9 @@ from agent_comms.messaging.messages import NoticeRole
 from agent_comms.messaging.notification_evidence import AfterRecipient
 from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.messaging.page_traversal import LatestSequence, LiveCursor
+from agent_comms.messaging.published_message import MessagePublished
 from agent_comms.messaging.send_result import (
     CorrectionComplete,
-    MessagePublished,
     SendResult,
 )
 from agent_comms.messaging.task_sources import Constraint, Decision, Subtask
