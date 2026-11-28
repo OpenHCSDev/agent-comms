@@ -603,7 +603,27 @@ class MessageRoutes(ProjectionOutputs):
         return (BusRouteCounts.from_message(message), BusRouteKeys.from_message(message))
 
 
-class MessageKind(DeclaredFamily, MessageRoutes, ProjectionSource, affix="Kind"):
+class DeliveredMessageRoutes(ProjectionOutputs):
+    """Per-recipient route totals emitted by conversation deliveries, separate from BusRouteCounts."""
+
+    __slots__ = ()
+
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        from agent_comms.messaging.bus_tables import BusRecipientRouteCounts
+        return (BusRecipientRouteCounts,)
+
+    @classmethod
+    def recipient_route_rows(cls, message):
+        from agent_comms.messaging.bus_tables import BusRecipientRouteCounts
+
+        return tuple(
+            BusRecipientRouteCounts.from_delivery(recipient.recipient_lookup, message)
+            for recipient in message.recipients
+        )
+
+
+class MessageKind(DeclaredFamily, MessageRoutes, DeliveredMessageRoutes, ProjectionSource, affix="Kind"):
     """A declared message kind; each member owns the validation it requires.
 
     Members are the kind themselves, never instances: the wire carries the
@@ -646,6 +666,10 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
 
     @classmethod
     def route_rows(cls, message):
+        return ()
+
+    @classmethod
+    def recipient_route_rows(cls, message):
         return ()
 
     @classmethod

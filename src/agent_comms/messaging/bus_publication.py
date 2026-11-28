@@ -10,7 +10,12 @@ from typing import ClassVar, Self
 from agent_comms.coordination.response_acknowledgement import KeyedResponseAcknowledgement
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.audience_manifest import AudiencedMessage
-from agent_comms.messaging.bus_tables import AwaitingAnswerSource, ReceivedSource, SentSource
+from agent_comms.messaging.bus_tables import (
+    AwaitingAnswerSource,
+    BusRecipientRouteCounts,
+    ReceivedSource,
+    SentSource,
+)
 from agent_comms.messaging.channel_targets import ThreadTarget
 from agent_comms.messaging.delivery_recipients import DeliveryRecipients
 from agent_comms.messaging.initial_origin import InitialOrigin, OwnerVoiceOrigin
@@ -44,7 +49,7 @@ class Delivered(
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        return (SentSource, ReceivedSource, AwaitingAnswerSource)
+        return (SentSource, ReceivedSource, AwaitingAnswerSource, BusRecipientRouteCounts)
 
     decisions: tuple[RecipientDecision, ...]
     control: str
@@ -64,6 +69,7 @@ class Delivered(
                     recipient.recipient_lookup, self.seq, recipient.canonical_thread,
                     self.role.response_policy(self).starts_direct_turn,
                 )
+        yield from self.type.recipient_route_rows(self)
 
     @property
     def history_record(self) -> Self:

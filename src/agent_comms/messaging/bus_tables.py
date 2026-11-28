@@ -7,10 +7,10 @@ import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import batched
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.messaging.bus_projection_tables import BusDerivedTables
+from agent_comms.messaging.bus_projection_tables import BusDerivedTables, BusRouteIdentity
 from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.message_send_reads import PublishedMessageRead
@@ -23,12 +23,15 @@ from agent_comms.messaging.messages import (
     MessageInput,
     MessageKind,
 )
+from agent_comms.messaging.projection_source import ProducedRow
 from agent_comms.messaging.read_basis import RepliesDisplayScope
+from agent_comms.nominal.class_fact import ClassFact
 from agent_comms.nominal.field_codec import FieldCodec, MessageId, ThreadLookup
 from agent_comms.storage.recorded_time import Timestamped
 from agent_comms.storage.typed_table import (
     Column,
     ComposedSchemas,
+    ExpressionIndex,
     Index,
     ProjectionProducerTables,
     RowNotFoundError,
@@ -82,6 +85,53 @@ class ReceivedSource(ParticipantSource):
             query += (f' AND seq IN (SELECT seq FROM "{SentSource.declared_name}" '
                       f'WHERE lookup IN ({marks}))')
         return query, (*parameters, *sender_lookups)
+
+
+@dataclass(frozen=True)
+class BusRecipientRouteCounts(BusRouteIdentity):
+    """Per-(recipient, route) delivery totals maintained at append time.
+
+    Cold thread-list and sidebar unread queries previously scanned all rows of
+    ``received_source`` joined to ``bus_route_counts`` (scaling with actors * history).
+    Any recipient route whose ``[min_seq, max_seq]`` and ``min_timestamp`` sit strictly
+    inside the requested window answers in O(1) without touching per-message rows; only
+    routes split by a high-water mark or window boundary fall back to row scans."""
+
+    @ClassFact
+    def writes(cls: type[BusRecipientRouteCounts]) -> tuple[type[ProducedRow], ...]:
+        return (BusRecipientRouteCounts,)
+
+    lookup: ThreadLookup
+    deliveries: int
+    min_seq: int
+    max_seq: int
+    min_timestamp: float
+    indexes: ClassVar = (
+        ExpressionIndex(
+            ("{lookup}", "{target}", "{sender}", "coalesce({sender_lookup}, '')"),
+            unique=True,
+        ),
+        Index(("lookup", "target", "sender", "sender_lookup", "max_seq")),
+    )
+
+    @classmethod
+    def from_delivery(cls, lookup: ThreadLookup, message) -> Self:
+        return cls(
+            message.target, message.sender, message.sender_lookup,
+            lookup, 1, message.seq, message.seq, message.timestamp,
+        )
+
+    def insertion(self) -> tuple[str, tuple]:
+        statement, values = self._insertion()
+        statement += (
+            ' ON CONFLICT ("lookup", "target", "sender", coalesce("sender_lookup", \'\'))'
+            ' DO UPDATE SET'
+            ' "deliveries"="deliveries"+excluded."deliveries",'
+            ' "min_seq"=min("min_seq",excluded."min_seq"),'
+            ' "max_seq"=max("max_seq",excluded."max_seq"),'
+            ' "min_timestamp"=min("min_timestamp",excluded."min_timestamp")'
+        )
+        return statement, values
 
 
 @dataclass(frozen=True)

@@ -8,31 +8,26 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, Self
 
-from agent_comms.messaging.bus_publication import Delivered
-from agent_comms.messaging.bus_tables import ReceivedSource
-from agent_comms.messaging.message_sender import PublicSender
-from agent_comms.messaging.bus_projection_tables import BusDerivedTables
+from agent_comms.messaging.audience_manifest import AudiencedMessage
+from agent_comms.messaging.bus_tables import BusRecipientRouteCounts, ReceivedSource
+from agent_comms.messaging.bus_projection_tables import BusRouteIdentity
 from agent_comms.messaging.messages import BusRow, MessageInput, PublicRecord
 from agent_comms.messaging.page_traversal import PageTraversal
 from agent_comms.messaging.projection_source import ProducedRow
 from agent_comms.messaging.read_basis import ActorRoute, ReadCursor
 from agent_comms.messaging.routing import DeliveryScope
 from agent_comms.nominal.class_fact import ClassFact
-from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.storage.typed_table import Column, ExpressionIndex, Index, TypedRow
 
 
 @dataclass(frozen=True)
-class BusRouteCounts(BusDerivedTables):
+class BusRouteCounts(BusRouteIdentity):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
         return (BusRouteCounts,)
 
     seq: Annotated[int, Column(primary_key=True)]
-    target: str
-    sender: str
-    sender_lookup: ThreadLookup | PublicSender
     timestamp: float
     indexes: ClassVar = (
         Index(("target", "sender", "sender_lookup", "seq")),
@@ -40,9 +35,9 @@ class BusRouteCounts(BusDerivedTables):
     )
 
     @classmethod
-    def from_message(cls, message: PublicRecord | Delivered):
-        return cls(message.seq, message.target, message.sender,
-                   message.sender_lookup, message.timestamp)
+    def from_message(cls, message: PublicRecord | AudiencedMessage):
+        return cls(message.target, message.sender, message.sender_lookup,
+                   message.seq, message.timestamp)
 
     @classmethod
     def has_target_since(
@@ -61,7 +56,7 @@ class BusRouteCounts(BusDerivedTables):
 
 
 @dataclass(frozen=True)
-class BusRouteKeys(BusDerivedTables):
+class BusRouteKeys(BusRouteIdentity):
     """Each route a message took, once, with the first message that took it.
 
     A read asks which routes reach its targets. Deriving that per read crossed every registered
@@ -72,9 +67,6 @@ class BusRouteKeys(BusDerivedTables):
     def writes(cls: type[BusRouteKeys]) -> tuple[type[ProducedRow], ...]:
         return (BusRouteKeys,)
 
-    target: str
-    sender: str
-    sender_lookup: ThreadLookup | PublicSender
     first_seq: int
     indexes: ClassVar = (
         ExpressionIndex(("{target}", "{sender}", "coalesce({sender_lookup}, '')"), unique=True),
@@ -84,7 +76,7 @@ class BusRouteKeys(BusDerivedTables):
     NULL-distinct UNIQUE admits twice; the expression makes it one route like any other."""
 
     @classmethod
-    def from_message(cls, message: PublicRecord | Delivered) -> Self:
+    def from_message(cls, message: PublicRecord | AudiencedMessage) -> Self:
         return cls(message.target, message.sender, message.sender_lookup, message.seq)
 
     def insertion(self) -> tuple[str, tuple]:
@@ -312,10 +304,128 @@ class RouteCounts(ABC):
             inputs = self._route_inputs(db, registry, deliveries, seen, through)
             return self._route_query(db, row_type, inputs, through, after, query, parameters)
 
-    @staticmethod
-    def _unseen_query(seen: Mapping[str, ReadCursor]) -> str:
-        return (f'''SELECT actor,target,sender,count(*) AS count FROM cursors AS request
-            WHERE {ReadCursor.rule_of(seen.values())} GROUP BY actor,target,sender''')
+    _summary_unseen_sql = f'''rc_dm AS MATERIALIZED (
+        SELECT actor,target,sender,high_water FROM read_cursors WHERE sender!=''
+    ), actor_routes AS MATERIALIZED (
+        SELECT tf.actor,vf.lookup,rk.target,rk.sender,rk.sender_lookup,
+               coalesce(rk.sender_lookup,'') AS sl,
+               max(tf.hw,coalesce(dm.high_water,0),(SELECT after FROM arguments)) AS min_seq,
+               max(vf.viewer_since,rk.since) AS min_ts
+        FROM actor_target_floor AS tf
+        JOIN actor_min_floor AS vf ON vf.actor=tf.actor
+        JOIN route_keys AS rk ON rk.target=tf.target
+        LEFT JOIN aliases AS alias ON alias.name=rk.sender
+        LEFT JOIN rc_dm AS dm ON dm.actor=tf.actor AND dm.target=tf.target AND dm.sender=rk.sender
+        WHERE {DeliveryScope.delivers_sql("tf.actor", "rk.sender", "alias.canonical")}
+    ), recipient_routes AS MATERIALIZED (
+        SELECT ar.actor,ar.lookup,ar.target,ar.sender,ar.min_seq,ar.min_ts,
+               br.sender_lookup,br.deliveries,br.min_seq AS r_min_seq,
+               br.max_seq AS r_max_seq,br.min_timestamp AS r_min_ts
+        FROM actor_routes AS ar
+        CROSS JOIN "{BusRecipientRouteCounts.declared_name}" AS br
+            ON br.lookup=ar.lookup AND br.target=ar.target
+                AND br.sender=ar.sender AND br.sender_lookup IS ar.sender_lookup
+                AND br.max_seq>ar.min_seq
+        WHERE ar.min_seq<(SELECT through FROM arguments)
+    ), half1_whole AS (
+        SELECT actor,target,sender,deliveries AS cnt
+        FROM recipient_routes
+        WHERE r_min_seq>min_seq
+            AND r_max_seq<=(SELECT through FROM arguments)
+            AND r_min_ts>=min_ts
+    ), half1_split AS (
+        SELECT rr.actor,rr.target,rr.sender,count(*) AS cnt
+        FROM recipient_routes AS rr
+        CROSS JOIN "{BusRouteCounts.declared_name}" AS row
+            ON row.target=rr.target AND row.sender=rr.sender
+                AND row.sender_lookup IS rr.sender_lookup
+                AND row.seq>rr.min_seq AND row.seq<=(SELECT through FROM arguments)
+        WHERE NOT (rr.r_min_seq>rr.min_seq
+                AND rr.r_max_seq<=(SELECT through FROM arguments)
+                AND rr.r_min_ts>=rr.min_ts)
+            AND row.timestamp>=rr.min_ts
+            AND EXISTS (SELECT 1 FROM "{ReceivedSource.declared_name}" AS addressed
+                WHERE addressed.lookup=rr.lookup AND addressed.seq=row.seq)
+        GROUP BY rr.actor,rr.target,rr.sender
+    ), half2_raw AS (
+        SELECT route.actor,row.target,row.sender,count(*) AS cnt
+        FROM route_since AS route
+        CROSS JOIN actor_target_floor AS tf
+            ON tf.actor=route.actor AND tf.target=route.target
+        LEFT JOIN rc_dm AS dm
+            ON dm.actor=route.actor AND dm.target=route.target AND dm.sender=route.sender
+        CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.target=route.target
+            AND row.sender=route.sender AND row.sender_lookup IS route.sender_lookup
+        WHERE route.unaddressed IS NOT NULL AND row.timestamp>=route.unaddressed
+            AND row.seq>max(tf.hw,coalesce(dm.high_water,0),(SELECT after FROM arguments))
+            AND row.seq<=(SELECT through FROM arguments)
+            AND NOT EXISTS (SELECT 1 FROM "{ReceivedSource.declared_name}" AS addressed
+                WHERE addressed.lookup=route.recipient_lookup AND addressed.seq=row.seq)
+        GROUP BY route.actor,row.target,row.sender
+    ), ex_addressed AS (
+        SELECT ex.ex_actor AS actor,row.target,row.sender,-count(*) AS cnt
+        FROM cursor_exceptions AS ex
+        CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.seq=ex.ex_seq
+        CROSS JOIN actor_routes AS ar
+            ON ar.actor=ex.ex_actor AND ar.target=row.target
+                AND ar.sender=row.sender AND ar.sl=coalesce(row.sender_lookup,'')
+        WHERE row.target=ex.ex_target
+            AND (ex.ex_sender='' OR ex.ex_sender=row.sender)
+            AND ex.ex_seq>ar.min_seq AND ex.ex_seq<=(SELECT through FROM arguments)
+            AND row.timestamp>=ar.min_ts
+            AND EXISTS (SELECT 1 FROM "{ReceivedSource.declared_name}" AS addressed
+                WHERE addressed.lookup=ar.lookup AND addressed.seq=ex.ex_seq)
+        GROUP BY ex.ex_actor,row.target,row.sender
+    ), ex_unaddressed AS (
+        SELECT ex.ex_actor AS actor,row.target,row.sender,-count(*) AS cnt
+        FROM route_since AS rs
+        CROSS JOIN cursor_exceptions AS ex
+            ON ex.ex_actor=rs.actor AND ex.ex_target=rs.target
+                AND (ex.ex_sender='' OR ex.ex_sender=rs.sender)
+        CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.seq=ex.ex_seq
+        CROSS JOIN actor_target_floor AS tf
+            ON tf.actor=rs.actor AND tf.target=rs.target
+        LEFT JOIN rc_dm AS dm
+            ON dm.actor=rs.actor AND dm.target=rs.target AND dm.sender=rs.sender
+        WHERE rs.unaddressed IS NOT NULL
+            AND row.target=rs.target AND row.sender=rs.sender
+            AND row.sender_lookup IS rs.sender_lookup
+            AND row.timestamp>=rs.unaddressed
+            AND ex.ex_seq>max(tf.hw,coalesce(dm.high_water,0),(SELECT after FROM arguments))
+            AND ex.ex_seq<=(SELECT through FROM arguments)
+            AND NOT EXISTS (SELECT 1 FROM "{ReceivedSource.declared_name}" AS addressed
+                WHERE addressed.lookup=rs.recipient_lookup AND addressed.seq=ex.ex_seq)
+        GROUP BY ex.ex_actor,row.target,row.sender
+    )
+    SELECT actor,target,sender,sum(cnt) AS count
+    FROM (
+        SELECT * FROM half1_whole
+        UNION ALL SELECT * FROM half1_split
+        UNION ALL SELECT * FROM half2_raw
+        UNION ALL SELECT * FROM ex_addressed
+        UNION ALL SELECT * FROM ex_unaddressed
+    )
+    GROUP BY actor,target,sender
+    HAVING sum(cnt)>0'''
+
+    def summary_unseen_counts(
+        self, db: sqlite3.Connection, inputs: RouteInputs, through: int, after: int,
+    ) -> list[RouteUnread]:
+        return RouteUnread.read(db.execute(
+            f'''WITH {ReadCursor.sql("?")}, {ReadCursor.floor_sql},
+            {self._route_sources}, {self._summary_unseen_sql}''',
+            inputs.bindings(through, after),
+        ))
+
+    def per_row_unseen_counts(
+        self, db: sqlite3.Connection, inputs: RouteInputs, through: int, after: int,
+        unread_rule: str,
+    ) -> list[RouteUnread]:
+        return self._route_query(
+            db, RouteUnread, inputs, through, after,
+            f'''SELECT actor,target,sender,count(*) AS count FROM cursors AS request
+                WHERE {unread_rule} GROUP BY actor,target,sender''',
+        )
 
     @staticmethod
     def _grouped(deliveries: Mapping[str, DeliveryScope], rows: Iterable[RouteUnread],
@@ -328,8 +438,11 @@ class RouteCounts(ABC):
 
     def unseen_counts(self, registry, deliveries: Mapping[str, DeliveryScope], seen: Mapping[str, ReadCursor], *,
                       after: int = 0) -> dict[str, dict[str, int]]:
-        rows = self._route_rows(RouteUnread, registry, deliveries, seen, after,
-                                self._unseen_query(seen))
+        cursor = ReadCursor.counts_cursor(seen.values())
+        with self.observing() as db:
+            through = BusRow.last_seq(db)
+            inputs = self._route_inputs(db, registry, deliveries, seen, through)
+            rows = cursor.unseen_counts(self, db, inputs, through, after)
         return self._grouped(deliveries, rows, {})
 
     def advanced_unseen_counts(self, held: HeldUnseenCounts, registry,
@@ -337,14 +450,14 @@ class RouteCounts(ABC):
         """The unseen counts through this reader's revision, counting only the rows appended
         since ``held`` when every value the count reads is unchanged. A delivered row's
         audience is frozen at append, so an older row's count cannot change under equal inputs."""
+        cursor = ReadCursor.counts_cursor(seen.values())
         with self.observing() as db:
             through = BusRow.last_seq(db)
             inputs = self._route_inputs(db, registry, deliveries, seen, through)
             if inputs == held.inputs and held.through == through:
                 return held
             start = held if inputs == held.inputs and held.through <= through else HeldUnseenCounts(inputs)
-            rows = self._route_query(db, RouteUnread, inputs, through, start.through,
-                                     self._unseen_query(seen))
+            rows = cursor.unseen_counts(self, db, inputs, through, start.through)
             return HeldUnseenCounts(inputs, through, self._grouped(deliveries, rows, start.counts))
 
     def unseen_deliveries(self, registry, delivery, seen, *, after: int = 0, scope=None, limit: int = 100,
