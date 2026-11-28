@@ -9,6 +9,7 @@ from typing import ClassVar, Self
 from agent_comms.messaging.assignment_notice import AssignmentNotice
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.message_send_reads import PublishedMessageRead
+from agent_comms.messaging.notification_contracts import TurnStartCheck
 from agent_comms.nominal.declared_family import DeclaredFamily, DeclaredOrder
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId, boundary_decoder
 from agent_comms.registry.thread_presentation import (
@@ -203,6 +204,10 @@ class DeliveryProgress(ThreadPresentationStatus):
         """A non-waking dismissal only settles a still-pending claim; other states keep their proof."""
         return self
 
+    def live_progress(self, observation: TurnStartCheck) -> DeliveryProgress:
+        """Promote a direct-harness read to Answering while its recipient's live turn runs on it."""
+        return self
+
 
 class ReadDelivery(SettledDelivery):
     """The recipient opened or read this message; its summary is counted, never raw-prefixed."""
@@ -241,6 +246,9 @@ class ConsumedDelivery(ReadDelivery):
 @dataclass(frozen=True)
 class UnrecordedProgress(WaitingDelivery, DeliveryProgress):
     """No recipient delivery has been recorded."""
+
+    def ignored(self) -> DeliveryProgress:
+        return IgnoredProgress(self)
 
 
 @dataclass(frozen=True)
@@ -452,6 +460,13 @@ class ShownToModelProgress(ConsumedDelivery, AssignmentProgress):
 
 class HarnessConsumedProgress(ShownToModelProgress):
     """Complete original body observed in the harness transcript, at its recorded time."""
+
+    def live_progress(self, observation: TurnStartCheck) -> DeliveryProgress:
+        return (
+            ConsumingProgress(self.consumed_at_ms)
+            if observation.turn_started_by(self.consumed_at_ms)
+            else self
+        )
 
 
 class SelectedConsumedProgress(ActiveDelivery, ShownToModelProgress):

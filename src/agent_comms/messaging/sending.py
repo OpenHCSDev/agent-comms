@@ -237,7 +237,7 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         *,
         bridge: type[HarnessSession],
     ) -> tuple[MessageReference, ...]:
-        """Settle non-waking direct-inbox origins as ignored so triage claims never stick on Sent."""
+        """Settle non-waking or unanswered direct-inbox origins as ignored (Not answering)."""
         refs = tuple(dict.fromkeys(origin.reference for origin in origins if origin.seq > 0))
         if not refs:
             return ()
@@ -247,7 +247,13 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         with NativeCoordinationSession(path) as session, session.writing() as db:
             assignments = AssignmentStore(session)
             for ref in refs:
-                if not HarnessDelivery.for_recipients(db, ((lookup, ref),)):
+                existing = HarnessDelivery.for_recipients(db, ((lookup, ref),))
+                if existing:
+                    for row in existing:
+                        replace(
+                            row, outcome=FilteredOutcome, monitor=evidence,
+                        ).record(assignments, db)
+                else:
                     HarnessDelivery(
                         bridge, lookup, ref.message_id, ref.seq,
                         FilteredOutcome, monitor=evidence,
