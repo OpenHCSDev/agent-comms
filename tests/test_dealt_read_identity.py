@@ -8,28 +8,38 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.execution.context_reading import ContextUsage
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.rule_probes import Probe
+from agent_comms.team.deal_delivery import EmptyDealDelivery, ReadSpan
 from agent_comms.team.pi_rule_gate import PiRedeal
 from agent_comms.team.prompt_reads import (
     DealtRead,
     DealtSource,
 )
-from agent_comms.team.deal_delivery import ReadSpan
 from agent_comms.team.rule_deal import (
     AuditDue,
     DealRecord,
+    FullDealMode,
     MeantRecord,
     Open,
     OpenedReads,
+    RequiredRuleCheckPolicy,
+    RuleGateSettings,
     SessionAudit,
     StartedDeal,
     Unread,
 )
 from agent_comms_hooks.skill import DeckReader
 from conftest import answer_deal, fresh_confession
+
+
+@pytest.fixture(autouse=True)
+def _no_system_prompt_delivery(monkeypatch):
+    monkeypatch.setattr(PiRedeal, "delivery", lambda self: EmptyDealDelivery())
 
 
 def test_identical_content_under_a_new_runtime_needs_no_reread(team_bus):
@@ -75,6 +85,7 @@ def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(team_bus):
     files again, because reading them had filled the context past the 66%-left refresh."""
     deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
     deal.redeal(StartedDeal())
+    deal.configure(RuleGateSettings(mode=FullDealMode, audit=RequiredRuleCheckPolicy))
     deal.observe_context(ContextUsage(40, 100))
     answer_deal(deal)
     dealt = deal.current().dealt
