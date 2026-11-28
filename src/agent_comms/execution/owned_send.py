@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import partial
@@ -23,7 +25,8 @@ from agent_comms.execution.reservation_rules import (
     ReservationViolationError,
     RuleCheck,
 )
-from agent_comms.execution.send_outcome import AuthorityChangedSend, SendBoundary, SendOutcome
+from agent_comms.execution.send_outcome import SendBoundary, SendOutcome
+from agent_comms.execution.turn_failure import AuthorityChanged
 from agent_comms.execution.turn_goal_permission import TurnGoalPermission
 from agent_comms.execution.turn_input_source import (
     OrdinaryOwnerCheck,
@@ -39,6 +42,27 @@ from agent_comms.planning.goal_waits import GoalWait
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
 from agent_comms.transport.tool_denial import SelectedToolDenied
+
+
+@dataclass(frozen=True)
+class AuthorityChangedSend(SendOutcome):
+    """A send its reservation rules refused, carrying the rule that refused it. On
+    2026-11-10 every Send Now failed as a bare "authority changed": the rule was logged at
+    INFO and dropped, so nobody could see which check was wrong."""
+
+    refusal: ReservationViolationError
+
+    @property
+    def denial_reason(self) -> str:
+        return f"Input authority changed before native send: {self.refusal}"
+
+    def apply(self, inputs, session, item, write: Callable[[], None]) -> Awaitable[bool]:
+        inputs.uncertain = True
+        session.output.final_assistant_stop = False
+        session.output.record_failure(AuthorityChanged(
+            f"Input authority changed before native send: {self.refusal}"))
+        return asyncio.sleep(0, result=False)
+
 
 @dataclass(frozen=True, kw_only=True)
 class InputKeysCheck(RuleCheck):
