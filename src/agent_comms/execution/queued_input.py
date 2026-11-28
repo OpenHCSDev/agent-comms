@@ -470,7 +470,7 @@ class DirectDeliveredInput(BusDeliveredInput):
                 key = message.bus_key(owner)
                 if document.lookup(key).is_stored():
                     continue
-                prompt = ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt
+                prompt = ScheduledTurn.steered(message, aliases=snapshot.aliases).prompt
                 row = ReservedInput(
                     key, message.seq, canonical, context.claimed_identity.claimed_generation,
                     message.target, prompt,

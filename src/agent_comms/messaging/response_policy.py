@@ -65,16 +65,24 @@ class ResponsePolicy(DeclaredFamily, ProjectionSource, affix="Policy"):
         """Whether a direct-inbox backend without a hidden triage phase wakes on this message."""
         return name in self.required_responders(message, (name,), aliases=aliases)
 
-    def steers_live_turn_for(
+    def claims_live_reply_target_for(
         self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES
     ) -> bool:
-        """Whether this message may steer an already-running turn and claim its reply targets.
+        """Whether steering this message into a running turn adds its route to auto-published
+        reply targets.
 
-        Unmentioned collective channel posts wake an idle thread for a dedicated triage turn
-        instead of hijacking an active goal turn or unrelated reply turn.
+        Unmentioned collective channel posts still steer a busy turn so the recipient reads
+        them immediately, but they never hijack an active goal turn's plain-text output into
+        the channel; the recipient replies explicitly via ``comms_send`` if answering.
         """
         del message, name, aliases
         return False
+
+    def steered_guidance(
+        self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES
+    ) -> str:
+        """Instructions included when this message steers an already-running turn."""
+        return self.guidance(message, aliases=aliases)
 
     def context_peer(self, owner: str, sender: str, target: str) -> str | None:
         return None
@@ -104,7 +112,7 @@ class DirectPolicy(NoChannelRecipients, ResponsePolicy):
     def direct_wake_for(self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES) -> bool:
         return self.starts_turn
 
-    def steers_live_turn_for(
+    def claims_live_reply_target_for(
         self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES
     ) -> bool:
         del message, name, aliases
@@ -131,12 +139,27 @@ class CollectivePolicy(ResponsePolicy):
     def guidance(self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
         return "collective; reply if you are answering, or say IGNORE if you are not answering (you can mark answering/not_answering with comms_ack)"
 
+    def steered_guidance(
+        self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES
+    ) -> str:
+        del message, aliases
+        return (
+            "collective (steered into your active turn — plain turn text is NOT auto-sent to "
+            "this channel; use comms_send with answers=[...] if you are answering, or continue "
+            "your current work / call comms_ack to settle as Not answering)"
+        )
+
 
 class MentionedPolicy(CollectivePolicy):
-    def steers_live_turn_for(
+    def claims_live_reply_target_for(
         self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES
     ) -> bool:
         return self.direct_wake_for(message, name, aliases)
+
+    def steered_guidance(
+        self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES
+    ) -> str:
+        return self.guidance(message, aliases=aliases)
 
     def required_responders(
         self, message: ResponseMessageSource, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES

@@ -196,6 +196,19 @@ class ScheduledTurn:
             origin=message,
         )
 
+    @classmethod
+    def steered(
+        cls, message: Message, *, aliases: Mapping[str, str] = NO_ALIASES
+    ) -> ScheduledTurn:
+        guidance = message.role.response_policy(message).steered_guidance(message, aliases=aliases)
+        scope = CommandTarget.named(message.target).guidance_scope
+        ref = f"{message.seq}-{message.message_id}"
+        return cls(
+            f"[agent-comms from {message.sender} to {message.target} · {ref}]\n"
+            f"[Response policy: {guidance}{scope}]\n{message.body}",
+            origin=message,
+        )
+
     @staticmethod
     def take_batch(pending: list[ScheduledTurn]) -> tuple[list[ScheduledTurn], list[ScheduledTurn]]:
         """Combine channel turns sharing a route, keeping each direct input separate."""

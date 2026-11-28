@@ -118,7 +118,7 @@ class TurnProgress(AgentEventConsumer[Comms]):
                 origin.exact_reply_target
                 for origin in self.delivered_origins.values()
                 if origin.sender != self.thread_name
-                and origin.role.response_policy(origin).steers_live_turn_for(
+                and origin.role.response_policy(origin).claims_live_reply_target_for(
                     origin, self.thread_name
                 )
             ),

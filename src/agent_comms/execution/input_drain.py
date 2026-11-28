@@ -1569,16 +1569,9 @@ class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEve
             if not messages:
                 return ()
             waking = self._partition_direct_inbox(owner, messages, inbox.displayed, snapshot.aliases)
-            steerable = tuple(
-                message
-                for message in waking
-                if message.role.response_policy(message).steers_live_turn_for(
-                    message, owner.name, snapshot.aliases
-                )
-            )
-            if not steerable:
+            if not waking:
                 return ()
-            return ((owner, steerable),)
+            return ((owner, waking),)
 
         for owner, waking in await Coordination.run_worker(capture_pending):
             await DirectDeliveredInput.deliver_direct(self, session_id, owner, waking)
