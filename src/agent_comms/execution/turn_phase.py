@@ -88,6 +88,9 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def keeps_project_resume(self) -> bool:
         return True
 
+    def records_install_resume(self) -> bool:
+        return False
+
     def holds_refusal_reports(self) -> bool:
         return False
     activity_state: ClassVar[ActivityState] = ActivityState.THINKING
@@ -197,6 +200,9 @@ class ShutdownPhase(ClosingTurn, TurnPhase):
 
     activity_state = ActivityState.WORKING
     label = "Stopping"
+
+    def records_install_resume(self) -> bool:
+        return True
 
 
 class PublishingPhase(ClosingTurn, TurnPhase):

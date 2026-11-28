@@ -377,6 +377,7 @@ class RegistryEdit:
             current,
             turn_generation=identity.generation,
             project_resume_due=False,
+            install_resume_due=False,
             turn_record=StoredTurnRecord.for_identity(self.store.path, identity, registry_type=RegistryStore),
         )
         self.begun.append((identity, TurnRowWriter.encoded(turn)))

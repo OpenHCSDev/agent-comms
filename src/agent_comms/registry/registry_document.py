@@ -1219,11 +1219,13 @@ class RegistryDocument(RegistryPresence[MutableMapping[str, ThreadStatus]]):
         completion = (self.status(name).completed_turn(canonical_lease)
                       if attested else NoFinishedTurn())
         keeps_resume = turn.phase.keeps_project_resume()
+        records_install = turn.phase.records_install_resume()
         record.without_claim()
         self.threads[name] = replace(
             current,
             turn_record=FinishedTurn(lease.turn_id),
             project_resume_due=current.project_resume_due and keeps_resume,
+            install_resume_due=current.install_resume_due or records_install,
         )
         self.last_seen[name] = time.time()
         return True, completion

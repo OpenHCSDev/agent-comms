@@ -177,6 +177,14 @@ class ScheduledTurn:
         )
 
     @classmethod
+    def resuming_after_install(cls) -> ScheduledTurn:
+        return cls(
+            "The host restarted for an agent-comms install while your previous turn was in "
+            "progress. Continue where you left off in this conversation and finish your "
+            "interrupted work."
+        )
+
+    @classmethod
     def incoming(
         cls, message: Message, *, aliases: Mapping[str, str] = NO_ALIASES
     ) -> ScheduledTurn:

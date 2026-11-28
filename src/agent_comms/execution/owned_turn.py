@@ -555,7 +555,8 @@ class OwnedTurn(ProgressTurn):
             await self.prepare_native()
             await self.stream()
         except asyncio.CancelledError:
-            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            phase = self.runner.inputs.state(self.session_id).owned().stop.terminal.cancellation_phase()
+            await self.runner.transition_turn(self.session_id, self.turn_lease, phase)
             await self.backend.abort(self.owner_task)
             await CoordinationWork.run_worker(self.progress.transcript_sink.on_abort)
             state = await CoordinationWork.run_worker(self.settle_unbound)

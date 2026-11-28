@@ -578,6 +578,11 @@ class Thread(
     project_resume_due: Annotated[
         bool, RegistrationPolicy(InheritPrevious), WireOmitDefault()
     ] = False
+    # An install interrupted a running turn; the next turn start clears this,
+    # and an idle owner without an active goal resumes the conversation itself.
+    install_resume_due: Annotated[
+        bool, RegistrationPolicy(InheritPrevious), WireOmitDefault()
+    ] = False
     role: Annotated[type[ThreadRole], RegistrationPolicy(ThreadRole)] = (
         AgentThreadRole
     )
@@ -683,6 +688,11 @@ class Thread(
     def owes_project_resume(self) -> bool:
         """Idle with the resume still due; a turn for the active goal is that turn."""
         return self.project_resume_due and not self.executing and not self.goal.accepts_following_handoff()
+
+    @property
+    def owes_install_resume(self) -> bool:
+        """Idle after an install interrupted a running turn; an active goal resumes on its own."""
+        return self.install_resume_due and not self.executing and not self.goal.accepts_following_handoff()
 
     @property
     def turn_state(self) -> TurnState:

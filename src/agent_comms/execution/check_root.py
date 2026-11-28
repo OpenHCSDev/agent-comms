@@ -130,6 +130,7 @@ class CheckRoot:
                 session_file=RegistrySessionLocation.from_path(session, copied.root),
                 earlier_projects=(),
                 project_resume_due=False,
+                install_resume_due=False,
                 storage_roots=storage.initial_roots(slot),
                 # A fresh turn history: a finished turn refuses generation 0.
                 turn_record=NoTurnRecord(),
