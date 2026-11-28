@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
@@ -87,6 +88,9 @@ class AcpDescriptorBuilder:
     thinking_levels: list[str] = field(default_factory=list)
 
 
+_BACKGROUND_TASK_ID_RE = re.compile(r"background task with task id:\s*(\S+)", re.IGNORECASE)
+
+
 @dataclass
 class AcpTurnStreamState:
     """Per-turn mutable correlation state while streaming one ACP `session/prompt`."""
@@ -95,6 +99,7 @@ class AcpTurnStreamState:
     pending_progress_chunks: list[str] = field(default_factory=list)
     tool_names: dict[str, str] = field(default_factory=dict)
     open_tools: set[str] = field(default_factory=set)
+    background_tasks: set[str] = field(default_factory=set)
     phase: TurnPhase = field(default_factory=ModelWaitPhase)
     current_model: str = ""
     thought_level: str = ""
@@ -106,6 +111,28 @@ class AcpTurnStreamState:
     def append_text(self, text: str) -> None:
         self.text_chunks.append(text)
         self.pending_progress_chunks.append(text)
+
+    def record_tool_output(self, output: str) -> None:
+        for match in _BACKGROUND_TASK_ID_RE.finditer(output):
+            self.background_tasks.add(match.group(1).rstrip(".,;:)"))
+
+    @property
+    def has_quiet_transition(self) -> bool:
+        return (
+            not self.open_tools
+            and self.phase.quiet_phase(background_tasks=tuple(sorted(self.background_tasks)))
+            != self.phase
+        )
+
+    def observe_quiet_silence(self) -> TurnPhase | None:
+        """Move a silent post-reply turn into BackgroundTaskWaitPhase once chunks stop."""
+        if self.open_tools:
+            return None
+        next_phase = self.phase.quiet_phase(background_tasks=tuple(sorted(self.background_tasks)))
+        if next_phase == self.phase:
+            return None
+        self.phase = next_phase
+        return next_phase
 
     def commit_progress(self) -> Iterator[AgentEvent]:
         if not self.pending_progress_chunks:
@@ -228,6 +255,7 @@ class CompletedToolStatus(AcpToolStatus, declared_name="completed"):
         output: str,
     ) -> Iterator[AgentEvent]:
         yield from state.commit_progress()
+        state.record_tool_output(output)
         state.open_tools.discard(str(call_id))
         state.phase = state.phase.tool_ended(call_id)
         yield events.ToolEnd(id=call_id, name=name, ok=True, output=output)

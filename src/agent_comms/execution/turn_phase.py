@@ -35,6 +35,10 @@ class NoModelWait:
     def model_wait[Wait](self, backstop: Wait, unbounded: Wait) -> Wait:
         return unbounded
 
+    def silence_budget(self, *, model_wait: float, post_reply_wait: float) -> float | None:
+        del model_wait, post_reply_wait
+        return None
+
 
 class AcceptsPrompt:
     """A native observation proves that Pi accepted the current prompt."""
@@ -115,6 +119,16 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def model_wait[Wait](self, backstop: Wait, unbounded: Wait) -> Wait:
         """Select the actual wait capability rather than flatten it to a nullable timeout."""
         return backstop
+
+    def quiet_phase(self, *, background_tasks: tuple[str, ...]) -> TurnPhase:
+        """Phase to enter when output goes silent with no open foreground tools."""
+        del background_tasks
+        return self
+
+    def silence_budget(self, *, model_wait: float, post_reply_wait: float) -> float | None:
+        """Maximum silent duration before an ACP stream is treated as stalled, or None if unbounded."""
+        del post_reply_wait
+        return model_wait
 
     def input_started(self) -> TurnPhase:
         return ModelWaitPhase()
@@ -227,6 +241,37 @@ class ReplyingPhase(ModelWaitPhase):
     @property
     def activity_detail(self) -> str:
         return self.summary
+
+    def quiet_phase(self, *, background_tasks: tuple[str, ...]) -> TurnPhase:
+        return BackgroundTaskWaitPhase(tasks=background_tasks)
+
+
+@dataclass(frozen=True)
+class BackgroundTaskWaitPhase(StallExempt, Excursion):
+    """Reply text stopped streaming, but a background task still holds the ACP turn open."""
+
+    tasks: tuple[str, ...] = ()
+    stall_reason = "background_task_no_progress"
+    activity_state = ActivityState.WORKING
+    label = "Waiting on background task"
+
+    @property
+    def summary(self) -> str:
+        if self.detail:
+            return self.detail
+        if self.tasks:
+            return f"{self.label} ({len(self.tasks)})"
+        return self.label
+
+    def silence_budget(self, *, model_wait: float, post_reply_wait: float) -> float | None:
+        del model_wait
+        return post_reply_wait
+
+    def stall_message(self, budget: float) -> str:
+        return (
+            f"Antigravity ACP turn produced no progress for {budget:g} seconds "
+            "while waiting on a background task."
+        )
 
 
 class SettlingStatsPhase(TurnPhase):

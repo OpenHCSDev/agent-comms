@@ -144,6 +144,9 @@ class TurnTranscriptSink:
     def on_committed_progress(self, text: str, published: tuple[MessageReference, ...]) -> None:
         del text, published
 
+    def discard_reply(self) -> None:
+        """Drop a suppressed triage reply (e.g. channel IGNORE) without recording it as DM output."""
+
     def on_finish(self, published: tuple[MessageReference, ...]) -> None:
         del published
 

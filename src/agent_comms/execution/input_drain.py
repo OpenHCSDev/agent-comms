@@ -1569,9 +1569,16 @@ class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEve
             if not messages:
                 return ()
             waking = self._partition_direct_inbox(owner, messages, inbox.displayed, snapshot.aliases)
-            if not waking:
+            steerable = tuple(
+                message
+                for message in waking
+                if message.role.response_policy(message).steers_live_turn_for(
+                    message, owner.name, snapshot.aliases
+                )
+            )
+            if not steerable:
                 return ()
-            return ((owner, waking),)
+            return ((owner, steerable),)
 
         for owner, waking in await Coordination.run_worker(capture_pending):
             await DirectDeliveredInput.deliver_direct(self, session_id, owner, waking)
@@ -1593,8 +1600,6 @@ class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEve
             snapshot = self.comms.registry.snapshot()
             owner = snapshot.require(thread.name)
             if snapshot.status(owner.name).is_stopped():
-                return ()
-            if owner.goal.accepts_following_handoff():
                 return ()
             inbox = self.comms.bus.inbox(owner.name)
             messages = tuple(sorted(inbox.page.messages, key=lambda item: item.seq))

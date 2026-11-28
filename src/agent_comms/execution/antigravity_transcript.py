@@ -260,6 +260,20 @@ class ExternalTurnTranscriptSink(TurnTranscriptSink):
         if text.strip():
             self._emit_assistant(item_id, started_at, text, published)
 
+    def discard_reply(self) -> None:
+        self._flush_thinking()
+        if not self._reply.has_content:
+            return
+        item_id, _ = self._reply.item_and_timestamp()
+        self._reply = _IDLE_BUFFER
+        self._last_draft_at = 0.0
+        if self._opened:
+            self.transcript.finish(
+                turn_id=self.turn_id,
+                item_id=item_id,
+                events=(),
+            )
+
     def on_finish(self, published: tuple[MessageReference, ...]) -> None:
         self._flush_thinking()
         self._reply = self._reply.flush_with(

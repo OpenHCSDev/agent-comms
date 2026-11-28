@@ -111,13 +111,16 @@ class TurnProgress(AgentEventConsumer[Comms]):
 
     @property
     def active_reply_targets(self) -> tuple[str, ...]:
-        """Initial turn reply targets plus any bus messages steered into this turn."""
+        """Initial turn reply targets plus directly addressed messages steered into this turn."""
         return tuple(dict.fromkeys((
             *self.turn.reply_targets,
             *(
                 origin.exact_reply_target
                 for origin in self.delivered_origins.values()
                 if origin.sender != self.thread_name
+                and origin.role.response_policy(origin).steers_live_turn_for(
+                    origin, self.thread_name
+                )
             ),
         )))
 
@@ -184,9 +187,21 @@ class TurnProgress(AgentEventConsumer[Comms]):
             )
         return targets
 
+    def _is_suppressed_channel_ignore(self, text: str) -> bool:
+        """True when text is a channel triage IGNORE suppressed from every active reply target."""
+        return bool(
+            self.active_reply_targets
+            and SelectedTriage.suppresses_channel_reply(text)
+            and not self._publishable_reply_targets(text)
+        )
+
     def publish_progress(self, progress: str) -> tuple[SendResult, ...]:
         """Join the committed notice and consume its streamed text together."""
         results: tuple[SendResult, ...] = ()
+        if self._is_suppressed_channel_ignore(progress):
+            self.reply_parts.clear()
+            self.transcript_sink.discard_reply()
+            return ()
         if self.active_reply_targets:
             if progress and "".join(self.reply_parts) == progress:
                 # Committed assistant text before tool work or steer handling. Channel
@@ -345,10 +360,13 @@ class TurnProgress(AgentEventConsumer[Comms]):
             publications.callback(record_publication)
             if self.reply_parts:
                 reply = "".join(self.reply_parts)
-                for target in self._publishable_reply_targets(reply):
-                    published.append(self.comms.messaging.send(
-                        self.thread_name, target, reply
-                    ))
+                if self._is_suppressed_channel_ignore(reply):
+                    self.transcript_sink.discard_reply()
+                else:
+                    for target in self._publishable_reply_targets(reply):
+                        published.append(self.comms.messaging.send(
+                            self.thread_name, target, reply
+                        ))
         self._settle_unanswered_channel_origins()
         self.comms.agents.recover_completed_turn(self.turn_lease, self.thread.backend)
         return tuple(published)

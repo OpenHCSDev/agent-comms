@@ -1020,6 +1020,21 @@ for raw in sys.stdin:
             m.body for m in comms.bus.inbox("tristan").page.messages if m.sender == thread.name
         ]
         assert posted_by_agent == [], f"IGNORE must never be posted to #model: {posted_by_agent!r}"
+        # Suppressed channel IGNORE must also never pollute ExternalTranscript (the thread's DM pane).
+        from agent_comms.execution.transcript_sources import ExternalTranscript
+        from agent_comms.transcript.transcript_events import AssistantTranscript
+
+        ext = ExternalTranscript(root, thread.incarnation)
+        with ext.reading() as records:
+            events_recorded = [
+                ev
+                for item in records.reverse(10**9)
+                for ev in item.events
+                if isinstance(ev, AssistantTranscript)
+            ]
+        assert [ev.text for ev in events_recorded] == [], (
+            f"Suppressed channel IGNORE leaked into ExternalTranscript: {events_recorded!r}"
+        )
     finally:
         await agent.shutdown()
 
@@ -1277,6 +1292,240 @@ async def test_drain_direct_inbox_skips_stored_not_sent_without_replaying_or_dis
         assert [m.seq for turn in pending for m in turn.origin.messages()] == [second.seq]
     finally:
         await agent.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_collective_channel_post_does_not_hijack_running_goal_turn_or_forge_answered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unmentioned collective channel post arriving during an active goal turn must not
+    steer into the goal turn, leak goal progress into the channel, or mark itself Answered."""
+    import os
+    from bus_record_fixture import prepare_native_comms
+    from agent_comms.comms import wire
+    from agent_comms.execution.acp import CommsAgent, RetainedOwnerLaunch
+    from agent_comms.execution.child_process import ProcessIdentity
+    from agent_comms.execution.native_arguments import NativeArguments
+    from agent_comms.messaging.channel_targets import ChannelTarget
+    from agent_comms.messaging.message_notification import MessageNotification
+    from agent_comms.messaging.notification_evidence import AllOutcomes
+    from agent_comms.registry.threads import NextTurnConfiguration
+
+    goal_and_ignore_server = """
+import json, sys, time, uuid
+
+for raw in sys.stdin:
+    if not raw.strip():
+        continue
+    msg = json.loads(raw)
+    method = msg.get("method")
+    rid = msg.get("id")
+    params = msg.get("params") or {}
+    def send(payload):
+        sys.stdout.write(json.dumps(payload) + "\\n")
+        sys.stdout.flush()
+    if method == "initialize":
+        send({"jsonrpc": "2.0", "id": rid, "result": {"protocolVersion": 1}})
+    elif method in ("session/new", "session/resume"):
+        sid = params.get("sessionId") or str(uuid.uuid4())
+        send({"jsonrpc": "2.0", "id": rid, "result": {"sessionId": sid, "configOptions": []}})
+    elif method == "session/prompt":
+        sid = params["sessionId"]
+        prompt_text = " ".join(b.get("text", "") for b in params.get("prompt", []) if isinstance(b, dict))
+        if "[agent-comms from" in prompt_text:
+            send({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": sid, "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "IGNORE"}}}})
+        elif "GOAL_WORK_HOLD" in prompt_text:
+            time.sleep(0.35)
+            for update in (
+                {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "internal goal progress monologue"}},
+                {"sessionUpdate": "tool_call", "toolCallId": "call-g1", "name": "run_command", "title": "run_command", "rawInput": {"CommandLine": "true"}},
+                {"sessionUpdate": "tool_call_update", "toolCallId": "call-g1", "name": "run_command", "status": "completed", "rawOutput": "ok"},
+                {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "internal goal done"}},
+            ):
+                send({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": sid, "update": update}})
+        send({"jsonrpc": "2.0", "id": rid, "result": {"stopReason": "end_turn"}})
+    elif rid is not None:
+        send({"jsonrpc": "2.0", "id": rid, "result": {}})
+"""
+    fake_script = tmp_path / "fake_agy_goal_ignore.py"
+    fake_script.write_text(goal_and_ignore_server, encoding="utf-8")
+    fake_bin = tmp_path / "fake_agy_goal_ignore"
+    fake_bin.write_text(f"#!/bin/sh\nexec {sys.executable} {fake_script} \"$@\"\n", encoding="utf-8")
+    fake_bin.chmod(0o755)
+    monkeypatch.setenv("AGENT_COMMS_AGY_BIN", str(fake_bin))
+
+    root = tmp_path / "comms-root"
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    comms = prepare_native_comms(wire(root))
+    comms.registry.declare(NativeThread("tristan", frozenset({"comms"}), Checkout(worktree)))
+    thread = comms.registry.declare(NativeThread("agy-goal", frozenset({"comms"}), Checkout(worktree)))
+    thread = comms.threads.set_thread_configuration(
+        thread, NextTurnConfiguration(model=ChosenModel("antigravity/gemini-4-neon")),
+    )
+    comms.owners.acquire_thread(thread.name)
+    owner = comms.registry.entry(thread.name).entry.owner_identity
+    proc = ProcessIdentity.capture(os.getpid())
+    env = {
+        **os.environ,
+        "AGENT_COMMS_THREAD": thread.name,
+        "PI_WORKTREE": str(worktree),
+        NativeArguments.binary_key: NativeArguments.default_binary,
+    }
+    launch = RetainedOwnerLaunch(process=proc, interpreter=sys.executable, environment=env)
+
+    agent = CommsAgent(comms, auto_wake=True)
+    sid = AcpSessionId(thread.name)
+    try:
+        await agent.sessions.start_owner(launch, owner)
+        await agent.turns.goals.set_goal(sid, "GOAL_WORK_HOLD persistent work")
+        for _ in range(80):
+            await asyncio.sleep(0.02)
+            if agent.inputs.turn_live(sid):
+                break
+        assert agent.inputs.turn_live(sid), "Expected active goal turn to be running"
+
+        sent = comms.messaging.send_user_message(
+            ChannelTarget("#comms"),
+            "collective UI complaint meant for another agent",
+            worktree=Checkout(worktree),
+        )
+        ref = sent.reference
+        summary = ""
+        for _ in range(120):
+            await asyncio.sleep(0.05)
+            win = comms.views.message_notifications_for_references(AllOutcomes(), (ref,))
+            summary = MessageNotification.summary(
+                win.outcomes.get((ref.seq, ref.message_id), ())
+            )
+            if "not answering" in summary:
+                break
+        assert summary == "1 read · 1 not answering", (
+            f"Collective post during goal turn must settle as Not answering, never Answered: {summary!r}"
+        )
+        posted_by_agent = [
+            m.body for m in comms.bus.inbox("tristan").page.messages if m.sender == thread.name
+        ]
+        assert posted_by_agent == [], (
+            f"Goal monologue or IGNORE leaked into #comms: {posted_by_agent!r}"
+        )
+    finally:
+        await agent.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_antigravity_acp_transitions_silent_post_reply_to_background_wait_and_recovers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When agy acp holds session/prompt open silently after final reply text (e.g. a forgotten
+    background task or stopped child), AntigravityAcpBackend must move out of ReplyingPhase into
+    BackgroundTaskWaitPhase and cancel/fail with ModelStalled once the stall budget expires."""
+    from agent_comms.execution.turn_failure import ModelStalled
+    from agent_comms.execution.turn_phase import (
+        BackgroundTaskWaitPhase,
+        NativePhaseChanged,
+        ReplyingPhase,
+    )
+
+    cancel_marker = tmp_path / "cancelled.txt"
+    hung_bg_server = f"""
+import json, sys, threading, time, uuid
+
+cancel_path = {str(cancel_marker)!r}
+cancelled = threading.Event()
+
+def reader():
+    for raw in sys.stdin:
+        if not raw.strip():
+            continue
+        msg = json.loads(raw)
+        method = msg.get("method")
+        rid = msg.get("id")
+        params = msg.get("params") or {{}}
+        def send(payload):
+            sys.stdout.write(json.dumps(payload) + "\\n")
+            sys.stdout.flush()
+        if method == "initialize":
+            send({{"jsonrpc": "2.0", "id": rid, "result": {{"protocolVersion": 1}}}})
+        elif method in ("session/new", "session/resume"):
+            sid = params.get("sessionId") or str(uuid.uuid4())
+            send({{"jsonrpc": "2.0", "id": rid, "result": {{"sessionId": sid, "configOptions": []}}}})
+        elif method == "session/cancel":
+            with open(cancel_path, "w", encoding="utf-8") as fh:
+                fh.write("cancelled")
+            cancelled.set()
+        elif method == "session/prompt":
+            sid = params["sessionId"]
+            for update in (
+                {{"sessionUpdate": "tool_call", "toolCallId": "bg-1", "name": "run_command", "title": "run_command", "rawInput": {{"CommandLine": "sleep 999"}}}},
+                {{"sessionUpdate": "tool_call_update", "toolCallId": "bg-1", "name": "run_command", "status": "completed", "rawOutput": "Tool is running as a background task with task id: conv/task-999"}},
+                {{"sessionUpdate": "agent_message_chunk", "content": {{"type": "text", "text": "Reply already written"}}}},
+            ):
+                send({{"jsonrpc": "2.0", "method": "session/update", "params": {{"sessionId": sid, "update": update}}}})
+            # Hold session/prompt open silently, simulating a hung background task.
+        elif rid is not None:
+            send({{"jsonrpc": "2.0", "id": rid, "result": {{}}}})
+
+reader()
+"""
+    monkeypatch.setattr(AntigravityAcpBackend, "REPLY_QUIET_SECONDS", 0.08)
+    monkeypatch.setattr(AntigravityAcpBackend, "POST_REPLY_STALL_SECONDS", 0.25)
+
+    class _FakeRunner:
+        pass
+
+    runner = _FakeRunner()
+    process = AntigravityAcpPool.for_runner(
+        runner, command=(sys.executable, "-u", "-c", hung_bg_server),
+    )
+    backend = AntigravityAcpBackend.for_worker(runner, AcpSessionId("hung-bg"))
+
+    class _StartListener:
+        started_events = (events.OriginalInputStarted(),)
+
+        def original(self, native_id, text):
+            del native_id, text
+            return True
+
+    delivery = SimpleNamespace(
+        worktree=str(tmp_path),
+        send_boundary=NO_SEND_BOUNDARY,
+        input_start=_StartListener(),
+        inbox=TurnInbox(),
+    )
+    loc = AntigravitySession.fresh_in(tmp_path)
+    thread = NativeThread(
+        "agy-hung", frozenset(), Checkout(tmp_path),
+        backend=AntigravityAcpBackend,
+        model=DeclaredModel("antigravity/gemini-4-neon"),
+        thinking_level=HighThinkingLevel,
+        session_file=RegistrySessionLocation.from_path(loc.path, tmp_path),
+    )
+    try:
+        emitted = await asyncio.wait_for(
+            _collect_backend_events(backend, thread, "run bg task", delivery),
+            timeout=5.0,
+        )
+    finally:
+        await process.shutdown()
+
+    phases = [ev.phase for ev in emitted if isinstance(ev, NativePhaseChanged)]
+    assert any(isinstance(phase, ReplyingPhase) for phase in phases)
+    bg_phases = [phase for phase in phases if isinstance(phase, BackgroundTaskWaitPhase)]
+    assert bg_phases, f"Expected transition to BackgroundTaskWaitPhase, saw: {phases!r}"
+    assert bg_phases[0].tasks == ("conv/task-999",)
+    assert bg_phases[0].summary == "Waiting on background task (1)"
+    done_events = [ev for ev in emitted if isinstance(ev, events.Done)]
+    assert len(done_events) == 1
+    assert done_events[0].ok is False
+    assert isinstance(done_events[0].failure, ModelStalled)
+    assert "background task" in done_events[0].text
+    assert cancel_marker.is_file()
+
+
+async def _collect_backend_events(backend, thread, text, delivery):
+    return [ev async for ev in backend.run_turn(thread, InputContent(text=text), delivery)]
+
 
 
 

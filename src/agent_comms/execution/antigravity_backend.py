@@ -56,7 +56,7 @@ from agent_comms.execution.runtime_observations import (
     ReportedNativeSessionPath,
 )
 from agent_comms.execution.turn_delivery import DirectTurnDelivery
-from agent_comms.execution.turn_failure import BackendFailed
+from agent_comms.execution.turn_failure import BackendFailed, ModelStalled
 from agent_comms.execution.turn_inbox import TurnInboxItem
 from agent_comms.execution.turn_phase import (
     NativePhaseChanged,
@@ -125,6 +125,9 @@ class AntigravityAcpBackend(
 
     location_type: ClassVar[type[RuntimeLocation]] = AntigravitySession
     event_kinds: ClassVar[frozenset[str]] = ANTIGRAVITY_ACP_EVENT_KINDS
+    REPLY_QUIET_SECONDS: ClassVar[float] = 15.0
+    POST_REPLY_STALL_SECONDS: ClassVar[float] = 180.0
+    MODEL_STALL_SECONDS: ClassVar[float] = 360.0
 
     @classmethod
     def acknowledge_turn_inputs(
@@ -294,13 +297,52 @@ class AntigravityAcpBackend(
                 frames_task: asyncio.Task[tuple[AcpPromptFrame, ...]] = asyncio.create_task(
                     live.next_frames()
                 )
+                loop = asyncio.get_running_loop()
+                last_activity = loop.time()
                 try:
                     while True:
+                        idle = loop.time() - last_activity
+                        deadlines: list[float] = []
+                        if state.has_quiet_transition:
+                            deadlines.append(max(0.0, self.REPLY_QUIET_SECONDS - idle))
+                        stall_budget = state.phase.silence_budget(
+                            model_wait=self.MODEL_STALL_SECONDS,
+                            post_reply_wait=self.POST_REPLY_STALL_SECONDS,
+                        )
+                        if stall_budget is not None:
+                            deadlines.append(max(0.0, stall_budget - idle))
+                        wait_timeout = min(deadlines) if deadlines else None
                         done, _ = await asyncio.wait(
                             {frames_task, inbox_task},
+                            timeout=wait_timeout,
                             return_when=asyncio.FIRST_COMPLETED,
                         )
+                        if not done:
+                            idle = loop.time() - last_activity
+                            if idle >= self.REPLY_QUIET_SECONDS:
+                                quiet = state.observe_quiet_silence()
+                                if quiet is not None:
+                                    last_phase = quiet
+                                    yield NativePhaseChanged(
+                                        last_phase, self._process.require_process_identity()
+                                    )
+                            stall_budget = state.phase.silence_budget(
+                                model_wait=self.MODEL_STALL_SECONDS,
+                                post_reply_wait=self.POST_REPLY_STALL_SECONDS,
+                            )
+                            if stall_budget is not None and idle >= stall_budget:
+                                stall_message = state.phase.stalled().stall_message(stall_budget)
+                                await live.cancel_and_close()
+                                yield events.Error(text=stall_message)
+                                yield events.Done(
+                                    text=stall_message,
+                                    ok=False,
+                                    failure=ModelStalled(stall_message),
+                                )
+                                return
+                            continue
                         if inbox_task in done:
+                            last_activity = loop.time()
                             item = inbox_task.result()
                             for progress_event in state.commit_progress():
                                 yield progress_event
@@ -310,8 +352,15 @@ class AntigravityAcpBackend(
                                 input_start=delivery.input_start,
                             ):
                                 yield event
+                            state.phase = state.phase.input_started()
+                            if state.phase != last_phase:
+                                last_phase = state.phase
+                                yield NativePhaseChanged(
+                                    last_phase, self._process.require_process_identity()
+                                )
                             inbox_task = asyncio.create_task(delivery.inbox.get())
                         if frames_task in done:
+                            last_activity = loop.time()
                             batch = frames_task.result()
                             if not batch:
                                 break
