@@ -24,8 +24,8 @@ from agent_comms.messaging.activity_clocks import ChannelActivity
 from agent_comms.messaging.channel_sources import ChannelHistorySource
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.mentions import ThreadMention
+from agent_comms.messaging.message_reads import ScopedMessage
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.messages import Message, MessageInput, MessageKind
 from agent_comms.messaging.notification_evidence import AllOutcomes, DisplayOutcomes, OutcomeViewer
 from agent_comms.messaging.projection_source import ProjectionSource
 from agent_comms.messaging.recorded_bus import RecordedBus, RecordedBusIdentity
@@ -955,23 +955,23 @@ class MessageDisplayScope(DeclaredFamily, ProjectionSource, affix="DisplayScope"
             sender, snapshot, ChannelConversation, DMConversation
         )
 
-    def records(
+    def records[Kind](
         self, source: BusReader, *, lower: int = 0, upper: int | None = None,
-        descending: bool = False, limit: int = 100, kinds: tuple[type[MessageKind], ...] = (),
-    ) -> tuple[Message, ...]:
+        descending: bool = False, limit: int = 100, kinds: tuple[Kind, ...] = (),
+    ) -> tuple[ScopedMessage, ...]:
         predicate, parameters = self.index_predicate
         return source.scoped_page(predicate, parameters, lower=lower, upper=upper,
                                   descending=descending, limit=limit, kinds=kinds)
 
-    def history(self, source: BusReader, *, limit: int) -> tuple[Message, ...]:
+    def history(self, source: BusReader, *, limit: int) -> tuple[ScopedMessage, ...]:
         """A bounded recent selection closed over its answers, without crossing this scope.
 
         A copied message keeps only the answers this scope discloses: a reference to a message
         outside it would name that message, and its original stays on the source bus."""
-        selected: dict[int, Message] = {}
+        selected: dict[int, ScopedMessage] = {}
         with source.reading() as reader:
             for message in self.records(reader, descending=True, limit=limit):
-                added: dict[int, Message] = {}
+                added: dict[int, ScopedMessage] = {}
                 pending = [message]
                 while pending and len(selected) + len(added) <= limit:
                     answer = pending.pop()
@@ -1018,10 +1018,9 @@ class MessageDisplayScope(DeclaredFamily, ProjectionSource, affix="DisplayScope"
 
     @property
     def index_predicate(self) -> tuple[str, tuple]:
-        """Select this scope's members before applying the sequence limit, its field selectors
-        rendered through the message input's declared tables."""
-        condition, parameters = self.condition
-        return MessageInput.render(condition), parameters
+        """Select this scope's members before applying the sequence limit; the bus query
+        boundary renders {field} selectors through the message input's declared tables."""
+        return self.condition
 
     @property
     @abstractmethod
@@ -1040,7 +1039,7 @@ class MessageDisplayScope(DeclaredFamily, ProjectionSource, affix="DisplayScope"
                 if key.in_targets(targets, snapshot))
 
     @abstractmethod
-    def includes(self, message: Message) -> bool:
+    def includes(self, message: ScopedMessage) -> bool:
         """Apply the captured predicate to a validated authoritative message."""
 
 
@@ -1093,7 +1092,7 @@ class DMDisplayScope(MessageDisplayScope):
     def index_targets(self) -> frozenset[str]:
         return self.first_names | self.second_names
 
-    def includes(self, message: Message) -> bool:
+    def includes(self, message: ScopedMessage) -> bool:
         return (message.sender in self.first_names and message.target in self.second_names) or (
             message.sender in self.second_names and message.target in self.first_names
         )
@@ -1108,7 +1107,7 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
         names = BoundSet(self.first_names | self.second_names)
         return names.within("{sender}"), names.parameters
 
-    def includes(self, message: Message) -> bool:
+    def includes(self, message: ScopedMessage) -> bool:
         return message.sender in self.first_names or (
             message.sender in self.second_names
             and any(message.awaits_answer_from(ThreadTarget(name)) for name in self.first_names)
@@ -1135,7 +1134,7 @@ class SenderDisplayScope(MessageDisplayScope):
         sender_sql = "{sender} IN (" + ",".join("?" for _ in names) + ")"
         return f"({inner_sql}) AND {sender_sql}", (*inner_params, *names)
 
-    def includes(self, message: Message) -> bool:
+    def includes(self, message: ScopedMessage) -> bool:
         return self.scope.includes(message) and message.sender in self.senders
 
 
@@ -1163,7 +1162,7 @@ class ListedDeliveries(TargetedDisplayScope):
         sequences = BoundSet(self.sequences)
         return sequences.within("{seq}"), sequences.parameters
 
-    def includes(self, message: Message) -> bool:
+    def includes(self, message: ScopedMessage) -> bool:
         return message.seq in self.sequences and self.scope.includes(message)
 
 
@@ -1202,7 +1201,7 @@ class ChannelDisplayScope(TargetedDisplayScope):
             raise DMPaintedBoundChanged()
         return self.displayed
 
-    def includes(self, message: Message) -> bool:
+    def includes(self, message: ScopedMessage) -> bool:
         return message.target in self.targets
 
 
@@ -1216,7 +1215,7 @@ class AllTargetsDisplayScope(AnyTargetDisplayScope, ChannelDisplayScope, declare
     def condition(self) -> tuple[str, tuple]:
         return "1", ()
 
-    def includes(self, message: Message) -> bool:
+    def includes(self, message: ScopedMessage) -> bool:
         return True
 
 
@@ -1263,7 +1262,7 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
                 (*targets.parameters, *names.parameters, *names.parameters, f"$.{mention_key}",
                  *names.parameters))
 
-    def includes(self, message: Message) -> bool:
+    def includes(self, message: ScopedMessage) -> bool:
         return self._includes(message.sender, message.target,
                               (mention.thread for mention in message.mentions))
 

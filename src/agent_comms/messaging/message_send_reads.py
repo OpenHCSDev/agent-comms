@@ -6,15 +6,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
 from agent_comms.execution.turn_item import NoSourceTurn, SourceTurn
+from agent_comms.messaging.message_reads import MessageReferenceRead
 from agent_comms.messaging.message_reference import MessageReference
-
-
-class MessageReferenceRead(ABC):
-    __slots__ = ()
-
-    @property
-    @abstractmethod
-    def reference(self) -> MessageReference: ...
 
 
 class PublishedMessageRead(MessageReferenceRead):

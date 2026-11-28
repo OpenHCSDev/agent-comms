@@ -280,7 +280,7 @@ class BusReader(
 
     def target_activity(self, predicate: str, parameters: tuple[object, ...]) -> ChannelActivity:
         with self.observing() as db:
-            return BusActivityIndex.aggregate(db, predicate, parameters)
+            return BusActivityIndex.aggregate(db, MessageInput.render(predicate), parameters)
 
     def participant_activity(self, names: frozenset[str]) -> ChannelActivity:
         marks = ','.join('?' for _ in names)
@@ -390,9 +390,10 @@ class BusReader(
     ) -> Iterator[StoredWireHistory]:
         """The public history selected on one read snapshot; each format reads its own rows."""
         with self.observing() as db:
+            rendered = MessageInput.render(predicate)
             query = Message.stored_wire_query(db, MessageIdentitySource)
             query = (f'SELECT seq, timestamp, wire FROM ({query}) '
-                     f'WHERE seq <= ? AND ({predicate})')
+                     f'WHERE seq <= ? AND ({rendered})')
             yield StoredWireHistory(db, query, (through, *parameters))
 
     def message_history(self) -> Iterator[Message]:
@@ -422,6 +423,7 @@ class BusReader(
     ) -> tuple[Message, ...]:
         """A captured display scope narrows the addressed table before decoding."""
         with self.observing() as db:
+            rendered = MessageInput.render(predicate)
             upper = BusRow.last_seq(db) + 1 if upper is None else upper
             order = "DESC" if descending else "ASC"
             members = ""
@@ -430,7 +432,7 @@ class BusReader(
             rows = db.execute(
                 f'SELECT seq FROM "{Addressed.table.declared_name}" '
                 f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
-                f'WHERE ({predicate}) AND seq > ? AND seq < ?{members} '
+                f'WHERE ({rendered}) AND seq > ? AND seq < ?{members} '
                 f'ORDER BY seq {order} LIMIT ?',
                 (*parameters, lower, upper, *(kind.declared_name for kind in kinds), limit),
             )
@@ -442,13 +444,14 @@ class BusReader(
         """The newest matching record of each addressed conversation inside one sequence window,
         oldest first: one row per conversation is read, never the window."""
         with self.observing() as db:
+            rendered = MessageInput.render(predicate)
             positions = sorted(
                 row.seq for row in AddressedRow.matching(
                     db,
                     f'{{seq}} IN (SELECT MAX(seq) FROM '
                     f'"{Addressed.table.declared_name}" '
                     f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
-                    f'WHERE ({predicate}) AND seq > ? AND seq <= ? GROUP BY sender, target)',
+                    f'WHERE ({rendered}) AND seq > ? AND seq <= ? GROUP BY sender, target)',
                     (*parameters, after, through),
                 )
             )
@@ -459,11 +462,12 @@ class BusReader(
     ) -> list[AddressedRow]:
         """One prefix per addressed conversation, without materializing its history."""
         with self.observing() as db:
+            rendered = MessageInput.render(predicate)
             return AddressedRow.matching(
                 db, (f'{{seq}} IN (SELECT MAX(seq) FROM '
                      f'"{Addressed.table.declared_name}" '
                      f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
-                     f'WHERE ({predicate}) AND seq <= ? GROUP BY sender, target)'),
+                     f'WHERE ({rendered}) AND seq <= ? GROUP BY sender, target)'),
                 (*parameters, through),
             )
 
@@ -650,11 +654,12 @@ class BusReader(
         counts = {}
         with self.observing() as db:
             for query in queries:
+                rendered = MessageInput.render(query.predicate)
                 counts[query] = FieldCodec.decode(int, db.execute(
                     f'WITH {ReadCursor.sql("?")}, requests AS ('
                     f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
                     f'JOIN "{MessageInput.table.declared_name}" USING(seq) WHERE seq > ? AND seq <= ? '
-                    f'AND ({query.predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
+                    f'AND ({rendered}) AND sender NOT IN (SELECT value FROM json_each(?))), '
                     f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
                     (CursorRow.binding(query.cursors), max(after, query.lower_bound), through,
                      *query.parameters, query.viewer_names),
@@ -666,10 +671,11 @@ class BusReader(
     ) -> list[AddressedRow]:
         """An explicit bulk read mark projects positions, not message bodies."""
         with self.observing() as db:
+            rendered = MessageInput.render(predicate)
             return AddressedRow.matching(
                 db, (f'{{seq}} IN (SELECT seq FROM "{Addressed.table.declared_name}" '
                      f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
-                     f'WHERE ({predicate}) AND seq <= ?)'),
+                     f'WHERE ({rendered}) AND seq <= ?)'),
                 (*parameters, through),
             )
 
