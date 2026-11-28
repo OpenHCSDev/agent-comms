@@ -44,7 +44,6 @@ from agent_comms.execution.transcript_cursor_reads import (
     TranscriptHistorySource,
     TranscriptRuntime,
 )
-from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.execution.turn_outcome import TurnOutcome
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMember
@@ -63,14 +62,14 @@ if TYPE_CHECKING:
     from agent_comms.registry.threads import Thread
 
 
-class TurnPublicationRecorder[Cursor, Routing](ABC):
+class TurnPublicationRecorder[Lease, Cursor, Routing](ABC):
     """Transcript store capability that joins a completed native turn to committed wire rows."""
 
     @abstractmethod
     def record_native_turn_publication(
         self,
         *,
-        lease: TurnLeaseFence,
+        lease: Lease,
         checkpoint: Cursor,
         routing: Routing,
         published: tuple[MessageReference, ...],
@@ -193,11 +192,11 @@ class RuntimeLocation(DeclaredFamily, TranscriptRuntime, affix='Runtime'):
     def transcript_cursor(self, frontier, cut, *, source):
         return frontier.cursor(source.read_key, cut.offset, file=cut.file_identity())
 
-    def record_turn_publication[Cursor, Routing](
+    def record_turn_publication[Lease, Cursor, Routing](
         self,
-        transcripts: TurnPublicationRecorder[Cursor, Routing],
+        transcripts: TurnPublicationRecorder[Lease, Cursor, Routing],
         *,
-        lease: TurnLeaseFence,
+        lease: Lease,
         checkpoint: Cursor,
         routing: Routing,
         published: tuple[MessageReference, ...],
