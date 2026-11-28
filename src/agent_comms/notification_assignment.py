@@ -29,7 +29,6 @@ from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.notification_evidence import (
-    ConsumptionEvidence,
     FirstRecipient,
     OutcomeViewer,
     RecipientCursor,
@@ -38,6 +37,7 @@ from agent_comms.messaging.notification_evidence import (
 from agent_comms.messaging.notification_progress import (
     AssignmentProgress,
     AssignmentResponse,
+    ConsumptionEvidence,
     DeliveryProgress,
     QueuedProgress,
     SentProgress,

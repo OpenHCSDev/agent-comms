@@ -20,8 +20,8 @@ from agent_comms.cli_bridges.delivery_outcome import (
 from agent_comms.coordination.assignment_states import AssignmentState
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.notification_evidence import ConsumptionEvidence
 from agent_comms.messaging.notification_progress import (
+    ConsumptionEvidence,
     ConsumingProgress,
     DeliveryProgress,
     HarnessConsumedProgress,
