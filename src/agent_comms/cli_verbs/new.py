@@ -18,6 +18,7 @@ from agent_comms.nominal.field_codec import (
     Normalize,
 )
 from agent_comms.projects.checkouts import Checkout, LaunchCheckout
+from agent_comms.registry.agent_settings import AgentSettings
 from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.tag_choice import InheritedTags, TagChoice
 from agent_comms.registry.thread_management import NewThreadSpec
@@ -52,8 +53,12 @@ class NewThreadCliCommand(
 
     @classmethod
     def project_bindings(cls, comms: CliBus, project: Checkout) -> tuple[Self, ...]:
-        defaults = NativeThreadDefaults()
-        return (cls(name='', project=project, **NativeThreadDefaults.field_values(defaults)),)
+        defaults = (
+            AgentSettings.at(comms.root).thread_defaults_for(project.path)
+            if comms is not None
+            else NativeThreadDefaults()
+        )
+        return (cls(name='', project=project, **ThreadSettings.field_values(defaults)),)
 
     @property
     def project_path(self) -> Path:

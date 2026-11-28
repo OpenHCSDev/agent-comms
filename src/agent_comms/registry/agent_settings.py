@@ -36,6 +36,7 @@ from agent_comms.registry.agent_settings_wire import (
     SCOPE_SEPARATOR,
     AgentSettingsDocument,
     AgentSettingsScope,
+    ProjectSettingsScope,
     ResolvedSetting,
     ScopedSettingsProjection,
 )
@@ -250,6 +251,40 @@ class AgentSettings:
 
     def projection(self, scope: AgentSettingsScope, *, channel: str = "") -> ScopedSettingsProjection:
         return self.resolve(scope, channel=channel).to_projection()
+
+    def thread_defaults_for(self, project: Path) -> ThreadSettings:
+        """Effective thread creation defaults for ``project`` (Global -> Project)."""
+        return self.resolve(ProjectSettingsScope(project.name)).values.thread
+
+    def apply_rule_gate_overrides[Record: RuleGateSettings](
+        self,
+        record: Record,
+        scope: AgentSettingsScope,
+        *,
+        channel: str = "",
+    ) -> Record:
+        """Apply only authored ``rule_gate.*`` overrides across ``scope``'s ancestry.
+
+        Un-overridden fields stay untouched so model-specific defaults (such as CLM's
+        ``OffDealMode``) remain intact unless explicitly overridden at Global, Project,
+        Channel, or Thread scope.
+        """
+        saved = self.store.read()
+        chain = scope.ancestry(channel=channel)
+        authored_paths = {
+            path
+            for member in chain
+            for path in saved.overrides_at(member.scope_id)
+            if path.startswith("rule_gate.")
+        }
+        if not authored_paths:
+            return record
+        resolved = self.resolve(scope, channel=channel, document=saved)
+        overrides = {
+            path.removeprefix("rule_gate."): resolved.resolved_fields[path].value
+            for path in authored_paths
+        }
+        return replace(record, **overrides)
 
     def update_scope(
         self,

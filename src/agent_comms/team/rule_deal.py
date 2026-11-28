@@ -823,6 +823,11 @@ class DealRecord(RuleGateSettings, DealPromptRecord):
         """A dealt session keeps the settings it was dealt under, whatever its model."""
         return self
 
+    def with_scoped_overrides(self, apply: Callable[[DealRecord], DealRecord]) -> DealRecord:
+        """A dealt session keeps its stored settings; an undealt one takes scoped defaults."""
+        del apply
+        return self
+
     def while_supplied(self) -> DealRecord:
         """This deal while every file it dealt is still installed.
 
@@ -845,6 +850,9 @@ class UndealtRecord(DealRecord):
     def for_model(self, provider) -> DealRecord:
         """A session never dealt starts from its model's defaults (ModelProvider.undealt)."""
         return provider.undealt(self)
+
+    def with_scoped_overrides(self, apply: Callable[[DealRecord], DealRecord]) -> DealRecord:
+        return apply(self)
 
     def refreshes_passed(self, usage: ContextUsage) -> tuple[RefreshAt, ...]:
         """Nothing was dealt, so nothing comes back."""
