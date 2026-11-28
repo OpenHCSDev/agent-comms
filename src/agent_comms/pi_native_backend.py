@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
@@ -22,15 +21,18 @@ from agent_comms import agent_events as events
 from agent_comms.agent_backend import (
     CompactionOutcome,
     FailedCompaction,
-    Forks,
-    Interrupts,
-    NewThreadBackend,
     NothingToCompaction,
     PlacedCompaction,
     RuntimeLocation,
+    ServedAgentBackend,
+    ServedRuntimeLocation,
 )
 from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.agent_event import AgentEvent
+from agent_comms.execution.backend_declarations import (
+    PiNativeBackendDeclaration,
+    PiSessionFileDeclaration,
+)
 from agent_comms.execution.fresh_private_session import create_fresh_private_session
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_arguments import NativeArguments
@@ -94,11 +96,8 @@ PI_0_85_1_EVENT_KINDS: frozenset[str] = frozenset({
 })
 
 
-@dataclass(frozen=True)
-class PiSessionFile(NativeTranscriptLocation, RuntimeLocation):
+class PiSessionFile(NativeTranscriptLocation, ServedRuntimeLocation, PiSessionFileDeclaration):
     """The native backend's stored Pi transcript."""
-
-    path: str
 
     def select_session(self, directory, execution, source_reads, *, participant):
         path = Path(self.path).absolute()
@@ -131,9 +130,8 @@ class PiSessionFile(NativeTranscriptLocation, RuntimeLocation):
 
 class PiNativeBackend(
     PersistentPiSession,
-    Interrupts,
-    Forks,
-    NewThreadBackend,
+    ServedAgentBackend,
+    PiNativeBackendDeclaration,
 ):
     """Pi 0.85.1 over RPC: one retained child per thread session in this worker.
 

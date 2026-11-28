@@ -13,22 +13,17 @@ import asyncio
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import suppress
-from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import (
-    AgentBackend,
     CompactionOutcome,
     FailedCompaction,
-    Forks,
-    Interrupts,
-    OwnedInboxDrainer,
     PlacedCompaction,
     RuntimeLocation,
-    ThreadServingBackend,
-    ThreadSettingApplier,
+    ServedAgentBackend,
+    ServedRuntimeLocation,
     TurnInputAcknowledger,
     TurnTranscriptSink,
 )
@@ -49,10 +44,13 @@ from agent_comms.execution.antigravity_acp_events import (
     AntigravityAcpUpdate,
 )
 from agent_comms.execution.antigravity_transcript import ExternalTurnTranscriptSink
+from agent_comms.execution.backend_declarations import (
+    AntigravityAcpBackendDeclaration,
+    AntigravitySessionDeclaration,
+)
 from agent_comms.execution.backend_query import TurnInputContent
 from agent_comms.execution.child_process import ProcessState
 from agent_comms.execution.launch_runtime import LaunchRuntime
-from agent_comms.execution.native_arguments import AntigravityProvider
 from agent_comms.execution.runtime_observations import (
     AgentInfo,
     ReportedNativeSessionPath,
@@ -65,7 +63,6 @@ from agent_comms.execution.turn_phase import (
     SettlingStatsPhase,
     TurnPhase,
 )
-from agent_comms.execution.unstarted_runtime import ExternalTranscriptLocation
 from agent_comms.installer.harness_install import AntigravityAcpSession
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.messages import Message
@@ -81,11 +78,8 @@ from agent_comms.registry.thread_identity import ThreadIncarnation
 from agent_comms.registry.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 
 
-@dataclass(frozen=True)
-class AntigravitySession(ExternalTranscriptLocation, declared_name="antigravity_session"):
+class AntigravitySession(ServedRuntimeLocation, AntigravitySessionDeclaration):
     """On-disk Antigravity conversation database (``conversations/<uuid>.db``)."""
-
-    path: str
 
     @classmethod
     def fresh(cls) -> Self:
@@ -125,42 +119,12 @@ def _selected_model_name(*, provider: object = "", model_id: object = "") -> str
 
 
 class AntigravityAcpBackend(
-    Forks, Interrupts, ThreadServingBackend, declared_name="antigravity_acp"
+    ServedAgentBackend, AntigravityAcpBackendDeclaration
 ):
     """Antigravity over ACP: concurrent thread sessions multiplexed on one ``agy acp`` server."""
 
     location_type: ClassVar[type[RuntimeLocation]] = AntigravitySession
     event_kinds: ClassVar[frozenset[str]] = ANTIGRAVITY_ACP_EVENT_KINDS
-    provider_type: ClassVar[type[AntigravityProvider]] = AntigravityProvider
-
-    @classmethod
-    def registered_over(cls, previous: type[AgentBackend]) -> type[AgentBackend]:
-        del previous
-        return cls
-
-    @classmethod
-    def as_native_backend(cls, incoming: type[AgentBackend]) -> type[AgentBackend]:
-        return incoming
-
-    @classmethod
-    async def apply_setting[Configuration, Command](
-        cls,
-        owner: ThreadSettingApplier[Configuration, Command],
-        configuration: Configuration,
-        thread,
-        command: Command,
-    ) -> None:
-        del configuration
-        await owner.store_direct_setting(thread, command)
-
-    @classmethod
-    async def drain_owned_inbox(
-        cls,
-        inputs: OwnedInboxDrainer,
-        session_id: AcpSessionId,
-        thread,
-    ) -> None:
-        await inputs.drain_direct_inbox(session_id, thread)
 
     @classmethod
     def acknowledge_turn_inputs(
@@ -197,11 +161,6 @@ class AntigravityAcpBackend(
         opening: tuple[MessageReference, ...],
     ) -> TurnTranscriptSink:
         return ExternalTurnTranscriptSink.for_turn(root, incarnation, turn_id, opening)
-
-    @classmethod
-    def join_forking_caller(cls, thread, join_child: object) -> None:
-        """Multiplexed Antigravity ACP sessions share the host MCP grant and act as their own thread."""
-        del thread, join_child
 
     def __init__(self, process: AntigravityAcpProcess) -> None:
         self._process = process

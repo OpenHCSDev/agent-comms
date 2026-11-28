@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import (
     dataclass,
     fields,
+    is_dataclass,
 )
 from typing import (
     TypedDict,
@@ -44,9 +45,13 @@ class ServesDeclaration(FamilyMeta):
             # FamilyMeta reads a member's name from its namespace when the header gives none.
             namespace.setdefault(REPLACES_REGISTERED_ATTRIBUTE, declaration)
             namespace.setdefault("declared_name", declaration.selection_key())
-            namespace.setdefault("__eq__", DeclaredValue(declaration).equal)
-            namespace.setdefault("__hash__", declaration.__hash__)
-        return cast(ServesDeclaration, super().__new__(mcs, name, bases, namespace, **options))
+            if is_dataclass(declaration):
+                namespace.setdefault("__eq__", DeclaredValue(declaration).equal)
+                namespace.setdefault("__hash__", declaration.__hash__)
+        cls = cast(ServesDeclaration, super().__new__(mcs, name, bases, namespace, **options))
+        for declaration in declarations:
+            cast(type[DeclaredFamily], cls)._served_declaration(declaration)
+        return cls
 
 
 @dataclass(frozen=True)
@@ -82,7 +87,7 @@ class DeclarationBases(MroDispatch):
     @staticmethod
     def declared(base: type[DeclaredFamily]) -> tuple[type[DeclaredFamily], ...]:
         """A family member registered under its own name; an intermediate has no name."""
-        return (base,) if base in dict.values(base.__registry__) else ()
+        return (base,) if base in dict.values(base.__registry_config__.registry_dict) else ()
 
     @handles(type)
     @staticmethod
