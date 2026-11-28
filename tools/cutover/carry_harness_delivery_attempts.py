@@ -15,10 +15,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from agent_comms.cli_bridges.delivery_outcome import EmittedOutcome, Outcome
 from agent_comms.cli_bridges.harness_delivery_states import (
-    EmittedOutcome,
     MonitorEvidence,
-    Outcome,
     UnrecordedMonitor,
 )
 from agent_comms.cli_bridges.shared import Binding, BridgeDeliveryStore, BridgeStateTable
