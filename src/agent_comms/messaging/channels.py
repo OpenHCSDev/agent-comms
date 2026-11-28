@@ -16,12 +16,7 @@ from agent_comms.messaging.activity_clocks import ChannelActivity
 from agent_comms.messaging.channel_sources import ChannelHistorySource, ChannelMemberSource
 from agent_comms.messaging.channel_targets import ChannelTarget, Tag
 from agent_comms.messaging.display_sources import ChannelSortView, SortedChannel, StoredThreadOrder
-from agent_comms.messaging.history_result import (
-    ChannelHistoryPageResult,
-    EverythingHistoryPageResult,
-    HistoryPageResult,
-)
-from agent_comms.messaging.messages import MembershipTransition
+from agent_comms.messaging.membership_transition import MembershipTransition
 from agent_comms.messaging.projection_source import ProjectionSource
 from agent_comms.messaging.read_basis import (
     AllChannelDisplayScope,
@@ -67,7 +62,10 @@ class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, StoredThr
     parent: str | None = None
     archived: bool = False
     any_mode: bool = False
-    history_result_type: ClassVar[type[HistoryPageResult]] = ChannelHistoryPageResult
+
+    def select_history_result[Result](self, *, channel: Result, everything: Result) -> Result:
+        del everything
+        return channel
 
     def __post_init__(self) -> None:
         name = ChannelTarget.normalize_name(self.name)
@@ -267,7 +265,9 @@ class NonRoutableChannel:
 
 
 class AnyChannel(NonRoutableChannel, BuiltinChannelView):
-    history_result_type = EverythingHistoryPageResult
+    def select_history_result[Result](self, *, channel: Result, everything: Result) -> Result:
+        del channel
+        return everything
 
     @classmethod
     def history_scope(cls) -> ChannelDisplayScope:

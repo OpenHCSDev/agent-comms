@@ -8,13 +8,14 @@ from dataclasses import dataclass, field
 from typing import Annotated
 
 from agent_comms.messaging import activity_clocks
-from agent_comms.messaging.messages import BusProjectionTables
+from agent_comms.messaging.bus_projection_tables import BusDerivedTables
 from agent_comms.messaging.projection_source import ProducedRow
 from agent_comms.nominal.class_fact import ClassFact
+from agent_comms.storage.locked_store import BusStoreFile, FileStore, SQLiteReader
 from agent_comms.storage.typed_table import Column
 
 
-class ActivityMaximum(BusProjectionTables, declared_name=None):
+class ActivityMaximum(BusDerivedTables, declared_name=None):
     """The declared non-key values are maxima, not independently writable clocks."""
 
     @ClassFact
@@ -69,3 +70,11 @@ class BusActivityIndex(activity_clocks.ChannelActivity, ActivityMaximum):
 class SentActivity(ActivityMaximum):
     sender: Annotated[str, Column(primary_key=True)]
     last_sent: float
+
+
+class BusActivityStore(FileStore, SQLiteReader, BusStoreFile):
+    """Read-only bus activity-clock access without importing Bus or Message."""
+
+    def activity_clocks(self) -> activity_clocks.ActivityClocks:
+        with self.reader_snapshot() as db:
+            return BusActivityIndex.clocks(db)

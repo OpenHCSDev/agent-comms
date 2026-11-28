@@ -19,6 +19,9 @@ from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.turn_origin import TurnOrigin
+from agent_comms.messaging.bus_activity_index import BusActivityIndex, SentActivity
+from agent_comms.messaging.bus_display_index import BusDisplayIndex
+from agent_comms.messaging.bus_projection_tables import BusDerivedTables
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.display_references import NO_HISTORY_SOURCE, MessageHistory
 from agent_comms.messaging.envelope_claim_transitions import (
@@ -29,6 +32,13 @@ from agent_comms.messaging.envelope_claim_transitions import (
     ClaimTransitionError,
     ResourceClaim,
     UnclaimedResource,
+)
+from agent_comms.messaging.membership_transition import (
+    JoinedMembership,
+    LeftMembership,
+    MembershipTransition,
+    NoMembershipChange,
+    RoleActivitySource,
 )
 from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.message_clock_source import MessageClockSource
@@ -95,8 +105,12 @@ class BusTables(TypedTable, AppendOnlyTables, SharedFileTables, DurableTables, d
     """Bus history cannot be rebuilt from another source."""
 
 
-class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declared_name=None):
+class BusProjectionTables(BusDerivedTables, declared_name=None):
     """Reverse lookups are derived from the record, in its append transaction."""
+
+    @classmethod
+    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
+        return tuple(TypedTable.members_with(BusDerivedTables))
 
     @classmethod
     def changed_rows(
@@ -142,7 +156,7 @@ class BusRow(BusTables):
 
 
 @dataclass(frozen=True)
-class TeamUpdatePosition(BusProjectionTables, declared_name="team_update_position"):
+class TeamUpdatePosition(BusDerivedTables, declared_name="team_update_position"):
     """Where each typed teammate packet sits, by the teammate birth it addresses. A rebuildable
     search projection: the packet's content stays on its original message's task."""
 
@@ -190,7 +204,7 @@ class TeamUpdatePosition(BusProjectionTables, declared_name="team_update_positio
 
 
 @dataclass(frozen=True)
-class EscalationPosition(BusProjectionTables):
+class EscalationPosition(BusDerivedTables):
     """Where each escalation line sits, by the teammate birth it addresses and when it was sent.
     It shares the owner's thread with every message he types, so this rebuildable projection, not
     the sender, finds a burst; which burst a line belongs to stays on its original message's task."""
@@ -213,7 +227,7 @@ class EscalationPosition(BusProjectionTables):
 
 
 @dataclass(frozen=True)
-class ClaimOperations(BusProjectionTables):
+class ClaimOperations(BusDerivedTables):
     """An acquisition's consumed operation refers to its original claim row."""
 
     operation_id: Annotated[ClaimId, Column(primary_key=True)]
@@ -229,7 +243,7 @@ class ClaimOperations(BusProjectionTables):
 
 
 @dataclass(frozen=True)
-class HeldResources(ClaimProducer, BusProjectionTables):
+class HeldResources(ClaimProducer, BusDerivedTables):
     """Current membership references the canonical transition, never a copy."""
 
     resource: Annotated[str, Column(primary_key=True)]
@@ -692,51 +706,6 @@ class ChangeReportKind(SendableMessageKind, declared_name="change-report"):
         message.report.require_references_exist(roots)
 
 
-class RoleActivitySource(ProjectionSource):
-    """A message's role and membership write its sender's activity and its awaited answers."""
-
-    __slots__ = ()
-
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.messaging.bus_activity_index import SentActivity
-        from agent_comms.messaging.bus_tables import AwaitingAnswerSource
-        return (SentActivity, AwaitingAnswerSource)
-
-
-class MembershipTransition(DeclaredFamily, RoleActivitySource, affix="Membership"):
-    @classmethod
-    def conversation_role(cls) -> MembershipConversationRole:
-        return MembershipConversationRole(cls)
-
-    @classmethod
-    def between(cls, previous: bool, current: bool) -> tuple[type[MembershipTransition], ...]:
-        return tuple(member for member in cls.members_with(cls) if member.applies(previous, current))
-
-    @staticmethod
-    @abstractmethod
-    def applies(previous: bool, current: bool) -> bool: ...
-
-
-class JoinedMembership(MembershipTransition):
-    @staticmethod
-    def applies(previous: bool, current: bool) -> bool:
-        return not previous and current
-
-
-class LeftMembership(MembershipTransition):
-    @staticmethod
-    def applies(previous: bool, current: bool) -> bool:
-        return previous and not current
-
-
-@dataclass(frozen=True, slots=True)
-class NoMembershipChange(NullMember, RoleActivitySource):
-
-    def conversation_role(self):
-        return ConversationRole()
-
-
 @dataclass(frozen=True, slots=True)
 class MessageRoleWire(RoleActivitySource):
     """The unchanged external fields, decoded once into a message role."""
@@ -749,7 +718,7 @@ class MessageRoleWire(RoleActivitySource):
     notice: Annotated[bool, WireOmitDefault()] = False
 
     def role(self):
-        role = self.change.conversation_role()
+        role = self.change.conversation_role(MembershipConversationRole, ConversationRole)
         return role.as_notice() if self.notice else role
 
     @classmethod
@@ -843,12 +812,9 @@ class ConversationActivity(ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.messaging.bus_activity_index import SentActivity
         return (SentActivity,)
 
     def activity_rows(self, message: Message) -> tuple[TypedTable, ...]:
-        from agent_comms.messaging.bus_activity_index import SentActivity
-
         return (SentActivity(message.sender, message.timestamp),)
 
 
@@ -1255,8 +1221,6 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.messaging.bus_activity_index import BusActivityIndex, SentActivity
-        from agent_comms.messaging.bus_display_index import BusDisplayIndex
         from agent_comms.messaging.bus_route_counts import BusRouteCounts, BusRouteKeys
         from agent_comms.messaging.bus_tables import AnsweredSource, MessageIdentitySource
         # Task rows are written by the record that carries the task, so the record kinds own
@@ -1269,8 +1233,6 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
         )))
 
     def projections(self):
-        from agent_comms.messaging.bus_activity_index import BusActivityIndex
-        from agent_comms.messaging.bus_display_index import BusDisplayIndex
         from agent_comms.messaging.bus_tables import AnsweredSource, MessageIdentitySource
 
         yield from super().projections()

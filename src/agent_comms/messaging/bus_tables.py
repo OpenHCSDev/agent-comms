@@ -10,6 +10,7 @@ from itertools import batched
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging.bus_projection_tables import BusDerivedTables
 from agent_comms.messaging.channel_targets import NamedTarget
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.message_send_reads import PublishedMessageRead
@@ -53,7 +54,7 @@ class BusSchema(ComposedSchemas, BusTables, ProjectionProducerTables, BusProject
 
 
 @dataclass(frozen=True)
-class ParticipantSource(BusProjectionTables, declared_name=None):
+class ParticipantSource(BusDerivedTables, declared_name=None):
     """A recorded participant's positions in actual frozen deliveries."""
 
     lookup: Annotated[ThreadLookup, Column(primary_key=True)]
@@ -119,7 +120,7 @@ class DirectReplySource(AwaitingAnswerSource, declared_name=None):
 
 
 @dataclass(frozen=True)
-class MessageIdentitySource(MessageReference, BusProjectionTables):
+class MessageIdentitySource(MessageReference, BusDerivedTables):
     """A record's existing reference, searchable without recomputing its content hash."""
 
     @classmethod
@@ -237,7 +238,7 @@ class AuthoredAnswers(RecordedAnswers):
 
 
 @dataclass(frozen=True)
-class AnsweredSource(BusProjectionTables):
+class AnsweredSource(BusDerivedTables):
     original: Annotated[int, Column(
         primary_key=True, references=TableReference(MessageIdentitySource, ("seq",)),
     )]

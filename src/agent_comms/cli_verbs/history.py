@@ -9,7 +9,12 @@ from agent_comms.installer.active_route import CommsRoute
 from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.channels import AnyChannel
 from agent_comms.messaging.historical_views import HistoryView
-from agent_comms.messaging.history_result import DmHistoryPageResult, HistoryPageResult
+from agent_comms.messaging.history_result import (
+    ChannelHistoryPageResult,
+    DmHistoryPageResult,
+    EverythingHistoryPageResult,
+    HistoryPageResult,
+)
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.message_page import PageBounds
 from agent_comms.messaging.page_traversal import NewestCursor, PageCursor
@@ -60,6 +65,8 @@ class HistoryCliCommand(CliCommand):
         return target.history_result(
             presentation.bus.require_channel,
             DmHistoryPageResult,
+            ChannelHistoryPageResult,
+            EverythingHistoryPageResult,
             tuple(reversed(page.messages)),
             page.has_older,
         )

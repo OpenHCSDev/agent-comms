@@ -15,8 +15,8 @@ from agent_comms.execution.child_process import ResidentManager
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.host_services import ServiceNotServingError, SystemdUserService
 from agent_comms.installer.active_route import ActiveRoute
-from agent_comms.messaging.bus import Bus
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
+from agent_comms.storage.locked_store import BusStoreFile
 from agent_comms.nominal.field_codec import Argument, FieldCodec, MalformedRecord, PathText
 from agent_comms.transport.connector_store import ConnectorStore, ReadServiceAccess
 from agent_comms.transport.mcp_wire import ToolsCallMessage, ToolsCallReply
@@ -84,8 +84,8 @@ class SystemdConnectorService(ConnectorService, SystemdUserService):
 
     def serves(self) -> None:
         super().serves()
-        served = Bus.path_in(self.launch.path)
-        published = Bus.path_in(ActiveRoute.published_launch().path)
+        served = BusStoreFile.path_in(self.launch.path)
+        published = BusStoreFile.path_in(ActiveRoute.published_launch().path)
         if not RecordedBusIdentity.capture(served).matches(RecordedBusIdentity.capture(published)):
             raise ServiceNotServingError(
                 f"Connector on port {self.port} serves {served}; "
@@ -144,8 +144,8 @@ class RoundTripVerb(ConnectorVerb):
             case ():
                 return f"No connector service is running for {self.root}"
             case (service,):
-                served = Bus.path_in(service.launch.path)
-                requested = Bus.path_in(self.root)
+                served = BusStoreFile.path_in(service.launch.path)
+                requested = BusStoreFile.path_in(self.root)
                 if service.port != self.port or not RecordedBusIdentity.capture(served).matches(
                     RecordedBusIdentity.capture(requested)
                 ):
