@@ -33,6 +33,7 @@ from annotated_types import Ge, Gt, Lt
 from python_introspect.jsonable import RegisteredClassChoices
 from python_introspect.validation import validate_annotated_dataclass
 
+from agent_comms.execution.compaction_redeal import CompactionRedeal
 from agent_comms.execution.context_reading import ContextUsage
 from agent_comms.nominal.configuration_record import ConfigurationRecord
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -1496,9 +1497,12 @@ class DealtRuleGate(ParsesItsAudit, AsksIfMeant, ReadsDealtSources, AuditsDealtR
     the gate every backend runs."""
 
 
-class Redeals(RuleDeal):
+class Redeals(RuleDeal, CompactionRedeal):
     """A deal its backend renews itself: at the first start, after each compaction, and at
     each declared share of context left, read from the backend's own context-use report."""
+
+    def redeal_compacted(self, compacted_at: str) -> None:
+        self.redeal(CompactedDeal(compacted_at))
 
     @property
     def refreshes(self) -> tuple[RefreshAt, ...]:

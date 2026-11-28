@@ -6,10 +6,10 @@ import os
 import sys
 import sysconfig
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping, MutableMapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
 import agent_comms
 from agent_comms.errors import RelationViolationError
@@ -26,21 +26,12 @@ from agent_comms.nominal.field_codec import (
     TextRepresentation,
     WireName,
     WireOmitDefault,
-    boundary_decoder,
 )
-from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_text import (
     AbsentText,
     GivenText,
-    NoParent,
-    NoThreadText,
     TextChoice,
-    ThreadParent,
-    ThreadText,
 )
-
-if TYPE_CHECKING:
-    from agent_comms.registry.threads import Thread
 
 
 class CallingThreadUnavailable(RelationViolationError):
@@ -468,78 +459,3 @@ class FlagText(TextRepresentation[bool]):
     @classmethod
     def from_text(cls, value: str) -> bool:
         return bool(int(value))
-
-
-@dataclass(frozen=True)
-class ThreadLaunch(EnvironmentRecord):
-    """The environment that carries one thread's launch into its processes.
-
-    Launch variable spellings for a thread belong to these fields; writers encode
-    the record and readers decode it.
-    """
-
-    name: Annotated[str, WireName("AGENT_COMMS_THREAD")]
-    worktree: Annotated[Checkout, WireName("PI_WORKTREE")]
-    tags: Annotated[
-        frozenset[str],
-        TagListText,
-        WireOmitDefault(),
-        WireName("AGENT_COMMS_TAGS"),
-    ] = frozenset()
-    parent: Annotated[ThreadParent, WireOmitDefault(), WireName("PI_PARENT_ID")] = NoParent()
-    task: Annotated[ThreadText, WireOmitDefault(), WireName("PI_TASK")] = NoThreadText()
-    managed: Annotated[
-        bool,
-        FlagText,
-        WireOmitDefault(),
-        WireName("AGENT_COMMS_MANAGED"),
-    ] = False
-    startup_input: Annotated[
-        EnvironmentValue,
-        WireOmitDefault(),
-        WireName("AGENT_COMMS_STARTUP_INPUT_KEY"),
-    ] = UnsetVariable()
-
-    @classmethod
-    @boundary_decoder
-    def from_thread(cls, thread: Thread) -> ThreadLaunch:
-        return cls(
-            thread.name,
-            thread.worktree,
-            frozenset(thread.tags),
-            thread.parent,
-            thread.task,
-        )
-
-    @classmethod
-    def current(cls, environment: Mapping[str, str] = os.environ) -> ThreadLaunch:
-        """Decode the explicitly declared calling thread and project."""
-        values = cls.inherited(environment)
-        if not values.get(cls.variable("name")):
-            raise CallingThreadUnavailable(f"Calling thread requires {cls.variable('name')}.")
-        if not values.get(cls.variable("worktree")):
-            raise CallingThreadUnavailable(f"Calling thread requires {cls.variable('worktree')}.")
-        return FieldCodec.decode(cls, values)
-
-    @classmethod
-    def called_by(
-        cls,
-        name: str,
-        canonicalize: Callable[[str], str],
-        *,
-        environment: Mapping[str, str] = os.environ,
-    ) -> bool:
-        try:
-            caller = cls.current(environment).name
-        except CallingThreadUnavailable:
-            return False
-        return canonicalize(caller) == name
-
-    def take_startup_input(self, environment: MutableMapping[str, str]) -> str | None:
-        """Consume this already-decoded launch token before any child inherits it."""
-        self.strip(environment, "startup_input")
-        return self.startup_input.otherwise(None)
-
-    def apply(self, environment: dict[str, str]) -> dict[str, str]:
-        """Replace any inherited launch with this one."""
-        return self.strip(environment) | self.encode()

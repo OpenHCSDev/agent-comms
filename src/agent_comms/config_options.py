@@ -18,7 +18,8 @@ from agent_comms.config_option import (
 )
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.launch_root import LaunchRoot
-from agent_comms.execution.launch_runtime import LaunchRuntime, ThreadLaunch
+from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.thread_launch import ThreadLaunch
 from agent_comms.execution.native_arguments import ModelProvider, NativeArguments
 from agent_comms.execution.pi_commands import (
     GetAvailableModels,

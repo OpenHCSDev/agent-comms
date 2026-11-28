@@ -16,7 +16,7 @@ from agent_comms.context_segments.wake_values import WakeWorkContext, WakeWorkSo
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.child_process import NoProcess, ProcessIdentity, ProcessState
 from agent_comms.execution.cli_inbox_backend import CliInboxBackend
-from agent_comms.execution.launch_runtime import ThreadLaunch
+from agent_comms.execution.thread_launch import ThreadLaunch, ThreadLaunchSource
 from agent_comms.execution.native_arguments import SelectedModel
 from agent_comms.execution.pi_vocabulary import (
     NoThinkingOverride,
@@ -519,6 +519,7 @@ class Thread(
     GoalFailureOwner,
     ChannelMemberSource,
     PresenceThread,
+    ThreadLaunchSource,
     affix='Thread',
 ):
     """Declares one agent thread's identity and provenance; each member is how it executes.

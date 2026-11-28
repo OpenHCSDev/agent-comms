@@ -33,8 +33,8 @@ from agent_comms.execution.launch_runtime import (
     LaunchRuntime,
     RestartEnvironment,
     SetVariable,
-    ThreadLaunch,
 )
+from agent_comms.execution.thread_launch import ThreadLaunch
 from agent_comms.execution.native_arguments import (
     ConfiguredBinary,
     InheritedArguments,

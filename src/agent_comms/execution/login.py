@@ -8,7 +8,7 @@ import subprocess
 from dataclasses import dataclass
 
 from agent_comms.config_options import ConfigOptions
-from agent_comms.execution.launch_runtime import ThreadLaunch
+from agent_comms.execution.thread_launch import ThreadLaunch
 
 
 @dataclass(frozen=True)
