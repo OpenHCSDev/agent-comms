@@ -97,6 +97,43 @@ class WaitingDelivery(DeliveryRank):
     pass
 
 
+@dataclass(frozen=True, slots=True)
+class DeliverySummaryCounts:
+    """One recipient's contribution to the message receipt summary.
+
+    Every recipient who is answering, answered, or not answering has read the message;
+    the read count therefore includes all of them alongside plain Read receipts.
+    """
+
+    read: int = 0
+    answering: int = 0
+    answered: int = 0
+    not_answering: int = 0
+
+    def __add__(self, other: DeliverySummaryCounts) -> DeliverySummaryCounts:
+        return DeliverySummaryCounts(
+            self.read + other.read,
+            self.answering + other.answering,
+            self.answered + other.answered,
+            self.not_answering + other.not_answering,
+        )
+
+    def as_read_only(self) -> DeliverySummaryCounts:
+        return DeliverySummaryCounts(read=self.read)
+
+    def parts(self) -> tuple[str, ...]:
+        return tuple(
+            f"{count} {word}"
+            for count, word in (
+                (self.read, "read"),
+                (self.answering, "answering"),
+                (self.answered, "answered"),
+                (self.not_answering, "not answering"),
+            )
+            if count
+        )
+
+
 class DeliveryProgress(ThreadPresentationStatus):
     """Publication owns Delivered and the read ledger owns Read; progress answers only
     whether the recipient's model took the message into its context."""
@@ -128,10 +165,6 @@ class DeliveryProgress(ThreadPresentationStatus):
         return self.label
 
     @property
-    def answering(self) -> bool:
-        return False
-
-    @property
     def seen_not_answering(self) -> bool:
         return False
 
@@ -147,13 +180,15 @@ class DeliveryProgress(ThreadPresentationStatus):
         """How a busy recipient that took this message reads; without context proof, unchanged."""
         return self.notification_label(notification)
 
-    def summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
+    def summary_prefix(
+        self, notification: AssignmentNotice[DeliveryProgress], *, displayed: bool = False
+    ) -> tuple[str, ...]:
         """What a summary led by this state prints before its counts."""
-        return (notification.label,)
+        return () if displayed else (notification.label,)
 
-    def counted_summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
-        """The lead a counted wrapper prints; a consumed proof is already named by its count."""
-        return (notification.label,)
+    def summary_counts(self, *, displayed: bool = False) -> DeliverySummaryCounts:
+        """What read/status counts this recipient adds to the message summary."""
+        return DeliverySummaryCounts(read=int(displayed))
 
     def answered_notification(self, notification: AssignmentNotice[DeliveryProgress],
                               response: AnsweredResponse) -> AssignmentNotice[DeliveryProgress]:
@@ -169,7 +204,19 @@ class DeliveryProgress(ThreadPresentationStatus):
         return self
 
 
-class ConsumedDelivery(SettledDelivery):
+class ReadDelivery(SettledDelivery):
+    """The recipient opened or read this message; its summary is counted, never raw-prefixed."""
+
+    def summary_prefix(
+        self, notification: AssignmentNotice[DeliveryProgress], *, displayed: bool = False
+    ) -> tuple[str, ...]:
+        return ()
+
+    def summary_counts(self, *, displayed: bool = False) -> DeliverySummaryCounts:
+        return DeliverySummaryCounts(read=1)
+
+
+class ConsumedDelivery(ReadDelivery):
     """The harness or native runtime proved the message entered the model's context."""
 
     # A model taking the message into its context is that recipient reading it. Calling
@@ -190,9 +237,6 @@ class ConsumedDelivery(SettledDelivery):
     def working_notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return WorkingTakenProgress.label
 
-    def counted_summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
-        return ()
-
 
 @dataclass(frozen=True)
 class UnrecordedProgress(WaitingDelivery, DeliveryProgress):
@@ -200,7 +244,7 @@ class UnrecordedProgress(WaitingDelivery, DeliveryProgress):
 
 
 @dataclass(frozen=True)
-class HumanReadProgress(SettledDelivery, DeliveryProgress):
+class HumanReadProgress(ReadDelivery, DeliveryProgress):
     """Human display is not model-context input."""
 
     label: ClassVar[str] = "Read"
@@ -233,6 +277,9 @@ class ContextualProgress(WaitingDelivery, DeliveryProgress):
     def model_consumed(self, proof: ShownToModelProgress) -> DeliveryProgress:
         return replace(self, proof=self.proof.model_consumed(proof))
 
+    def summary_counts(self, *, displayed: bool = False) -> DeliverySummaryCounts:
+        return self.proof.summary_counts(displayed=displayed).as_read_only()
+
 
 class PendingProgress(ContextualProgress):
     """A pending claim adds no label of its own: once entry is proven, the proof is
@@ -253,7 +300,7 @@ class PassiveProgress(ContextualProgress):
     detail = "Available as context; no automatic response requested."
 
 
-class IgnoredProgress(SettledDelivery, ContextualProgress):
+class IgnoredProgress(ReadDelivery, ContextualProgress):
     label = DeliveryProgress.ignored_label
 
     @property
@@ -263,8 +310,8 @@ class IgnoredProgress(SettledDelivery, ContextualProgress):
     def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return self.proof.ignored_notification_label(notification)
 
-    def summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
-        return self.proof.counted_summary_prefix(notification)
+    def summary_counts(self, *, displayed: bool = False) -> DeliverySummaryCounts:
+        return DeliverySummaryCounts(read=1, not_answering=1)
 
 
 class TakenProgress(SettledDelivery, ContextualProgress):
@@ -272,6 +319,11 @@ class TakenProgress(SettledDelivery, ContextualProgress):
 
     def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return self.proof.notification_label(notification)
+
+    def summary_prefix(
+        self, notification: AssignmentNotice[DeliveryProgress], *, displayed: bool = False
+    ) -> tuple[str, ...]:
+        return self.proof.summary_prefix(notification, displayed=displayed)
 
 
 class WorkingTakenProgress(ActiveDelivery, TakenProgress, WorkingThreadPresentationStatus):
@@ -286,9 +338,6 @@ class WorkingTakenProgress(ActiveDelivery, TakenProgress, WorkingThreadPresentat
     def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return self.proof.working_notification_label(notification)
 
-    def summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
-        return self.proof.counted_summary_prefix(notification)
-
 
 class InterruptedProgress(ContextualProgress):
     label = "Interrupted"
@@ -299,7 +348,7 @@ class FailedProgress(ContextualProgress):
 
 
 @dataclass(frozen=True)
-class AnsweredProgress(SettledDelivery, ContextualProgress):
+class AnsweredProgress(ReadDelivery, ContextualProgress):
     response: AnsweredResponse
     label = "Answered"
 
@@ -318,8 +367,11 @@ class AnsweredProgress(SettledDelivery, ContextualProgress):
     def notification_label(self, notification: AssignmentNotice[DeliveryProgress]) -> str:
         return notification.timed_state(self.label, self.response.received_at_ms)
 
+    def summary_counts(self, *, displayed: bool = False) -> DeliverySummaryCounts:
+        return DeliverySummaryCounts(read=1, answered=1)
 
-class CompletedProgress(SettledDelivery, ContextualProgress):
+
+class CompletedProgress(ReadDelivery, ContextualProgress):
     """Workflow completion is not evidence of an independent reply."""
 
     label = "Completed"
@@ -411,10 +463,5 @@ class ConsumingProgress(SelectedConsumedProgress, WorkingThreadPresentationStatu
 
     label = "Answering"
 
-    @property
-    def answering(self) -> bool:
-        return True
-
-    def summary_prefix(self, notification: AssignmentNotice[DeliveryProgress]) -> tuple[str, ...]:
-        """Its Answering count already names it."""
-        return ()
+    def summary_counts(self, *, displayed: bool = False) -> DeliverySummaryCounts:
+        return DeliverySummaryCounts(read=1, answering=1)

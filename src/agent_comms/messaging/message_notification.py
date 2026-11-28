@@ -32,6 +32,7 @@ from agent_comms.messaging.notification_progress import (
     AssignmentProgress,
     AssignmentResponse,
     DeliveryProgress,
+    DeliverySummaryCounts,
     HumanReadProgress,
 )
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
@@ -220,34 +221,25 @@ class MessageNotification(AssignmentNotice[DeliveryProgress]):
 
     @classmethod
     def summary(cls, notifications: Iterable[MessageNotification]) -> str:
-        """What the sender asked: that it went, how many read it, how many are answering.
+        """What the sender asked: whether it went, how many read it, and their answer status.
 
-        It used to answer a different question — "Passive · Observed 14 recipients
-        (bounded) · Consumed 1 observed" names which internal step fired for whom, and
-        leaves the reader to work out whether anybody read their message. Tristan,
-        2026-11-08: "There should be read, there should be answering and there should be
-        sent. I think that should be enough."
-
-        The counts stay a bounded observation rather than the frozen audience; saying so
-        in the line itself bought nothing, since a count nobody can act on is noise in the
-        column where the answer should be.
+        Read means the message was opened/seen, so every Answering, Answered, and Not answering
+        recipient is counted in ``read`` alongside plain Read receipts.
         """
         ordered = cls.ordered(notifications)
         if not ordered:
             # A matched original is sent even when there is no recipient feedback
             # (including when its only synthetic row was the viewing human).
             return DeliveryProgress.label
-        # A recipient has read it whether a person displayed it or a model took it into
-        # context; the sender asked who read it, not which of the two paths got there.
-        read = sum(1 for item in ordered
-                   if item.displayed_to or item.state.is_consumed())
-        counted = ((read, "read"),
-                   (sum(item.state.answering for item in ordered), "answering"))
+        counts = sum(
+            (item.state.summary_counts(displayed=bool(item.displayed_to)) for item in ordered),
+            DeliverySummaryCounts(),
+        )
         leading = ordered[0]
         return " · ".join(
             (
-                *leading.state.summary_prefix(leading),
-                *(f"{count} {word}" for count, word in counted if count),
+                *leading.state.summary_prefix(leading, displayed=bool(leading.displayed_to)),
+                *counts.parts(),
             )
         )
 
