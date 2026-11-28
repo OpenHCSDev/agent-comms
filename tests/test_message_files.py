@@ -23,7 +23,7 @@ from agent_comms.messaging.message_files import (
     MessageFilesRead,
 )
 from agent_comms.messaging.message_page import MessagePage
-from agent_comms.messaging.send_result import MessagePublished
+from agent_comms.messaging.published_message import MessagePublished
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread

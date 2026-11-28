@@ -63,7 +63,7 @@ from agent_comms.registry.agent_settings_wire import ScopedSettingsProjection
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.message_page import NEWEST_PAGE, MessagePage, PageBounds
 from agent_comms.messaging.page_traversal import LatestSequence
-from agent_comms.messaging.send_result import MessagePublished
+from agent_comms.messaging.published_message import MessagePublished
 from agent_comms.messaging.served_bus import ServedBus, UnidentifiedBus
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import AbsolutePathText, ThreadLookup, WireName
