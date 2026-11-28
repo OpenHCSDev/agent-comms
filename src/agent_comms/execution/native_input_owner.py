@@ -16,7 +16,7 @@ from agent_comms.coordination.participant_store import ParticipantStoreOwner
 from agent_comms.coordination.tables.participants import OwnerGenerations
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.child_process import ProcessIdentity
-from agent_comms.execution.private_send_rules import (
+from agent_comms.execution.registry_identity_rules import (
     GoalRegistryClaimCheck,
     GoalRegistryIdentityCheck,
     RegistryIdentityCheck,
