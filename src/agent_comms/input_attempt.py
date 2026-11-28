@@ -13,8 +13,11 @@ from agent_comms.execution.input_key import InputKey, InputKeyText, PublicInputK
 import agent_comms.execution.input_origin as input_origin
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.reported_turn import ReportedTurnState
-from agent_comms.messaging.notification_evidence import ConsumptionEvidence
-from agent_comms.messaging.notification_progress import DeliveryProgress, ShownToModelProgress
+from agent_comms.messaging.notification_progress import (
+    ConsumptionEvidence,
+    DeliveryProgress,
+    ShownToModelProgress,
+)
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,

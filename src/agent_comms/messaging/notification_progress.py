@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from typing import ClassVar, Self
 
@@ -202,6 +202,13 @@ class DeliveryProgress(ThreadPresentationStatus):
     def ignored(self) -> DeliveryProgress:
         """A non-waking dismissal only settles a still-pending claim; other states keep their proof."""
         return self
+
+
+class ConsumptionEvidence(ABC):
+    """A recorded fact that may prove a delivery entered the model's context."""
+
+    @abstractmethod
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress: ...
 
 
 class ReadDelivery(SettledDelivery):

@@ -1,16 +1,16 @@
-"""Detached notification evidence and the bounded window family contract."""
+"""Bounded notification recipient-window and outcome-viewer contracts."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from pydantic import JsonValue
 
+from agent_comms.messaging.delivery_recipients import DeliveryRecipients
 from agent_comms.messaging.frozen_recipient import FrozenRecipient
-from agent_comms.messaging.notification_progress import DeliveryProgress
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.nominal.field_codec import (
     NullMember,
@@ -20,16 +20,6 @@ from agent_comms.nominal.field_codec import (
     ThreadLookup,
 )
 from agent_comms.registry.thread_identity import ThreadIncarnation
-
-if TYPE_CHECKING:
-    from agent_comms.messaging.bus_publication import Delivered
-
-
-class ConsumptionEvidence(ABC):
-    """A recorded fact that may prove a delivery entered the model's context."""
-
-    @abstractmethod
-    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress: ...
 
 
 @dataclass(frozen=True)
@@ -53,7 +43,7 @@ class RecipientPositions(ABC):
     """Which recipient positions of a delivery this reader sees."""
 
     @abstractmethod
-    def positions(self, source: Delivered) -> range: ...
+    def positions(self, source: DeliveryRecipients) -> range: ...
 
 
 class RecipientCursor(RecipientPositions, SubclassUnion, affix=""):
@@ -66,7 +56,7 @@ class EveryRecipient:
 
     __slots__ = ()
 
-    def positions(self, source: Delivered) -> range:
+    def positions(self, source: DeliveryRecipients) -> range:
         return range(len(source.recipients))
 
 
@@ -79,7 +69,7 @@ class FirstRecipient(EveryRecipient, NullMember, RecipientCursor):
 class AfterRecipient(RecordMember, RecipientCursor):
     recipient: FrozenRecipient
 
-    def positions(self, source: Delivered) -> range:
+    def positions(self, source: DeliveryRecipients) -> range:
         start = bisect_right(
             source.recipients,
             self.recipient.recipient_lookup,
@@ -98,11 +88,11 @@ class OutcomeViewer(RecipientPositions):
         return displayed_to
 
     @abstractmethod
-    def sees_direct_read(self, source: Delivered) -> bool:
+    def sees_direct_read(self, source: DeliveryRecipients) -> bool:
         pass
 
     @abstractmethod
-    def sees(self, source: Delivered) -> bool:
+    def sees(self, source: DeliveryRecipients) -> bool:
         """Whether this reader may read the message at all."""
 
 
@@ -110,10 +100,10 @@ class OutcomeViewer(RecipientPositions):
 class AllOutcomes(EveryRecipient, OutcomeViewer):
     """An unscoped reader sees every recipient's outcome and every human read."""
 
-    def sees_direct_read(self, source: Delivered) -> bool:
+    def sees_direct_read(self, source: DeliveryRecipients) -> bool:
         return True
 
-    def sees(self, source: Delivered) -> bool:
+    def sees(self, source: DeliveryRecipients) -> bool:
         return True
 
 
@@ -148,7 +138,7 @@ class OwnerOutcomes(OutcomeViewer):
     def of(cls, owner: ThreadIncarnation) -> OwnerOutcomes:
         return cls(owner.require_recorded().lookup)
 
-    def positions(self, source: Delivered) -> range:
+    def positions(self, source: DeliveryRecipients) -> range:
         if source.sender_lookup == self.lookup:
             return range(len(source.recipients))
         position = bisect_left(
@@ -161,9 +151,9 @@ class OwnerOutcomes(OutcomeViewer):
             return range(position, position + 1)
         return range(0)
 
-    def sees_direct_read(self, source: Delivered) -> bool:
+    def sees_direct_read(self, source: DeliveryRecipients) -> bool:
         return source.sender_lookup == self.lookup
 
-    def sees(self, source: Delivered) -> bool:
+    def sees(self, source: DeliveryRecipients) -> bool:
         """The message's sender and its original recipients may read it."""
         return self.lookup == source.sender_lookup or bool(self.positions(source))
