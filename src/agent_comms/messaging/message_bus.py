@@ -29,12 +29,16 @@ from agent_comms.messaging.publisher import Publisher
 from agent_comms.messaging.read_basis import (
     AnonymousViewer,
     ChannelDisplayScope,
+    Conversation,
+    DisplayBasis,
+    DisplayedConversation,
     DisplayViewer,
     ListedDeliveries,
     NamedViewer,
     ReadCursor,
     SenderDisplayScope,
 )
+from agent_comms.messaging.recorded_bus import RecordedBus
 from agent_comms.messaging.read_ledger import ReadDocument, ReadLedger
 from agent_comms.messaging.read_selection import CapturedSelection
 from agent_comms.messaging.routing import DeliveryScope
@@ -250,6 +254,29 @@ class MessageBus[Writes: Publisher](PublishedBus[Writes], BusReadSource):
             displayed = scope.capture_deliveries(
                 self.reads, canonical, basis.registry, source, document=basis.document,
                 audience=delivery, through=sequence,
+            )
+            self.reads.mark_displayed(canonical, displayed)
+
+    def mark_messages_displayed(self, name: str, messages: Sequence[Message]) -> None:
+        """Advance the read ledger for exactly these delivered messages without skipping others."""
+        deliveries = tuple(message for message in messages if message.seq > 0)
+        if not deliveries:
+            return
+        with self.snapshot(NamedViewer(name)) as (basis, source):
+            canonical = basis.require_viewer()
+            delivery = DeliveryScope.capture(canonical, basis.registry, basis.catalog)
+            grouped: dict[Conversation, list[int]] = {}
+            for message in deliveries:
+                conversation = delivery.read_key(message.sender, message.target, basis.registry)
+                grouped.setdefault(conversation, []).append(message.seq)
+            displayed = DisplayBasis(
+                canonical,
+                basis.registry.require(canonical).incarnation.wire_birth,
+                tuple(
+                    DisplayedConversation(conversation, tuple(sorted(set(sequences))))
+                    for conversation, sequences in grouped.items()
+                ),
+                RecordedBus(source.identity),
             )
             self.reads.mark_displayed(canonical, displayed)
 

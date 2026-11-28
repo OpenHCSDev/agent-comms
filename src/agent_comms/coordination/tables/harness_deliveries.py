@@ -130,7 +130,7 @@ class HarnessDelivery(
         native queue, then took the steps this outcome proves. Each phase reads the claim as it
         stands, so a claim accepted after the attempt ends where one that existed before it
         would; a claim already settled keeps its state."""
-        for steps in (lambda state: state.harness_handoff(), self.monitor.claim_steps):
+        for steps in (self.monitor.claim_handoff, self.monitor.claim_steps):
             assignments.settle_harness_inputs(db, self.recipient_lookup, (self.reference,), steps)
 
     def begin(self, assignments: AssignmentStore, db: sqlite3.Connection) -> bool:

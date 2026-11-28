@@ -164,6 +164,10 @@ class DeliveryProgress(ThreadPresentationStatus):
         """The first proof that the message entered the model's context, at its own time."""
         return proof
 
+    def ignored(self) -> DeliveryProgress:
+        """A non-waking dismissal only settles a still-pending claim; other states keep their proof."""
+        return self
+
 
 class ConsumedDelivery(SettledDelivery):
     """The harness or native runtime proved the message entered the model's context."""
@@ -239,6 +243,9 @@ class PendingProgress(ContextualProgress):
 
     def model_consumed(self, proof: ShownToModelProgress) -> DeliveryProgress:
         return self.proof.model_consumed(proof)
+
+    def ignored(self) -> DeliveryProgress:
+        return IgnoredProgress(self.proof)
 
 
 class PassiveProgress(ContextualProgress):

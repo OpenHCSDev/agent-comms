@@ -231,6 +231,10 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, UnengagedDefaults, 
         """Steps when that harness confirms the message started; a settled claim keeps its state."""
         return ()
 
+    def harness_ignore(self) -> tuple[type[AssignmentState], ...]:
+        """Steps when a direct-inbox backend dismisses a non-waking message without running a turn."""
+        return ()
+
     def preengagement(self, disposition: type[AssignmentState]) -> AssignmentState:
         if self.execution_id is not None or disposition not in self.successors():
             raise IdentityConflict("preengagement transition is not declared")
@@ -341,6 +345,9 @@ class TriagePendingAssignment(PreengagementTarget, PendingNotification, Assignme
 
     def requires_selected_triage(self) -> bool:
         return True
+
+    def harness_ignore(self) -> tuple[type[AssignmentState], ...]:
+        return (IgnoredAssignment,)
 
     @property
     def mode(self):

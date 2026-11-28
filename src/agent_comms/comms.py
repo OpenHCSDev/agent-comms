@@ -77,6 +77,19 @@ class Comms(
             bridge=bridge,
         )
 
+    def ignore_direct_turn_inputs(
+        self,
+        thread: Thread,
+        origins: tuple[Message, ...],
+        *,
+        bridge: type[HarnessSession],
+    ) -> None:
+        self.messaging.ignore_direct_turn_inputs(
+            thread,
+            origins,
+            bridge=bridge,
+        )
+
     def __init__(self, root: CommsRoute) -> None:
         super().__init__(root)
         self.goals = Goals(self.root, self.registry, self.bus, self.agents)

@@ -117,6 +117,15 @@ class TurnInputAcknowledger(ABC):
         bridge: type[HarnessSession],
     ) -> None: ...
 
+    @abstractmethod
+    def ignore_direct_turn_inputs(
+        self,
+        thread: Thread,
+        origins: tuple[Message, ...],
+        *,
+        bridge: type[HarnessSession],
+    ) -> None: ...
+
 
 class TurnTranscriptSink:
     """Per-turn transcript publisher for backends whose history lives in ``ExternalTranscript``."""
@@ -446,6 +455,16 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         origins: tuple[Message, ...],
     ) -> None:
         """Record model-context delivery acknowledgements when a backend starts origins."""
+        del acknowledger, thread, origins
+
+    @classmethod
+    def ignore_turn_inputs(
+        cls,
+        acknowledger: TurnInputAcknowledger,
+        thread: Thread,
+        origins: tuple[Message, ...],
+    ) -> None:
+        """Settle non-waking direct-inbox origins without starting a model turn."""
         del acknowledger, thread, origins
 
     async def context_for_input(self, thread, context):

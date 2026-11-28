@@ -90,6 +90,9 @@ class MonitorEvidence(ConsumptionEvidence, DeclaredFamily):
     def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
         return progress
 
+    def claim_handoff(self, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
+        return state.harness_handoff()
+
     def claim_steps(self, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
         return ()
 
@@ -104,6 +107,20 @@ class MonitorEvidence(ConsumptionEvidence, DeclaredFamily):
 @dataclass(frozen=True)
 class UnrecordedMonitor(MonitorEvidence):
     pass
+
+
+@dataclass(frozen=True)
+class IgnoredMonitor(MonitorEvidence):
+    """This recipient's direct-inbox backend dismissed a non-waking message without running a turn."""
+
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
+        return progress.ignored()
+
+    def claim_handoff(self, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
+        return ()
+
+    def claim_steps(self, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
+        return state.harness_ignore()
 
 
 @dataclass(frozen=True)
