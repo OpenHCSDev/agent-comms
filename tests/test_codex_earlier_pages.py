@@ -9,7 +9,7 @@ from aiohttp import web
 from agent_comms.cli_bridges.cli_protocol import WATCH_LINE
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
 from agent_comms.cli_bridges.codex_protocol import BusClientId, BusInput, ItemsPage
-from agent_comms.cli_bridges.harness_delivery_states import AcceptedOutcome
+from agent_comms.cli_bridges.delivery_outcome import AcceptedOutcome
 from agent_comms.cli_bridges.runtime_updates import EarlierItems, ThreadOutput
 from agent_comms.cli_bridges.shared import Binding, StoredBinding, Watch
 from agent_comms.comms import wire

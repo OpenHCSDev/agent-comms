@@ -9,7 +9,8 @@ import pytest
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.codex import CodexBridge
-from agent_comms.cli_bridges.harness_delivery_states import EmittedOutcome, ReceivingMonitor
+from agent_comms.cli_bridges.delivery_outcome import EmittedOutcome
+from agent_comms.cli_bridges.harness_delivery_states import ReceivingMonitor
 from agent_comms.comms import wire
 from agent_comms.coordination.assignment_states import (
     FullPendingAssignment,

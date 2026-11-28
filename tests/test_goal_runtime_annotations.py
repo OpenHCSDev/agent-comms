@@ -52,7 +52,7 @@ from agent_comms.execution.turn_origin import TurnOrigin
 from agent_comms.execution.turn_progress import TurnProgress
 from agent_comms.execution.turn_runner import TurnRunner
 from agent_comms.following_inputs import FollowingInputs, OwnerFollowingInputs
-from agent_comms.cli_bridges.harness_delivery_states import Outcome
+from agent_comms.cli_bridges.delivery_outcome import Outcome
 from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.importing import ImportBuffer, ImportSnapshot
 from agent_comms.input_attempt import InputAttempt, StoredInput

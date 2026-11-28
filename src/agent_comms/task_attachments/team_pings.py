@@ -13,7 +13,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
-from agent_comms.cli_bridges.harness_delivery_states import DeliveredOutcome, Outcome
+from agent_comms.cli_bridges.delivery_outcome import DeliveredOutcome, Outcome
 from agent_comms.bus_context import BusContext
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.delivers_input import DeliversInput

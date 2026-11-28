@@ -41,17 +41,19 @@ from agent_comms.agent_runtime import ExternalRuntime
 from agent_comms.cli_bridges.cli_arguments import CliArguments
 from agent_comms.cli_bridges.cli_protocol import CoreError, TaggedWire
 from agent_comms.cli_bridges.runtime_updates import EarlierItems
-from agent_comms.cli_bridges.harness_delivery_states import (
+from agent_comms.cli_bridges.delivery_outcome import (
     DeliveredOutcome,
     EmittedOutcome,
     FilteredOutcome,
+    Outcome,
+    UnconfirmedOutcome,
+)
+from agent_comms.cli_bridges.harness_delivery_states import (
     MismatchedMonitor,
     MonitorEvidence,
     ObservedBridgeInput,
     ObservedMonitor,
-    Outcome,
     TakingLedger,
-    UnconfirmedOutcome,
 )
 from agent_comms.cli_bridges.goal_semantics import ExternalGoalHarness, InboxGoalHarness
 from agent_comms.cli_bridges.monitor import (

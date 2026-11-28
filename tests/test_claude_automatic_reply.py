@@ -20,7 +20,7 @@ from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import ClaudeRecord, ClaudeSession
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
 from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
-from agent_comms.cli_bridges.harness_delivery_states import DeliveredOutcome
+from agent_comms.cli_bridges.delivery_outcome import DeliveredOutcome
 from agent_comms.cli_bridges.runtime_updates import (
     AllTurnsCancelled,
     AllTurnsEnded,

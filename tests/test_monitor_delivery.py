@@ -27,13 +27,15 @@ from agent_comms.cli_bridges.claude_protocol import (
     TaskUserRecord,
 )
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
-from agent_comms.cli_bridges.harness_delivery_states import (
+from agent_comms.cli_bridges.delivery_outcome import (
     DeliveredOutcome,
     EmittedOutcome,
+    UnconfirmedOutcome,
+)
+from agent_comms.cli_bridges.harness_delivery_states import (
     MismatchedMonitor,
     ObservedMonitor,
     ReceivingMonitor,
-    UnconfirmedOutcome,
     UnrecordedMonitor,
 )
 from agent_comms.cli_bridges.monitor import MonitorPeer
