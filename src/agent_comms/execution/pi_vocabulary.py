@@ -7,6 +7,8 @@ from collections.abc import Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
 
+from python_introspect.choices import LabelledChoices
+
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     AcceptsNull,
@@ -310,7 +312,17 @@ class ThinkingLevelValue(AcceptsNull):
         return FieldCodec.value_schema(type[ThinkingLevel] | None)
 
 
-ThinkingLevelField = Annotated[type[ThinkingChoice], ThinkingLevelValue]
+class ThinkingLevelChoices(LabelledChoices):
+    """Declared thinking-level choices for forms and validation."""
+
+    def labelled_choices(self) -> tuple[tuple[str, object], ...]:
+        return (
+            ("default (no override)", NoThinkingOverride),
+            *((level.declared_name, level) for level in ThinkingLevel.members_with(ThinkingLevel)),
+        )
+
+
+ThinkingLevelField = Annotated[type[ThinkingChoice], ThinkingLevelValue, ThinkingLevelChoices()]
 
 
 class OffThinkingLevel(ThinkingLevel):

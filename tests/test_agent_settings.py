@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from objectstate import ScopeKey
+from python_introspect.choices import declared_annotation_choices
 from python_introspect.jsonable import RegisteredClassChoices, registered_class_from_key
 
 from agent_comms.cli_verbs.new import NewThreadCliCommand
@@ -18,7 +19,9 @@ from agent_comms.execution.child_process import NO_PROCESS, ProcessIdentity
 from agent_comms.execution.pi_vocabulary import (
     HighThinkingLevel,
     LowThinkingLevel,
+    NoThinkingOverride,
     ServiceTier,
+    ThinkingLevelField,
 )
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
@@ -286,3 +289,10 @@ def test_declared_family_exposes_registry_key_for_registered_class_choices() -> 
     policy_choices = dict(RegisteredClassChoices(RuleCheckPolicy).labelled_choices())
     assert policy_choices["off"] is OffRuleCheckPolicy
     assert policy_choices["required"] is RequiredRuleCheckPolicy
+
+    thinking_choices = declared_annotation_choices(ThinkingLevelField)
+    assert thinking_choices is not None
+    labelled = dict(thinking_choices.labelled_choices())
+    assert labelled["default (no override)"] is NoThinkingOverride
+    assert labelled["high"] is HighThinkingLevel
+    assert labelled["low"] is LowThinkingLevel
