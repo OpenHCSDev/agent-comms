@@ -5,7 +5,12 @@ import pytest
 
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
 from agent_comms.cli_bridges.codex_protocol import BusClientId, ItemStream, RpcNotification
-from agent_comms.cli_bridges.harness_delivery_states import AcceptedOutcome, DeliveredOutcome, ObservedBridgeInput, UnconfirmedOutcome
+from agent_comms.cli_bridges.delivery_outcome import (
+    AcceptedOutcome,
+    DeliveredOutcome,
+    UnconfirmedOutcome,
+)
+from agent_comms.cli_bridges.harness_delivery_states import ObservedBridgeInput
 from agent_comms.cli_bridges.runtime_updates import FailedTurn, FinishedTurn, ThreadOutput
 from agent_comms.cli_bridges.shared import Binding, IncomingFrame, StoredBinding, Watch
 from agent_comms.errors import RelationViolationError

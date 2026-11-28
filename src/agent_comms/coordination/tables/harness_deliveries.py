@@ -12,12 +12,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Annotated, Self
 
-from agent_comms.cli_bridges.harness_delivery_states import (
-    MonitorEvidence,
-    Outcome,
-    UnconfirmedOutcome,
-    UnrecordedMonitor,
-)
+from agent_comms.cli_bridges.delivery_outcome import Outcome, UnconfirmedOutcome
+from agent_comms.cli_bridges.harness_delivery_states import MonitorEvidence, UnrecordedMonitor
 from agent_comms.coordination.assignment_store import AssignmentStore
 from agent_comms.coordination.errors import IdentityConflict
 from agent_comms.coordination.schema import CoordinatorRow

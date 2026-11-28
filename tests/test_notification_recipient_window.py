@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.harness_delivery_states import PersistedOutcome
+from agent_comms.cli_bridges.delivery_outcome import PersistedOutcome
 from agent_comms.comms import Comms
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery

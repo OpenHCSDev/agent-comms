@@ -9,7 +9,7 @@ from functools import partial
 from typing import Annotated, Self
 
 from agent_comms import input_attempt
-from agent_comms.cli_bridges.harness_delivery_states import Outcome
+from agent_comms.cli_bridges.delivery_outcome import Outcome
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.delivers_input import DeliversInput
 from agent_comms.execution.input_lookup import InputLookup

@@ -28,7 +28,7 @@ from agent_comms.cli_bridges.codex_protocol import (
     ResumeThread,
     ToolOutput,
 )
-from agent_comms.cli_bridges.harness_delivery_states import AcceptedOutcome, Outcome
+from agent_comms.cli_bridges.delivery_outcome import AcceptedOutcome, Outcome
 from agent_comms.cli_bridges.history import CodexHistory, HarnessAddress, OnlineHistory
 from agent_comms.cli_bridges.runtime_updates import (
     EarlierPublishedPage,

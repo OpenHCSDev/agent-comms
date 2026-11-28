@@ -41,12 +41,8 @@ from agent_comms.cli_bridges.inbox_watch_client import (
     session_transcript,
 )
 from agent_comms.cli_bridges.wait_log import wait_for_log_growth, wait_for_log_growth_sync
-from agent_comms.cli_bridges.harness_delivery_states import (
-    AcknowledgedReceipt,
-    DeliveredOutcome,
-    EmittedOutcome,
-    ObservedMonitor,
-)
+from agent_comms.cli_bridges.delivery_outcome import DeliveredOutcome, EmittedOutcome
+from agent_comms.cli_bridges.harness_delivery_states import AcknowledgedReceipt, ObservedMonitor
 from agent_comms.cli_bridges.history import RemoteWatchHistory
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore

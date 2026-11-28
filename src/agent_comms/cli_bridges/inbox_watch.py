@@ -39,11 +39,8 @@ from agent_comms.cli_bridges.claude_transcript import (
     WatchedFilePart,
     WatchReport,
 )
-from agent_comms.cli_bridges.harness_delivery_states import (
-    EmittedOutcome,
-    TakingLedger,
-    UnconfirmedOutcome,
-)
+from agent_comms.cli_bridges.delivery_outcome import EmittedOutcome, UnconfirmedOutcome
+from agent_comms.cli_bridges.harness_delivery_states import TakingLedger
 from agent_comms.cli_bridges.history import RemoteWatchHistory
 from agent_comms.cli_bridges.open_viewer import OpenViewer
 from agent_comms.cli_bridges.runtime_updates import AllTurnsEnded, RuntimeUpdate

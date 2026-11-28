@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-from agent_comms.cli_bridges.harness_delivery_states import Outcome
+from agent_comms.cli_bridges.delivery_outcome import Outcome
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.context_provenance import Provenance, WireProvenance
 from agent_comms.execution.delivers_input import DeliversInput

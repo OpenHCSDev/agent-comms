@@ -3,7 +3,8 @@ import os
 from dataclasses import replace
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.harness_delivery_states import DeliveredOutcome, ObservedMonitor
+from agent_comms.cli_bridges.delivery_outcome import DeliveredOutcome
+from agent_comms.cli_bridges.harness_delivery_states import ObservedMonitor
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery

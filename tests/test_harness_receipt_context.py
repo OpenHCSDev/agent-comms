@@ -6,16 +6,15 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.harness_delivery_states import (
+from agent_comms.cli_bridges.delivery_outcome import (
     AcceptedOutcome,
     DeliveredOutcome,
     EmittedOutcome,
     FilteredOutcome,
-    ObservedMonitor,
     PersistedOutcome,
     UnconfirmedOutcome,
-    UnrecordedMonitor,
 )
+from agent_comms.cli_bridges.harness_delivery_states import ObservedMonitor, UnrecordedMonitor
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.tables.harness_deliveries import HarnessDelivery

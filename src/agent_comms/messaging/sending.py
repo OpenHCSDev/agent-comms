@@ -7,11 +7,11 @@ from functools import partial
 from pathlib import Path
 import time
 
+from agent_comms.cli_bridges.delivery_outcome import UnconfirmedOutcome
 from agent_comms.cli_bridges.harness_delivery_states import (
     DeliveryReceiptChoice,
     NotAnsweringReceiptChoice,
     ReadReceiptChoice,
-    UnconfirmedOutcome,
 )
 from agent_comms.coordination.assignment_store import AssignmentStore
 from agent_comms.coordination.database import CoordinationStore

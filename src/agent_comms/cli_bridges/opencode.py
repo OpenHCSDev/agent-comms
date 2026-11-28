@@ -14,7 +14,7 @@ from urllib.parse import quote
 import aiohttp
 
 from agent_comms.cli_bridges.cli_arguments import CliArguments
-from agent_comms.cli_bridges.harness_delivery_states import Outcome, PersistedOutcome
+from agent_comms.cli_bridges.delivery_outcome import Outcome, PersistedOutcome
 from agent_comms.cli_bridges.history import HarnessAddress, OnlineHistory, OpenCodeHistory
 from agent_comms.cli_bridges.opencode_parts import SavedMessage, UserMessage
 from agent_comms.cli_bridges.opencode_protocol import (

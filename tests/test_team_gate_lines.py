@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field, fields, replace
 from pickle import dumps, loads
 
-from agent_comms.cli_bridges.harness_delivery_states import DeliveredOutcome
+from agent_comms.cli_bridges.delivery_outcome import DeliveredOutcome
 from agent_comms.execution.delivers_input import DeliversInput
 from agent_comms.heartbeat_subjects import TeamHistory, TeammateSubject
 from agent_comms.installer.build_identity import (
