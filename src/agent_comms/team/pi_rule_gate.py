@@ -25,6 +25,8 @@ from agent_comms.execution.transcript_sources import TranscriptSource
 from agent_comms.installer.native_package import SYSTEM_PROMPT
 from agent_comms.messaging.bus_publication import Delivered
 from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.registry.agent_settings import AgentSettings
+from agent_comms.registry.agent_settings_wire import ThreadSettingsScope
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.threads import Thread
 from agent_comms.team.meant_voice import BusVoice
@@ -101,9 +103,14 @@ class PiThreadGate(PiRuleGate, BusVoice):
         return self.current().mode.delivery(SYSTEM_PROMPT)
 
     def stored(self) -> DealRecord:
-        """The thread's deal on disk; one never dealt takes its model's defaults."""
-        return super().stored().for_model(
-            self.thread.model.native(NativeArguments(())).provider_type)
+        """The thread's deal on disk; one never dealt takes its model and scoped defaults."""
+        provider = self.thread.model.native(NativeArguments(())).provider_type
+        scope = ThreadSettingsScope(self.thread.project_path.name, self.thread.name)
+        return super().stored().for_model(provider).with_scoped_overrides(
+            lambda undealt: AgentSettings.at(self.comms.root).apply_rule_gate_overrides(
+                undealt, scope
+            )
+        )
 
 
 @dataclass(frozen=True)

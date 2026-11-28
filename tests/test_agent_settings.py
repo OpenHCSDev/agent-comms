@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from objectstate import ScopeKey
 
+from agent_comms.cli_verbs.new import NewThreadCliCommand
 from agent_comms.execution.child_process import NO_PROCESS, ProcessIdentity
 from agent_comms.execution.pi_vocabulary import (
     HighThinkingLevel,
@@ -35,6 +36,7 @@ from agent_comms.registry.native_settings import NativeThreadDefaults
 from agent_comms.registry.thread_model import CliInboxThreadModel, DeclaredModel
 from agent_comms.registry.thread_settings import ContextEditPolicy
 from agent_comms.registry.thread_status import StoppedThreadStatus
+from agent_comms.team.pi_rule_gate import PiThreadGate
 from agent_comms.team.rule_deal import (
     CompactionDealMode,
     FullDealMode,
@@ -243,3 +245,30 @@ print(json.dumps({{
     )
     loaded = json.loads(completed.stdout)
     assert loaded == {"objectstate": False, "rule_deal": False, "agent_settings": False}
+
+
+def test_new_thread_bindings_and_undealt_pi_gate_inherit_scoped_settings(comms, tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    project.mkdir()
+    settings = AgentSettings.at(comms.root)
+    settings.update_scope(GlobalSettingsScope(), {"thread.model": "anthropic/claude-opus-4-6"})
+    settings.update_scope(
+        ProjectSettingsScope("proj"),
+        {
+            "thread.thinking_level": "low",
+            "thread.service_tier": "priority",
+            "rule_gate.mode": "full",
+            "rule_gate.audit": "required",
+        },
+    )
+
+    binding, = NewThreadCliCommand.project_bindings(comms, Checkout(project))
+    assert binding.model == DeclaredModel("anthropic/claude-opus-4-6")
+    assert binding.thinking_level is LowThinkingLevel
+    assert binding.service_tier is ServiceTier.PRIORITY
+
+    worker = comms.threads.claim_thread("worker", tags=frozenset(), worktree=Checkout(project))
+    gate = PiThreadGate.of(comms, worker)
+    record = gate.stored()
+    assert record.mode is FullDealMode
+    assert record.audit is RequiredRuleCheckPolicy
