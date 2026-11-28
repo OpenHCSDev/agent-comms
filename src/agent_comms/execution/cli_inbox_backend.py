@@ -17,6 +17,7 @@ from typing import Self
 from agent_comms.agent_backend import (
     AgentBackend,
     BackendDeclarationError,
+    ExplicitlyRegisteredBackend,
     FailedCompaction,
     Forks,
     NewThreadBackend,
@@ -71,7 +72,7 @@ class CliInboxRuntime(ExternalTranscriptLocation):
         return None
 
 
-class CliInboxBackend(Forks, AgentBackend):
+class CliInboxBackend(Forks, ExplicitlyRegisteredBackend):
     """External CLI/MCP inbox backend: reads/publishes external transcripts and forks directly."""
 
     location_type = CliInboxRuntime
@@ -97,14 +98,6 @@ class CliInboxBackend(Forks, AgentBackend):
     def configured_for(cls, provider) -> type[AgentBackend]:
         del provider
         return cls
-
-    @classmethod
-    def registered_over(cls, previous: type[AgentBackend]) -> type[AgentBackend]:
-        return cls
-
-    @classmethod
-    def as_native_backend(cls, incoming: type[AgentBackend]) -> type[AgentBackend]:
-        return incoming
 
     @classmethod
     async def fork(

@@ -25,6 +25,9 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from metaclass_registry.core import REPLACES_REGISTERED_ATTRIBUTE
+from metaclass_registry.discovery import import_module_preserving_root_logging
+
 from agent_comms.errors import RelationViolationError
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.execution.agent_event import AgentEvent
@@ -48,6 +51,7 @@ from agent_comms.execution.turn_outcome import TurnOutcome
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMember
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, TurnId
+from agent_comms.nominal.served_declaration import ServesDeclaration
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry.thread_identity import (
     RecordedThreadIncarnation,
@@ -409,6 +413,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     event_kinds: ClassVar[frozenset[str]]
     provider_type: ClassVar[type[ModelProvider]] = ModelProvider
     _sealed: ClassVar[bool] = False
+    _served_declarations: ClassVar[tuple[type[AgentBackend], ...]] = ()
 
     @classmethod
     def for_provider(cls, provider: type[ModelProvider]) -> type[AgentBackend]:
@@ -483,13 +488,32 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         """A runtime without native queries refuses this capability explicitly."""
         raise BackendDeclarationError(f"{type(self).__name__} does not support native inspection")
 
+    @classmethod
+    def served(cls) -> type[AgentBackend]:
+        """The runtime-serving backend class for this declaration."""
+        return cls
+
     def __init_subclass__(cls, **options: str | None) -> None:
         if AgentBackend._sealed:
-            raise BackendDeclarationError(
-                f"{cls.__name__}: the AgentBackend registry is sealed; declare backends "
-                "before the Thread backend lookup seals its declarations."
-            )
+            replaces = vars(cls).get(REPLACES_REGISTERED_ATTRIBUTE)
+            if replaces not in dict.values(AgentBackend.__registry_config__.registry_dict):
+                raise BackendDeclarationError(
+                    f"{cls.__name__}: the AgentBackend registry is sealed; declare backends "
+                    "before the Thread backend lookup seals its declarations."
+                )
         super().__init_subclass__(**options)
+
+    @classmethod
+    def _served_declaration(cls, declaration: type[DeclaredFamily]) -> None:
+        if not issubclass(cls.location_type, declaration.location_type):
+            raise BackendDeclarationError(
+                f"{cls.__name__} location {cls.location_type.__name__} does not serve "
+                f"{declaration.location_type.__name__}"
+            )
+        cls._served_declarations = (declaration,)
+        if AgentBackend._sealed:
+            cls.location_type._backend = cls
+            declaration.location_type._backend = cls
 
     @classmethod
     @abstractmethod
@@ -559,7 +583,11 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
             owners[location] = member
         for location, owner in owners.items():
             location._backend = owner
-        AgentBackend.__registry__ = MappingProxyType(dict(AgentBackend.__registry__))  # type: ignore[assignment]
+            for replaced in owner._served_declarations:
+                replaced.location_type._backend = owner
+        AgentBackend.__registry__ = MappingProxyType(  # type: ignore[assignment]
+            AgentBackend.__registry_config__.registry_dict
+        )
         AgentBackend._sealed = True
 
     def run_turn(self, thread: Thread, content: TurnInputContent, delivery: TurnDelivery):
@@ -625,3 +653,111 @@ class NewThreadBackend(ThreadServingBackend, declared_name=None):
                 f"exactly one backend must serve new threads, found "
                 f"{[member.__name__ for member in members]}")
         return members[0]
+
+
+class ServedRuntimeLocation(RuntimeLocation, metaclass=ServesDeclaration, declared_name=None):
+    """Base for served RuntimeLocation classes replacing lightweight wire declarations."""
+
+
+class DeclaredRuntimeLocation(RuntimeLocation, declared_name=None):
+    """Lightweight RuntimeLocation declaration that acquires its served class on runtime access."""
+
+    def _served(self) -> RuntimeLocation:
+        return self.backend.served().location_type(self.path)
+
+    def history_source(self, root, incarnation) -> TranscriptHistorySource:
+        return self._served().history_source(root, incarnation)
+
+    def storage_files(self):
+        return self._served().storage_files()
+
+
+class DeclaredNativeCutLocation(DeclaredRuntimeLocation, declared_name=None):
+    """Lightweight RuntimeLocation declaration whose served class owns ``native_cut``."""
+
+    def native_cut(self, key: str):
+        return self._served().native_cut(key)
+
+
+class DeclaredSavedModelLocation(DeclaredRuntimeLocation, declared_name=None):
+    """Lightweight RuntimeLocation declaration whose served class reads ``saved_model``."""
+
+    @property
+    def saved_model(self) -> ThreadModel:
+        return self._served().saved_model
+
+
+class ExplicitlyRegisteredBackend(AgentBackend, declared_name=None):
+    """Backend adopted explicitly on re-registration and yielded to an incoming native backend."""
+
+    @classmethod
+    def registered_over(cls, previous: type[AgentBackend]) -> type[AgentBackend]:
+        del previous
+        return cls
+
+    @classmethod
+    def as_native_backend(cls, incoming: type[AgentBackend]) -> type[AgentBackend]:
+        return incoming
+
+
+class ServedAgentBackend(AgentBackend, metaclass=ServesDeclaration, declared_name=None):
+    """Base for served AgentBackend classes replacing lightweight wire declarations."""
+
+    @classmethod
+    def served(cls) -> type[AgentBackend]:
+        return cls
+
+
+class DeclaredAgentBackend(AgentBackend, declared_name=None):
+    """Lightweight AgentBackend declaration; imports its runtime module only on execution."""
+
+    runtime_module: ClassVar[str]
+
+    @classmethod
+    def served(cls) -> type[AgentBackend]:
+        import_module_preserving_root_logging(cls.runtime_module)
+        return AgentBackend.member_named(cls.declared_name)
+
+    @classmethod
+    def for_worker(cls, runner: TurnRunner, session_id: AcpSessionId):
+        return cls.served().for_worker(runner, session_id)
+
+    @classmethod
+    def new_location(cls, root, worktree) -> RuntimeLocation:
+        return cls.served().new_location(root, worktree)
+
+    async def compact(self, thread: Thread, instructions: str | None) -> CompactionOutcome:
+        raise BackendDeclarationError(
+            f"{type(self).__name__} is a declaration; instantiate via {type(self).runtime_module}"
+        )
+
+
+class DeclaredForkingBackend(DeclaredAgentBackend, declared_name=None):
+    """Lightweight backend declaration mixin with forking capability."""
+
+    @classmethod
+    async def fork(
+        cls, parent: Thread, launcher: str, runtime: LaunchRuntime, root: Path,
+    ) -> RuntimeLocation:
+        return await cls.served().fork(parent, launcher, runtime, root)
+
+
+class DeclaredThreadServingBackend(DeclaredAgentBackend, declared_name=None):
+    """Lightweight thread-serving backend declaration mixin."""
+
+    def run_turn(
+        self, thread: Thread, content: TurnInputContent, delivery: TurnDelivery
+    ) -> AsyncIterator[AgentEvent]:
+        raise BackendDeclarationError(
+            f"{type(self).__name__} is a declaration; instantiate via {type(self).runtime_module}"
+        )
+
+    async def abort[Result](self, owner: asyncio.Task[Result]) -> None:
+        raise BackendDeclarationError(
+            f"{type(self).__name__} is a declaration; instantiate via {type(self).runtime_module}"
+        )
+
+    async def close_idle(self) -> None:
+        raise BackendDeclarationError(
+            f"{type(self).__name__} is a declaration; instantiate via {type(self).runtime_module}"
+        )

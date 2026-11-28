@@ -220,6 +220,10 @@ class DeclaredFamily(FamilyMember, metaclass=FamilyMeta):
     def validate_selection(cls, members: Iterable[type[DeclaredFamily]]) -> None:
         """Named declarations use the registry's existing duplicate-name check."""
 
+    @classmethod
+    def _served_declaration(cls, declaration: type[DeclaredFamily]) -> None:
+        """Hook called after a served class replaces ``declaration`` in its family registry."""
+
     def record_tag(self) -> dict[str, str]:
         """Derive the wire selector from the family's decoding behavior."""
         return {self.family_discriminator: self.declared_name} if self.decodes_tagged_records() else {}

@@ -258,7 +258,7 @@ class TurnRunner(OwnedTurnRunner):
 
     def backend_for(self, session_id: AcpSessionId, thread: Thread) -> AgentBackend:
         """This session's backend, created for the thread's declared backend on first use."""
-        backend = thread.runtime.backend
+        backend = thread.runtime.backend.served()
         current = self.persistent_backends.get(session_id)
         if current is None:
             current = backend.for_worker(self, session_id)

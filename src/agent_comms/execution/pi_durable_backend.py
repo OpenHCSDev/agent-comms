@@ -12,8 +12,16 @@ from typing import Annotated
 
 from pydantic import JsonValue
 
-from agent_comms.agent_backend import AgentBackend, CompactionOutcome, Compacts, RuntimeLocation
+from agent_comms.agent_backend import (
+    CompactionOutcome,
+    ServedAgentBackend,
+    ServedRuntimeLocation,
+)
 from agent_comms.agent_events import Error
+from agent_comms.execution.backend_declarations import (
+    DurableDatabaseDeclaration,
+    PiDurableBackendDeclaration,
+)
 from agent_comms.execution.launch_runtime import RestartEnvironment
 from agent_comms.execution.native_child import PiChild
 from agent_comms.execution.native_entries import StoredEntry
@@ -31,27 +39,11 @@ from agent_comms.storage.locked_store import SQLiteFile
 from agent_comms.transcript.external_transcript_rows import ExternalCut
 
 
-@dataclass(frozen=True)
-class DurableDatabase(SessionFiles, NativeTranscriptLocation, RuntimeLocation):
-    path: str
-
-    def __post_init__(self):
-        if not Path(self.path).is_absolute():
-            raise ValueError('Durable database path must be absolute')
-
-    def require_forkable(self):
-        raise ValueError('Durable database forking is not implemented')
-
+class DurableDatabase(
+    NativeTranscriptLocation, ServedRuntimeLocation, DurableDatabaseDeclaration, SessionFiles
+):
     def history_source(self, root, incarnation):
         return DurableTranscript(self)
-
-    @property
-    def session(self):
-        return Path(self.path)
-
-    @property
-    def writer_lock(self):
-        return self.session.with_suffix(self.session.suffix + '.lock')
 
     @property
     def members(self):
@@ -197,7 +189,7 @@ class CompactDurable(ExactResponse, Compact):
     response_payload = OutcomeData
 
 
-class PiDurableBackend(AgentBackend, Compacts):
+class PiDurableBackend(ServedAgentBackend, PiDurableBackendDeclaration):
     location_type = DurableDatabase
     event_kinds = frozenset(kind for member in DurablePiEvent.members_with(DurablePiEvent) for kind in member.known_kinds())
 
