@@ -15,7 +15,8 @@ from agent_comms.execution.child_process import (
     NoProcess,
     ProcessIdentity,
 )
-from agent_comms.installer.active_route import ActiveRoute, read_active_route, route_new_bus
+from agent_comms.installer.active_route import ActiveRoute, read_active_route
+from agent_comms.installer.route_publication import route_new_bus
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.interpreter_operation import InstallClock
 from agent_comms.installer.practice import PracticeCopy

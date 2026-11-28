@@ -28,6 +28,7 @@ from agent_comms.execution.pi_commands import (
     SetThinkingLevel,
 )
 from agent_comms.execution.pi_vocabulary import ServiceTier
+from agent_comms.execution.private_nk_entrypoint import RootLaunch
 from agent_comms.installer.active_route import CommsRoute, resolve_comms_route
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.messaging.bus import Bus
@@ -273,7 +274,7 @@ class ConfigOptions(ConfigCatalogSource):
     @cached_property
     def package(self) -> VerifiedNativePackage:
         """The verified artifact, acquired when a catalog or configuration first runs Pi."""
-        return self.route.package_for_command(self.launch.binary, LaunchRuntime.running())
+        return RootLaunch.package_for_command(self.route, self.launch.binary, LaunchRuntime.running())
 
     @classmethod
     def configured(cls) -> ConfigOptions:

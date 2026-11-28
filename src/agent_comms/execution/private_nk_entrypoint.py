@@ -17,6 +17,7 @@ from agent_comms.coordination.errors import IdentityConflict, PublicationActivat
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.native_failures import NativePiUnavailable
+from agent_comms.installer.active_route import CommsRoute
 from agent_comms.installer.native_package import (
     NativePackageError,
     VerifiedNativePackage,
@@ -27,7 +28,6 @@ from agent_comms.storage.locked_store import BusRevisionReader, RegistryFile
 from agent_comms.storage.private_path import PrivateDirectoryRole
 
 if TYPE_CHECKING:
-    from agent_comms.installer.active_route import CommsRoute
     from agent_comms.registry.threads import Thread
 
 
@@ -47,6 +47,15 @@ class RootLaunch(ABC):
 
         root = route.observe_root()
         return RegistryStore.at(root).privacy().launch(root)
+
+    @classmethod
+    def package_for_command(
+        cls, route: CommsRoute, command: str, runtime: LaunchRuntime,
+    ) -> VerifiedNativePackage:
+        """Acquire this route's verified native Pi package after validating ``command``."""
+        package = cls.derive(route).launched_package()
+        package.require_command(command, Path(NativeArguments.owner_launcher(runtime)))
+        return package
 
     @property
     @abstractmethod

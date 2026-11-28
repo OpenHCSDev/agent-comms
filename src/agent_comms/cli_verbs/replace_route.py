@@ -10,8 +10,8 @@ from agent_comms.installer.active_route import (
     ActiveRoute,
     CommsRoute,
     active_route_path,
-    route_new_bus,
 )
+from agent_comms.installer.route_publication import route_new_bus
 from agent_comms.messaging.recorded_bus import RecordedBusIdentity
 from agent_comms.storage.locked_store import BusStoreFile
 
