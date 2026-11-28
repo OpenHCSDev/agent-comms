@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from typing import Annotated
 
 from agent_comms.planning.goal_wait_target import GoalWaitTarget
 from agent_comms.registry.agent_activity import AgentActivity
@@ -11,18 +12,12 @@ from agent_comms.errors import UnregisteredThreadError
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.turn_lease import TurnCompletion, TurnLease
 from agent_comms.input_attempt import StoredInput, UnresolvedInput
-from agent_comms.execution.input_key import InputKey
+from agent_comms.execution.input_key import InputKey, InputKeyText
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.messaging.published_bus import PublishedBus
-from agent_comms.nominal.field_codec import GoalId
-from agent_comms.planning.goal_waits import (
-    ExcludedInput,
-    GoalWait,
-    GoalWaits,
-    NotADirectReplyFromDeclaredDependenciesExclusion,
-    OwnerInputWithoutBusSequenceExclusion,
-    StandbyReview,
-)
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import GoalId, NullMember
+from agent_comms.planning.goal_waits import GoalWait, GoalWaits, OwnerWaitRead
 from agent_comms.registry.registration import Registration
 from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_store import RegistryEdit
@@ -30,15 +25,42 @@ from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import Thread
 
 
-@dataclass(frozen=True, kw_only=True)
-class OwnerWaitRead:
-    """A registry snapshot, the goal owner's thread in it, and that goal's wait, read together."""
+class InputExclusion(DeclaredFamily, affix="Exclusion"):
+    """Why a standby review leaves an unresolved input out; its declared name is its wire value."""
 
-    __slots__ = ()
 
-    snapshot: RegistrySnapshot
-    owner: Thread
-    wait: GoalWait
+class OwnerInputWithoutBusSequenceExclusion(InputExclusion):
+    """The owner's own input has no bus sequence, so no dependency sent it."""
+
+
+class NotADirectReplyFromDeclaredDependenciesExclusion(InputExclusion):
+    """A bus input that is not a direct reply from the declared dependencies."""
+
+
+@dataclass(frozen=True)
+class ExcludedInput(UnresolvedInput):
+    reason: type[InputExclusion] = field(kw_only=True)
+
+    @classmethod
+    def excluded(cls, row: StoredInput, reason: type[InputExclusion]) -> ExcludedInput:
+        return cls.of(row, reason=reason)
+
+
+@dataclass(frozen=True)
+class NoStandbyReview(NullMember):
+    """No standby was asked for, so the page carries no review."""
+
+
+@dataclass(frozen=True)
+class StandbyReview:
+    """The reply form of a goal input review: eligible messages and their exact keys."""
+
+    goal_id: GoalId
+    wait_for: tuple[str, ...]
+    reviewed_inputs: tuple[Annotated[InputKey, InputKeyText], ...]
+    messages: tuple[UnresolvedInput, ...]
+    already_reviewed_inputs: tuple[UnresolvedInput, ...]
+    excluded_inputs: tuple[ExcludedInput, ...]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

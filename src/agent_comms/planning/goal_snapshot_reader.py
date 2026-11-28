@@ -38,9 +38,8 @@ from agent_comms.planning.goal_presentation import (
 from agent_comms.planning.goal_snapshots import GoalSnapshots
 from agent_comms.planning.goal_states import PauseSource
 from agent_comms.planning.goal_store_access import GoalStoreAccess
-from agent_comms.planning.goal_wait_recovery import OwnerWaitRead
 from agent_comms.planning.goal_wait_target import GoalWaitTarget
-from agent_comms.planning.goal_waits import GoalWait
+from agent_comms.planning.goal_waits import GoalWait, OwnerWaitRead
 from agent_comms.planning.goals import Goal, GoalDeclaration
 from agent_comms.registry.agent_activity import ActivityAnswers
 from agent_comms.registry.registry_document import RegistrySnapshot

@@ -63,7 +63,8 @@ from agent_comms.planning.goal_presentation import (
 from agent_comms.planning.goal_records import GoalRecords
 from agent_comms.planning.goal_scope import AllGoals, GoalScope, OneGoal
 from agent_comms.planning.goal_snapshot_reader import GoalSnapshotReader
-from agent_comms.planning.goal_waits import GoalWait, StandbyReview
+from agent_comms.planning.goal_wait_recovery import StandbyReview
+from agent_comms.planning.goal_waits import GoalWait
 from agent_comms.planning.goals import GoalDeclaration
 from agent_comms.planning.held_orders import HeldOrders
 from agent_comms.planning.order_words import StrikeReason
