@@ -151,3 +151,34 @@ def test_reading_without_a_declared_view_fails_at_class_creation():
         class UndeclaredReading(ReadingObservation):
             def read(self, comms, revision):
                 yield ObservationStep()
+
+
+async def test_notification_reading_runs_ahead_of_sidebar_reading(comms):
+    order: list[str] = []
+
+    class RecordingSidebar(SidebarReading):
+        def read(self, comms, revision):
+            order.append("sidebar")
+            yield ObservationStep()
+
+    class RecordingNotifications(NotificationReading):
+        def read(self, comms, revision):
+            order.append("notifications")
+            yield ObservationStep()
+
+    client, observer = Pipe()
+    with client, observer:
+        service = ObservationService(comms, observer)
+        sidebar = RecordingSidebar(ObserveSidebar(Checkout(comms.root.parent), True, True))
+        notifications = RecordingNotifications(ObserveNotifications(frozenset()))
+        service.interest.observations = {
+            RecordingSidebar: sidebar,
+            RecordingNotifications: notifications,
+        }
+        revision = comms.views.revision()
+        try:
+            await service.interest.observe(service, revision, set())
+            assert order == ["notifications", "sidebar"]
+        finally:
+            service.retire()
+            comms.views.transcript_reads.close()

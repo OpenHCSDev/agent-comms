@@ -5,11 +5,13 @@ import json
 import subprocess
 import sys
 from contextlib import contextmanager
+from multiprocessing import Pipe
 
 import pytest
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
 from agent_comms.comms import wire
+from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.messaging.notification_reads import LiveNotificationRead
 from agent_comms.projects.checkouts import Checkout
@@ -18,7 +20,9 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.transport.tools.reads import OwnerGoalRead, TranscriptPageRead
 from agent_comms.ui_model.observation import (
     NothingAnswered,
+    NotificationsObserved,
     ObservationProcess,
+    ObserveNotifications,
     ReadBusy,
     ReadNotifications,
     ReadOwnerOperation,
@@ -239,5 +243,45 @@ def test_local_pipe_corruption_is_not_peer_retirement(comms):
         with pytest.raises(OSError):
             service.send(NothingAnswered(1))
         assert not service.closed
+
+
+async def test_busy_notification_observation_retries_without_revision_change(tmp_path, monkeypatch):
+    """A notification read deferred by transient store contention must retry via retry_busy
+    once contention clears, without stranding on Checking until an unrelated store commit."""
+    comms, _session = saved_history(tmp_path)
+    sender = comms.messaging.user_identity(Checkout(tmp_path)).name
+    sent = comms.messaging.send("saved", sender, "ping").message
+    original_apply = LiveNotificationRead.apply
+    attempts = 0
+
+    def busy_once(self, bus_comms, reader):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise CoordinationReadUnavailable("transient contention")
+        return original_apply(self, bus_comms, reader)
+
+    monkeypatch.setattr(LiveNotificationRead, "apply", busy_once)
+    request = ReadNotifications(str(comms.root), LiveNotificationRead((sent.reference,)))
+    client, server = Pipe()
+    with client, server:
+        service = ObservationService(comms, server)
+        service.accept(ObserveNotifications(frozenset((request,))))
+        runner = asyncio.create_task(service.run())
+        try:
+            async with asyncio.timeout(5):
+                while True:
+                    if client.poll(0.05):
+                        item = client.recv()
+                        if isinstance(item, NotificationsObserved) and (
+                            sent.reference.seq, sent.reference.message_id
+                        ) in item.outcomes:
+                            break
+                    await asyncio.sleep(0.02)
+            assert attempts == 2
+        finally:
+            service.retire()
+            await asyncio.wait_for(runner, timeout=5)
+            comms.views.transcript_reads.close()
 
 
