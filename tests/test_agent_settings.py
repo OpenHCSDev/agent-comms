@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from objectstate import ScopeKey
+from python_introspect.jsonable import RegisteredClassChoices, registered_class_from_key
 
 from agent_comms.cli_verbs.new import NewThreadCliCommand
 from agent_comms.execution.child_process import NO_PROCESS, ProcessIdentity
@@ -39,9 +40,11 @@ from agent_comms.registry.thread_status import StoppedThreadStatus
 from agent_comms.team.pi_rule_gate import PiThreadGate
 from agent_comms.team.rule_deal import (
     CompactionDealMode,
+    DealMode,
     FullDealMode,
     OffRuleCheckPolicy,
     RequiredRuleCheckPolicy,
+    RuleCheckPolicy,
 )
 from agent_comms.transport.tools.sidebar import (
     CommsAgentSettingsTool,
@@ -272,3 +275,14 @@ def test_new_thread_bindings_and_undealt_pi_gate_inherit_scoped_settings(comms, 
     record = gate.stored()
     assert record.mode is FullDealMode
     assert record.audit is RequiredRuleCheckPolicy
+
+
+def test_declared_family_exposes_registry_key_for_registered_class_choices() -> None:
+    mode_choices = dict(RegisteredClassChoices(DealMode).labelled_choices())
+    assert mode_choices["compaction"] is CompactionDealMode
+    assert mode_choices["full"] is FullDealMode
+    assert registered_class_from_key(DealMode, "compaction") is CompactionDealMode
+
+    policy_choices = dict(RegisteredClassChoices(RuleCheckPolicy).labelled_choices())
+    assert policy_choices["off"] is OffRuleCheckPolicy
+    assert policy_choices["required"] is RequiredRuleCheckPolicy
