@@ -27,6 +27,10 @@ class FrozenRecipient(ParticipantIdentity, ProjectionSource):
 
     @ClassFact
     def writes(cls: type[FrozenRecipient]) -> tuple[type[ProducedRow], ...]:
-        from agent_comms.messaging.bus_tables import AwaitingAnswerSource, ReceivedSource
+        from agent_comms.messaging.bus_tables import (
+            AwaitingAnswerSource,
+            BusRecipientRouteCounts,
+            ReceivedSource,
+        )
 
-        return (ReceivedSource, AwaitingAnswerSource)
+        return (ReceivedSource, AwaitingAnswerSource, BusRecipientRouteCounts)

@@ -85,6 +85,10 @@ class AttachedTakenInputs(ReadCursor):
                     AND claim.message_id={message}
                     AND {self.privacy.context_entered_sql("claim.assignment_id")})"""
 
+    def unseen_counts(self, counts, db: sqlite3.Connection, inputs, through: int, after: int):
+        """Taken-input counts exclude per-message coordinator claims and must inspect rows."""
+        return counts.per_row_unseen_counts(db, inputs, through, after, self.unread_rule())
+
 
 class TakenInputPosition(InboxStart, declared_name=None):
     """Taken inputs own an agent's position; human reads do not, before or after a message."""

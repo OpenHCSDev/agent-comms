@@ -485,11 +485,22 @@ class ReadCursor:
         """Which joined request rows this cursor still counts; a human read is the whole rule."""
         return self.unread_sql
 
+    def unseen_counts(self, counts, db: sqlite3.Connection, inputs, through: int, after: int):
+        """Human read counts answer from per-recipient route totals instead of scanning deliveries."""
+        return counts.summary_unseen_counts(db, inputs, through, after)
+
     @staticmethod
     def rule_of(cursors: Iterable[ReadCursor]) -> str:
         """One route query applies one cursor rule to every actor it reads."""
         rule, = {cursor.unread_rule() for cursor in cursors}
         return rule
+
+    @classmethod
+    def counts_cursor(cls, cursors: Iterable[ReadCursor]) -> ReadCursor:
+        """Validate every actor shares one unread rule and return its representative cursor."""
+        selected = tuple(cursors)
+        cls.rule_of(selected)
+        return selected[0]
 
     def attached(self, db: sqlite3.Connection, root: Path, privacy: RegistryPrivacy) -> ReadCursor:
         """A human read needs no store beyond the bus snapshot it is read from."""
