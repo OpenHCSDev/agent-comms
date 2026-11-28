@@ -21,7 +21,7 @@ import aiohttp
 from pydantic import JsonValue
 from yarl import URL
 
-from agent_comms.execution.child_process import RelayEnding
+from agent_comms.execution.host_platform import RelayEnding
 from agent_comms.transport.sync_answer import AwaitsWork
 from agent_comms.coordination.errors import CoordinationReadUnavailable
 from agent_comms.nominal.field_codec import FieldCodec, RpcCallId

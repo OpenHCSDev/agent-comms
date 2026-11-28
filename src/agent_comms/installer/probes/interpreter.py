@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.installer.build_artifact import BuildArtifact
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 
@@ -57,7 +57,7 @@ class InterpreterBuildProbe(TargetProbe, RuntimeProbe[RecordedInterpreterBuild])
         if not isinstance(abi, str) or not abi:
             raise ValueError("The selected interpreter does not declare its native ABI")
         address = ctypes.cast(ctypes.pythonapi.Py_GetVersion, ctypes.c_void_p)
-        with Platform.current().native_image(address) as stream:
+        with HostPlatform.current().native_image(address) as stream:
             native = BuildArtifact.from_stream(stream)
         executable = Path(sys.executable).resolve(strict=True)
         images = {native.path: native}

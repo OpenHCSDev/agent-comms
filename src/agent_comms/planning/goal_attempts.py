@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Self, TypeVar
 
 from agent_comms import errors
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.execution.goal_turn_permit import GoalTurnPermit
 from agent_comms.execution.pi_wire import PiUsage
 from agent_comms.execution.reservation_rules import ReservationRule, RuleCheck
@@ -360,7 +360,7 @@ class GoalAttemptStore(
     def initialize(cls, root: str | Path) -> GoalAttemptStore:
         """Explicit setup; creation or fsync uncertainty never returns a store."""
         directory = Path(root)
-        if not directory.is_dir() or not Platform.current().is_private(directory.stat(), 0o700):
+        if not directory.is_dir() or not HostPlatform.current().is_private(directory.stat(), 0o700):
             raise StorageUncertainError("An existing owner-0700 directory is required.")
         path = cls.path_in(directory)
         if path.exists():
@@ -385,8 +385,8 @@ class GoalAttemptStore(
             # Publish only the complete schema; a concurrent initializer may win.
             # The staging descriptor is closed before its inode becomes shared.
             with suppress(FileExistsError):
-                Platform.current().publish_new_file(staging, path)
-            Platform.current().sync_directory(directory)
+                HostPlatform.current().publish_new_file(staging, path)
+            HostPlatform.current().sync_directory(directory)
         except (sqlite3.Error, OSError) as error:
             raise StorageUncertainError("Goal attempt initialization is uncertain.") from error
         finally:
@@ -401,11 +401,11 @@ class GoalAttemptStore(
         return self
 
     def require_path(self) -> None:
-        if not self.root.is_dir() or not Platform.current().is_private(self.root.stat(), 0o700):
+        if not self.root.is_dir() or not HostPlatform.current().is_private(self.root.stat(), 0o700):
             raise StorageUncertainError("Goal attempt root must remain owner-0700.")
         if (
             self.path.exists()
-            and not Platform.current().is_private(self.path.stat(), 0o600)
+            and not HostPlatform.current().is_private(self.path.stat(), 0o600)
         ):
             raise StorageUncertainError("Goal attempt database must remain owner-0600.")
 

@@ -19,7 +19,7 @@ from typing import Annotated, ClassVar
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.launch_runtime import LaunchRuntime
 from agent_comms.execution.native_arguments import NativeArguments
@@ -95,7 +95,7 @@ class ActiveRouteFile(FileTransactions, SingleFileStore, DependentStateTier):
         refusal = ValueError("active comms route directory changed or is not owned")
         with OwnedDirectoryRole.reading(self.path.parent, refusal) as directory:
             OwnedDirectoryRole.held(directory, self.path.parent, refusal)
-            Platform.current().make_private_descriptor(directory, 0o700)
+            HostPlatform.current().make_private_descriptor(directory, 0o700)
             yield directory
 
     def update[Value, Result](
@@ -406,7 +406,7 @@ class RouteFile(ABC):
             f"{name.stem}.{time.strftime('%Y%m%dT%H%M%S')}-{ScratchName.mint()}.bak{name.suffix}")
         OwnedDirectoryRole.held(directory, path.parent,
                                 ValueError("active comms route directory changed"))
-        Platform.current().snapshot_file(path.name, backup.name, src_dir_fd=directory,
+        HostPlatform.current().snapshot_file(path.name, backup.name, src_dir_fd=directory,
                                          dst_dir_fd=directory)
         try:
             publish()

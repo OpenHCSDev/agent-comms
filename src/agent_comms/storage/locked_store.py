@@ -32,7 +32,7 @@ from agent_comms.coordination.errors import (
     CoordinationReadUnavailable,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.execution.publication_measurements import TransactionWait
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText
@@ -357,9 +357,9 @@ class RootFile:
                 target = directory / retained
                 PrivateDirectoryRole.make_parents(target.parent)
                 cls.copy_file(source, target)
-                Platform.current().sync_file(target)
+                HostPlatform.current().sync_file(target)
                 saved[retained] = cls.digest(target)
-                Platform.current().sync_directory(target.parent)
+                HostPlatform.current().sync_directory(target.parent)
         return saved
 
     @classmethod
@@ -389,7 +389,7 @@ class RootFile:
                 cls._restore_member(directory / retained, target)
             else:
                 target.unlink(missing_ok=True)
-        Platform.current().sync_directory(path.parent)
+        HostPlatform.current().sync_directory(path.parent)
 
     @staticmethod
     @contextmanager
@@ -631,7 +631,7 @@ class JsonDocument(RootFile, ABC, Generic[T]):
         backup = StoreOwner.rollback_file(staged)
         try:
             mode = stat.S_IMODE(self.path.stat().st_mode)
-            Platform.current().snapshot_file(self.path, backup)
+            HostPlatform.current().snapshot_file(self.path, backup)
         except FileNotFoundError:
             mode = PrivateFileRole.permissions
         try:
@@ -644,10 +644,10 @@ class JsonDocument(RootFile, ABC, Generic[T]):
                 if backup.exists():
                     if not self.path.exists() or not self.path.samefile(backup):
                         os.replace(backup, self.path)
-                        Platform.current().sync_directory(self.path.parent)
+                        HostPlatform.current().sync_directory(self.path.parent)
                 else:
                     self.path.unlink(missing_ok=True)
-                    Platform.current().sync_directory(self.path.parent)
+                    HostPlatform.current().sync_directory(self.path.parent)
                 raise
         finally:
             # A failed restore leaves the last original inode for recovery.

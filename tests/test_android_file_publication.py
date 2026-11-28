@@ -1,21 +1,19 @@
 """Native Android publication contracts without a Python or kernel hard-link path."""
 import os
 import stat
+import sys
 
 import pytest
 
 from agent_comms.coordination.coordinator import StandaloneCoordination
-from agent_comms.execution.child_process import (
-    AndroidPlatform,
-    Platform,
-)
+from agent_comms.execution.child_process import Platform
 from agent_comms.execution.runtime_info import RuntimeInfoStore
 from agent_comms.storage.store_files import ExclusiveAtomicFile, ExclusiveDirectoryAtomicFile
 
 
 @pytest.fixture(autouse=True)
 def android_without_hardlinks(monkeypatch):
-    monkeypatch.setattr(Platform, 'current', classmethod(lambda cls: AndroidPlatform()))
+    monkeypatch.setattr(sys, 'platform', 'android')
 
     def refused(*args, **kwargs):
         raise AssertionError('Android does not permit hard links')

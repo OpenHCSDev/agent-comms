@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal
 
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.installer.native_build_inputs import (
     INPUTS_PREFIX,
@@ -330,7 +330,7 @@ def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
         if source.read_bytes() != path.read_bytes():
             continue
         replacement = path.with_name(path.name + ".sharing")
-        if not Platform.current().share_file(source, replacement):
+        if not HostPlatform.current().share_file(source, replacement):
             continue
         try:
             if replacement.read_bytes() != path.read_bytes():
@@ -496,7 +496,7 @@ def install_declared_sources(root: Path, snapshot_root: Path) -> None:
         for source in sources:
             source.verify_installed()
         for parent in {source.destination.parent for source in sources}:
-            Platform.current().sync_directory(parent)
+            HostPlatform.current().sync_directory(parent)
     except OSError as error:
         raise NativePackageError("Native extension source could not be installed") from error
     finally:

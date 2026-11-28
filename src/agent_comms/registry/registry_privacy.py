@@ -23,7 +23,7 @@ from agent_comms.coordination.session import NativeCoordinationSession
 from agent_comms.coordination.tables.participants import Participants
 from agent_comms.coordination.tables.response_schema import ResponseTable
 from agent_comms.errors import RelationViolationError
-from agent_comms.execution.child_process import Platform
+from agent_comms.execution.host_platform import HostPlatform
 from agent_comms.execution.input_root_authority import InputRootAuthority
 from agent_comms.execution.native_input_owner import NativeOwnerRegistry, RegistryOwner
 from agent_comms.execution.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
@@ -281,7 +281,7 @@ class PrivateRegistry(RegistryPrivacy):
             _reject("has an ambiguous root path")
         root = self.registry_path.parent.absolute()
         cursor = root
-        platform = Platform.current()
+        platform = HostPlatform.current()
         while True:
             try:
                 info = cursor.lstat()

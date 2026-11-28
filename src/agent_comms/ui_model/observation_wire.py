@@ -22,7 +22,7 @@ from typing import ClassVar, Protocol
 from aiohttp import ClientTimeout, ClientWSTimeout, WSMsgType
 
 from agent_comms.coordination.errors import CoordinationError, ReadAgain
-from agent_comms.execution.child_process import RelayEnding
+from agent_comms.execution.host_platform import RelayEnding
 from agent_comms.nominal.field_codec import FieldCodec
 
 WEBSOCKET_HEARTBEAT_SECONDS: float = 10.0
