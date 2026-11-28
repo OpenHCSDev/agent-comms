@@ -186,3 +186,22 @@ def test_a_subtype_this_build_never_heard_of_keeps_the_session_alive():
         json.dumps(declared).encode(), 1).subtype) is ApiError
 
 
+def test_live_tool_result_without_local_tool_start_keeps_watch_alive():
+    """2026-11-28: pm-trainer-cloud's long-running tool finished after a catch-up reconnect,
+    and Live.missing_tool raised ValueError, stopping its transcript from reaching the bus."""
+    running = NativeTurnId(transcript_record('prompt'))
+    record = TimedRecord(uuid=transcript_record('res'), timestamp='2026-11-28T11:05:00Z', position=42)
+
+    known_session = ClaudeSession(phase=Live(), turn=KnownTurn(running))
+    assert known_session.tool_result('toolu_prewindow', 'done', True, record) == (
+        ActiveItem(running, NativeItemId('toolu_prewindow'), ModelWaitPhase()),
+    )
+
+    unknown_session = ClaudeSession(phase=Live())
+    assert unknown_session.tool_result('toolu_prewindow', 'done', True, record) == ()
+
+    catchup_session = ClaudeSession(phase=CatchUp(), turn=KnownTurn(running))
+    assert catchup_session.tool_result('toolu_prewindow', 'done', True, record) == ()
+
+
+
