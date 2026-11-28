@@ -56,7 +56,7 @@ from agent_comms.pi_payloads import (
     ThinkingLevelsData,
     UnknownData,
 )
-from agent_comms.transport.native_tool_transport import OwnerToolConnection
+from agent_comms.transport.native_tool_mode import OwnerToolConnection
 
 if TYPE_CHECKING:
     from agent_comms.execution.backend import TurnSession

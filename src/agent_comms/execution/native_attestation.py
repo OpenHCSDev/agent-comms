@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from agent_comms.execution.native_failures import NativePiUnavailable
-from agent_comms.execution.native_pi import CAPABILITY
+CAPABILITY = "pi-native-input-v1-live-only"
 from agent_comms.execution.native_session_reopen import (
     NativeSessionIdentity,
     NoSessionRetention,

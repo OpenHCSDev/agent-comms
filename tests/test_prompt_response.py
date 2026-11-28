@@ -36,7 +36,7 @@ from agent_comms.execution.turn_stats import (
     StatsRequest,
 )
 from agent_comms.nominal.field_codec import FieldCodec, InputId
-from agent_comms.transport.native_tool_transport import OwnerToolConnection
+from agent_comms.transport.native_tool_mode import OwnerToolConnection
 from native_response_fixture import native_response_session
 
 

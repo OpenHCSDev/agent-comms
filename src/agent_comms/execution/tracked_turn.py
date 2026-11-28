@@ -53,7 +53,7 @@ from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.nominal.field_codec import InputId, MalformedRecord
 from agent_comms.pi_payloads import UserMessage
 from agent_comms.storage.maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
-from agent_comms.transport.native_tool_transport import NativeToolMode
+from agent_comms.transport.native_tool_mode import NativeToolMode
 from agent_comms.transport.tool_denial import SelectedToolDenied
 
 NativeObserver = Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]]

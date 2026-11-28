@@ -31,7 +31,7 @@ from agent_comms.execution.turn_phase import (
 )
 from agent_comms.execution.turn_watchdog import ModelWait, UnboundedWait
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord
-from agent_comms.transport.native_tool_transport import OwnerToolConnection
+from agent_comms.transport.native_tool_mode import OwnerToolConnection
 from native_response_fixture import native_response_session
 
 

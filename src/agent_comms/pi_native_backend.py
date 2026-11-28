@@ -37,13 +37,11 @@ from agent_comms.execution.native_arguments import NativeArguments
 from agent_comms.execution.native_entries import NativeEvidenceScope
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_fork import RuntimeForkHelper, RuntimeForkRequest
-from agent_comms.execution.native_pi import NativePiRpcLaunch
 from agent_comms.execution.native_session_files import (
     ForkedSession,
     NativeSessionFiles,
     NativeSessionLocks,
 )
-from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.persistent_pi_session import (
     PersistentPiSession as PersistentPiSession,
 )
@@ -57,12 +55,8 @@ from agent_comms.execution.pi_events import NativePiEvent
 from agent_comms.execution.pi_wire import PiOmitted
 from agent_comms.execution.selected.session import SavedSelectedSession
 from agent_comms.execution.session_revision import SessionObservation, SessionRevision
-from agent_comms.execution.session_revision import (
-    SessionObservation,
-    SessionRevision,
-    SessionRevisionUnavailable,
-)
 from agent_comms.execution.turn_inbox import InputContent
+from agent_comms.installer.active_route import resolve_comms_route
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.pi_payloads import PiResponseData, StateData
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
@@ -297,9 +291,9 @@ class PiNativeBackend(
         cls, parent: Thread, launcher: str, runtime: LaunchRuntime, root: Path,
     ) -> PiSessionFile:
         """Copy the parent's whole saved history with Pi's own session manager."""
-        package = await CoordinationWork.run_worker(partial(
-            NativePiRpcLaunch.package_for_command, launcher, runtime,
-        ))
+        package = await CoordinationWork.run_worker(
+            lambda: resolve_comms_route(None).package_for_command(launcher, runtime)
+        )
         directory = await CoordinationWork.run_worker(partial(ForkedSession.prepared_directory, root))
         identity = await RuntimeForkHelper.run(
             RuntimeForkRequest(str(package.path), parent.runtime.path, str(parent.worktree),
