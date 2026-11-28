@@ -25,7 +25,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms import agent_events as events
 from agent_comms.errors import RelationViolationError
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.execution.agent_event import AgentEvent
@@ -45,13 +44,9 @@ from agent_comms.execution.transcript_cursor_reads import (
     TranscriptHistorySource,
     TranscriptRuntime,
 )
-from agent_comms.execution.transcript_sources import TranscriptCursor
 from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.execution.turn_outcome import TurnOutcome
-from agent_comms.installer.harness_install import HarnessSession
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.messages import Message
-from agent_comms.messaging.routing import TurnRouting
 from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMember
 from agent_comms.nominal.field_codec import AcpSessionId, InputId, TurnId
 from agent_comms.pi_counts import PiCount
@@ -68,7 +63,7 @@ if TYPE_CHECKING:
     from agent_comms.registry.threads import Thread
 
 
-class TurnPublicationRecorder(ABC):
+class TurnPublicationRecorder[Cursor, Routing](ABC):
     """Transcript store capability that joins a completed native turn to committed wire rows."""
 
     @abstractmethod
@@ -76,8 +71,8 @@ class TurnPublicationRecorder(ABC):
         self,
         *,
         lease: TurnLeaseFence,
-        checkpoint: TranscriptCursor,
-        routing: TurnRouting,
+        checkpoint: Cursor,
+        routing: Routing,
         published: tuple[MessageReference, ...],
         incarnation: RecordedThreadIncarnation,
         thread: Thread,
@@ -106,25 +101,25 @@ class OwnedInboxDrainer(ABC):
     async def drain_direct_inbox(self, session_id: AcpSessionId, thread: Thread) -> None: ...
 
 
-class TurnInputAcknowledger(ABC):
+class TurnInputAcknowledger[Origin, Bridge](ABC):
     """Composition-root capability recording durable delivery acknowledgements for direct inputs."""
 
     @abstractmethod
     def acknowledge_direct_turn_inputs(
         self,
         thread: Thread,
-        origins: tuple[Message, ...],
+        origins: tuple[Origin, ...],
         *,
-        bridge: type[HarnessSession],
+        bridge: type[Bridge],
     ) -> None: ...
 
     @abstractmethod
     def ignore_direct_turn_inputs(
         self,
         thread: Thread,
-        origins: tuple[Message, ...],
+        origins: tuple[Origin, ...],
         *,
-        bridge: type[HarnessSession],
+        bridge: type[Bridge],
     ) -> None: ...
 
 
@@ -137,10 +132,10 @@ class TurnTranscriptSink:
     async def on_chunk(self, text: str) -> None:
         del text
 
-    async def on_tool_start(self, event: events.ToolStart) -> None:
+    async def on_tool_start(self, event: AgentEvent) -> None:
         del event
 
-    async def on_tool_end(self, event: events.ToolEnd) -> None:
+    async def on_tool_end(self, event: AgentEvent) -> None:
         del event
 
     def on_committed_progress(self, text: str, published: tuple[MessageReference, ...]) -> None:
@@ -195,13 +190,13 @@ class RuntimeLocation(DeclaredFamily, TranscriptRuntime, affix='Runtime'):
     def transcript_cursor(self, frontier, cut, *, source):
         return frontier.cursor(source.read_key, cut.offset, file=cut.file_identity())
 
-    def record_turn_publication(
+    def record_turn_publication[Cursor, Routing](
         self,
-        transcripts: TurnPublicationRecorder,
+        transcripts: TurnPublicationRecorder[Cursor, Routing],
         *,
         lease: TurnLeaseFence,
-        checkpoint: TranscriptCursor,
-        routing: TurnRouting,
+        checkpoint: Cursor,
+        routing: Routing,
         published: tuple[MessageReference, ...],
         incarnation: RecordedThreadIncarnation,
         thread: Thread,
@@ -449,21 +444,21 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         await inputs.drain_private_inbox(session_id)
 
     @classmethod
-    def acknowledge_turn_inputs(
+    def acknowledge_turn_inputs[Origin, Bridge](
         cls,
-        acknowledger: TurnInputAcknowledger,
+        acknowledger: TurnInputAcknowledger[Origin, Bridge],
         thread: Thread,
-        origins: tuple[Message, ...],
+        origins: tuple[Origin, ...],
     ) -> None:
         """Record model-context delivery acknowledgements when a backend starts origins."""
         del acknowledger, thread, origins
 
     @classmethod
-    def ignore_turn_inputs(
+    def ignore_turn_inputs[Origin, Bridge](
         cls,
-        acknowledger: TurnInputAcknowledger,
+        acknowledger: TurnInputAcknowledger[Origin, Bridge],
         thread: Thread,
-        origins: tuple[Message, ...],
+        origins: tuple[Origin, ...],
     ) -> None:
         """Settle non-waking direct-inbox origins without starting a model turn."""
         del acknowledger, thread, origins

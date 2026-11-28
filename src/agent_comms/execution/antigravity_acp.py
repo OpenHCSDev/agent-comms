@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import sqlite3
 import uuid
@@ -45,7 +46,7 @@ from agent_comms.execution.antigravity_acp_events import (
 from agent_comms.execution.child_process import NoProcess, Platform, ProcessIdentity, ProcessState
 from agent_comms.execution.native_session_files import SessionFiles
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import AcpSessionId, NominalText
+from agent_comms.nominal.field_codec import AcpSessionId, NominalSpelling, NominalText
 from agent_comms.storage.store_files import AtomicFile
 
 DEFAULT_ANTIGRAVITY_HOME: Path = Path(".gemini/antigravity-cli")
@@ -54,6 +55,10 @@ logger = logging.getLogger(__name__)
 
 class AntigravityConversationId(NominalText):
     """Nominal identifier for one Antigravity conversation database on disk."""
+
+
+class AntigravityConversationIdText(NominalSpelling[AntigravityConversationId]):
+    spelling = re.compile(r"\S{1,4096}")
 
 
 class TranscriptModelLineWire(AcpWireModel):
