@@ -269,6 +269,10 @@ class ConversationHistoryView(HistoryView):
 class ChannelHistory(HistoryView):
     scope: ChannelDisplayScope
 
+    @classmethod
+    def for_channel(cls, channel: Channel) -> ChannelHistory:
+        return cls(channel.history_scope(ChannelDisplayScope))
+
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         return self.scope
 
@@ -326,14 +330,15 @@ class ChannelDisplayHistory(ConversationHistoryView):
         return ChannelDisplayIdentity(
             viewer=viewer.incarnation,
             bus_identity=RecordedBusIdentity.capture(views.bus.bus.path),
-            scope=channel.display_scope(snapshot), history_revision=history_revision,
+            scope=channel.display_scope(snapshot, ChannelDisplayScope),
+            history_revision=history_revision,
         )
 
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         return presentation.channel_page(self.channel.name, viewer=self.viewer, bounds=bounds)
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
-        return self.channel.display_scope(snapshot)
+        return self.channel.display_scope(snapshot, ChannelDisplayScope)
 
 
 @dataclass(frozen=True, slots=True)

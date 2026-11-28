@@ -21,7 +21,7 @@ from agent_comms.coordination.errors import DMPaintedBoundChanged, DMScopeChange
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.execution.launch_runtime import CallingThreadUnavailable
 from agent_comms.messaging.activity_clocks import ChannelActivity
-from agent_comms.messaging.channel_sources import ChannelHistorySource
+from agent_comms.messaging.channel_sources import ChannelHistorySource, ChannelScopeFactory
 from agent_comms.messaging.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.message_reads import ScopedMessage
@@ -1167,12 +1167,26 @@ class ListedDeliveries(TargetedDisplayScope):
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelDisplayScope(TargetedDisplayScope):
+class ChannelDisplayScope(TargetedDisplayScope, ChannelScopeFactory["ChannelDisplayScope"]):
     """One captured local display predicate; it never changes delivery or history ownership."""
 
     channel: str
     targets: frozenset[str]
     displayed: DisplayBasis | None = field(default=None, compare=False)
+
+    @classmethod
+    def channel_scope(cls, channel: str, targets: frozenset[str]) -> ChannelDisplayScope:
+        return cls(channel, targets)
+
+    @classmethod
+    def all_channel_scope(cls, channel: str) -> ChannelDisplayScope:
+        return AllChannelDisplayScope(channel)
+
+    @classmethod
+    def member_activity_scope(
+        cls, channel: ChannelHistorySource, snapshot: RegistryNames[TaggedThreadSource]
+    ) -> ChannelDisplayScope:
+        return MemberActivityDisplayScope.capture(channel, snapshot)
 
     def target_values[V](self, values: Mapping[str, V]) -> Iterable[V]:
         return (values[target] for target in self.targets if target in values)

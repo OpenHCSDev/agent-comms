@@ -13,16 +13,15 @@ from agent_comms.cli_verbs.cli_result import CliResult
 from agent_comms.display_order import ChannelSort, CreatedThreadSort, ThreadSort
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging.activity_clocks import ChannelActivity
-from agent_comms.messaging.channel_sources import ChannelHistorySource, ChannelMemberSource
+from agent_comms.messaging.channel_sources import (
+    ChannelHistorySource,
+    ChannelMemberSource,
+    ChannelScopeFactory,
+)
 from agent_comms.messaging.channel_targets import ChannelTarget, Tag
 from agent_comms.messaging.display_sources import ChannelSortView, SortedChannel, StoredThreadOrder
 from agent_comms.messaging.membership_transition import MembershipTransition
 from agent_comms.messaging.projection_source import ProjectionSource
-from agent_comms.messaging.read_basis import (
-    AllChannelDisplayScope,
-    ChannelDisplayScope,
-    MemberActivityDisplayScope,
-)
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import CatalogExclude, FieldCodec
 from agent_comms.registry.registry_names import RegistryNames
@@ -111,10 +110,15 @@ class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, StoredThr
         return True
 
     @abstractmethod
-    def history_scope(self) -> ChannelDisplayScope: ...
+    def history_scope[Scope](self, scopes: type[ChannelScopeFactory[Scope]]) -> Scope: ...
 
-    def display_scope(self, snapshot: RegistryNames[TaggedThreadSource]) -> ChannelDisplayScope:
-        return self.history_scope()
+    def display_scope[Scope](
+        self, snapshot: RegistryNames[TaggedThreadSource], scopes: type[ChannelScopeFactory[Scope]]
+    ) -> Scope:
+        return self.history_scope(scopes)
+
+    @abstractmethod
+    def target_values[V](self, values: Mapping[str, V]) -> Iterable[V]: ...
 
     @abstractmethod
     def require_metadata(self) -> None: ...
@@ -135,10 +139,10 @@ class Channel(DeclaredFamily, CliResult, ToolResult, ProjectionSource, StoredThr
     def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[type[MembershipTransition], ...]: ...
 
     def history_activity(self, by_target: Mapping[str, ChannelActivity]) -> ChannelActivity:
-        return ChannelActivity.combine(self.history_scope().target_values(by_target))
+        return ChannelActivity.combine(self.target_values(by_target))
 
     def pending_count(self, counts: dict[str, int]) -> int:
-        return sum(self.history_scope().target_values(counts))
+        return sum(self.target_values(counts))
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)
@@ -168,8 +172,11 @@ class GroupedChannel(ChannelHistorySource):
 
     __slots__ = ()
 
-    def history_scope(self) -> ChannelDisplayScope:
-        return ChannelDisplayScope(self.name, self.history_targets)
+    def history_scope[Scope](self, scopes: type[ChannelScopeFactory[Scope]]) -> Scope:
+        return scopes.channel_scope(self.name, self.history_targets)
+
+    def target_values[V](self, values: Mapping[str, V]) -> Iterable[V]:
+        return (values[target] for target in self.history_targets if target in values)
 
     def can_set_archived(self, archived: bool) -> bool:
         return self.archived != archived
@@ -236,8 +243,12 @@ class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel, declared_
         return False
 
     @classmethod
-    def history_scope(cls) -> ChannelDisplayScope:
-        return ChannelDisplayScope(cls.address(), frozenset((cls.address(),)))
+    def history_scope[Scope](cls, scopes: type[ChannelScopeFactory[Scope]]) -> Scope:
+        return scopes.channel_scope(cls.address(), frozenset((cls.address(),)))
+
+    def target_values[V](self, values: Mapping[str, V]) -> Iterable[V]:
+        address = self.address()
+        return (values[address],) if address in values else ()
 
     def require_metadata(self) -> None:
         raise ValueError("Built-in channels cannot be grouped or archived.")
@@ -270,8 +281,11 @@ class AnyChannel(NonRoutableChannel, BuiltinChannelView):
         return everything
 
     @classmethod
-    def history_scope(cls) -> ChannelDisplayScope:
-        return AllChannelDisplayScope(cls.address())
+    def history_scope[Scope](cls, scopes: type[ChannelScopeFactory[Scope]]) -> Scope:
+        return scopes.all_channel_scope(cls.address())
+
+    def target_values[V](self, values: Mapping[str, V]) -> Iterable[V]:
+        return values.values()
 
 
 class NoneChannel(BuiltinChannelView):
@@ -339,10 +353,12 @@ class TagChannelIdentity(GroupedChannel, Channel):
 
 @dataclass(frozen=True, slots=True)
 class TagChannel(MembershipChannel, TagChannelIdentity):
-    def display_scope(self, snapshot: RegistryNames[TaggedThreadSource]) -> ChannelDisplayScope:
+    def display_scope[Scope](
+        self, snapshot: RegistryNames[TaggedThreadSource], scopes: type[ChannelScopeFactory[Scope]]
+    ) -> Scope:
         if self.any_mode:
-            return MemberActivityDisplayScope.capture(self, snapshot)
-        return self.history_scope()
+            return scopes.member_activity_scope(self, snapshot)
+        return self.history_scope(scopes)
 
     def members[Member: ChannelMemberSource](self, index: ChannelMemberIndex[Member]) -> tuple[Member, ...]:
         return index[ChannelTarget.bare_name(self.name)]
