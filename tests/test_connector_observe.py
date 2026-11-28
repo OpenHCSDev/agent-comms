@@ -1,11 +1,14 @@
 """A UI grant observes its root through the connector, as declared records."""
 
 import asyncio
+import os
+from multiprocessing import forkserver
 
 from aiohttp import WSMsgType
 from aiohttp.test_utils import TestClient, TestServer
 
 from agent_comms.comms import Comms
+from agent_comms.execution.child_process import ForkserverHelper
 from agent_comms.transport.connector import Connector, ObservationRelay
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.projects.checkouts import Checkout
@@ -17,6 +20,7 @@ from agent_comms.ui_model.observation import (
     ServiceResult,
     SidebarResult,
 )
+from agent_comms.ui_model.observation_service import OBSERVATION_PRELOAD_MODULE
 from bus_record_fixture import prepare_native_comms
 
 
@@ -223,3 +227,21 @@ async def test_an_observer_that_reconnects_sees_what_changed_while_it_was_gone(
         f"UI that reconnects would miss every message it was away for: alice's conversation "
         f"held {unread(before)} unread before and {unread(after)} after")
     assert after.request == wanted, "and it is still the interest the UI asked for"
+
+
+def test_connector_helper_start_preloads_observation_forkserver_and_retires_cleanly() -> None:
+    """Connector's /observe helper uses a preloaded forkserver and retires it on shutdown."""
+    start = Connector.helper_start
+    assert isinstance(start, ForkserverHelper)
+    assert OBSERVATION_PRELOAD_MODULE in start.preload
+    start.prepare()
+    pid = forkserver._forkserver._forkserver_pid  # type: ignore[attr-defined]
+    assert pid is not None
+    start.retire()
+    assert forkserver._forkserver._forkserver_pid is None  # type: ignore[attr-defined]
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        pass
+    else:
+        raise AssertionError(f"Forkserver process {pid} survived retire()")

@@ -55,13 +55,13 @@ from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.errors import UnexposedToolError
 from agent_comms.execution.child_process import (
+    ForkserverHelper,
     GitChildren,
     HelperStart,
     OutlivesLauncherLifetime,
     OwnedGitOpening,
     Platform,
     ProcessIdentity,
-    SpawnedHelper,
     SpawnedProcess,
     join_retirement,
 )
@@ -169,7 +169,10 @@ from agent_comms.transport.tool_result import ToolResult
 from agent_comms.transport.tools.orders import CommsHeadVerdictTool, HeadVerdictTool
 from agent_comms.transport.tools.send import CommsSendTool, SendTool
 from agent_comms.transport.tools.commands import SearchToolLookup
-from agent_comms.ui_model.observation_service import serve_encoded
+from agent_comms.ui_model.observation_service import (
+    OBSERVATION_PRELOAD_MODULE,
+    serve_encoded,
+)
 from agent_comms.ui_model.observation_wire import (
     WEBSOCKET_HEARTBEAT_SECONDS,
     WEBSOCKET_MAX_MESSAGE_BYTES,
@@ -852,7 +855,7 @@ class Connector(ConnectorService, McpServer):
     """How often a connector WebSocket is pinged; a peer that misses the pong is dropped."""
     stack_frames: ClassVar[int] = 6
     """How deep a still-running task's stack is reported; the innermost frames name its phase."""
-    helper_start: ClassVar[HelperStart] = SpawnedHelper()
+    helper_start: ClassVar[HelperStart] = ForkserverHelper((OBSERVATION_PRELOAD_MODULE,))
     """How a remote viewer's observation process starts."""
 
     store: ConnectorStore
@@ -1534,10 +1537,12 @@ class ServeVerb(ConnectorOptions):
         loop.add_signal_handler(signal.SIGUSR1, connector.log_pending, "asked what it is doing")
         try:
             await SystemdSite(runner, LOOPBACK, self.port).start()
+            connector.helper_start.prepare()
             await stopped.wait()
             connector.log_pending()
         finally:
             await runner.cleanup()
+            await asyncio.to_thread(connector.helper_start.retire)
 
 
 @dataclass(frozen=True, kw_only=True)
