@@ -4,6 +4,7 @@ shutdown leaves none."""
 
 import os
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -163,3 +164,21 @@ def test_terminating_stops_a_running_call(tmp_path):
     with pytest.raises(LostHelperWorkerError):
         call.result(timeout=10)
     workers.shutdown(wait=True)
+
+
+def test_child_process_and_connector_profile_import_without_multiprocessing_extension():
+    """Android's Python build has no _multiprocessing C extension (bionic lacks POSIX
+    named semaphores), so importing child_process or connector_profile must never load it."""
+    probe = (
+        "import sys; sys.modules['_multiprocessing'] = None; "
+        "import agent_comms.execution.child_process; "
+        "import agent_comms.transport.connector_profile"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
