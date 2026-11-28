@@ -61,6 +61,10 @@ class ResponsePolicy(DeclaredFamily, ProjectionSource, affix="Policy"):
     def starts_turn_for(self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES) -> bool:
         return name in self.recipients(message, (name,), aliases=aliases)
 
+    def direct_wake_for(self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES) -> bool:
+        """Whether a direct-inbox backend without a hidden triage phase wakes on this message."""
+        return name in self.required_responders(message, (name,), aliases=aliases)
+
     def context_peer(self, owner: str, sender: str, target: str) -> str | None:
         return None
 
@@ -84,6 +88,9 @@ class DirectPolicy(NoChannelRecipients, ResponsePolicy):
     separate_turn = True
 
     def starts_turn_for(self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES) -> bool:
+        return self.starts_turn
+
+    def direct_wake_for(self, message: ResponseMessageSource, name: str, aliases: Mapping[str, str] = NO_ALIASES) -> bool:
         return self.starts_turn
 
     def guidance(self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:

@@ -10,6 +10,8 @@ import time
 from agent_comms.cli_bridges.harness_delivery_states import (
     AcknowledgedReceipt,
     DeliveredOutcome,
+    FilteredOutcome,
+    IgnoredMonitor,
     UnconfirmedOutcome,
 )
 from agent_comms.coordination.assignment_store import AssignmentStore
@@ -220,11 +222,37 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         *,
         bridge: type[HarnessSession],
     ) -> tuple[MessageReference, ...]:
-        """Record durable model-context delivery acknowledgements for a direct backend turn."""
+        """Record durable model-context delivery acknowledgements, then advance read markers."""
         refs = tuple(dict.fromkeys(origin.reference for origin in origins if origin.seq > 0))
         if not refs:
             return ()
-        return self.acknowledge_deliveries(owner.name, refs, bridge=bridge)
+        acknowledged = self.acknowledge_deliveries(owner.name, refs, bridge=bridge)
+        self.bus.mark_messages_displayed(owner.name, origins)
+        return acknowledged
+
+    def ignore_direct_turn_inputs(
+        self,
+        owner: Thread,
+        origins: tuple[Message, ...],
+        *,
+        bridge: type[HarnessSession],
+    ) -> tuple[MessageReference, ...]:
+        """Settle non-waking direct-inbox origins as ignored so triage claims never stick on Sent."""
+        refs = tuple(dict.fromkeys(origin.reference for origin in origins if origin.seq > 0))
+        if not refs:
+            return ()
+        lookup = owner.incarnation.require_recorded().lookup
+        evidence = IgnoredMonitor()
+        path = str(CoordinationStore.path_in(self.root))
+        with NativeCoordinationSession(path) as session, session.writing() as db:
+            assignments = AssignmentStore(session)
+            for ref in refs:
+                if not HarnessDelivery.for_recipients(db, ((lookup, ref),)):
+                    HarnessDelivery(
+                        bridge, lookup, ref.message_id, ref.seq,
+                        FilteredOutcome, monitor=evidence,
+                    ).record(assignments, db)
+        return refs
 
     def _settle_answered_remote_deliveries(
         self,

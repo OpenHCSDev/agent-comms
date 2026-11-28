@@ -177,6 +177,19 @@ class AntigravityAcpBackend(
         )
 
     @classmethod
+    def ignore_turn_inputs(
+        cls,
+        acknowledger: TurnInputAcknowledger,
+        thread: Thread,
+        origins: tuple[Message, ...],
+    ) -> None:
+        acknowledger.ignore_direct_turn_inputs(
+            thread,
+            origins,
+            bridge=AntigravityAcpSession,
+        )
+
+    @classmethod
     def turn_transcript_sink(
         cls,
         root: Path,

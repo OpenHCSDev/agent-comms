@@ -56,6 +56,7 @@ class InvalidTriageDecision(ValueError):
 
 class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
     family_discriminator = "decision"
+    suppresses_reply: ClassVar[bool] = False
 
     @classmethod
     def output_values(cls) -> dict[str, str]:
@@ -86,6 +87,14 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
         return True
 
     @classmethod
+    def suppresses_channel_reply(cls, text: str) -> bool:
+        """Whether this text is a bounded IGNORE verdict rather than a channel reply."""
+        try:
+            return cls.parse(text).suppresses_reply
+        except InvalidTriageDecision:
+            return False
+
+    @classmethod
     @abstractmethod
     def proves_source(cls, evidence: tuple[HistoricalNativeInput, ...]) -> bool: ...
 
@@ -101,6 +110,8 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
 
 @dataclass(frozen=True)
 class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
+    suppresses_reply = True
+
     @classmethod
     def proves_source(cls, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
         return True

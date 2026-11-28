@@ -295,6 +295,7 @@ class NamedTarget(CommandTarget):
 
     guidance_scope = ""
     default_audience = MessageAudience.DIRECT
+    suppresses_ignore_reply: ClassVar[bool] = False
 
     @abstractmethod
     def display_history(self, views: HistoryViews, project: Checkout) -> ConversationHistoryView:
@@ -568,6 +569,7 @@ class ChannelTarget(NamedTarget):
         return seq > 0
     kind = "channel"
     default_audience = MessageAudience.COLLECTIVE
+    suppresses_ignore_reply: ClassVar[bool] = True
 
     sigil = "#"
     route: ClassVar[ReplyRoute] = ChannelReply()

@@ -17,10 +17,12 @@ from agent_comms.execution.diagnostics import record_request_progress, record_te
 from agent_comms.execution.native_turn_context import ContextObserved
 from agent_comms.execution.publication_measurements import PublicationMeasurements
 from agent_comms.execution.runtime_observations import AgentEventConsumer, NativeMetadataObservation
+from agent_comms.execution.selected.triage import SelectedTriage
 from agent_comms.execution.turn_failure import ModelRequestFailed, NoTurnFailure, TurnFailure
 from agent_comms.execution.turn_lease import TurnState
 from agent_comms.execution.turn_phase import NativePhaseChanged, PublishingPhase
 from agent_comms.execution.turn_progress_reads import ProgressGoalAccount, ProgressTurn
+from agent_comms.messaging.channel_targets import CommandTarget
 from agent_comms.messaging.messages import AlertKind, NoticeRole
 from agent_comms.messaging.send_result import SendResult
 from agent_comms.nominal.field_codec import AcpSessionId
@@ -156,6 +158,15 @@ class TurnProgress(AgentEventConsumer[Comms]):
             for text in result.notices:
                 await self.consume(events.Notice(text=text))
 
+    def _publishable_reply_targets(self, text: str) -> tuple[str, ...]:
+        if SelectedTriage.suppresses_channel_reply(text):
+            return tuple(
+                target
+                for target in self.turn.reply_targets
+                if not CommandTarget.named(target).suppresses_ignore_reply
+            )
+        return self.turn.reply_targets
+
     def publish_progress(self, progress: str) -> tuple[SendResult, ...]:
         """Join the committed notice and consume its streamed text together."""
         results: tuple[SendResult, ...] = ()
@@ -166,7 +177,7 @@ class TurnProgress(AgentEventConsumer[Comms]):
                 # final reply contains only subsequent assistant text.
                 results = tuple(self.comms.messaging.send(
                     self.thread_name, target, progress, role=NoticeRole()
-                ) for target in self.turn.reply_targets)
+                ) for target in self._publishable_reply_targets(progress))
                 self.reply_parts.clear()
         if progress:
             self.transcript_sink.on_committed_progress(
@@ -308,9 +319,10 @@ class TurnProgress(AgentEventConsumer[Comms]):
         with ExitStack() as publications:
             publications.callback(record_publication)
             if self.reply_parts:
-                for target in self.turn.reply_targets:
+                reply = "".join(self.reply_parts)
+                for target in self._publishable_reply_targets(reply):
                     published.append(self.comms.messaging.send(
-                        self.thread_name, target, "".join(self.reply_parts)
+                        self.thread_name, target, reply
                     ))
         self.comms.agents.recover_completed_turn(self.turn_lease, self.thread.backend)
         return tuple(published)

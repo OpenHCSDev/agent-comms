@@ -1512,12 +1512,45 @@ class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEve
         await self._drain_private_if_changed(session_id, private_root)
         WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
 
+    def _partition_direct_inbox(
+        self,
+        owner: Thread,
+        messages: tuple[Message, ...],
+        displayed: DisplayBasis,
+        aliases: Mapping[str, str],
+    ) -> tuple[Message, ...]:
+        """Split direct-inbox messages into waking turns vs non-waking posts.
+
+        Non-waking messages are settled as ignored and marked displayed immediately.
+        Waking messages stay unmarked until ``TurnProgress.input_started`` records durable
+        ``HarnessDelivery``, so a restart before the turn starts never drops them.
+        """
+        waking = tuple(
+            message
+            for message in messages
+            if message.sender != owner.name
+            and message.role.response_policy(message).direct_wake_for(
+                message, owner.name, aliases
+            )
+        )
+        waking_seqs = frozenset(message.seq for message in waking)
+        non_waking = tuple(message for message in messages if message.seq not in waking_seqs)
+        if non_waking:
+            dismissed = tuple(message for message in non_waking if message.sender != owner.name)
+            if dismissed:
+                owner.backend.ignore_turn_inputs(self.comms, owner, dismissed)
+            self.comms.bus.reads.mark_displayed(
+                owner.name,
+                displayed.select(tuple(message.seq for message in non_waking)),
+            )
+        return waking
+
     async def _steer_direct_inbox(self, session_id: AcpSessionId, thread: Thread) -> None:
         turn = (await self.effects.turns.active_backend_turn(session_id)).turn
         if not turn.has_source():
             return
 
-        def capture_pending() -> tuple[tuple[Thread, tuple[Message, ...], DisplayBasis], ...]:
+        def capture_pending() -> tuple[tuple[Thread, tuple[Message, ...]], ...]:
             if self.comms.owners.maintenance.read().turn_pending:
                 return ()
             snapshot = self.comms.registry.snapshot()
@@ -1528,25 +1561,13 @@ class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEve
             messages = tuple(sorted(inbox.page.messages, key=lambda item: item.seq))
             if not messages:
                 return ()
-            waking = tuple(
-                message
-                for message in messages
-                if message.sender != owner.name
-                and message.role.response_policy(message).starts_turn_for(
-                    message, owner.name, snapshot.aliases
-                )
-            )
+            waking = self._partition_direct_inbox(owner, messages, inbox.displayed, snapshot.aliases)
             if not waking:
-                self.comms.bus.reads.mark_displayed(owner.name, inbox.displayed)
                 return ()
-            return ((owner, waking, inbox.displayed),)
+            return ((owner, waking),)
 
-        for owner, waking, displayed in await Coordination.run_worker(capture_pending):
-            placed = await DirectDeliveredInput.deliver_direct(self, session_id, owner, waking)
-            if placed:
-                await Coordination.run_worker(
-                    partial(self.comms.bus.reads.mark_displayed, owner.name, displayed)
-                )
+        for owner, waking in await Coordination.run_worker(capture_pending):
+            await DirectDeliveredInput.deliver_direct(self, session_id, owner, waking)
 
     async def drain_direct_inbox(self, session_id: AcpSessionId, thread: Thread) -> None:
         if self.background_wakes_disabled:
@@ -1572,15 +1593,7 @@ class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEve
             messages = tuple(sorted(inbox.page.messages, key=lambda item: item.seq))
             if not messages:
                 return ()
-            self.comms.bus.reads.mark_displayed(owner.name, inbox.displayed)
-            waking = tuple(
-                message
-                for message in messages
-                if message.sender != owner.name
-                and message.role.response_policy(message).starts_turn_for(
-                    message, owner.name, snapshot.aliases
-                )
-            )
+            waking = self._partition_direct_inbox(owner, messages, inbox.displayed, snapshot.aliases)
             return tuple(
                 ScheduledTurn.incoming(message, aliases=snapshot.aliases)
                 for message in waking

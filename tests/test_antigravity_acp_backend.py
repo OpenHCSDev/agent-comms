@@ -839,5 +839,261 @@ async def test_antigravity_acp_steers_dm_during_active_persistent_goal(
         await agent.shutdown()
 
 
+@pytest.mark.asyncio
+async def test_antigravity_acp_ignores_unmentioned_channel_post_and_settles_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unmentioned MentionedPolicy channel post must not wake an Antigravity ACP
+    member and must settle its BoundedTriageWake claim to Not answering (never Sent)."""
+    import os
+    from bus_record_fixture import prepare_native_comms
+    from agent_comms.comms import wire
+    from agent_comms.execution.acp import CommsAgent, RetainedOwnerLaunch
+    from agent_comms.execution.child_process import ProcessIdentity
+    from agent_comms.execution.native_arguments import NativeArguments
+    from agent_comms.messaging.notification_evidence import AllOutcomes
+    from agent_comms.messaging.notification_progress import IgnoredProgress
+    from agent_comms.registry.threads import NextTurnConfiguration
+
+    fake_script = tmp_path / "fake_agy.py"
+    fake_script.write_text(_FAKE_ACP_SERVER, encoding="utf-8")
+    fake_bin = tmp_path / "fake_agy"
+    fake_bin.write_text(f"#!/bin/sh\nexec {sys.executable} {fake_script} \"$@\"\n", encoding="utf-8")
+    fake_bin.chmod(0o755)
+    monkeypatch.setenv("AGENT_COMMS_AGY_BIN", str(fake_bin))
+
+    root = tmp_path / "comms-root"
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    comms = prepare_native_comms(wire(root))
+    comms.registry.declare(NativeThread("sender", frozenset({"model"}), Checkout(worktree)))
+    comms.registry.declare(NativeThread("other-agent", frozenset({"model"}), Checkout(worktree)))
+    thread = comms.registry.declare(NativeThread("agy-idle", frozenset({"model"}), Checkout(worktree)))
+    thread = comms.threads.set_thread_configuration(
+        thread, NextTurnConfiguration(model=ChosenModel("antigravity/gemini-4-neon")),
+    )
+    comms.owners.acquire_thread(thread.name)
+    owner = comms.registry.entry(thread.name).entry.owner_identity
+    proc = ProcessIdentity.capture(os.getpid())
+    env = {
+        **os.environ,
+        "AGENT_COMMS_THREAD": thread.name,
+        "PI_WORKTREE": str(worktree),
+        NativeArguments.binary_key: NativeArguments.default_binary,
+    }
+    launch = RetainedOwnerLaunch(process=proc, interpreter=sys.executable, environment=env)
+
+    agent = CommsAgent(comms, auto_wake=True)
+    sid = AcpSessionId(thread.name)
+    try:
+        await agent.sessions.start_owner(launch, owner)
+        sent = comms.messaging.send("sender", "#model", "@other-agent please check run 8")
+        ref = sent.message.reference
+        ignored_state = None
+        by_recipient: dict[str, object] = {}
+        for _ in range(80):
+            await asyncio.sleep(0.05)
+            win = comms.views.message_notifications_for_references(AllOutcomes(), (ref,))
+            by_recipient = {
+                item.recipient: item.state
+                for item in win.outcomes.get((ref.seq, ref.message_id), ())
+            }
+            if isinstance(by_recipient.get(thread.name), IgnoredProgress):
+                ignored_state = by_recipient[thread.name]
+                break
+        assert isinstance(ignored_state, IgnoredProgress), (
+            f"Unmentioned BoundedTriageWake post stayed stuck instead of IgnoredProgress: {by_recipient!r}"
+        )
+        assert not agent.inputs.turn_live(sid)
+        assert comms.bus.inbox(thread.name).page.messages == ()
+        channel_msgs = [m.body for m in comms.bus.inbox("other-agent").page.messages]
+        assert channel_msgs == ["@other-agent please check run 8"]
+    finally:
+        await agent.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_antigravity_acp_suppresses_ignore_channel_reply_without_posting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When a woken Antigravity ACP agent answers IGNORE on a channel turn (either in
+    CommittedProgress before a tool call or as final text), TurnProgress must suppress
+    posting IGNORE to the channel while still acknowledging the incoming message."""
+    import os
+    from bus_record_fixture import prepare_native_comms
+    from agent_comms.comms import wire
+    from agent_comms.execution.acp import CommsAgent, RetainedOwnerLaunch
+    from agent_comms.execution.child_process import ProcessIdentity
+    from agent_comms.execution.native_arguments import NativeArguments
+    from agent_comms.messaging.channel_targets import ChannelTarget
+    from agent_comms.messaging.message_notification import MessageNotification
+    from agent_comms.messaging.notification_evidence import AllOutcomes
+    from agent_comms.registry.threads import NextTurnConfiguration
+
+    ignore_server = """
+import json, sys, uuid
+
+for raw in sys.stdin:
+    if not raw.strip():
+        continue
+    msg = json.loads(raw)
+    method = msg.get("method")
+    rid = msg.get("id")
+    params = msg.get("params") or {}
+    def send(payload):
+        sys.stdout.write(json.dumps(payload) + "\\n")
+        sys.stdout.flush()
+    if method == "initialize":
+        send({"jsonrpc": "2.0", "id": rid, "result": {"protocolVersion": 1}})
+    elif method in ("session/new", "session/resume"):
+        sid = params.get("sessionId") or str(uuid.uuid4())
+        send({"jsonrpc": "2.0", "id": rid, "result": {"sessionId": sid, "configOptions": []}})
+    elif method == "session/prompt":
+        sid = params["sessionId"]
+        for update in (
+            {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "IGNORE"}},
+            {"sessionUpdate": "tool_call", "toolCallId": "call-1", "name": "run_command", "title": "run_command", "rawInput": {"CommandLine": "true"}},
+            {"sessionUpdate": "tool_call_update", "toolCallId": "call-1", "name": "run_command", "status": "completed", "rawOutput": ""},
+            {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "IGNORE"}},
+        ):
+            send({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": sid, "update": update}})
+        send({"jsonrpc": "2.0", "id": rid, "result": {"stopReason": "end_turn"}})
+    elif rid is not None:
+        send({"jsonrpc": "2.0", "id": rid, "result": {}})
+"""
+    fake_script = tmp_path / "fake_agy_ignore.py"
+    fake_script.write_text(ignore_server, encoding="utf-8")
+    fake_bin = tmp_path / "fake_agy_ignore"
+    fake_bin.write_text(f"#!/bin/sh\nexec {sys.executable} {fake_script} \"$@\"\n", encoding="utf-8")
+    fake_bin.chmod(0o755)
+    monkeypatch.setenv("AGENT_COMMS_AGY_BIN", str(fake_bin))
+
+    root = tmp_path / "comms-root"
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    comms = prepare_native_comms(wire(root))
+    comms.registry.declare(NativeThread("tristan", frozenset({"model"}), Checkout(worktree)))
+    thread = comms.registry.declare(NativeThread("agy-ch", frozenset({"model"}), Checkout(worktree)))
+    thread = comms.threads.set_thread_configuration(
+        thread, NextTurnConfiguration(model=ChosenModel("antigravity/gemini-4-neon")),
+    )
+    comms.owners.acquire_thread(thread.name)
+    owner = comms.registry.entry(thread.name).entry.owner_identity
+    proc = ProcessIdentity.capture(os.getpid())
+    env = {
+        **os.environ,
+        "AGENT_COMMS_THREAD": thread.name,
+        "PI_WORKTREE": str(worktree),
+        NativeArguments.binary_key: NativeArguments.default_binary,
+    }
+    launch = RetainedOwnerLaunch(process=proc, interpreter=sys.executable, environment=env)
+
+    agent = CommsAgent(comms, auto_wake=True)
+    sid = AcpSessionId(thread.name)
+    try:
+        await agent.sessions.start_owner(launch, owner)
+        sent = comms.messaging.send_user_message(
+            ChannelTarget("#model"),
+            "Guys, collective update with no mentions",
+            worktree=Checkout(worktree),
+        )
+        ref = sent.reference
+        summary = ""
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            win = comms.views.message_notifications_for_references(AllOutcomes(), (ref,))
+            summary = MessageNotification.summary(
+                win.outcomes.get((ref.seq, ref.message_id), ())
+            )
+            if "1 read" in summary and not agent.inputs.turn_live(sid):
+                break
+        assert "1 read" in summary, f"Expected collective post acknowledged, got {summary!r}"
+        posted_by_agent = [
+            m.body for m in comms.bus.inbox("tristan").page.messages if m.sender == thread.name
+        ]
+        assert posted_by_agent == [], f"IGNORE must never be posted to #model: {posted_by_agent!r}"
+    finally:
+        await agent.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_antigravity_acp_waking_dm_survives_restart_before_turn_starts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """drain_direct_inbox must not mark waking messages displayed before TurnProgress.input_started
+    records durable HarnessDelivery, so a restart while queued redelivers the DM."""
+    import os
+    from bus_record_fixture import prepare_native_comms
+    from agent_comms.comms import wire
+    from agent_comms.execution.acp import CommsAgent, RetainedOwnerLaunch
+    from agent_comms.execution.child_process import ProcessIdentity
+    from agent_comms.execution.native_arguments import NativeArguments
+    from agent_comms.messaging.message_notification import MessageNotification
+    from agent_comms.messaging.notification_evidence import AllOutcomes
+    from agent_comms.registry.threads import NextTurnConfiguration
+
+    fake_script = tmp_path / "fake_agy.py"
+    fake_script.write_text(_FAKE_ACP_SERVER, encoding="utf-8")
+    fake_bin = tmp_path / "fake_agy"
+    fake_bin.write_text(f"#!/bin/sh\nexec {sys.executable} {fake_script} \"$@\"\n", encoding="utf-8")
+    fake_bin.chmod(0o755)
+    monkeypatch.setenv("AGENT_COMMS_AGY_BIN", str(fake_bin))
+
+    root = tmp_path / "comms-root"
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    comms = prepare_native_comms(wire(root))
+    comms.registry.declare(NativeThread("tristan", frozenset(), Checkout(worktree)))
+    thread = comms.registry.declare(NativeThread("agy-restart", frozenset(), Checkout(worktree)))
+    thread = comms.threads.set_thread_configuration(
+        thread, NextTurnConfiguration(model=ChosenModel("antigravity/gemini-4-neon")),
+    )
+    comms.owners.acquire_thread(thread.name)
+    owner = comms.registry.entry(thread.name).entry.owner_identity
+    proc = ProcessIdentity.capture(os.getpid())
+    env = {
+        **os.environ,
+        "AGENT_COMMS_THREAD": thread.name,
+        "PI_WORKTREE": str(worktree),
+        NativeArguments.binary_key: NativeArguments.default_binary,
+    }
+    launch = RetainedOwnerLaunch(process=proc, interpreter=sys.executable, environment=env)
+
+    # First worker captures the waking DM into pending_turns, then dies before running it.
+    first_agent = CommsAgent(comms, auto_wake=True)
+    sid = AcpSessionId(thread.name)
+    monkeypatch.setattr(
+        first_agent.inputs,
+        "ensure_live_drain",
+        lambda *_a, **_kw: None,
+    )
+    dm = comms.messaging.send("tristan", thread.name, "SURVIVE_RESTART_9852")
+    ref = dm.message.reference
+    first_agent.sessions.published[sid] = thread.name
+    first_agent.inputs.state(sid).owned_launch = launch
+    await first_agent.inputs.drain_direct_inbox(sid, thread)
+    assert len(first_agent.inputs.state(sid).pending_turns) == 1
+    assert [m.seq for m in comms.bus.inbox(thread.name).page.messages] == [ref.seq]
+    await first_agent.shutdown()
+
+    # Second worker starts fresh and redelivers the DM cleanly.
+    second_agent = CommsAgent(comms, auto_wake=True)
+    try:
+        await second_agent.sessions.start_owner(launch, owner)
+        summary = ""
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            win = comms.views.message_notifications_for_references(AllOutcomes(), (ref,))
+            summary = MessageNotification.summary(
+                win.outcomes.get((ref.seq, ref.message_id), ())
+            )
+            if "1 read" in summary and not second_agent.inputs.turn_live(sid):
+                break
+        assert "1 read" in summary, f"Restarted worker failed to redeliver DM: {summary!r}"
+        assert comms.bus.inbox(thread.name).page.messages == ()
+    finally:
+        await second_agent.shutdown()
+
+
 
 
