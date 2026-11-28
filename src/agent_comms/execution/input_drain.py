@@ -1543,7 +1543,14 @@ class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEve
                 owner.name,
                 displayed.select(tuple(message.seq for message in non_waking)),
             )
-        return waking
+        if not waking:
+            return ()
+        document = self.dispositions.read(tuple(message.bus_key(owner) for message in waking))
+        return tuple(
+            message
+            for message in waking
+            if not document.lookup(message.bus_key(owner)).is_stored()
+        )
 
     async def _steer_direct_inbox(self, session_id: AcpSessionId, thread: Thread) -> None:
         turn = (await self.effects.turns.active_backend_turn(session_id)).turn
