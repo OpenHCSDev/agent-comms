@@ -42,8 +42,8 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
     scheduled = ScheduledTurn.incoming(message)
     assert scheduled.origin.exact_reply_target == "#team"
     assert "Response policy: mentioned" in scheduled.prompt
-    assert "addressed especially to: @alpha, @beta" in scheduled.prompt
-    assert "other channel members may contribute when involved or relevant" in scheduled.prompt
+    assert "addressed to @alpha, @beta;" in scheduled.prompt
+    assert "reply if you are answering, or say IGNORE if you are not answering" in scheduled.prompt
     assert "delivery and history remain #team" in scheduled.prompt
 
 
@@ -107,7 +107,7 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
     assert collective.role.response_policy(collective).starts_turn_for(collective, "alpha")
     assert collective.role.response_policy(collective).starts_turn_for(collective, "beta")
     collective_prompt = ScheduledTurn.incoming(collective).prompt
-    assert "Response policy: collective; channel members may respond" in collective_prompt
+    assert "Response policy: collective; reply if you are answering, or say IGNORE if you are not answering" in collective_prompt
     assert "delivery and history remain #team" in collective_prompt
 
     mentioned = comms.messaging.send_user_message(CommandTarget.named('#team'), "@beta please answer", worktree=Checkout(tmp_path))
@@ -118,8 +118,8 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
     assert mentioned.role.response_policy(mentioned).starts_turn_for(mentioned, "beta")
     assert mentioned.target == "#team"
     mentioned_prompt = ScheduledTurn.incoming(mentioned).prompt
-    assert "addressed especially to: @beta" in mentioned_prompt
-    assert "other channel members may contribute when involved or relevant" in mentioned_prompt
+    assert "mentioned; addressed to @beta;" in mentioned_prompt
+    assert "reply if you are answering, or say IGNORE if you are not answering" in mentioned_prompt
 
     agent_chatter = comms.messaging.send("alpha", "#team", "status only").message
     assert agent_chatter.role.response_policy(agent_chatter) is InformationalPolicy.instance()
@@ -285,7 +285,7 @@ def test_committed_channel_mention_follows_recipient_renames_without_expanding_a
         "final", "observer",
     )
     assert (
-        "addressed especially to: @final"
+        "addressed to @final;"
         in ScheduledTurn.incoming(message, aliases=aliases).prompt
     )
     assert message.mentions[0].thread == "alpha"  # Original wire record is unchanged.

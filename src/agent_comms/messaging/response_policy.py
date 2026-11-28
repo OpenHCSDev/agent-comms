@@ -112,7 +112,7 @@ class CollectivePolicy(ResponsePolicy):
         return tuple(dict.fromkeys(audience))
 
     def guidance(self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
-        return "collective; channel members may respond"
+        return "collective; reply if you are answering, or say IGNORE if you are not answering so you don't leave it on read"
 
 
 class MentionedPolicy(CollectivePolicy):
@@ -133,9 +133,8 @@ class MentionedPolicy(CollectivePolicy):
     def guidance(self, message: ResponseMessageSource, *, aliases: Mapping[str, str] = NO_ALIASES) -> str:
         names = ", ".join(f"@{name}" for name in self.mentioned(message, aliases))
         return (
-            f"mentioned; addressed especially to: {names}; "
-            "other channel members may contribute when involved or relevant; "
-            "no reply is required from uninvolved members"
+            f"mentioned; addressed to {names}; "
+            "reply if you are answering, or say IGNORE if you are not answering so you don't leave it on read"
         )
 
 

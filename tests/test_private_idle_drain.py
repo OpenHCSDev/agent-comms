@@ -18,7 +18,7 @@ from agent_comms.execution.owned_turn import OwnedTurn
 from agent_comms.execution.queued_input import DeliveredInput
 from agent_comms.execution.turn_input_source import NoTurnAcceptance
 from agent_comms.execution.turn_phase import CancellingPhase
-from agent_comms.messaging.messages import AlertKind, InfoKind, Message, NoticeRole
+from agent_comms.messaging.messages import AlertKind, ConversationRole, InfoKind, Message, NoticeRole
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.threads import NativeThread
 from agent_comms.storage.file_observation import FileRevision
@@ -117,7 +117,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(
             await progress.chunk(events.Chunk("committed progress"))
             await progress.committed_progress(events.CommittedProgress("committed progress"))
             assert progress.reply_parts == []
-            assert [(row.body, isinstance(row.role, NoticeRole)) for row in read_history(comms)] == [
+            assert [(row.body, isinstance(row.role, ConversationRole)) for row in read_history(comms)] == [
                 ("committed progress", True),
             ]
             await progress.done(events.Done("refused", False))

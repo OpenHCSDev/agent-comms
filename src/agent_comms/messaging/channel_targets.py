@@ -295,7 +295,18 @@ class NamedTarget(CommandTarget):
 
     guidance_scope = ""
     default_audience = MessageAudience.DIRECT
-    suppresses_ignore_reply: ClassVar[bool] = False
+
+    def keep_on_ignore(self, target: str) -> tuple[str, ...]:
+        """Direct targets keep their reply target even if text matches the triage ignore token."""
+        return (target,)
+
+    def settle_unanswered[Origin](self, origin: Origin) -> tuple[Origin, ...]:
+        """Direct targets never settle unanswered origins as Not answering."""
+        return ()
+
+    def progress_reply_role[Role](self, *, conversation: Role, notice: Role) -> Role:
+        """Mid-turn DM progress stays a non-waking notice so peers do not wake prematurely."""
+        return notice
 
     @abstractmethod
     def display_history(self, views: HistoryViews, project: Checkout) -> ConversationHistoryView:
@@ -569,7 +580,20 @@ class ChannelTarget(NamedTarget):
         return seq > 0
     kind = "channel"
     default_audience = MessageAudience.COLLECTIVE
-    suppresses_ignore_reply: ClassVar[bool] = True
+
+    def keep_on_ignore(self, target: str) -> tuple[str, ...]:
+        """Channel targets suppress bare IGNORE replies instead of posting them to the channel."""
+        del target
+        return ()
+
+    def settle_unanswered[Origin](self, origin: Origin) -> tuple[Origin, ...]:
+        """Channel targets settle unanswered wake origins as Not answering when a turn completes."""
+        return (origin,)
+
+    def progress_reply_role[Role](self, *, conversation: Role, notice: Role) -> Role:
+        """Channel progress stays a conversation message: unmentioned agent posts remain
+        non-waking while explicit @mentions wake their targets and carry read receipts."""
+        return conversation
 
     sigil = "#"
     route: ClassVar[ReplyRoute] = ChannelReply()

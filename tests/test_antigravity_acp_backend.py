@@ -1007,13 +1007,67 @@ for raw in sys.stdin:
             )
             if "1 read" in summary and not agent.inputs.turn_live(sid):
                 break
-        assert "1 read" in summary, f"Expected collective post acknowledged, got {summary!r}"
+        assert summary == "1 read · 1 not answering", (
+            f"Expected suppressed IGNORE reply to settle as Not answering, got {summary!r}"
+        )
         posted_by_agent = [
             m.body for m in comms.bus.inbox("tristan").page.messages if m.sender == thread.name
         ]
         assert posted_by_agent == [], f"IGNORE must never be posted to #model: {posted_by_agent!r}"
     finally:
         await agent.shutdown()
+
+
+def test_progress_reply_role_preserves_channel_mentions_and_keeps_dm_notice() -> None:
+    """Channel committed progress stays ConversationRole (so @mentions wake peers and receipts
+    resolve); DM committed progress stays NoticeRole so mid-turn lines never wake DM peers."""
+    from agent_comms.messaging.channel_targets import CommandTarget
+    from agent_comms.messaging.messages import ConversationRole, NoticeRole
+
+    assert isinstance(
+        CommandTarget.named("#model").progress_reply_role(
+            conversation=ConversationRole(), notice=NoticeRole()
+        ),
+        ConversationRole,
+    )
+    assert isinstance(
+        CommandTarget.named("peer").progress_reply_role(
+            conversation=ConversationRole(), notice=NoticeRole()
+        ),
+        NoticeRole,
+    )
+
+
+def test_harness_consumed_progress_shows_answering_while_live_turn_runs() -> None:
+    """Direct-harness reads promote to Answering while the recipient's active turn runs on them,
+    and return to plain Read once the turn finishes or on earlier turns."""
+    from agent_comms.messaging.frozen_recipient import FrozenRecipient
+    from agent_comms.messaging.message_notification import MessageNotification
+    from agent_comms.messaging.notification_contracts import TurnStartCheck
+    from agent_comms.messaging.notification_progress import (
+        ConsumingProgress,
+        HarnessConsumedProgress,
+    )
+    from agent_comms.nominal.field_codec import ThreadLookup
+
+    class _TurnCheck(TurnStartCheck):
+        def __init__(self, active: bool) -> None:
+            self._active = active
+
+        def turn_started_by(self, updated_at_ms: int) -> bool:
+            del updated_at_ms
+            return self._active
+
+    read_state = HarnessConsumedProgress(1_700_000_000_000)
+    answering = read_state.live_progress(_TurnCheck(True))
+    settled = read_state.live_progress(_TurnCheck(False))
+    assert isinstance(answering, ConsumingProgress)
+    assert settled is read_state
+
+    recipient = FrozenRecipient(ThreadLookup("r-1"), "comms-a")
+    sender = ThreadLookup("user-1")
+    assert MessageNotification.summary((MessageNotification(recipient, sender, answering),)) == "1 read · 1 answering"
+    assert MessageNotification.summary((MessageNotification(recipient, sender, settled),)) == "1 read"
 
 
 @pytest.mark.asyncio

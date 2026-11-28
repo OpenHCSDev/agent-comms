@@ -23,7 +23,7 @@ from agent_comms.execution.turn_lease import TurnState
 from agent_comms.execution.turn_phase import NativePhaseChanged, PublishingPhase
 from agent_comms.execution.turn_progress_reads import ProgressGoalAccount, ProgressTurn
 from agent_comms.messaging.channel_targets import CommandTarget
-from agent_comms.messaging.messages import AlertKind, NoticeRole
+from agent_comms.messaging.messages import AlertKind, ConversationRole, Message, NoticeRole
 from agent_comms.messaging.send_result import SendResult
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.registry.thread_identity import ClaimedIdentity
@@ -62,6 +62,9 @@ class TurnProgress(AgentEventConsumer[Comms]):
         self.session_id, self.turn = session_id, turn
         self.finish_event, self.goals = finish_event, goals
         self.reply_parts: list[str] = []
+        self.delivered_origins: dict[int, Message] = {
+            origin.seq: origin for origin in self.origins if origin.seq > 0
+        }
         self.terminal_error: events.Error | None = None
         self.terminal_failure: TurnFailure = NoTurnFailure()
         self.publication_measurements = PublicationMeasurements()
@@ -161,9 +164,9 @@ class TurnProgress(AgentEventConsumer[Comms]):
     def _publishable_reply_targets(self, text: str) -> tuple[str, ...]:
         if SelectedTriage.suppresses_channel_reply(text):
             return tuple(
-                target
+                kept
                 for target in self.turn.reply_targets
-                if not CommandTarget.named(target).suppresses_ignore_reply
+                for kept in CommandTarget.named(target).keep_on_ignore(target)
             )
         return self.turn.reply_targets
 
@@ -172,11 +175,16 @@ class TurnProgress(AgentEventConsumer[Comms]):
         results: tuple[SendResult, ...] = ()
         if self.turn.reply_targets:
             if progress and "".join(self.reply_parts) == progress:
-                # Pi committed this assistant message before tool work.
-                # Publish it once as visible, non-waking progress; the
-                # final reply contains only subsequent assistant text.
+                # Committed assistant text before tool work or steer handling. Channel
+                # targets keep ConversationRole so @mentions wake peers and receipts resolve;
+                # DMs keep NoticeRole so intermediate lines never wake a peer mid-turn.
                 results = tuple(self.comms.messaging.send(
-                    self.thread_name, target, progress, role=NoticeRole()
+                    self.thread_name,
+                    target,
+                    progress,
+                    role=CommandTarget.named(target).progress_reply_role(
+                        conversation=ConversationRole(), notice=NoticeRole(),
+                    ),
                 ) for target in self._publishable_reply_targets(progress))
                 self.reply_parts.clear()
         if progress:
@@ -243,6 +251,9 @@ class TurnProgress(AgentEventConsumer[Comms]):
                 self.turn_lease.claimed_generation,
             ), owner=self.thread.require_process()),
         )
+        for origin in captured.origins:
+            if origin.seq > 0:
+                self.delivered_origins[origin.seq] = origin
         await CoordinationWork.run_worker(partial(
             self.thread.backend.acknowledge_turn_inputs, self.comms, self.thread, captured.origins,
         ))
@@ -324,8 +335,32 @@ class TurnProgress(AgentEventConsumer[Comms]):
                     published.append(self.comms.messaging.send(
                         self.thread_name, target, reply
                     ))
+        self._settle_unanswered_channel_origins()
         self.comms.agents.recover_completed_turn(self.turn_lease, self.thread.backend)
         return tuple(published)
+
+    def _settle_unanswered_channel_origins(self) -> None:
+        """Settle channel messages delivered to this turn that received no reply as Not answering."""
+        channel_origins = tuple(
+            settled
+            for origin in self.delivered_origins.values()
+            if origin.sender != self.thread_name
+            for settled in CommandTarget.named(origin.target).settle_unanswered(origin)
+        )
+        if not channel_origins:
+            return
+        lookup = self.thread.incarnation.require_recorded().lookup
+        answered_seqs = frozenset(
+            reply.original
+            for reply in self.comms.bus.bus.recipient_replies(
+                tuple((lookup, origin.reference) for origin in channel_origins)
+            )
+        )
+        unanswered = tuple(
+            origin for origin in channel_origins if origin.seq not in answered_seqs
+        )
+        if unanswered:
+            self.thread.backend.ignore_turn_inputs(self.comms, self.thread, unanswered)
 
     def publish_checkpoint(self, terminal: events.Done) -> tuple[SendResult, ...]:
         """Close terminal publication and its original read before ACP delivery."""

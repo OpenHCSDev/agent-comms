@@ -13,11 +13,17 @@ class NotificationEvidenceSource[Evidence](ABC):
     def notification_evidence(self) -> Evidence: ...
 
 
-class RecipientActivityRead[Notice, Assignment, Progress](ABC):
+class TurnStartCheck(ABC):
+    """Whether a live recipient turn is actively working on an input acknowledged at ``updated_at_ms``."""
+
     __slots__ = ()
 
     @abstractmethod
     def turn_started_by(self, updated_at_ms: int) -> bool: ...
+
+
+class RecipientActivityRead[Notice, Assignment, Progress](TurnStartCheck):
+    __slots__ = ()
 
     @abstractmethod
     def displayed_recipient(self, notification, source, reads, document, snapshot): ...
