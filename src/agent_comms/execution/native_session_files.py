@@ -22,6 +22,7 @@ from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_input_proof import NativeInputProof
 from agent_comms.execution.native_session_reopen import NativeSessionIdentity
 from agent_comms.execution.participant_identity import ParticipantIdentity
+from agent_comms.execution.session_revision import ObservedSessionFiles
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.nominal.field_codec import FieldCodec, NullMember, WireName
 from agent_comms.storage.locked_store import DurableFile, PatternFile
@@ -182,7 +183,7 @@ class NativeSessionLocks(NativeTranscriptFiles):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles):
+class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles, ObservedSessionFiles):
     """Bind the existing saved identity to its bus and participant namespace."""
 
     root: Path

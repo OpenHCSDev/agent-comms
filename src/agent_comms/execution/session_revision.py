@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 
-from agent_comms.execution.native_session_files import NativeSessionFiles
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.storage.file_observation import FileRevision
+
+
+class ObservedSessionFiles(ABC):
+    """Saved session file paired with its input-proof sidecar for revision observation."""
+
+    __slots__ = ()
+
+    @property
+    @abstractmethod
+    def session(self) -> Path: ...
+
+    @property
+    @abstractmethod
+    def input_proof(self) -> Path: ...
 
 
 class SessionRevisionUnavailable(ValueError):
@@ -64,7 +78,7 @@ class SessionRevision(SessionObservation):
     input_proof: InputProofRevision
 
     @classmethod
-    def observe(cls, files: NativeSessionFiles) -> SessionObservation:
+    def observe(cls, files: ObservedSessionFiles) -> SessionObservation:
         try:
             native = FileRevision.from_stat(files.session.stat())
             try:
@@ -84,5 +98,5 @@ class SessionRevision(SessionObservation):
     def matches(self, reserved: SessionRevision) -> bool:
         return self == reserved
 
-    def current(self, files: NativeSessionFiles) -> bool:
+    def current(self, files: ObservedSessionFiles) -> bool:
         return self.observe(files).matches(self)
