@@ -27,7 +27,7 @@ from agent_comms.execution.native_runtime_input import (
     NativeRuntimeInput,
     NativeRuntimeTable,
 )
-from agent_comms.execution.private_send_rules import RunningTurnRegistryCheck
+from agent_comms.execution.registry_identity_rules import RunningTurnRegistryCheck
 from agent_comms.execution.proven_source_coverage import (
     CoverageInput,
     NoInjectedInput,

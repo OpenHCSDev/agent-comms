@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import (
     Awaitable,
     Callable,
 )
 from dataclasses import dataclass
-from functools import partial
 from typing import (
     TYPE_CHECKING,
     ClassVar,
@@ -16,18 +15,14 @@ from typing import (
 
 from agent_comms.coordination.assignment_states import (
     AssignmentState,
-    FailedAssignment,
     IgnoredAssignment,
     TriagePendingAssignment,
 )
 from agent_comms.coordination.session import CoordinationSession
-from agent_comms.coordination.work import CoordinationWork
 from agent_comms.coordination.tables.assignments import WakeAssignment
 from agent_comms.coordination.tables.executions import WireOrigin
 from agent_comms.execution.native_input_proof import NativeContextProof
 from agent_comms.execution.native_input_record import TriageNativeExecution
-from agent_comms.execution.selected.result import CoordinatedTurn, publish_native_failure
-from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -42,12 +37,31 @@ from agent_comms.storage.typed_table import TextStorage
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
-    from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.execution.historical_native_inputs import HistoricalNativeInput
     from agent_comms.execution.native_runtime_input import NativeRuntimeInput
     from agent_comms.execution.private_send_stage import TriageNativeSend
     from agent_comms.execution.selected.participant import SelectedParticipant
     from agent_comms.private_send_claim import PrivateSendClaim
+
+
+class TriageContinuation[Participant, Session, Turn](ABC):
+    """Post-triage continuations executed by the runtime owner."""
+
+    @abstractmethod
+    async def full(self, participant: Participant, session: Session, snapshot: object) -> Turn: ...
+
+    @abstractmethod
+    async def ignored(self, participant: Participant, input_id: InputId) -> Turn: ...
+
+    @abstractmethod
+    async def rejected_triage(
+        self,
+        participant: Participant,
+        input_id: InputId,
+        reason: str,
+        *,
+        source_error: Exception,
+    ) -> Turn: ...
 
 
 class InvalidTriageDecision(ValueError):
@@ -102,10 +116,11 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
     def settle(self, session: CoordinationSession, db: Connection, current: WakeAssignment) -> None: ...
 
     @abstractmethod
-    async def continue_turn(
-        self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
-        execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
-    ) -> CoordinatedTurn: ...
+    async def continue_turn[Session, Turn](
+        self, participant: SelectedParticipant, session: Session, input_id: InputId,
+        execution: TriageContinuation[SelectedParticipant, Session, Turn],
+        settled: tuple[WakeAssignment, ...],
+    ) -> Turn: ...
 
 
 @dataclass(frozen=True)
@@ -137,12 +152,13 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
             updated_at_ms=session.now(now),
         )
 
-    async def continue_turn(
-        self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
-        execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
-    ) -> CoordinatedTurn:
-        await CoordinationWork.run_worker(participant.consume_reply_wait)
-        return await CoordinatedTurn.capture(participant, input_id, IgnoredAssignment)
+    async def continue_turn[Session, Turn](
+        self, participant: SelectedParticipant, session: Session, input_id: InputId,
+        execution: TriageContinuation[SelectedParticipant, Session, Turn],
+        settled: tuple[WakeAssignment, ...],
+    ) -> Turn:
+        del session, settled
+        return await execution.ignored(participant, input_id)
 
 
 @dataclass(frozen=True)
@@ -155,10 +171,11 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
         # Deferred until the execution owner atomically engages this exact claim.
         pass
 
-    async def continue_turn(
-        self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
-        execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
-    ) -> CoordinatedTurn:
+    async def continue_turn[Session, Turn](
+        self, participant: SelectedParticipant, session: Session, input_id: InputId,
+        execution: TriageContinuation[SelectedParticipant, Session, Turn],
+        settled: tuple[WakeAssignment, ...],
+    ) -> Turn:
         await participant.require_current()
         created = participant.store.create_after_triage(
             participant.batch.execution_id, WireOrigin,
@@ -193,10 +210,11 @@ class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):
         return answer
 
     @abstractmethod
-    async def continue_turn(
-        self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
-        execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
-    ) -> CoordinatedTurn | None: ...
+    async def continue_turn[Session, Turn](
+        self, participant: SelectedParticipant, session: Session, input_id: InputId,
+        execution: TriageContinuation[SelectedParticipant, Session, Turn],
+        settled: tuple[WakeAssignment, ...],
+    ) -> Turn | None: ...
 
 
 @dataclass(frozen=True)
@@ -207,10 +225,11 @@ class DecidedTriageOutcome(SelectedTriageOutcome):
         return stage.commit(participant.store, participant.identity, claim_scope.input_id,
                             claim_scope.token_digest, context, self.decision)
 
-    async def continue_turn(
-        self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
-        execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
-    ) -> CoordinatedTurn | None:
+    async def continue_turn[Session, Turn](
+        self, participant: SelectedParticipant, session: Session, input_id: InputId,
+        execution: TriageContinuation[SelectedParticipant, Session, Turn],
+        settled: tuple[WakeAssignment, ...],
+    ) -> Turn | None:
         return await self.decision.continue_turn(participant, session, input_id, execution, settled)
 
 
@@ -256,20 +275,15 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
     ) -> AnswerT:
         return await reask(self)
 
-    async def continue_turn(
-        self, participant: SelectedParticipant, session: SelectedSession, input_id: InputId,
-        execution: SelectedExecution, settled: tuple[WakeAssignment, ...],
-    ) -> CoordinatedTurn | None:
-
-        sent = await CoordinationWork.run_worker(partial(
-            publish_native_failure, participant, input_id,
-            self.reason(),
-            source_error=self.error,
-        ))
-
-        return await CoordinatedTurn.capture(
-            participant, input_id, FailedAssignment,
-            notices=sent.notices)
+    async def continue_turn[Session, Turn](
+        self, participant: SelectedParticipant, session: Session, input_id: InputId,
+        execution: TriageContinuation[SelectedParticipant, Session, Turn],
+        settled: tuple[WakeAssignment, ...],
+    ) -> Turn | None:
+        del session, settled
+        return await execution.rejected_triage(
+            participant, input_id, self.reason(), source_error=self.error,
+        )
 
 
 class TriageDecisionRecord(DeclaredFamily, JsonShapeFamily, affix="TriageDecisionRecord"):

@@ -34,6 +34,20 @@ from agent_comms.storage.typed_table import (
 from agent_comms.transcript.transcript_events import ContextTranscript, TranscriptEvent
 
 
+class TranscriptEventsEntry(ABC):
+    """A recorded transcript entry that projects its events under a TranscriptProjection."""
+
+    @abstractmethod
+    def events(self, context: TranscriptProjection) -> list[TranscriptEvent]: ...
+
+
+class TrackedInputEntry(ABC):
+    """A recorded user entry carrying a tracked native input ID."""
+
+    @abstractmethod
+    def require_input_id(self) -> InputId: ...
+
+
 class ProjectedUserMessage[Part](ABC):
     """A user transcript message whose display and parts project through InputDisplay."""
 

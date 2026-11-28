@@ -17,7 +17,10 @@ from pathlib import Path
 
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.errors import IdentityConflict, RetryScheduled
-from agent_comms.execution.diagnostics import record_acquisition_progress, record_request_progress
+from agent_comms.execution.request_diagnostics import (
+    record_acquisition_progress,
+    record_request_progress,
+)
 from agent_comms.execution.following_input_contracts import FollowingPromptBoundary
 from agent_comms.execution.goal_turn_permit import NoLaunchPermit
 from agent_comms.execution.input_drain import InputDrain

@@ -13,9 +13,10 @@ from agent_comms.agent_event_updates import RoutedTurnEventConsumer, TurnEventCo
 from agent_comms.comms import Comms
 from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.acp_failure import FailedNativeTurnOutcome, NativeTurnOutcome
-from agent_comms.execution.diagnostics import record_request_progress, record_terminal_failure
+from agent_comms.execution.diagnostics import record_terminal_failure
 from agent_comms.execution.native_turn_context import ContextObserved
 from agent_comms.execution.publication_measurements import PublicationMeasurements
+from agent_comms.execution.request_diagnostics import record_request_progress
 from agent_comms.execution.runtime_observations import AgentEventConsumer, NativeMetadataObservation
 from agent_comms.execution.selected.triage import SelectedTriage
 from agent_comms.execution.turn_failure import ModelRequestFailed, NoTurnFailure, TurnFailure

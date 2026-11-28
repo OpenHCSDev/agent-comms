@@ -44,7 +44,7 @@ from agent_comms.coordination.tables.response_schema import (
 )
 from agent_comms.coordination.tables.responses import ResponseObligation
 from agent_comms.execution.native_input_owner import RegistryOwner
-from agent_comms.execution.private_send_rules import RunningTurnRegistryCheck
+from agent_comms.execution.registry_identity_rules import RunningTurnRegistryCheck
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messaging.message_bus import MessageBus
 from agent_comms.messaging.messages import (

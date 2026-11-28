@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import ClassVar
 
 from metaclass_registry.mro_dispatch import MroDispatch
 
 from agent_comms.comms import wire
+from agent_comms.coordination.assignment_states import FailedAssignment, IgnoredAssignment
 from agent_comms.coordination.coordinator import Coordination
 from agent_comms.coordination.database import CoordinationStore
 from agent_comms.coordination.errors import (
@@ -23,6 +25,7 @@ from agent_comms.coordination.errors import (
     RetryScheduled,
 )
 from agent_comms.coordination.snapshot import RecoverySnapshot
+from agent_comms.coordination.work import CoordinationWork
 from agent_comms.execution.native_execution import NativeExecution, PackagedNativeExecution
 from agent_comms.execution.native_failures import NativePiUnavailable
 from agent_comms.execution.native_pi import NativePiRpcLaunch
@@ -39,13 +42,14 @@ from agent_comms.execution.selected.participant import (
     NoLivePublication,
     SelectedParticipant,
 )
-from agent_comms.execution.selected.result import CoordinatedTurn
+from agent_comms.execution.selected.result import CoordinatedTurn, publish_native_failure
 from agent_comms.execution.selected.session import SelectedSession
+from agent_comms.execution.selected.triage import TriageContinuation
 from agent_comms.execution.selected.turn import SelectedAttempt, SelectedConsideration
 from agent_comms.execution.turn_failure import RetryableProviderFailure
 from agent_comms.following_inputs import FollowingInputs
 from agent_comms.installer.native_package import VerifiedNativePackage
-from agent_comms.nominal.field_codec import RootId
+from agent_comms.nominal.field_codec import InputId, RootId
 from agent_comms.team.pi_rule_gate import PiRuleGate
 
 
@@ -69,7 +73,12 @@ class ExecutionRoot:
 
 
 @dataclass(kw_only=True)
-class SelectedExecution(ExecutionRoot, PackagedNativeExecution, ConsidersSelectedWork):
+class SelectedExecution(
+    ExecutionRoot,
+    PackagedNativeExecution,
+    ConsidersSelectedWork,
+    TriageContinuation[SelectedParticipant, SelectedSession, CoordinatedTurn],
+):
     max_attempts: ClassVar[int] = RetryableProviderFailure.max_retries + 1
 
     owner_name: str
@@ -125,6 +134,25 @@ class SelectedExecution(ExecutionRoot, PackagedNativeExecution, ConsidersSelecte
         """Direct work and a FULL verdict share one attempt and tool selection."""
         attempt = await SelectedAttempt.engage(participant, snapshot)
         return await attempt.run(self, session, self.action, self.write_authority)
+
+    async def ignored(self, participant: SelectedParticipant, input_id: InputId) -> CoordinatedTurn:
+        await CoordinationWork.run_worker(participant.consume_reply_wait)
+        return await CoordinatedTurn.capture(participant, input_id, IgnoredAssignment)
+
+    async def rejected_triage(
+        self,
+        participant: SelectedParticipant,
+        input_id: InputId,
+        reason: str,
+        *,
+        source_error: Exception,
+    ) -> CoordinatedTurn:
+        sent = await CoordinationWork.run_worker(partial(
+            publish_native_failure, participant, input_id, reason, source_error=source_error,
+        ))
+        return await CoordinatedTurn.capture(
+            participant, input_id, FailedAssignment, notices=sent.notices,
+        )
 
     async def run(
         self, *, publication: MroDispatch = NoLivePublication(),

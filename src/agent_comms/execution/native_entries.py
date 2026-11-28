@@ -50,6 +50,8 @@ from agent_comms.execution.provider_records import ReportedText
 from agent_comms.execution.transcript_routes import (
     InputPresentation,
     NoInputDisplay,
+    TrackedInputEntry,
+    TranscriptEventsEntry,
     TranscriptProjection,
     _SessionRoutes,
 )
@@ -103,7 +105,7 @@ class NoEntryId(NullMember):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RecordedEntry(PiPayload):
+class RecordedEntry(TranscriptEventsEntry, PiPayload):
     """Shared source identity and projection; each journal declares its own clock."""
 
     id: str | NoEntryId = NoEntryId()
@@ -669,7 +671,7 @@ class SessionEntry(NativeEntry):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageEntry(NativeEntry):
+class MessageEntry(TrackedInputEntry, NativeEntry):
     def preserve_evidence(self, raw: dict) -> MessageEntry:
         message = raw[FieldCodec.record_key(type(self), "message")]
         # Opaque display roles must not hide a tracked ID from proof readers.
