@@ -6,9 +6,35 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 import sqlite3
 
+from agent_comms.messaging.channel_targets import ThreadTarget
+from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.message_directions import MessageDirections
 from agent_comms.messaging.message_reference import MessageReference
 from agent_comms.nominal.field_codec import MessageId, ThreadLookup
+
+
+class MessageReferenceRead(ABC):
+    __slots__ = ()
+
+    @property
+    @abstractmethod
+    def reference(self) -> MessageReference: ...
+
+
+class ScopedMessage(MessageReferenceRead):
+    """Addressed message fields checked by display scopes without importing bus tables."""
+    __slots__ = ()
+    sender: str
+    target: str
+    mentions: tuple[ThreadMention, ...]
+    answers: tuple[MessageReference, ...]
+
+    @property
+    @abstractmethod
+    def seq(self) -> int: ...
+
+    @abstractmethod
+    def awaits_answer_from(self, participant: ThreadTarget) -> bool: ...
 
 
 class DirectableMessage[Message](ABC):

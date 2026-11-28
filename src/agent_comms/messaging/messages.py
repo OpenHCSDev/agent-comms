@@ -43,9 +43,12 @@ from agent_comms.messaging.membership_transition import (
 from agent_comms.messaging.mentions import ThreadMention
 from agent_comms.messaging.message_clock_source import MessageClockSource
 from agent_comms.messaging.message_directions import MessageDirections
-from agent_comms.messaging.message_reads import MessageDeliveryRead, PublishedRecord
+from agent_comms.messaging.message_reads import (
+    MessageDeliveryRead,
+    PublishedRecord,
+    ScopedMessage,
+)
 from agent_comms.messaging.message_reference import MessageReference
-from agent_comms.messaging.message_send_reads import MessageReferenceRead
 from agent_comms.messaging.message_sender import PublicSender
 from agent_comms.messaging.page_traversal import LiveCursor, PageCursor
 from agent_comms.messaging.projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
@@ -984,7 +987,8 @@ class MessageInput(MessageClockSource, Addressed, ResponseMessageSource):
 
 @dataclass(frozen=True, slots=True)
 class Message(
-    CompactText, MessageInput, TurnOrigin['Message'], MessageReferenceRead, PublishedRecord['Message'],
+    CompactText, MessageInput, TurnOrigin['Message'], PublishedRecord['Message'],
+    ScopedMessage,
 ):
     """Declares one inter-thread message.
 

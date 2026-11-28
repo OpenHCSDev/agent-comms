@@ -466,12 +466,13 @@ class RouteCounts(ABC):
             raise ValueError("Unread delivery limit must be positive.")
         scope = delivery if scope is None else scope
         predicate, values = scope.index_predicate
+        rendered = MessageInput.render(predicate)
         return tuple(self._route_rows(UnseenDelivery, registry, {delivery.actor: delivery},
             {delivery.actor: seen}, after,
             f''', unread AS (
                 SELECT request.seq,request.target,request.sender,{MessageInput.render('message.{mentions}')}
                 FROM cursors AS request CROSS JOIN "{MessageInput.table.declared_name}" AS message USING(seq)
                 WHERE actor=? AND {seen.unread_rule()}
-            ) SELECT seq,target FROM unread WHERE ({predicate}) AND (? IS NULL OR seq < ?)
+            ) SELECT seq,target FROM unread WHERE ({rendered}) AND (? IS NULL OR seq < ?)
             ORDER BY seq {traversal.seq_order} LIMIT ?''',
             (delivery.actor, *values, traversal.upper, traversal.upper, limit)))
