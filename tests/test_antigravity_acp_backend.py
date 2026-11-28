@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sqlite3
 import sys
 from contextlib import contextmanager
@@ -11,9 +12,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from bus_record_fixture import prepare_native_comms
 
 from agent_comms import agent_events as events
 from agent_comms.agent_backend import AgentBackend, Forks, PlacedCompaction, ThreadServingBackend
+from agent_comms.comms import wire
+from agent_comms.execution.acp import CommsAgent, RetainedOwnerLaunch
 from agent_comms.execution.antigravity_acp import (
     AntigravityAcpPool,
     AntigravityAcpProcess,
@@ -27,17 +31,19 @@ from agent_comms.execution.antigravity_acp_events import (
     AntigravityAcpUpdate,
 )
 from agent_comms.execution.antigravity_backend import AntigravityAcpBackend, AntigravitySession
-from agent_comms.execution.native_arguments import AntigravityProvider, SelectedModel
+from agent_comms.execution.child_process import ProcessIdentity
+from agent_comms.execution.native_arguments import AntigravityProvider, NativeArguments, SelectedModel
 from agent_comms.execution.pi_vocabulary import HighThinkingLevel
 from agent_comms.execution.runtime_observations import AgentInfo, ContextInfo
 from agent_comms.execution.send_outcome import NO_SEND_BOUNDARY
 from agent_comms.execution.session_file import RegistrySessionLocation
 from agent_comms.execution.turn_inbox import InputContent, TurnInbox
+from agent_comms.input_attempt import NotSentInput, ReservedInput
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.projects.checkouts import Checkout, LaunchCheckout
 from agent_comms.registry.thread_management import ForkSpec, NewThreadSpec
 from agent_comms.registry.thread_model import DeclaredModel
-from agent_comms.registry.threads import ChosenModel, NativeThread, Thread
+from agent_comms.registry.threads import ChosenModel, NativeThread, NextTurnConfiguration, Thread
 
 
 _FAKE_ACP_SERVER = """
@@ -1215,6 +1221,62 @@ async def test_antigravity_acp_waking_dm_survives_restart_before_turn_starts(
         assert comms.bus.inbox(thread.name).page.messages == ()
     finally:
         await second_agent.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_drain_direct_inbox_skips_stored_not_sent_without_replaying_or_dismissing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A direct-inbox waking message already settled as NotSentInput must neither
+    loop forever through bind_turn_input/unbound_ordinary_input nor be silently
+    dismissed as non-waking; a fresh subsequent waking message still drains."""
+    root = tmp_path / "comms-root"
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    comms = prepare_native_comms(wire(root))
+    comms.registry.declare(NativeThread("tristan", frozenset(), Checkout(worktree)))
+    thread = comms.registry.declare(NativeThread("agy-unsent", frozenset(), Checkout(worktree)))
+    thread = comms.threads.set_thread_configuration(
+        thread, NextTurnConfiguration(model=ChosenModel("antigravity/gemini-4-neon")),
+    )
+    comms.owners.acquire_thread(thread.name)
+    proc = ProcessIdentity.capture(os.getpid())
+    env = {
+        **os.environ,
+        "AGENT_COMMS_THREAD": thread.name,
+        "PI_WORKTREE": str(worktree),
+        NativeArguments.binary_key: NativeArguments.default_binary,
+    }
+    launch = RetainedOwnerLaunch(process=proc, interpreter=sys.executable, environment=env)
+
+    agent = CommsAgent(comms, auto_wake=True)
+    sid = AcpSessionId(thread.name)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda *_a, **_kw: None)
+    try:
+        agent.sessions.published[sid] = thread.name
+        agent.inputs.state(sid).owned_launch = launch
+
+        first = comms.messaging.send("tristan", thread.name, "PRIOR_UNSENT_11150").message
+        key = first.bus_key(thread)
+        agent.inputs.dispositions.record_originals(
+            ReservedInput(key, first.seq, thread.name, 1, first.target, first.body),
+        )
+        settled = agent.inputs.dispositions.settle_unbound((key,))
+        assert isinstance(settled.lookup(key), NotSentInput)
+
+        await agent.inputs.drain_direct_inbox(sid, thread)
+        assert agent.inputs.state(sid).pending_turns == []
+        # Still unread (never silently dismissed as ignored) and still NotSentInput.
+        assert [m.seq for m in comms.bus.inbox(thread.name).page.messages] == [first.seq]
+        assert isinstance(agent.inputs.dispositions.read((key,)).lookup(key), NotSentInput)
+
+        # A fresh subsequent DM still wakes cleanly without re-scheduling the NotSentInput.
+        second = comms.messaging.send("tristan", thread.name, "FRESH_DM_11151").message
+        await agent.inputs.drain_direct_inbox(sid, thread)
+        pending = agent.inputs.state(sid).pending_turns
+        assert [m.seq for turn in pending for m in turn.origin.messages()] == [second.seq]
+    finally:
+        await agent.shutdown()
 
 
 
