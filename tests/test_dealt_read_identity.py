@@ -17,13 +17,13 @@ from agent_comms.team.prompt_reads import (
     DealtRead,
     DealtSource,
 )
+from agent_comms.team.deal_delivery import ReadSpan
 from agent_comms.team.rule_deal import (
     AuditDue,
     DealRecord,
     MeantRecord,
     Open,
     OpenedReads,
-    ReadSpan,
     SessionAudit,
     StartedDeal,
     Unread,

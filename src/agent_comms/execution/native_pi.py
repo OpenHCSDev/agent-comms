@@ -36,7 +36,7 @@ from agent_comms.execution.selected.session import SelectedSession
 from agent_comms.installer.active_route import ActiveRoute, resolve_comms_route
 from agent_comms.installer.native_package import MANIFEST, SYSTEM_PROMPT, VerifiedNativePackage
 from agent_comms.nominal.field_codec import InputId
-from agent_comms.team.rule_deal import DealDelivery, EmptyDealDelivery, SystemPromptDelivery
+from agent_comms.team.deal_delivery import DealDelivery, EmptyDealDelivery, SystemPromptDelivery
 from agent_comms.transport.native_tool_mode import NativeToolMode
 
 

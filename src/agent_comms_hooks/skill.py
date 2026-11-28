@@ -32,17 +32,19 @@ from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.team.dealt_sources import DealtSources
 from agent_comms.team.package import TeamPackage
 from agent_comms.team.pattern_sources import PostmortemFailure
+from agent_comms.team.deal_delivery import (
+    DealDelivery,
+    EmptyDealDelivery,
+    SystemPromptDelivery,
+)
 from agent_comms.team.rule_deal import (
     AuditDue,
     ClearedDeal,
     CompactedDeal,
     CompactionDeal,
-    DealDelivery,
     DealTrigger,
-    EmptyDealDelivery,
     PrimedDeal,
     StartedDeal,
-    SystemPromptDelivery,
     UnstampedCompactionDeal,
 )
 from agent_comms.team.rule_file import RuleFile

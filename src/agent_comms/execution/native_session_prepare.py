@@ -20,7 +20,7 @@ from agent_comms.execution.runtime_observations import AgentInfo
 from agent_comms.execution.session_retention import NativeSessionRetention
 from agent_comms.installer.native_package import VerifiedNativePackage
 from agent_comms.pi_payloads import StateData
-from agent_comms.team.rule_deal import DealDelivery
+from agent_comms.team.deal_delivery import DealDelivery
 
 
 

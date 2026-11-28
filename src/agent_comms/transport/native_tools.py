@@ -33,7 +33,7 @@ from agent_comms.projects.shell_effects import (
 )
 from agent_comms.registry.thread_identity import OfferedTools, UnobservedTools
 from agent_comms.storage.recorded_time import EventTime
-from agent_comms.team.rule_deal import ReadSpan
+from agent_comms.team.deal_delivery import ReadSpan
 from agent_comms.transport import served_tools
 from agent_comms.transport.native_tool_call import CodingCall, RefusedCodingCall
 from agent_comms.transport.request import ArgumentTool

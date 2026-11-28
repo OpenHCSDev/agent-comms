@@ -88,7 +88,8 @@ from agent_comms.storage.maintenance_barrier import (
 from agent_comms.storage.typed_table import TypedTable, sql_literal
 from agent_comms.team.order import Team
 from agent_comms.team.pi_rule_gate import PiRedeal, PiRuleGate
-from agent_comms.team.rule_deal import ReadSpan, RuleDeal, SessionAudit, StartedDeal
+from agent_comms.team.deal_delivery import ReadSpan
+from agent_comms.team.rule_deal import RuleDeal, SessionAudit, StartedDeal
 from agent_comms.transport.native_tool_transport import ToolListener
 from agent_comms.transport.core_access import LocalCoreAccess
 from agent_comms.transport.tool_caller import PeerCaller

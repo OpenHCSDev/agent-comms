@@ -55,7 +55,7 @@ from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.projects.checkouts import Checkout
 from agent_comms.registry.thread_identity import RecordedThreadIncarnation
 from agent_comms.registry.threads import NativeThread
-from agent_comms.team.rule_deal import EmptyDealDelivery, SystemPromptDelivery
+from agent_comms.team.deal_delivery import EmptyDealDelivery, SystemPromptDelivery
 
 INPUT_ID = InputId('a' * 32)
 DIGEST = 'b' * 64

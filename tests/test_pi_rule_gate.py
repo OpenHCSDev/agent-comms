@@ -27,11 +27,11 @@ from agent_comms.registry.threads import NativeThread
 from agent_comms.task_attachments.owner_notices import MeantNotice, RestartNotice
 from agent_comms.team.package import TeamPackage
 from agent_comms.team.pi_rule_gate import PiRedeal, RulesUnread
+from agent_comms.team.deal_delivery import EmptyDealDelivery
 from agent_comms.team.rule_deal import (
     Asked,
     AuditDue,
     CompactionDealMode,
-    EmptyDealDelivery,
     FullDealMode,
     MeantAnswer,
     MeantRecord,

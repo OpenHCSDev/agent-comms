@@ -30,7 +30,7 @@ from agent_comms.nominal.lifecycle_capability import Unresolved
 from agent_comms.execution.persistent_pi_session import PersistentPiSession
 from agent_comms.registry.activity import ActivityState
 from agent_comms.transport.acp_update_sink import AcpUpdateSink
-from agent_comms.team.rule_deal import EmptyDealDelivery
+from agent_comms.team.deal_delivery import EmptyDealDelivery
 from bus_record_fixture import prepare_native_comms
 from conftest import answer_rules
 from native_backend_fixture import AnnouncedInputStart, NativeBackendFixture

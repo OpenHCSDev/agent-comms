@@ -15,16 +15,15 @@ from agent_comms.team.prompt_reads import (
     DealtRead,
     PromptReads,
 )
+from agent_comms.team.deal_delivery import EmptyDealDelivery, SystemPromptDelivery
 from agent_comms.team.rule_deal import (
     AuditDue,
     DealtRuleGate,
-    EmptyDealDelivery,
     OffDealMode,
     OpenedReads,
     SessionRuleDeal,
     StartedDeal,
     StartupDealMode,
-    SystemPromptDelivery,
     Unaudited,
     Unread,
 )
