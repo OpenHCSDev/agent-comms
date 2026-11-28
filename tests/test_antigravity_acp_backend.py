@@ -762,4 +762,82 @@ for line in sys.stdin:
         await agent.shutdown()
 
 
+@pytest.mark.asyncio
+async def test_antigravity_acp_steers_dm_during_active_persistent_goal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An incoming DM while a persistent goal is active must steer into the running
+    Antigravity ACP turn and record its read receipt instead of sitting stuck on Sent."""
+    import os
+    from bus_record_fixture import prepare_native_comms
+    from agent_comms.comms import wire
+    from agent_comms.execution.acp import CommsAgent, RetainedOwnerLaunch
+    from agent_comms.execution.child_process import ProcessIdentity
+    from agent_comms.execution.native_arguments import NativeArguments
+    from agent_comms.messaging.message_notification import MessageNotification
+    from agent_comms.messaging.notification_evidence import AllOutcomes
+    from agent_comms.registry.threads import NextTurnConfiguration
+
+    fake_script = tmp_path / "fake_agy.py"
+    fake_script.write_text(_FAKE_ACP_SERVER, encoding="utf-8")
+    fake_bin = tmp_path / "fake_agy"
+    fake_bin.write_text(f"#!/bin/sh\nexec {sys.executable} {fake_script} \"$@\"\n", encoding="utf-8")
+    fake_bin.chmod(0o755)
+    monkeypatch.setenv("AGENT_COMMS_AGY_BIN", str(fake_bin))
+
+    root = tmp_path / "comms-root"
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    comms = prepare_native_comms(wire(root))
+    comms.registry.declare(NativeThread("tristan", frozenset(), Checkout(worktree)))
+    thread = comms.registry.declare(NativeThread("agy-goal-steer", frozenset(), Checkout(worktree)))
+    thread = comms.threads.set_thread_configuration(
+        thread, NextTurnConfiguration(model=ChosenModel("antigravity/gemini-4-neon")),
+    )
+    assert thread.backend is AntigravityAcpBackend
+    comms.owners.acquire_thread(thread.name)
+    owner = comms.registry.entry(thread.name).entry.owner_identity
+    proc = ProcessIdentity.capture(os.getpid())
+    env = {
+        **os.environ,
+        "AGENT_COMMS_THREAD": thread.name,
+        "PI_WORKTREE": str(worktree),
+        NativeArguments.binary_key: NativeArguments.default_binary,
+    }
+    launch = RetainedOwnerLaunch(process=proc, interpreter=sys.executable, environment=env)
+
+    agent = CommsAgent(comms, auto_wake=True)
+    sid = AcpSessionId(thread.name)
+    try:
+        await agent.sessions.start_owner(launch, owner)
+        # Active persistent goal whose prompt triggers SLOW_HOLD so the turn stays live
+        # while the human DM arrives.
+        await agent.turns.goals.set_goal(sid, "SLOW_HOLD persistent goal work")
+        for _ in range(80):
+            await asyncio.sleep(0.02)
+            if agent.inputs.turn_live(sid):
+                break
+        assert agent.inputs.turn_live(sid), "Expected active goal turn to be running"
+
+        dm_sent = comms.messaging.send("tristan", thread.name, "GOAL_DM_STEER_42")
+        ref = dm_sent.message.reference
+        summary = ""
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            win = comms.views.message_notifications_for_references(AllOutcomes(), (ref,))
+            summary = MessageNotification.summary(
+                win.outcomes.get((ref.seq, ref.message_id), ())
+            )
+            if "1 read" in summary:
+                break
+        assert "1 read" in summary, (
+            f"DM during active persistent goal stayed stuck instead of steering: {summary!r}"
+        )
+        diag_dir = root / "diagnostics"
+        assert not (list(diag_dir.glob("*.json")) if diag_dir.exists() else [])
+    finally:
+        await agent.shutdown()
+
+
+
 
