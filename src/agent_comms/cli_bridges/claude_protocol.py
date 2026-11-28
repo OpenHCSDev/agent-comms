@@ -357,7 +357,7 @@ class ClaudeReaderPhase(ReadingPhase):
     def window_ended(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
 
     @abstractmethod
-    def missing_tool(self, tool_id: str) -> tuple[RuntimeUpdate, ...]: ...
+    def missing_tool(self, turn: ClaudeTurn, tool_id: str) -> tuple[RuntimeUpdate, ...]: ...
 
     @abstractmethod
     def unturned_finish(self) -> tuple[RuntimeUpdate, ...]: ...
@@ -385,7 +385,8 @@ class CatchUp(ClaudeReaderPhase):
         session.phase = Live()
         return (*self.latest_tools, *self.latest_info, *self.pending)
 
-    def missing_tool(self, tool_id: str) -> tuple[RuntimeUpdate, ...]:
+    def missing_tool(self, turn: ClaudeTurn, tool_id: str) -> tuple[RuntimeUpdate, ...]:
+        del turn, tool_id
         return ()
 
     def unturned_finish(self) -> tuple[RuntimeUpdate, ...]:
@@ -399,8 +400,11 @@ class Live(ClaudeReaderPhase):
     def window_ended(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
 
-    def missing_tool(self, tool_id: str) -> tuple[RuntimeUpdate, ...]:
-        raise ValueError(f'Claude result has no tool start: {tool_id}')
+    def missing_tool(self, turn: ClaudeTurn, tool_id: str) -> tuple[RuntimeUpdate, ...]:
+        """A long-running background tool started before the bounded catch-up window (or an
+        already-settled tool) may deliver a live result without a local start draft; keep the
+        transcript stream alive instead of dropping the session off the bus."""
+        return turn.untracked_tool_result(tool_id)
 
     def unturned_finish(self) -> tuple[RuntimeUpdate, ...]:
         raise ValueError('Claude completed an item before identifying its turn')
@@ -472,6 +476,11 @@ class ClaudeTurn(ABC):
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
                turn_phase: TurnPhase) -> tuple[RuntimeUpdate, ...]: ...
 
+    def untracked_tool_result(self, tool_id: str) -> tuple[RuntimeUpdate, ...]:
+        """What a live tool result without a local start draft contributes to activity."""
+        del tool_id
+        return ()
+
 
 class UnknownTurn(ClaudeTurn):
     def opened(self, record: TimedRecord) -> ClaudeTurn:
@@ -510,6 +519,9 @@ class KnownTurn(ClaudeTurn):
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
                turn_phase: TurnPhase) -> tuple[RuntimeUpdate, ...]:
         return (ActiveItem(self.id, NativeItemId(tool_id), turn_phase),)
+
+    def untracked_tool_result(self, tool_id: str) -> tuple[RuntimeUpdate, ...]:
+        return (ActiveItem(self.id, NativeItemId(tool_id), ModelWaitPhase()),)
 
 
 @dataclass
@@ -557,7 +569,7 @@ class ClaudeSession:
         try:
             tool = self.tools.pop(tool_id)
         except KeyError:
-            return self.phase.missing_tool(tool_id)
+            return self.phase.missing_tool(self.turn, tool_id)
         return (*self.finished(tool_id, tool.completed(record, text, ok)),
                 *self.turn.active(tool_id, self.phase, ModelWaitPhase()),
                 *tool.read_results(record, text, ok, frozenset(
