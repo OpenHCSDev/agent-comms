@@ -7,7 +7,7 @@ from typing import Annotated
 import pytest
 from cutover.carry_shared_team_frames import FlatTeamFrameFile, SharedTeamFrames
 
-from agent_comms.coordination.service_passes import BoardUnavailable
+from agent_comms.coordination.service_passes import ServicePassStore
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     FrozenRecordMember,
@@ -444,3 +444,50 @@ def test_packet_map_caches_by_file_revision_and_invalidates_on_write_or_unlink(
 
     store.path.unlink()
     assert store.packet_map() == {}
+
+
+def test_read_cut_and_read_for_cache_huds_by_file_revision_and_refresh_services(
+    tmp_path, monkeypatch
+):
+    original = tuple(
+        replace(
+            hud,
+            open_pings=tuple(replace(ping, since=RecordedEventTime(10.0)) for ping in hud.open_pings),
+        )
+        for hud in huds()
+    )
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), original)
+    ping_decodes = 0
+    real_from_wire = Ping.from_wire.__func__
+
+    def counted_ping(cls, raw):
+        nonlocal ping_decodes
+        ping_decodes += 1
+        return real_from_wire(cls, raw)
+
+    monkeypatch.setattr(Ping, "from_wire", classmethod(counted_ping))
+
+    first = TeamBoardPublicationStore.read_cut(tmp_path)
+    first_decodes = ping_decodes
+    assert first_decodes > 0
+    first_board = first.huds[0].board
+    first_text = first.huds[0].plain_group_text
+
+    second = TeamBoardPublicationStore.read_cut(tmp_path)
+    assert ping_decodes == first_decodes
+    assert second.huds[0] is first.huds[0]
+    assert second.huds[0].board is first_board
+    assert second.huds[0].plain_group_text is first_text
+
+    ServicePassStore.at(tmp_path).failed("watch", OSError("service down"))
+    refreshed = TeamBoardPublicationStore.read_cut(tmp_path)
+    assert ping_decodes == first_decodes
+    assert "watch" in refreshed.huds[0].services.failing
+    assert refreshed.huds[0].board is first_board
+    assert refreshed.huds[0].plain_group_text is first_text
+
+    changed = (replace(original[0], packets=(), open_pings=()), *original[1:])
+    TeamBoardPublicationStore.replace_all(tmp_path, TeamPlan(), changed)
+    reloaded = TeamBoardPublicationStore.read_cut(tmp_path)
+    assert ping_decodes > first_decodes
+    assert reloaded.huds[0].open_pings == ()
