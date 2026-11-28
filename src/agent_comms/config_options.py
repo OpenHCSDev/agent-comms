@@ -19,7 +19,7 @@ from agent_comms.config_option import (
 from agent_comms.coordination.errors import Refused
 from agent_comms.execution.launch_root import LaunchRoot
 from agent_comms.execution.launch_runtime import LaunchRuntime, ThreadLaunch
-from agent_comms.execution.native_arguments import NativeArguments
+from agent_comms.execution.native_arguments import ModelProvider, NativeArguments
 from agent_comms.execution.pi_commands import (
     GetAvailableModels,
     GetAvailableThinkingLevels,
@@ -74,6 +74,8 @@ class ConfigurationChanges[Configuration](ABC):
 class SessionConfigOption(CatalogConfigOption, declared_name=None):
     """A catalog-backed session option that also applies changes to a Thread."""
 
+    owner: ConfigOptions
+
     @abstractmethod
     async def apply(
         self, owner: ConfigurationChanges[ConfigOptions], thread: Thread, value: str
@@ -126,6 +128,11 @@ class ThinkingLevelConfigOption(ThinkingSetting, SessionConfigOption):
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
         if not thread.model.discovers_thinking_levels:
             return []
+        declared_levels = (
+            thread.model.native(self.owner.agent_args).provider_type.thinking_levels()
+        )
+        if declared_levels:
+            return [CatalogChoice(value=level, name=level.title()) for level in declared_levels]
         data = await GetAvailableThinkingLevels().discover(
             self.owner.launch.binary,
             thread.model.native(self.owner.agent_args).argv,
@@ -227,6 +234,17 @@ class DiscoveredModels(ModelCatalog):
                         name=model.catalog_label(text),
                         value=text,
                         description=model.catalog_description(),
+                    ),
+                )
+        for provider in ModelProvider.members_with(ModelProvider):
+            for model_id, label, description in provider.catalog_models():
+                qualified = f"{provider.declared_name}/{model_id}"
+                seen.setdefault(
+                    qualified,
+                    CatalogChoice(
+                        name=label,
+                        value=qualified,
+                        description=description,
                     ),
                 )
         return list(seen.values())

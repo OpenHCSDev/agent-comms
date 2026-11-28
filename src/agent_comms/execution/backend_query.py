@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC
+from abc import ABC, abstractmethod
 
 
 class BackendQuery(ABC):
@@ -19,3 +19,9 @@ class ContextCommitProof(ABC):
 
 class TurnInputContent(ABC):
     """Prepared input payload handed to RunsTurns.run_turn."""
+
+    text: str
+
+    @abstractmethod
+    def acp_prompt_blocks(self) -> list[dict[str, object]]:
+        """Render this input as ACP prompt content blocks."""

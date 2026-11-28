@@ -242,6 +242,16 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
         del session_file
         return ContextSizes.unrecorded()
 
+    @classmethod
+    def catalog_models(cls) -> tuple[tuple[str, str, str], ...]:
+        """Declared `(model_id, label, description)` choices owned directly by this provider."""
+        return ()
+
+    @classmethod
+    def thinking_levels(cls) -> tuple[str, ...]:
+        """Static thinking levels owned by this provider, or empty to query Pi dynamically."""
+        return ()
+
 
 class NoSelectedModel(ModelProvider, declared_name=None):
     """A thread with no native model selected."""
@@ -262,6 +272,28 @@ class OpenAIProvider(ModelProvider, declared_name="openai"):
 
 class OpenAICodexProvider(ModelProvider, declared_name="openai-codex"):
     """Declared by name."""
+
+
+class AntigravityProvider(ModelProvider, declared_name="antigravity"):
+    """Antigravity models multiplexed over a single shared ``agy acp`` process."""
+
+    MODELS: ClassVar[tuple[tuple[str, str, str], ...]] = (
+        ("gemini-4-neon", "Gemini 4 Neon (Antigravity ACP)", "Shared multiplexed agy acp session"),
+        ("gemini-4-carbon", "Gemini 4 Carbon (Antigravity ACP)", "Shared multiplexed agy acp session"),
+        ("gemini-4-argon", "Gemini 4 Argon (Antigravity ACP)", "Shared multiplexed agy acp session"),
+        ("gemini-4-hydrogen", "Gemini 4 Hydrogen (Antigravity ACP)", "Shared multiplexed agy acp session"),
+        ("claude-opus-5-5", "Claude Opus 5.5 (Antigravity ACP)", "Shared multiplexed agy acp session"),
+        ("claude-sonnet-5-5", "Claude Sonnet 5.5 (Antigravity ACP)", "Shared multiplexed agy acp session"),
+    )
+    LEVELS: ClassVar[tuple[str, ...]] = ("low", "medium", "high", "xhigh")
+
+    @classmethod
+    def catalog_models(cls) -> tuple[tuple[str, str, str], ...]:
+        return cls.MODELS
+
+    @classmethod
+    def thinking_levels(cls) -> tuple[str, ...]:
+        return cls.LEVELS
 
 
 class ClmLocalProvider(ModelProvider, declared_name="clm-local"):

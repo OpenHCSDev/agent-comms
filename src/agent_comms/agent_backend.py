@@ -25,6 +25,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms import agent_events as events
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.agent_event import AgentEvent
 from agent_comms.execution.backend_query import (
@@ -36,16 +37,27 @@ from agent_comms.execution.backend_query import (
 from agent_comms.execution.child_process import NoProcess, ProcessState
 from agent_comms.execution.history_view import OwnHistory
 from agent_comms.execution.launch_runtime import LaunchRuntime
+from agent_comms.execution.native_arguments import ModelProvider
 from agent_comms.execution.pi_vocabulary import CompactionReason
 from agent_comms.execution.session_revision import NoSessionObservation, SessionObservation
 from agent_comms.execution.transcript_cursor_reads import (
     TranscriptHistorySource,
     TranscriptRuntime,
 )
+from agent_comms.execution.transcript_sources import TranscriptCursor
+from agent_comms.execution.turn_lease import TurnLeaseFence
 from agent_comms.execution.turn_outcome import TurnOutcome
+from agent_comms.installer.harness_install import HarnessSession
+from agent_comms.messaging.message_reference import MessageReference
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.routing import TurnRouting
 from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMember
-from agent_comms.nominal.field_codec import AcpSessionId, InputId
+from agent_comms.nominal.field_codec import AcpSessionId, InputId, TurnId
 from agent_comms.pi_counts import PiCount
+from agent_comms.registry.thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
 from agent_comms.registry.thread_model import ThreadModel, UndeclaredModel
 from agent_comms.transport.tool_result import DeclaredReply
 
@@ -53,6 +65,82 @@ if TYPE_CHECKING:
     from agent_comms.execution.owned_turn import TurnDelivery
     from agent_comms.execution.turn_runner import TurnRunner
     from agent_comms.registry.threads import Thread
+
+
+class TurnPublicationRecorder(ABC):
+    """Transcript store capability that joins a completed native turn to committed wire rows."""
+
+    @abstractmethod
+    def record_native_turn_publication(
+        self,
+        *,
+        lease: TurnLeaseFence,
+        checkpoint: TranscriptCursor,
+        routing: TurnRouting,
+        published: tuple[MessageReference, ...],
+        incarnation: RecordedThreadIncarnation,
+        thread: Thread,
+    ) -> None: ...
+
+
+class ThreadSettingApplier[Configuration, Command](ABC):
+    """Configuration owner capability applying stored model/thinking updates for a backend."""
+
+    @abstractmethod
+    async def configure_pi_thread(
+        self, configuration: Configuration, thread: Thread, command: Command
+    ) -> None: ...
+
+    @abstractmethod
+    async def store_direct_setting(self, thread: Thread, command: Command) -> None: ...
+
+
+class OwnedInboxDrainer(ABC):
+    """Input drain capability serving either private-N/K Pi or direct ACP threads."""
+
+    @abstractmethod
+    async def drain_private_inbox(self, session_id: AcpSessionId) -> None: ...
+
+    @abstractmethod
+    async def drain_direct_inbox(self, session_id: AcpSessionId, thread: Thread) -> None: ...
+
+
+class TurnInputAcknowledger(ABC):
+    """Composition-root capability recording durable delivery acknowledgements for direct inputs."""
+
+    @abstractmethod
+    def acknowledge_direct_turn_inputs(
+        self,
+        thread: Thread,
+        origins: tuple[Message, ...],
+        *,
+        bridge: type[HarnessSession],
+    ) -> None: ...
+
+
+class TurnTranscriptSink:
+    """Per-turn transcript publisher for backends whose history lives in ``ExternalTranscript``."""
+
+    async def on_thinking(self, text: str) -> None:
+        del text
+
+    async def on_chunk(self, text: str) -> None:
+        del text
+
+    async def on_tool_start(self, event: events.ToolStart) -> None:
+        del event
+
+    async def on_tool_end(self, event: events.ToolEnd) -> None:
+        del event
+
+    def on_committed_progress(self, text: str, published: tuple[MessageReference, ...]) -> None:
+        del text, published
+
+    def on_finish(self, published: tuple[MessageReference, ...]) -> None:
+        del published
+
+    def on_abort(self) -> None:
+        pass
 
 
 class BackendDeclarationError(TypeError):
@@ -96,6 +184,26 @@ class RuntimeLocation(DeclaredFamily, TranscriptRuntime, affix='Runtime'):
 
     def transcript_cursor(self, frontier, cut, *, source):
         return frontier.cursor(source.read_key, cut.offset, file=cut.file_identity())
+
+    def record_turn_publication(
+        self,
+        transcripts: TurnPublicationRecorder,
+        *,
+        lease: TurnLeaseFence,
+        checkpoint: TranscriptCursor,
+        routing: TurnRouting,
+        published: tuple[MessageReference, ...],
+        incarnation: RecordedThreadIncarnation,
+        thread: Thread,
+    ) -> None:
+        transcripts.record_native_turn_publication(
+            lease=lease,
+            checkpoint=checkpoint,
+            routing=routing,
+            published=published,
+            incarnation=incarnation,
+            thread=thread,
+        )
 
     def history_locations(self, thread, registry, visited):
         yield self, OwnHistory()
@@ -292,7 +400,53 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
 
     location_type: ClassVar[type[RuntimeLocation]]
     event_kinds: ClassVar[frozenset[str]]
+    provider_type: ClassVar[type[ModelProvider]] = ModelProvider
     _sealed: ClassVar[bool] = False
+
+    @classmethod
+    def for_provider(cls, provider: type[ModelProvider]) -> type[AgentBackend]:
+        """Resolve the backend declared for ``provider``, defaulting to ``NewThreadBackend``."""
+        for member in AgentBackend.members_with(AgentBackend):
+            if member.provider_type is provider:
+                return member
+        return NewThreadBackend.selected()
+
+    @classmethod
+    def configured_for(cls, provider: type[ModelProvider]) -> type[AgentBackend]:
+        """Backend a thread on ``cls`` moves to when configured with a model from ``provider``."""
+        return cls.for_provider(provider)
+
+    @classmethod
+    async def apply_setting[Configuration, Command](
+        cls,
+        owner: ThreadSettingApplier[Configuration, Command],
+        configuration: Configuration,
+        thread: Thread,
+        command: Command,
+    ) -> None:
+        """Apply one runtime setting change (`SetModel` or `SetThinkingLevel`) for this backend."""
+        await owner.configure_pi_thread(configuration, thread, command)
+
+    @classmethod
+    async def drain_owned_inbox(
+        cls,
+        inputs: OwnedInboxDrainer,
+        session_id: AcpSessionId,
+        thread: Thread,
+    ) -> None:
+        """Drain this thread's inbox inside the worker host."""
+        del thread
+        await inputs.drain_private_inbox(session_id)
+
+    @classmethod
+    def acknowledge_turn_inputs(
+        cls,
+        acknowledger: TurnInputAcknowledger,
+        thread: Thread,
+        origins: tuple[Message, ...],
+    ) -> None:
+        """Record model-context delivery acknowledgements when a backend starts origins."""
+        del acknowledger, thread, origins
 
     async def context_for_input(self, thread, context):
         return context
@@ -351,6 +505,17 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     @classmethod
     def as_native_backend(cls, incoming: type[AgentBackend]) -> type[AgentBackend]:
         return cls
+
+    @classmethod
+    def turn_transcript_sink(
+        cls,
+        root: Path,
+        incarnation: ThreadIncarnation,
+        turn_id: TurnId,
+        opening: tuple[MessageReference, ...],
+    ) -> TurnTranscriptSink:
+        del root, incarnation, turn_id, opening
+        return TurnTranscriptSink()
 
     @classmethod
     def seal(cls) -> None:

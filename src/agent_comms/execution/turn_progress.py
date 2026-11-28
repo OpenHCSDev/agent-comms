@@ -72,6 +72,12 @@ class TurnProgress(AgentEventConsumer[Comms]):
             sync_goal_execution=sync_goals,
             session_id=session_id,
         )
+        self.transcript_sink = self.thread.backend.turn_transcript_sink(
+            self.comms.root,
+            self.thread.incarnation,
+            self.turn_lease.turn_id,
+            tuple(origin.reference for origin in self.origins if origin.seq > 0),
+        )
 
     @property
     def thread(self):
@@ -131,10 +137,15 @@ class TurnProgress(AgentEventConsumer[Comms]):
     async def provider_usage(self, event: events.ProviderUsage) -> None:
         await CoordinationWork.run_worker(partial(self.goals.provider_usage, event))
 
+    @handles(events.Thinking)
+    async def thinking(self, event: events.Thinking) -> None:
+        await self.transcript_sink.on_thinking(event.text or "")
+
     @handles(events.Chunk)
     async def chunk(self, event: events.Chunk) -> None:
         if self.turn.reply_targets:
             self.reply_parts.append(event.text)
+        await self.transcript_sink.on_chunk(event.text)
 
     @handles(events.CommittedProgress)
     async def committed_progress(self, event: events.CommittedProgress) -> None:
@@ -147,6 +158,7 @@ class TurnProgress(AgentEventConsumer[Comms]):
 
     def publish_progress(self, progress: str) -> tuple[SendResult, ...]:
         """Join the committed notice and consume its streamed text together."""
+        results: tuple[SendResult, ...] = ()
         if self.turn.reply_targets:
             if progress and "".join(self.reply_parts) == progress:
                 # Pi committed this assistant message before tool work.
@@ -156,8 +168,11 @@ class TurnProgress(AgentEventConsumer[Comms]):
                     self.thread_name, target, progress, role=NoticeRole()
                 ) for target in self.turn.reply_targets)
                 self.reply_parts.clear()
-                return results
-        return ()
+        if progress:
+            self.transcript_sink.on_committed_progress(
+                progress, tuple(result.message.reference for result in results)
+            )
+        return results
 
     @handles(events.Error)
     async def error(self, event: events.Error) -> object:
@@ -209,13 +224,17 @@ class TurnProgress(AgentEventConsumer[Comms]):
 
     @handles(events.InputStarted)
     async def input_started(self, event: events.InputStarted) -> None:
-        await event.captured(self.inputs, self.session_id).started(
+        captured = event.captured(self.inputs, self.session_id)
+        await captured.started(
             self.inputs, self.session_id,
             LiveQueueScope(session_id=self.session_id, claimed_identity=ClaimedIdentity(
                 self.turn_lease.identity.incarnation,
                 self.turn_lease.claimed_generation,
             ), owner=self.thread.require_process()),
         )
+        await CoordinationWork.run_worker(partial(
+            self.thread.backend.acknowledge_turn_inputs, self.comms, self.thread, captured.origins,
+        ))
 
     async def before_native_metadata(self, event: NativeMetadataObservation) -> None:
         await event.session_file.attach(self.turn.attach_native_session)
@@ -223,8 +242,13 @@ class TurnProgress(AgentEventConsumer[Comms]):
     async def after_native_metadata(self, event: NativeMetadataObservation) -> None:
         await self.sessions.observe_native_configuration(self.session_id, self.thread_name, event)
 
+    @handles(events.ToolStart)
+    async def tool_started(self, event: events.ToolStart) -> None:
+        await self.transcript_sink.on_tool_start(event)
+
     @handles(events.ToolEnd)
     async def tool_ended(self, event: events.ToolEnd) -> None:
+        await self.transcript_sink.on_tool_end(event)
         await self.sessions.sync_identity(self.session_id)
         await CoordinationWork.run_worker(partial(self.goals.tool_ended, event))
 
@@ -272,11 +296,13 @@ class TurnProgress(AgentEventConsumer[Comms]):
         published: list[SendResult] = []
 
         def record_publication() -> None:
+            published_refs = tuple(result.message.reference for result in published)
+            self.transcript_sink.on_finish(published_refs)
             self.comms.transcripts.record_turn_publication(
                 lease=self.turn_lease,
                 checkpoint=self.checkpoint,
                 routing=self.routing,
-                published=tuple(result.message.reference for result in published),
+                published=published_refs,
             )
 
         with ExitStack() as publications:
@@ -294,6 +320,7 @@ class TurnProgress(AgentEventConsumer[Comms]):
         if terminal.ok:
             return self.publish_success()
         else:
+            self.transcript_sink.on_abort()
             # Streamed chunks were provisional. A failed or missing terminal
             # result cannot turn them into a completed wire reply. Keep the
             # failure notice non-waking, including for human reply targets.

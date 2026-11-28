@@ -399,17 +399,11 @@ class InputReservation(Generic[ReservedQueuedInput]):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class DeliveredInput(QueuedInput):
-    """A pending bus message handed to its recipient's running turn.
-
-    Its assignment is paused while the turn holds it. A proved start settles it
-    as delivered; an input never written returns it to pending for an ordinary
-    wake. One written without a proved start stays paused and is never resent.
-    """
+class BusDeliveredInput(QueuedInput):
+    """A bus message handed to its recipient's running turn as a following steer."""
 
     bus_key: InputKey
     message: Message
-    assignment: WakeAssignment
 
     @property
     def key(self) -> InputKey:
@@ -426,12 +420,126 @@ class DeliveredInput(QueuedInput):
             origins=(self.message,),
         )
 
+    @staticmethod
+    async def _restore_unplaced(
+        inputs: InputDrain, session_id: AcpSessionId,
+        reserved: list[tuple[BusDeliveredInput, InputContent]],
+    ) -> None:
+        # Capture the loop-owned transfer before the first await; a turn may
+        # retire its placed inputs while an unplaced input is being restored.
+        placed = inputs.state(session_id).queued
+        unplaced = tuple(
+            item for item, _content in reserved if placed.get(item.input_id) is not item
+        )
+        for item in unplaced:
+            await item.not_started(inputs)
+
+    async def dispatch(self, turns: TurnRunner, session_id: AcpSessionId, name: str) -> None:
+        raise InputHandoffRefused("A bus message its turn never took wakes its owner instead")
+
+    def after_clear(self) -> Self:
+        return self  # Clearing the user's queue cannot withdraw a bus message.
+
+    def restore_after_turn(self) -> tuple[QueuedInput, ...]:
+        return ()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DirectDeliveredInput(BusDeliveredInput):
+    """A direct-inbox bus message steered into a running turn without cohort locking."""
+
+    @classmethod
+    def reserve_direct(
+        cls, inputs: InputDrain, name: str,
+        messages: tuple[Message, ...],
+        sources: tuple[TurnInputSource, ...],
+        reserved: list[tuple[BusDeliveredInput, InputContent]],
+    ) -> None:
+        with inputs.comms.registry.store.current_snapshot() as cut:
+            accepted = messages[:max(cls.remaining_capacity(inputs, sources), 0)]
+            if not accepted:
+                return
+            snapshot = cut.snapshot
+            canonical = snapshot.canonical_name(name)
+            owner = snapshot.threads[canonical]
+            context = QueuedInputContext.capture(owner, snapshot.claimed_identity(canonical))
+            document = inputs.dispositions.read(tuple(
+                message.bus_key(owner) for message in accepted
+            ))
+            for message in accepted:
+                key = message.bus_key(owner)
+                if document.lookup(key).is_stored():
+                    continue
+                prompt = ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt
+                row = ReservedInput(
+                    key, message.seq, canonical, context.claimed_identity.claimed_generation,
+                    message.target, prompt,
+                )
+                with ExitStack() as ownership:
+                    inputs.dispositions.reserve_originals(row, ownership=ownership)
+                    reserved.append((
+                        cls(
+                            text=prompt, echo=False, context=context,
+                            input_id=InputId.mint(), prompt=prompt,
+                            bus_key=key, message=message,
+                        ),
+                        InputContent(text=prompt),
+                    ))
+                    ownership.pop_all()
+
+    @classmethod
+    async def deliver_direct(
+        cls, inputs: InputDrain, session_id: AcpSessionId, owner: Thread,
+        messages: tuple[Message, ...],
+    ) -> int:
+        """Steer newly arrived waking bus messages directly into a live turn's inbox."""
+        if not messages:
+            return 0
+        turn = (await inputs.effects.turns.active_backend_turn(session_id)).turn
+        if not turn.has_source():
+            return 0
+        inbox = turn.require_inbox()
+        reserved: list[tuple[BusDeliveredInput, InputContent]] = []
+        placed_count = 0
+        async with AsyncExitStack() as rollback:
+            rollback.push_async_callback(cls._restore_unplaced, inputs, session_id, reserved)
+            async with inputs.queue_lock:
+                sources = tuple(inputs.state(session_id).following.values())
+                await Coordination.run_worker(partial(
+                    cls.reserve_direct, inputs, owner.name, messages, sources, reserved,
+                ))
+                for item, content in reserved:
+                    try:
+                        item.place(inputs, session_id, inbox, content)
+                        placed_count += 1
+                    except InputHandoffRefused:
+                        break
+        return placed_count
+
+    async def started(self, inputs: InputDrain) -> None:
+        """Delivery acknowledgement is recorded durably by TurnProgress.input_started."""
+
+    async def not_started(self, inputs: InputDrain) -> None:
+        await Coordination.run_worker(partial(inputs.finish_original_inputs, (self.key,)))
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DeliveredInput(BusDeliveredInput):
+    """A pending bus message handed to its recipient's running turn.
+
+    Its assignment is paused while the turn holds it. A proved start settles it
+    as delivered; an input never written returns it to pending for an ordinary
+    wake. One written without a proved start stays paused and is never resent.
+    """
+
+    assignment: WakeAssignment
+
     @classmethod
     def reserve_pending(
         cls, inputs: InputDrain, name: str, root_id: RootId,
         pending: tuple[tuple[Delivered, WakeAssignment], ...],
         sources: tuple[TurnInputSource, ...],
-        reserved: list[tuple[Self, InputContent]],
+        reserved: list[tuple[BusDeliveredInput, InputContent]],
     ) -> None:
         """Fill the original reservation scope under its current registry owner.
 
@@ -483,20 +591,6 @@ class DeliveredInput(QueuedInput):
                             InputContent(text=rendered.text, contributions=rendered.contributions),
                         ))
                         ownership.pop_all()
-
-    @staticmethod
-    async def _restore_unplaced(
-        inputs: InputDrain, session_id: AcpSessionId,
-        reserved: list[tuple[DeliveredInput, InputContent]],
-    ) -> None:
-        # Capture the loop-owned transfer before the first await; a turn may
-        # retire its placed inputs while an unplaced input is being restored.
-        placed = inputs.state(session_id).queued
-        unplaced = tuple(
-            item for item, _content in reserved if placed.get(item.input_id) is not item
-        )
-        for item in unplaced:
-            await item.not_started(inputs)
 
     @classmethod
     async def recover_interrupted(
@@ -588,7 +682,7 @@ class DeliveredInput(QueuedInput):
         pending = await Coordination.run_read_async(store_path, read)
         if not pending:
             return
-        reserved: list[tuple[Self, InputContent]] = []
+        reserved: list[tuple[BusDeliveredInput, InputContent]] = []
         async with AsyncExitStack() as rollback:
             rollback.push_async_callback(cls._restore_unplaced, inputs, session_id, reserved)
             async with inputs.queue_lock:
@@ -601,15 +695,6 @@ class DeliveredInput(QueuedInput):
                         item.place(inputs, session_id, inbox, content)
                     except InputHandoffRefused:
                         break
-
-    async def dispatch(self, turns: TurnRunner, session_id: AcpSessionId, name: str) -> None:
-        raise InputHandoffRefused("A bus message its turn never took wakes its owner instead")
-
-    def after_clear(self) -> DeliveredInput:
-        return self  # Clearing the user's queue cannot withdraw a bus message.
-
-    def restore_after_turn(self) -> tuple[QueuedInput, ...]:
-        return ()
 
     async def settle(self, inputs: InputDrain, state) -> None:
         await Coordination.run_async(

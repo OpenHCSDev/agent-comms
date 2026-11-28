@@ -303,6 +303,14 @@ class ChosenModel(NamedModel, ModelChoice):
         SelectedModel.decode(self.text)
 
     def configured(self, thread: Thread) -> Thread:
+        target_backend = thread.backend.configured_for(SelectedModel.decode(self.text).provider_type)
+        if target_backend is not thread.backend:
+            return replace(
+                thread,
+                model=DeclaredModel(self.text),
+                backend=target_backend,
+                session_file=NoSessionFile(),
+            )
         return replace(thread, model=DeclaredModel(self.text))
 
     def apply_to_thread(
@@ -1301,8 +1309,9 @@ def current_thread(registry) -> Thread:
         process_identity=ProcessIdentity.capture(os.getpid()))
 
 
-# These imports register both runtime declarations before AgentBackend.seal().
+# These imports register all runtime declarations before AgentBackend.seal().
 from agent_comms import pi_native_backend  # noqa: E402, F401
+from agent_comms.execution import antigravity_backend  # noqa: E402, F401
 from agent_comms.execution import pi_durable_backend  # noqa: E402, F401
 
 

@@ -20,6 +20,7 @@ from agent_comms.acp_extension import (
     QueueChangedUpdate,
     QueueScope,
 )
+from agent_comms.agent_backend import OwnedInboxDrainer
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
 from agent_comms.coordination.cohort import next_sealed_assignment
@@ -46,7 +47,12 @@ from agent_comms.execution.input_key import InputKey
 from agent_comms.execution.native_input_owner import RegistryOwner
 from agent_comms.execution.proven_source_coverage import SourcePrefix
 from agent_comms.execution.queue_publication import QueuePublication
-from agent_comms.execution.queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
+from agent_comms.execution.queued_input import (
+    DeliveredInput,
+    DirectDeliveredInput,
+    InputHandoffRefused,
+    QueuedInput,
+)
 from agent_comms.execution.reservation_rules import (
     ReservationRule,
     ReservationViolationError,
@@ -84,6 +90,8 @@ from agent_comms.input_attempt import (
 )
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.messaging.bus import Bus
+from agent_comms.messaging.messages import Message
+from agent_comms.messaging.read_basis import DisplayBasis
 from agent_comms.messaging.routing import ScheduledTurn
 from agent_comms.messaging.watched import ChangeSignal, FileLifetimeSource, FileSource
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -1290,7 +1298,7 @@ class OwnerSession(DrainedSession, OwnedSessionLifetime):
         return (*super().producers(), self.auth_observer)
 
 
-class InputDrain(InputObservation, QueuePublication, InputEventSource):
+class InputDrain(OwnedInboxDrainer, InputObservation, QueuePublication, InputEventSource):
     async def begin_observation(
         self, state: DrainedSession, entry: RegistryEntry,
     ) -> RegistryEntry:
@@ -1499,13 +1507,97 @@ class InputDrain(InputObservation, QueuePublication, InputEventSource):
         every drain that finds it."""
         await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
 
+    async def drain_private_inbox(self, session_id: AcpSessionId) -> None:
+        private_root = self.comms.owners.require_private_launch().wire_root_id
+        await self._drain_private_if_changed(session_id, private_root)
+        WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
+
+    async def _steer_direct_inbox(self, session_id: AcpSessionId, thread: Thread) -> None:
+        turn = (await self.effects.turns.active_backend_turn(session_id)).turn
+        if not turn.has_source():
+            return
+
+        def capture_pending() -> tuple[tuple[Thread, tuple[Message, ...], DisplayBasis], ...]:
+            if self.comms.owners.maintenance.read().turn_pending:
+                return ()
+            snapshot = self.comms.registry.snapshot()
+            owner = snapshot.require(thread.name)
+            if snapshot.status(owner.name).is_stopped() or owner.goal.accepts_following_handoff():
+                return ()
+            inbox = self.comms.bus.inbox(owner.name)
+            messages = tuple(sorted(inbox.page.messages, key=lambda item: item.seq))
+            if not messages:
+                return ()
+            waking = tuple(
+                message
+                for message in messages
+                if message.sender != owner.name
+                and message.role.response_policy(message).starts_turn_for(
+                    message, owner.name, snapshot.aliases
+                )
+            )
+            if not waking:
+                self.comms.bus.reads.mark_displayed(owner.name, inbox.displayed)
+                return ()
+            return ((owner, waking, inbox.displayed),)
+
+        for owner, waking, displayed in await Coordination.run_worker(capture_pending):
+            placed = await DirectDeliveredInput.deliver_direct(self, session_id, owner, waking)
+            if placed:
+                await Coordination.run_worker(
+                    partial(self.comms.bus.reads.mark_displayed, owner.name, displayed)
+                )
+
+    async def drain_direct_inbox(self, session_id: AcpSessionId, thread: Thread) -> None:
+        if self.background_wakes_disabled:
+            return
+        if self.turn_live(session_id):
+            await self._steer_direct_inbox(session_id, thread)
+            return
+        state = self.state(session_id)
+        if state.pending_turns:
+            WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
+            return
+
+        def capture() -> tuple[ScheduledTurn, ...]:
+            if self.comms.owners.maintenance.read().turn_pending:
+                return ()
+            snapshot = self.comms.registry.snapshot()
+            owner = snapshot.require(thread.name)
+            if snapshot.status(owner.name).is_stopped():
+                return ()
+            if owner.goal.accepts_following_handoff():
+                return ()
+            inbox = self.comms.bus.inbox(owner.name)
+            messages = tuple(sorted(inbox.page.messages, key=lambda item: item.seq))
+            if not messages:
+                return ()
+            self.comms.bus.reads.mark_displayed(owner.name, inbox.displayed)
+            waking = tuple(
+                message
+                for message in messages
+                if message.sender != owner.name
+                and message.role.response_policy(message).starts_turn_for(
+                    message, owner.name, snapshot.aliases
+                )
+            )
+            return tuple(
+                ScheduledTurn.incoming(message, aliases=snapshot.aliases)
+                for message in waking
+            )
+
+        turns = await Coordination.run_worker(capture)
+        if not turns:
+            return
+        state.pending_turns.extend(turns)
+        WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
+
     async def drain_owned_inbox(self, session_id: AcpSessionId) -> None:
         # The revision read below checks this root against the bus marker and
         # the checkpoint, so no separate exclusive bus read is needed here.
         await self.state(session_id).turn.resume(self.comms.owners.maintenance)
-        private_root = self.comms.owners.require_private_launch().wire_root_id
-        await self._drain_private_if_changed(session_id, private_root)
-        WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
+        entry = (await self._own_entry(session_id)).entry
+        await entry.thread.backend.drain_owned_inbox(self, session_id, entry.thread)
 
     @property
     def background_wakes_disabled(self) -> bool:

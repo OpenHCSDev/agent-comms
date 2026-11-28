@@ -6,6 +6,7 @@ from functools import partial
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination.work import CoordinationWork
+from agent_comms.messaging.messages import Message
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.nominal.lifecycle_capability import Unresolved
 
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 
 class StartedInput:
     notice_text: ClassVar[str | None] = None
+    origins: ClassVar[tuple[Message, ...]] = ()
 
     def started_update_of(self, row: StartedRow, update: InputStartedUpdate) -> InputStartedUpdate:
         return update

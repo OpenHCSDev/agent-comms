@@ -4,14 +4,60 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agent_comms.agent_backend import AgentBackend, FailedCompaction, RuntimeLocation
+from agent_comms.agent_backend import (
+    AgentBackend,
+    FailedCompaction,
+    RuntimeLocation,
+    TurnPublicationRecorder,
+)
 from agent_comms.execution.history_view import ForkOwnHistory
 from agent_comms.execution.transcript_sources import ExternalTranscript
 from agent_comms.transcript.no_native_transcript_cursor import NoNativeTranscriptCursor
 
 
+class ExternalTranscriptLocation(RuntimeLocation):
+    """Runtime location whose conversation history is paged from `ExternalTranscript`."""
+
+    def read_keys(self) -> tuple[str, ...]:
+        """External-transcript runtimes have no Pi JSONL transcript files to index."""
+        return ()
+
+    def history_locations(self, thread, registry, visited):
+        yield from thread.inherited_history(registry, visited)
+        yield self, thread.parent.own_history
+
+    def view_from_fork(self, view, fork_birth):
+        """history_source reads the asking thread's own records, whichever thread this location
+        came from. A fork's own work is all after its birth, so no date can filter it."""
+        return ForkOwnHistory()
+
+    def transcript_cursor(self, frontier, cut, *, source):
+        return NoNativeTranscriptCursor(
+            source=source, offset=cut.offset, wire=frontier, file=cut.file_identity(),
+        )
+
+    def record_turn_publication(
+        self,
+        transcripts: TurnPublicationRecorder,
+        *,
+        lease: object,
+        checkpoint: object,
+        routing: object,
+        published: tuple[object, ...],
+        incarnation: object,
+        thread: object,
+    ) -> None:
+        del transcripts, lease, checkpoint, routing, published, incarnation, thread
+
+    def external_records(self, root, incarnation):
+        return self.history_source(root, incarnation)
+
+    def history_source(self, root, incarnation):
+        return ExternalTranscript(root, incarnation)
+
+
 @dataclass(frozen=True)
-class UnstartedRuntime(RuntimeLocation):
+class UnstartedRuntime(ExternalTranscriptLocation):
     owner: type[AgentBackend]
     def is_resumable(self) -> bool:
         return False
@@ -40,33 +86,11 @@ class UnstartedRuntime(RuntimeLocation):
     def arguments(self):
         return {}
 
-    def read_keys(self):
-        return ()
-
-    def transcript_cursor(self, frontier, cut, *, source):
-        return NoNativeTranscriptCursor(source=source, offset=cut.offset, wire=frontier,
-                                        file=cut.file_identity())
-
-    def history_locations(self, thread, registry, visited):
-        yield from thread.inherited_history(registry, visited)
-        yield self, thread.parent.own_history
-
-    def view_from_fork(self, view, fork_birth):
-        """history_source reads the asking thread's own records, whichever thread this location
-        came from. A fork's own work is all after its birth, so no date can filter it."""
-        return ForkOwnHistory()
-
-    def external_records(self, root, incarnation):
-        return self.history_source(root, incarnation)
-
     def select_session(self, directory, execution, source_reads, *, participant):
         location = participant.comms.registry.claim_fresh_session(participant)
         return location.select_session(
             directory, execution, source_reads, participant=participant,
         )
-
-    def history_source(self, root, incarnation):
-        return ExternalTranscript(root, incarnation)
 
     def storage_files(self):
         return ()

@@ -207,6 +207,22 @@ class ModelWaitPhase(StallExempt, ActivityWord, TurnPhase):
     pass
 
 
+class ThinkingPhase(ModelWaitPhase):
+    """Model is actively emitting reasoning/thought tokens."""
+
+    label = "Thinking"
+
+
+class ReplyingPhase(ModelWaitPhase):
+    """Model is actively streaming its reply text."""
+
+    label = "Replying"
+
+    @property
+    def activity_detail(self) -> str:
+        return self.summary
+
+
 class SettlingStatsPhase(TurnPhase):
     def accepts_followup(self) -> bool:
         return False

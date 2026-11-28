@@ -213,6 +213,19 @@ class Messaging(InputUserIdentity[Thread], PresenceMessageSender):
         )
         return unique
 
+    def acknowledge_direct_turn_inputs(
+        self,
+        owner: Thread,
+        origins: tuple[Message, ...],
+        *,
+        bridge: type[HarnessSession],
+    ) -> tuple[MessageReference, ...]:
+        """Record durable model-context delivery acknowledgements for a direct backend turn."""
+        refs = tuple(dict.fromkeys(origin.reference for origin in origins if origin.seq > 0))
+        if not refs:
+            return ()
+        return self.acknowledge_deliveries(owner.name, refs, bridge=bridge)
+
     def _settle_answered_remote_deliveries(
         self,
         owner: Thread,

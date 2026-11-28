@@ -167,12 +167,28 @@ class GoalPublicationRead:
     def wait(self, goal: GoalDeclaration) -> GoalWait:
         return self.goals.waits.resolve_in(self.wait_connection, goal)
 
+    @cached_property
+    def generations(self) -> Mapping[GoalId, Generation]:
+        goal_ids = tuple(
+            goal.id
+            for name in self.names
+            for canonical in (self.registry.canonical_name(name),)
+            if canonical in self.registry.threads
+            for goal in self.registry.threads[canonical].goal
+        )
+        return Generation.require_all_in(self.connection, goal_ids) if goal_ids else {}
+
     def change(self, name: str, previous: GoalPublicationSnapshot) -> GoalChange:
         try:
             owner = self.registry.threads[self.registry.canonical_name(name)]
             current = self.goals._snapshot_in(
-                lambda: self.connection, owner, self.registry, self.wait,
-                self.goals.agents, self.turns,
+                lambda: self.connection,
+                owner,
+                self.registry,
+                self.wait,
+                self.goals.agents,
+                self.turns,
+                self.generations,
             )
             return GoalChange.observed(current, previous)
         except (OSError, sqlite3.Error, ValueError, RuntimeError, KeyError, DeferredRead) as error:

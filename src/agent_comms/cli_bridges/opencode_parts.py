@@ -21,7 +21,12 @@ from agent_comms.cli_bridges.runtime_updates import (
 from agent_comms.cli_bridges.tool_calls import CliToolArguments, ToolCall
 from agent_comms.cli_bridges.wire_models import WireModel
 from agent_comms.execution.turn_item import NativeItemId, NativeTurnId
-from agent_comms.execution.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
+from agent_comms.execution.turn_phase import (
+    ReplyingPhase,
+    ThinkingPhase,
+    ToolRunningPhase,
+    TurnPhase,
+)
 from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,
@@ -150,7 +155,7 @@ class TextualPart(Part, ABC, declared_name=None):
 
 class TextPart(TextWire, TextualPart, declared_name='text'):
     event_type = AssistantTranscript
-    phase = ModelWaitPhase('Replying')
+    phase = ReplyingPhase()
 
     def matches(self, session: str, text: str) -> bool:
         return self.sessionID == session and self.text == text
@@ -164,7 +169,7 @@ class TextPart(TextWire, TextualPart, declared_name='text'):
 
 class ReasoningPart(TextualPart, declared_name='reasoning'):
     event_type = ThinkingTranscript
-    phase = ModelWaitPhase()
+    phase = ThinkingPhase()
 
 
 class ToolArguments(WireModel):

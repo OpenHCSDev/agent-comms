@@ -24,6 +24,7 @@ from agent_comms.coordination.errors import (
     StaleRevision,
     TranscriptChanged,
 )
+from agent_comms.agent_backend import TurnPublicationRecorder
 from agent_comms.errors import RelationViolationError
 from agent_comms.execution.history_view import HistoryView, OwnHistory
 from agent_comms.execution.native_entries import NativeEvidenceScope
@@ -87,7 +88,10 @@ from agent_comms.registry.registry_document import RegistrySnapshot
 from agent_comms.registry.registry_provenance import RegistryProvenance
 from agent_comms.registry.registry_store import RegistryStore
 from agent_comms.registry.registry_tables import RegistryRowRevision
-from agent_comms.registry.thread_identity import ThreadIncarnation
+from agent_comms.registry.thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
 from agent_comms.registry.thread_presentation import ThreadOwnerBinding, ThreadPresentation
 from agent_comms.registry.thread_text import ThreadParent, ThreadText
 from agent_comms.registry.threads import Thread, ThreadProvenance
@@ -538,7 +542,7 @@ class AcquiredThreadPresentation(NotifiedThreadPresentation):
             "send its published() ThreadPresentation")
 
 
-class Transcripts:
+class Transcripts(TurnPublicationRecorder):
     def __init__(self, root: Path, registry: Registration, bus: MessageBus):
         self.root = root
         self.registry = registry
@@ -775,6 +779,26 @@ class Transcripts:
         thread = RegistryOwner.capture_local(initial, incarnation.name).thread
         if thread.turn_lease != lease:
             raise RelationViolationError("Native publication has no current original turn")
+        thread.runtime.record_turn_publication(
+            self,
+            lease=lease,
+            checkpoint=checkpoint,
+            routing=routing,
+            published=published,
+            incarnation=incarnation,
+            thread=thread,
+        )
+
+    def record_native_turn_publication(
+        self,
+        *,
+        lease: TurnLeaseFence,
+        checkpoint: TranscriptCursor,
+        routing: TurnRouting,
+        published: tuple[MessageReference, ...],
+        incarnation: RecordedThreadIncarnation,
+        thread: Thread,
+    ) -> None:
         path = Path(thread.runtime.path)
         revision = FileRevision.capture(path).require(
             RelationViolationError("Native publication has no retained session"))

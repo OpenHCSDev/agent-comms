@@ -344,3 +344,9 @@ class HarnessSession(DeclaredFamily, affix="History", discovery_package="agent_c
     can name the bridge that made a delivery attempt by this declaration."""
 
     harness: ClassVar[type[Harness]]
+
+
+class AntigravityAcpSession(HarnessSession, declared_name="antigravity_acp"):
+    """Native multiplexed Antigravity ACP runtime delivery acknowledgement identity."""
+
+    harness = AntigravityHarness

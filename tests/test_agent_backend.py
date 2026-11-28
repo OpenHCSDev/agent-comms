@@ -39,7 +39,7 @@ from agent_comms.transport.serving.owner_launch import ServedReadNativeChildProc
 
 
 def test_registry_holds_the_pi_backends_and_selects_native_for_new_threads():
-    assert ab.AgentBackend.names() == ("cli_inbox", "pi_native", "pi_durable")
+    assert ab.AgentBackend.names() == ("cli_inbox", "pi_native", "antigravity_acp", "pi_durable")
     assert ab.AgentBackend.member_named("cli_inbox") is CliInboxBackend
     assert ab.AgentBackend.member_named("pi_native") is PiNativeBackend
     assert ab.AgentBackend.member_named("pi_durable") is PiDurableBackend
@@ -66,7 +66,7 @@ def test_a_backend_declared_after_sealing_fails_loud():
         class LateBackend(ab.AgentBackend):  # noqa: F841
             pass
 
-    assert ab.AgentBackend.names() == ("cli_inbox", "pi_native", "pi_durable")
+    assert ab.AgentBackend.names() == ("cli_inbox", "pi_native", "antigravity_acp", "pi_durable")
 
 
 @pytest.mark.parametrize("session_file, location", [
