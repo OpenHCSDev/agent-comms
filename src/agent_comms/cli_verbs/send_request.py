@@ -6,7 +6,6 @@ from typing import Annotated
 
 from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_verbs.declared_verb import DeclaredOptions
-from agent_comms.cli_verbs.target_fields import ChoiceTargetField
 from agent_comms.messaging.messages import (
     ConversationRole,
     InfoKind,
@@ -27,7 +26,6 @@ class SendRequest(DeclaredOptions):
     body: Annotated[str, field_codec.Argument(flags=("--body",))]
     type: Annotated[
         builtins.type[MessageKind],
-        field_codec.Editor(ChoiceTargetField),
         field_codec.Argument(
             flags=("--type",), options={"choices": SendableMessageKind.names()}
         ),

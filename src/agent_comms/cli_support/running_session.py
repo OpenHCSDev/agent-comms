@@ -6,9 +6,8 @@ from typing import Annotated
 
 from agent_comms.cli_bridges.history import DefaultAddress, HarnessAddress, OnlineHistory
 from agent_comms.cli_verbs.cli_verb import CliCommand
-from agent_comms.cli_verbs.target_fields import ChoiceTargetField
 from agent_comms.installer.harness_install import Harness
-from agent_comms.nominal.field_codec import Argument, Editor
+from agent_comms.nominal.field_codec import Argument
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -17,7 +16,6 @@ class RunningSessionCliCommand(CliCommand):
 
     harness: Annotated[
         type[Harness],
-        Editor(ChoiceTargetField),
         Argument(flags=("--harness",)),
     ]
     thread: Annotated[

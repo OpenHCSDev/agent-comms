@@ -7,13 +7,12 @@ from typing import Annotated, Self
 from agent_comms.cli_verbs.cli_verb import CliBus
 from agent_comms.cli_support.exact_tag import ExactTagCliCommand
 from agent_comms.cli_verbs.cli_command import MultipleTargets, TargetActionCommand
-from agent_comms.cli_verbs.target_fields import ChoiceTargetField
 from agent_comms.messaging.tag_edits import (
     KeepThreadsTagDisposition,
     TagChangeResult,
     TagDisposition,
 )
-from agent_comms.nominal.field_codec import Argument, Editor, TargetBound
+from agent_comms.nominal.field_codec import Argument, TargetBound
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -23,7 +22,6 @@ class DeleteTagCliCommand(MultipleTargets, ExactTagCliCommand, TargetActionComma
     menu_label = "Delete tag"
     disposition: Annotated[
         TagDisposition,
-        Editor(ChoiceTargetField),
         Argument(
             flags=("--disposition",), options={"help": "Choose what happens to tagged threads"}
         ),

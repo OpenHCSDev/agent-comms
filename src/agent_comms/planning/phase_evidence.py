@@ -23,7 +23,6 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, ClassVar, cast, get_args, get_origin
 
 from metaclass_registry.mro_dispatch import MroDispatch, handles
-from nominal_refactor_advisor.foreign_family import FunctionDefinition
 
 from agent_comms.ast_field_decoders import capture_names, variadic_parameters
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -785,7 +784,7 @@ class ClassChecks(ast.NodeVisitor):
         self.path = ""
         self.checked: list[tuple[str, int, frozenset[str]]] = []
         self._scopes: list[set[str]] = []
-        self._methods: set[ast.FunctionDef | ast.AsyncFunctionDef] = set()
+        self._class_statements: set[ast.stmt] = set()
         self._comparison_guards: set[ast.Call] = set()
 
     def visit_Module(self, node: ast.Module) -> None:
@@ -794,19 +793,19 @@ class ClassChecks(ast.NodeVisitor):
             self.generic_visit(node)
         finally:
             self._scopes.pop()
-            self._methods.clear()
+            self._class_statements.clear()
             self._comparison_guards.clear()
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self.declared.add(node.name)
         self.classes.append((node.name, frozenset(NamedClasses.of(node.bases))))
-        self._methods.update(member for member in FunctionDefinition.within(node.body))
+        self._class_statements.update(node.body)
         self.generic_visit(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         self._scopes.append(ScopeBindings.of((node.args, *node.body)))
         arguments = (*node.args.posonlyargs, *node.args.args)
-        if (node in self._methods and not node.decorator_list
+        if (node in self._class_statements and not node.decorator_list
             and node.name in ("__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__")
             and len(arguments) == 2 and not variadic_parameters(node.args)
             and not node.args.kwonlyargs
